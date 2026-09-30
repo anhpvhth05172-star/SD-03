@@ -6,13 +6,23 @@
 
 :root {
   --red: #e0202a;
-  --red-soft: #fdecec;
+  --red-bright: #ef4444;
   --red-dark: #c11f27;
-  --page-bg: #f4f5f7;
-  --line: #ececec;
-  --text: #2b2b2b;
-  --muted: #8a8a8a;
-  --blue: #4aa3f0;
+  --red-soft: #fdeef0;
+  --blue: #3b82f6;
+  --green: #22c55e;
+  --black: #141416;
+  --white: #ffffff;
+
+  --grad-brand: linear-gradient(135deg, #0d0d0f 0%, #e0202a 100%);
+  --grad-tri: linear-gradient(90deg, #0d0d0f 0%, #ffffff 50%, #e0202a 100%);
+
+  --panel-bg: #f8f8fa;
+  --card-line: #ececef;
+  --line: #e9eaee;
+  --pink-line: #f0c8cc;
+  --text: #24242a;
+  --muted: #8b8b93;
 }
 
 html,
@@ -25,7 +35,7 @@ body {
   font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 14px;
   color: var(--text);
-  background: var(--page-bg);
+  background: var(--black);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -35,6 +45,7 @@ a {
 }
 
 button,
-input {
+input,
+select {
   font-family: inherit;
 }
