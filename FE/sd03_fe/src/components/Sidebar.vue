@@ -100,7 +100,11 @@ const navigateTo = (path) => {
             </li>
 
             <li class="subnav-item">
-              <a class="subnav-link">
+              <a
+                class="subnav-link"
+                :class="{ 'active': route.path === '/san-pham/bien-the' }"
+                @click="navigateTo('/san-pham/bien-the')"
+              >
                 <span class="subnav-icon">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
@@ -111,7 +115,7 @@ const navigateTo = (path) => {
                     <line x1="12" y1="22.08" x2="12" y2="12"></line>
                   </svg>
                 </span>
-                <span class="subnav-text">Biến thể sản ph...</span>
+                <span class="subnav-text">Biến thể sản phẩm</span>
               </a>
             </li>
           </ul>

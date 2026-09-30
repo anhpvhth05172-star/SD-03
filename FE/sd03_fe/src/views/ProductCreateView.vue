@@ -1,12 +1,12 @@
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import QuickAddModal from '../components/QuickAddModal.vue'
 
 const router = useRouter()
 
 const form = reactive({
-  code: 'G66748',
+  code: 'SP-NK-2026',
   name: '',
   brand: '',
   category: '',
@@ -84,7 +84,7 @@ const weightOptions = [
 
 const availableColors = ref([
   { id: 1, name: 'Đen', hex: '#111827' },
-  { id: 2, name: 'Trắng', hex: '#f8fafc' },
+  { id: 2, name: 'Trắng', hex: '#ffffff' },
   { id: 3, name: 'Đỏ', hex: '#ef4444' },
   { id: 4, name: 'Xanh dương', hex: '#3b82f6' },
   { id: 5, name: 'Xám', hex: '#64748b' },
@@ -101,9 +101,8 @@ const availableSizes = ref([
   { id: 7, name: '44' }
 ])
 
-
 const selectedColors = ref([availableColors.value[0], availableColors.value[1]])
-const selectedSizes = ref([availableSizes.value[2], availableSizes.value[3], availableSizes.value[4]])
+const selectedSizes = ref([availableSizes.value[1], availableSizes.value[2], availableSizes.value[3]])
 
 const tempColorSelect = ref('')
 const tempSizeSelect = ref('')
@@ -257,320 +256,273 @@ const saveProduct = () => {
 
 <template>
   <div class="product-create-page">
-    <div class="page-action-row">
-      <button class="btn-back" @click="goBack">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-          stroke-linecap="round" stroke-linejoin="round">
-          <line x1="19" y1="12" x2="5" y2="12"></line>
-          <polyline points="12 19 5 12 12 5"></polyline>
-        </svg>
-        <span>Quay lại danh sách</span>
-      </button>
+    <!-- Header Row -->
+    <div class="page-header-row">
+      <div class="page-title-box">
+        <h1 class="page-title">Thêm sản phẩm mới</h1>
+        <p class="page-subtitle">Nhập thuộc tính sản phẩm và hệ thống sẽ tự động tạo danh sách biến thể SKU.</p>
+      </div>
+
+      <div class="page-actions-box">
+        <button class="btn btn-outline-cancel" @click="goBack">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          Quay lại
+        </button>
+        <button class="btn btn-generate-hdr" @click="generateVariants">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          Tạo biến thể tự động
+        </button>
+        <button class="btn btn-save-primary" @click="saveProduct">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          Lưu sản phẩm
+        </button>
+      </div>
     </div>
 
-    <section class="form-card">
-      <div class="form-grid">
+    <section class="card-box">
+      <div class="card-header-title">
+        <span class="header-icon-circle">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+          </svg>
+        </span>
+        <h2>1. Thông tin cơ bản sản phẩm</h2>
+      </div>
+
+      <div class="form-grid-2col margin-top-md">
         <div class="form-group">
-          <label class="form-label">Mã sản phẩm</label>
-          <input v-model="form.code" type="text" class="form-input disabled" readonly />
+          <label class="field-label">Mã sản phẩm</label>
+          <input v-model="form.code" type="text" class="field-input disabled-input" readonly />
         </div>
 
         <div class="form-group">
-          <label class="form-label">
-            Sản phẩm <span class="required-star">*</span>
-          </label>
-          <input v-model="form.name" type="text" class="form-input" placeholder="Nhập tên sản phẩm..." />
+          <label class="field-label">Tên sản phẩm <span class="required-star">*</span></label>
+          <input v-model="form.name" type="text" class="field-input" placeholder="Ví dụ: Nike Air Max 270..." />
         </div>
 
         <div class="form-group">
-          <label class="form-label">
-            Thương hiệu <span class="required-star">*</span>
-          </label>
-          <div class="select-wrapper">
-            <select v-model="form.brand" class="form-select">
-              <option value="" disabled selected>Chọn thương hiệu...</option>
-              <option v-for="item in brandOptions" :key="item.value" :value="item.value">
-                {{ item.label }}
-              </option>
-            </select>
-            <div class="select-chevron">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </div>
-          </div>
+          <label class="field-label">Thương hiệu <span class="required-star">*</span></label>
+          <select v-model="form.brand" class="field-select">
+            <option value="" disabled selected>Chọn thương hiệu...</option>
+            <option v-for="item in brandOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+          </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label">
-            Loại giày <span class="required-star">*</span>
-          </label>
-          <div class="select-wrapper">
-            <select v-model="form.category" class="form-select">
-              <option value="" disabled selected>Chọn loại giày...</option>
-              <option v-for="item in categoryOptions" :key="item.value" :value="item.value">
-                {{ item.label }}
-              </option>
-            </select>
-            <div class="select-chevron">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </div>
-          </div>
+          <label class="field-label">Loại giày <span class="required-star">*</span></label>
+          <select v-model="form.category" class="field-select">
+            <option value="" disabled selected>Chọn loại giày...</option>
+            <option v-for="item in categoryOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+          </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label">
-            Giới tính <span class="required-star">*</span>
-          </label>
-          <div class="select-wrapper">
-            <select v-model="form.gender" class="form-select">
-              <option v-for="item in genderOptions" :key="item.value" :value="item.value">
-                {{ item.label }}
-              </option>
-            </select>
-            <div class="select-chevron">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </div>
-          </div>
+          <label class="field-label">Giới tính <span class="required-star">*</span></label>
+          <select v-model="form.gender" class="field-select">
+            <option v-for="item in genderOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+          </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label">
-            Chất liệu <span class="required-star">*</span>
-          </label>
-          <div class="select-wrapper">
-            <select v-model="form.material" class="form-select">
-              <option value="" disabled selected>Chọn chất liệu giày...</option>
-              <option v-for="item in materialOptions" :key="item.value" :value="item.value">
-                {{ item.label }}
-              </option>
-            </select>
-            <div class="select-chevron">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </div>
-          </div>
+          <label class="field-label">Chất liệu <span class="required-star">*</span></label>
+          <select v-model="form.material" class="field-select">
+            <option value="" disabled selected>Chọn chất liệu...</option>
+            <option v-for="item in materialOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+          </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label">
-            Đế giày <span class="required-star">*</span>
-          </label>
-          <div class="select-wrapper">
-            <select v-model="form.sole" class="form-select">
-              <option value="" disabled selected>Chọn đế giày...</option>
-              <option v-for="item in soleOptions" :key="item.value" :value="item.value">
-                {{ item.label }}
-              </option>
-            </select>
-            <div class="select-chevron">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </div>
-          </div>
+          <label class="field-label">Đế giày <span class="required-star">*</span></label>
+          <select v-model="form.sole" class="field-select">
+            <option value="" disabled selected>Chọn đế giày...</option>
+            <option v-for="item in soleOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+          </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label">
-            Cổ giày <span class="required-star">*</span>
-          </label>
-          <div class="select-wrapper">
-            <select v-model="form.collar" class="form-select">
-              <option value="" disabled selected>Chọn cổ giày...</option>
-              <option v-for="item in collarOptions" :key="item.value" :value="item.value">
-                {{ item.label }}
-              </option>
-            </select>
-            <div class="select-chevron">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </div>
-          </div>
+          <label class="field-label">Cổ giày <span class="required-star">*</span></label>
+          <select v-model="form.collar" class="field-select">
+            <option value="" disabled selected>Chọn cổ giày...</option>
+            <option v-for="item in collarOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+          </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label">
-            Công nghệ đệm <span class="required-star">*</span>
-          </label>
-          <div class="select-wrapper">
-            <select v-model="form.cushion" class="form-select">
-              <option value="" disabled selected>Chọn công nghệ đệm...</option>
-              <option v-for="item in cushionOptions" :key="item.value" :value="item.value">
-                {{ item.label }}
-              </option>
-            </select>
-            <div class="select-chevron">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </div>
-          </div>
+          <label class="field-label">Công nghệ đệm <span class="required-star">*</span></label>
+          <select v-model="form.cushion" class="field-select">
+            <option value="" disabled selected>Chọn công nghệ đệm...</option>
+            <option v-for="item in cushionOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+          </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label">
-            Trọng lượng <span class="required-star">*</span>
-          </label>
-          <div class="select-wrapper">
-            <select v-model="form.weight" class="form-select">
-              <option value="" disabled selected>Chọn trọng lượng...</option>
-              <option v-for="item in weightOptions" :key="item.value" :value="item.value">
-                {{ item.label }}
-              </option>
-            </select>
-            <div class="select-chevron">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </div>
-          </div>
+          <label class="field-label">Trọng lượng <span class="required-star">*</span></label>
+          <select v-model="form.weight" class="field-select">
+            <option value="" disabled selected>Chọn trọng lượng...</option>
+            <option v-for="item in weightOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+          </select>
         </div>
       </div>
     </section>
-    <section class="form-card">
-      <div class="attribute-row">
-        <div class="attribute-label">
-          Màu sắc <span class="required-star">*</span>
-        </div>
-        <div class="attribute-input-area">
-          <div class="select-wrapper">
-            <select v-model="tempColorSelect" class="form-select attribute-select" @change="handleSelectColor">
-              <option value="" disabled selected>Chọn màu</option>
-              <option v-for="color in availableColors" :key="color.id" :value="color.id">
-                {{ color.name }}
-              </option>
-            </select>
-            <div class="select-chevron">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </div>
-          </div>
 
-          <div v-if="selectedColors.length > 0" class="selected-tags-wrap">
-            <span v-for="col in selectedColors" :key="col.id" class="attribute-tag">
-              <span class="color-dot" :style="{ backgroundColor: col.hex }"></span>
-              <span>{{ col.name }}</span>
-              <button class="btn-tag-remove" @click="removeColor(col.id)" title="Xóa màu này">
-                &times;
-              </button>
-            </span>
-          </div>
-        </div>
-
-        <button class="btn-add-fast" @click="openQuickAdd('color')">
-          <span class="plus-icon">+</span>
-          <span>Thêm nhanh</span>
-        </button>
+    <section class="card-box margin-top-lg">
+      <div class="card-header-title">
+        <span class="header-icon-circle">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.53 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-4 9c-.83 0-1.5-.67-1.5-1.5S7.17 9 8 9s1.5.67 1.5 1.5S8.83 12 8 12zm4 0c-.83 0-1.5-.67-1.5-1.5S11.17 9 12 9s1.5.67 1.5 1.5S12.83 12 12 12zm4 0c-.83 0-1.5-.67-1.5-1.5S15.17 9 16 9s1.5.67 1.5 1.5S16.83 12 16 12z" />
+          </svg>
+        </span>
+        <h2>2. Thuộc tính biến thể (Màu sắc & Kích cỡ)</h2>
       </div>
 
-      <div class="attribute-row">
-        <div class="attribute-label">
-          Kích cỡ <span class="required-star">*</span>
+      <div class="attribute-selection-row margin-top-md">
+        <div class="attr-label-col">
+          <span class="field-label">Màu sắc <span class="required-star">*</span></span>
         </div>
-        <div class="attribute-input-area">
-          <div class="select-wrapper">
-            <select v-model="tempSizeSelect" class="form-select attribute-select" @change="handleSelectSize">
-              <option value="" disabled selected>Chọn size</option>
-              <option v-for="sz in availableSizes" :key="sz.id" :value="sz.id">
-                {{ sz.name }}
-              </option>
+        <div class="attr-content-col">
+          <div class="flex-align-center gap-10">
+            <select v-model="tempColorSelect" class="field-select attr-dropdown" @change="handleSelectColor">
+              <option value="" disabled selected>Chọn màu sắc...</option>
+              <option v-for="color in availableColors" :key="color.id" :value="color.id">{{ color.name }}</option>
             </select>
-            <div class="select-chevron">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
+            <button class="btn btn-quick-add" @click="openQuickAdd('color')">
+              <span class="plus-sign">+</span> Thêm màu mới
+            </button>
+          </div>
+
+          <!-- Color Tags -->
+          <div v-if="selectedColors.length > 0" class="tags-container margin-top-sm">
+            <div v-for="col in selectedColors" :key="col.id" class="chip-tag color-chip">
+              <span class="color-dot-swatch"
+                :style="{ backgroundColor: col.hex, border: col.hex === '#ffffff' ? '1px solid #cbd5e1' : 'none' }"></span>
+              <span class="chip-text">{{ col.name }}</span>
+              <button class="chip-remove-btn" @click="removeColor(col.id)">&times;</button>
             </div>
           </div>
+        </div>
+      </div>
 
-          <div v-if="selectedSizes.length > 0" class="selected-tags-wrap">
-            <span v-for="sz in selectedSizes" :key="sz.id" class="attribute-tag size-tag">
-              <span>Size {{ sz.name }}</span>
-              <button class="btn-tag-remove" @click="removeSize(sz.id)" title="Xóa size này">
-                &times;
-              </button>
-            </span>
+      <!-- Row Kích Cỡ -->
+      <div class="attribute-selection-row margin-top-md">
+        <div class="attr-label-col">
+          <span class="field-label">Kích cỡ (Size) <span class="required-star">*</span></span>
+        </div>
+        <div class="attr-content-col">
+          <div class="flex-align-center gap-10">
+            <select v-model="tempSizeSelect" class="field-select attr-dropdown" @change="handleSelectSize">
+              <option value="" disabled selected>Chọn size...</option>
+              <option v-for="sz in availableSizes" :key="sz.id" :value="sz.id">Size {{ sz.name }}</option>
+            </select>
+            <button class="btn btn-quick-add" @click="openQuickAdd('size')">
+              <span class="plus-sign">+</span> Thêm size mới
+            </button>
+          </div>
+
+          <!-- Size Tags -->
+          <div v-if="selectedSizes.length > 0" class="tags-container margin-top-sm">
+            <div v-for="sz in selectedSizes" :key="sz.id" class="chip-tag size-chip">
+              <span class="chip-text">Size {{ sz.name }}</span>
+              <button class="chip-remove-btn" @click="removeSize(sz.id)">&times;</button>
+            </div>
           </div>
         </div>
+      </div>
 
-        <button class="btn-add-fast" @click="openQuickAdd('size')">
-          <span class="plus-icon">+</span>
-          <span>Thêm nhanh</span>
+      <!-- Action Button Generate -->
+      <div class="generate-btn-banner margin-top-lg">
+        <button class="btn btn-hero-generate" @click="generateVariants">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          Tự động sinh danh sách {{ selectedColors.length * selectedSizes.length }} biến thể (SKU)
         </button>
       </div>
     </section>
 
-    <section v-if="hasGeneratedVariants" id="variants-section" class="form-card variants-table-card">
-      <div class="variants-header">
-        <div class="variants-header-left">
-          <h3 class="variants-title">Danh sách biến thể tạo tự động</h3>
-          <span class="badge-count-pill">{{ variants.length }} biến thể</span>
+    <!-- Section 3: Bảng danh sách biến thể tự động -->
+    <section v-if="hasGeneratedVariants" id="variants-section" class="card-box margin-top-lg">
+      <div class="card-header flex-align-center justify-between">
+        <div class="card-header-title">
+          <span class="header-icon-circle">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" />
+            </svg>
+          </span>
+          <h2>3. Danh sách biến thể tự động</h2>
+          <span class="count-pill">{{ variants.length }} biến thể</span>
         </div>
 
-        <div class="bulk-controls">
-          <div class="bulk-item">
+        <!-- Bulk Controls Bar -->
+        <div class="bulk-bar">
+          <div class="bulk-group">
             <span class="bulk-label">Giá chung:</span>
             <input v-model.number="bulkPrice" type="number" class="bulk-input" step="10000" />
-            <button class="btn-apply-bulk" @click="applyBulkPrice">Áp dụng giá</button>
+            <button class="btn btn-apply-bulk" @click="applyBulkPrice">Áp dụng giá</button>
           </div>
-          <div class="bulk-item">
+          <div class="bulk-group">
             <span class="bulk-label">SL chung:</span>
             <input v-model.number="bulkStock" type="number" class="bulk-input" min="0" />
-            <button class="btn-apply-bulk" @click="applyBulkStock">Áp dụng SL</button>
+            <button class="btn btn-apply-bulk" @click="applyBulkStock">Áp dụng SL</button>
           </div>
         </div>
       </div>
 
-      <div class="table-responsive">
+      <!-- Variants Table -->
+      <div class="table-responsive margin-top-md">
         <table class="variants-table">
           <thead>
             <tr>
-              <th width="40">STT</th>
-              <th width="140">Màu sắc</th>
-              <th width="100">Kích cỡ</th>
-              <th width="200">Mã SKU</th>
-              <th width="180">Giá bán (VNĐ)</th>
-              <th width="140">Số lượng tồn</th>
-              <th width="140">Trạng thái</th>
-              <th width="80" class="text-center">Xóa</th>
+              <th width="50" class="text-center">STT</th>
+              <th width="140">MÀU SẮC</th>
+              <th width="100">KÍCH CỠ</th>
+              <th width="200">MÃ SKU</th>
+              <th width="180">GIÁ BÁN (VNĐ)</th>
+              <th width="140" class="text-center">SỐ LƯỢNG KHO</th>
+              <th width="130">TRẠNG THÁI</th>
+              <th width="70" class="text-center">XÓA</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(v, index) in variants" :key="v.id">
-              <td>{{ index + 1 }}</td>
+              <td class="text-center font-bold text-muted">{{ index + 1 }}</td>
               <td>
-                <div class="variant-color-badge">
-                  <span class="color-dot" :style="{ backgroundColor: v.colorHex }"></span>
+                <div class="color-cell">
+                  <span class="color-dot-swatch"
+                    :style="{ backgroundColor: v.colorHex, border: v.colorHex === '#ffffff' ? '1px solid #cbd5e1' : 'none' }"></span>
                   <span class="font-semibold">{{ v.color }}</span>
                 </div>
               </td>
               <td>
-                <span class="size-pill">{{ v.size }}</span>
+                <span class="size-badge">Size {{ v.size }}</span>
               </td>
               <td>
-                <input v-model="v.sku" type="text" class="table-cell-input" />
+                <input v-model="v.sku" type="text" class="cell-input code-font" />
               </td>
               <td>
-                <input v-model.number="v.price" type="number" class="table-cell-input price-cell-input" />
+                <input v-model.number="v.price" type="number" class="cell-input price-font" />
               </td>
               <td>
-                <input v-model.number="v.stock" type="number" class="table-cell-input stock-cell-input" min="0" />
+                <input v-model.number="v.stock" type="number" class="cell-input stock-font text-center" min="0" />
               </td>
               <td>
-                <span class="badge badge-success">
+                <span class="badge-status green">
                   <span class="status-dot"></span> Đang bán
                 </span>
               </td>
               <td class="text-center">
-                <button class="btn-delete-row" title="Xóa biến thể" @click="removeVariant(v.id)">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="btn-icon-del" @click="removeVariant(v.id)" title="Xóa biến thể">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="3 6 5 6 21 6"></polyline>
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                   </svg>
@@ -581,52 +533,27 @@ const saveProduct = () => {
         </table>
       </div>
 
-      <div class="variants-footer-actions">
-        <button class="btn btn-secondary" @click="goBack">Hủy bỏ</button>
-        <button class="btn btn-primary btn-save-large" @click="saveProduct">
+      <!-- Save Actions Footer -->
+      <div class="card-footer-actions margin-top-lg">
+        <button class="btn btn-outline-cancel" @click="goBack">Hủy bỏ</button>
+        <button class="btn btn-save-primary btn-lg" @click="saveProduct">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
             <polyline points="17 21 17 13 7 13 7 21"></polyline>
             <polyline points="7 3 7 8 15 8"></polyline>
           </svg>
-          Lưu thông tin sản phẩm
+          Lưu tất cả sản phẩm & biến thể
         </button>
       </div>
     </section>
 
-    <div class="floating-action-bar">
-      <button class="btn-generate-variants" @click="generateVariants">
-        Tạo biến thể tự động
-      </button>
-
-      <button class="floating-bot-btn" title="Trợ lý tạo sản phẩm">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-          stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="11" width="18" height="10" rx="2"></rect>
-          <circle cx="12" cy="5" r="2"></circle>
-          <path d="M12 7v4"></path>
-          <line x1="8" y1="16" x2="8.01" y2="16"></line>
-          <line x1="16" y1="16" x2="16.01" y2="16"></line>
-        </svg>
-      </button>
-    </div>
-
+    <!-- Modals & Toasts -->
     <QuickAddModal :is-open="isModalOpen" :type="modalType" @close="isModalOpen = false" @add="handleAttributeAdded" />
 
-    <transition name="toast-slide">
-      <div v-if="toast.show" class="toast-notification" :class="'toast-' + toast.type">
-        <span class="toast-icon">
-          <svg v-if="toast.type === 'success'" width="18" height="18" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2.5">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-          <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-        </span>
-        <span class="toast-text">{{ toast.message }}</span>
+    <transition name="toast-fade">
+      <div v-if="toast.show" class="toast-card" :class="'toast-' + toast.type">
+        <span class="toast-icon">✓</span>
+        <span class="toast-msg">{{ toast.message }}</span>
       </div>
     </transition>
   </div>
@@ -635,52 +562,125 @@ const saveProduct = () => {
 <style scoped>
 .product-create-page {
   width: 100%;
-  position: relative;
 }
 
-.page-action-row {
+.page-header-row {
   display: flex;
-  justify-content: flex-end;
-  margin-bottom: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
 }
 
-.btn-back {
-  display: inline-flex;
+.page-title {
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.5px;
+}
+
+.page-subtitle {
+  font-size: 13.5px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.page-actions-box {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 18px;
-  background-color: #ffffff;
+  gap: 12px;
+}
+
+.btn-outline-cancel {
+  background: #ffffff;
   border: 1px solid #fee2e2;
-  color: var(--primary);
-  border-radius: var(--radius-md);
+  color: #d92d20;
   font-size: 13.5px;
   font-weight: 600;
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 7px;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(217, 45, 32, 0.04);
-  transition: all 0.15s ease;
-  user-select: none;
+  transition: all 0.15s;
 }
 
-.btn-back:hover {
+.btn-outline-cancel:hover {
   background-color: #fff1f2;
   border-color: #fca5a5;
-  transform: translateX(-2px);
 }
 
-.form-card {
-  background-color: #ffffff;
+.btn-generate-hdr {
+  background: #fff1f2;
+  border: 1px solid #fee2e2;
+  color: #d92d20;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.btn-save-primary {
+  background-color: var(--primary);
+  color: #ffffff;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(217, 45, 32, 0.25);
+  transition: all 0.15s;
+}
+
+.btn-save-primary:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+/* Card Box */
+.card-box {
+  background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: var(--radius-lg);
   padding: 24px;
-  margin-bottom: 20px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
 }
 
-.form-grid {
+.card-header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-header-title h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.header-icon-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: #fee2e2;
+  color: #d92d20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.form-grid-2col {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  column-gap: 24px;
-  row-gap: 20px;
+  gap: 18px 24px;
 }
 
 .form-group {
@@ -689,322 +689,183 @@ const saveProduct = () => {
   gap: 6px;
 }
 
-.form-label {
-  font-size: 13.5px;
+.field-label {
+  font-size: 13px;
   font-weight: 600;
   color: #334155;
-  display: flex;
-  align-items: center;
 }
 
 .required-star {
-  color: var(--primary);
-  margin-left: 3px;
-  font-weight: 700;
+  color: #d92d20;
 }
 
-.form-input,
-.form-select {
-  height: 42px;
+.field-input,
+.field-select {
+  height: 40px;
   padding: 0 14px;
   border: 1px solid #e2e8f0;
   border-radius: var(--radius-md);
-  font-family: inherit;
   font-size: 13.5px;
-  color: #1e293b;
-  background-color: #ffffff;
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
-  width: 100%;
-}
-
-.form-input:focus,
-.form-select:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.12);
-}
-
-.form-input::placeholder {
-  color: #94a3b8;
-}
-
-.form-input.disabled {
-  background-color: #f8fafc;
   color: #0f172a;
-  font-weight: 600;
-  cursor: not-allowed;
-  border-color: #e2e8f0;
-}
-
-.select-wrapper {
-  position: relative;
+  outline: none;
+  background: #ffffff;
   width: 100%;
 }
 
-.select-wrapper select {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 36px;
-  cursor: pointer;
+.disabled-input {
+  background-color: #f8fafc;
+  color: #64748b;
+  font-weight: 600;
 }
 
-.select-chevron {
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  color: #94a3b8;
-  display: flex;
-  align-items: center;
+.field-input:focus,
+.field-select:focus {
+  border-color: #d92d20;
 }
 
-.attribute-row {
+/* Attribute Selection Row */
+.attribute-selection-row {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 20px;
 }
 
-.attribute-row:last-child {
-  margin-bottom: 0;
-}
-
-.attribute-label {
-  width: 95px;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: #334155;
-  flex-shrink: 0;
+.attr-label-col {
+  width: 140px;
   padding-top: 10px;
 }
 
-.attribute-input-area {
+.attr-content-col {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
-.attribute-select {
-  height: 42px;
+.attr-dropdown {
+  width: 240px;
 }
 
-.btn-add-fast {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 18px;
+.btn-quick-add {
   background: #ffffff;
-  border: 1px solid #fee2e2;
-  color: var(--primary);
-  border-radius: var(--radius-md);
-  font-size: 13px;
+  border: 1px dashed #d92d20;
+  color: #d92d20;
   font-weight: 600;
+  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  flex-shrink: 0;
-  transition: all 0.15s ease;
-  height: 42px;
 }
 
-.btn-add-fast:hover {
-  background-color: #fff1f2;
-  border-color: #fca5a5;
-  transform: translateY(-1px);
+.btn-quick-add:hover {
+  background: #fff1f2;
 }
 
-.plus-icon {
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.selected-tags-wrap {
+.tags-container {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 4px;
 }
 
-.attribute-tag {
+.chip-tag {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 10px 5px 12px;
-  background-color: #f8fafc;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 20px;
   font-size: 13px;
   font-weight: 600;
-  color: #1e293b;
 }
 
-.size-tag {
-  background-color: #fff1f2;
-  border-color: #fecdd3;
-  color: var(--primary);
-}
-
-.color-dot {
-  width: 14px;
-  height: 14px;
+.color-dot-swatch {
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  border: 1px solid #cbd5e1;
-  display: inline-block;
 }
 
-.btn-tag-remove {
+.chip-remove-btn {
   background: none;
   border: none;
   color: #94a3b8;
-  cursor: pointer;
   font-size: 16px;
+  cursor: pointer;
   line-height: 1;
+}
+
+.chip-remove-btn:hover {
+  color: #d92d20;
+}
+
+/* Hero Generate Banner */
+.generate-btn-banner {
+  background: #fafafa;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 20px;
   display: flex;
-  align-items: center;
   justify-content: center;
-  padding: 2px 4px;
-  border-radius: 50%;
-  transition: color 0.15s;
 }
 
-.btn-tag-remove:hover {
-  color: var(--primary);
-}
-
-.floating-action-bar {
-  position: fixed;
-  bottom: 24px;
-  right: 32px;
+.btn-hero-generate {
+  background: #d92d20;
+  color: #ffffff;
+  border: none;
+  font-size: 14.5px;
+  font-weight: 700;
+  padding: 12px 28px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   gap: 10px;
-  z-index: 50;
-}
-
-.btn-generate-variants {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background-color: var(--primary);
-  color: #ffffff;
-  border: none;
-  padding: 12px 24px;
-  border-radius: var(--radius-md);
-  font-size: 14px;
-  font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(217, 45, 32, 0.4);
-  transition: all 0.15s ease;
-  user-select: none;
+  box-shadow: 0 4px 14px rgba(217, 45, 32, 0.3);
+  transition: all 0.15s;
 }
 
-.btn-generate-variants:hover {
-  background-color: var(--primary-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(217, 45, 32, 0.5);
+.btn-hero-generate:hover {
+  background-color: #b42318;
+  transform: translateY(-1px);
 }
 
-.btn-generate-variants:active {
-  transform: translateY(0);
-}
-
-.floating-bot-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  background-color: var(--primary);
-  color: #ffffff;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 14px rgba(217, 45, 32, 0.4);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.floating-bot-btn:hover {
-  background-color: var(--primary-hover);
-  transform: translateY(-2px);
-}
-
-.variants-table-card {
-  margin-top: 24px;
-  padding: 24px;
-}
-
-.variants-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.variants-header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.variants-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.badge-count-pill {
-  padding: 4px 12px;
-  background-color: #fff1f2;
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: 700;
-  border-radius: 20px;
-  border: 1px solid #fee2e2;
-}
-
-.bulk-controls {
+/* Bulk Bar */
+.bulk-bar {
   display: flex;
   align-items: center;
   gap: 16px;
 }
 
-.bulk-item {
+.bulk-group {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.bulk-label {
   font-size: 13px;
-  font-weight: 600;
-  color: #475569;
+  color: #64748b;
 }
 
 .bulk-input {
-  width: 120px;
+  width: 110px;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: var(--radius-sm);
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
   font-size: 13px;
 }
 
 .btn-apply-bulk {
-  padding: 7px 12px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #334155;
   font-size: 12px;
   font-weight: 600;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
 .btn-apply-bulk:hover {
-  background-color: #f1f5f9;
+  background: #e2e8f0;
 }
 
+/* Table */
 .table-responsive {
   overflow-x: auto;
 }
@@ -1012,15 +873,14 @@ const saveProduct = () => {
 .variants-table {
   width: 100%;
   border-collapse: collapse;
-  text-align: left;
   font-size: 13.5px;
 }
 
 .variants-table th {
   padding: 12px 14px;
-  background-color: #f8fafc;
-  color: #475569;
-  font-weight: 600;
+  background: #f8fafc;
+  color: #64748b;
+  font-weight: 700;
   border-bottom: 1px solid #e2e8f0;
 }
 
@@ -1030,114 +890,139 @@ const saveProduct = () => {
   vertical-align: middle;
 }
 
-.variant-color-badge {
+.color-cell {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.size-pill {
-  display: inline-block;
+.size-badge {
   padding: 4px 10px;
-  background-color: #f1f5f9;
-  border-radius: var(--radius-sm);
+  background: #f1f5f9;
+  border-radius: 6px;
   font-weight: 700;
   font-size: 12.5px;
+  color: #334155;
 }
 
-.table-cell-input {
-  height: 36px;
+.cell-input {
+  height: 34px;
   padding: 0 10px;
   border: 1px solid #e2e8f0;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
+  border-radius: 6px;
   width: 100%;
+  font-size: 13px;
 }
 
-.table-cell-input:focus {
-  border-color: var(--primary);
-  outline: none;
-}
-
-.price-cell-input {
-  font-weight: 600;
-  color: var(--primary);
-}
-
-.stock-cell-input {
+.code-font {
+  font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
 }
 
-.btn-delete-row {
-  background: none;
-  border: none;
-  color: #94a3b8;
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 4px;
+.price-font {
+  font-weight: 700;
+  color: #d92d20;
+}
+
+.badge-status {
   display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.btn-delete-row:hover {
-  color: var(--primary);
-  background-color: #fee2e2;
+.badge-status.green {
+  background: #ecfdf5;
+  color: #059669;
 }
 
 .status-dot {
   width: 6px;
   height: 6px;
-  background-color: #10b981;
   border-radius: 50%;
-  display: inline-block;
+  background: #10b981;
 }
 
-.variants-footer-actions {
+.btn-icon-del {
+  background: none;
+  border: 1px solid #fee2e2;
+  border-radius: 6px;
+  padding: 5px;
+  color: #d92d20;
+  cursor: pointer;
+}
+
+.btn-icon-del:hover {
+  background: #fff1f2;
+}
+
+.card-footer-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid #f1f5f9;
 }
 
-.btn-save-large {
-  padding: 10px 24px;
+.btn-lg {
+  padding: 12px 24px;
   font-size: 14px;
 }
 
-/* Toast Notifications */
-.toast-notification {
+.margin-top-md {
+  margin-top: 16px;
+}
+
+.margin-top-lg {
+  margin-top: 24px;
+}
+
+.margin-top-sm {
+  margin-top: 10px;
+}
+
+.flex-align-center {
+  display: flex;
+  align-items: center;
+}
+
+.gap-10 {
+  gap: 10px;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.count-pill {
+  padding: 3px 10px;
+  background: #fff1f2;
+  color: #d92d20;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 20px;
+  border: 1px solid #fee2e2;
+}
+
+.toast-card {
   position: fixed;
-  bottom: 84px;
-  right: 32px;
-  padding: 12px 20px;
-  border-radius: var(--radius-md);
+  bottom: 24px;
+  right: 24px;
+  background: #0f172a;
   color: #ffffff;
+  padding: 12px 20px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   gap: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
   font-size: 13.5px;
   font-weight: 600;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-}
-
-.toast-success {
-  background-color: #0f172a;
 }
 
 .toast-warning {
-  background-color: #b45309;
-}
-
-.toast-slide-enter-active,
-.toast-slide-leave-active {
-  transition: all 0.25s ease;
-}
-
-.toast-slide-enter-from,
-.toast-slide-leave-to {
-  opacity: 0;
-  transform: translateY(16px);
+  background: #d97706;
 }
 </style>

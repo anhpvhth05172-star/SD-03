@@ -6,6 +6,7 @@ const route = useRoute()
 const router = useRouter()
 
 const isAddPage = computed(() => route.path.includes('/them'))
+const isVariantPage = computed(() => route.path.includes('/bien-the'))
 
 const navigateToProducts = () => {
   router.push('/san-pham')
@@ -14,51 +15,57 @@ const navigateToProducts = () => {
 
 <template>
   <header class="topbar">
-    <!-- Breadcrumb with folder icon matching Image 1 -->
     <div class="topbar-left">
       <div class="folder-icon-box">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="#334155">
-          <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/>
+          <path
+            d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z" />
         </svg>
       </div>
 
       <nav class="breadcrumb-nav">
-        <span class="breadcrumb-item" @click="navigateToProducts">Quản lý sản phẩm</span>
-        <span class="breadcrumb-separator">/</span>
-        <span
-          class="breadcrumb-item"
-          :class="{ 'breadcrumb-red': !isAddPage, 'breadcrumb-clickable': isAddPage }"
-          @click="navigateToProducts"
-        >
-          Sản phẩm
-        </span>
-        <template v-if="isAddPage">
+        <span class="breadcrumb-item breadcrumb-clickable" @click="navigateToProducts">Quản lý sản phẩm</span>
+
+        <template v-if="isVariantPage">
           <span class="breadcrumb-separator">/</span>
-          <span class="breadcrumb-item breadcrumb-red">Thêm sản phẩm</span>
+          <span class="breadcrumb-item breadcrumb-clickable" @click="navigateToProducts">Biến thể sản phẩm</span>
+          <span class="breadcrumb-separator">/</span>
+          <span class="breadcrumb-item breadcrumb-red">Quản lý biến thể</span>
+        </template>
+
+        <template v-else>
+          <span class="breadcrumb-separator">/</span>
+          <span class="breadcrumb-item" :class="{ 'breadcrumb-red': !isAddPage, 'breadcrumb-clickable': isAddPage }"
+            @click="navigateToProducts">
+            Sản phẩm
+          </span>
+          <template v-if="isAddPage">
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item breadcrumb-red">Thêm sản phẩm</span>
+          </template>
         </template>
       </nav>
     </div>
 
-    <!-- Right Controls: Bell and User Profile -->
     <div class="topbar-right">
-      <!-- Notification Icon with dot -->
       <button class="icon-circle-btn" title="Thông báo">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
           <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
         </svg>
         <span class="notification-dot"></span>
       </button>
 
-      <!-- User Profile matching Image 1: Phạm Hà Anh / Quản lý -->
       <div class="user-profile-badge">
         <div class="avatar-circle">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+            <path
+              d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
           </svg>
         </div>
         <div class="user-info">
-          <span class="user-fullname">Phạm Hà Anh</span>
+          <span class="user-fullname">Duc</span>
           <span class="user-role">Quản lý</span>
         </div>
       </div>
@@ -114,6 +121,7 @@ const navigateToProducts = () => {
 .breadcrumb-clickable {
   cursor: pointer;
 }
+
 .breadcrumb-clickable:hover {
   color: var(--primary);
 }

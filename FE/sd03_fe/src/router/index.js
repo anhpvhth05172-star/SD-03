@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import ProductListView from '../views/ProductListView.vue'
 import ProductCreateView from '../views/ProductCreateView.vue'
+import ProductVariantView from '../views/ProductVariantView.vue'
 
 import AdminLayout from '../layouts/AdminLayout.vue'
 import InvoiceListPage from '../pages/InvoiceListPage.vue'
@@ -10,6 +11,7 @@ const routes = [
   { path: '/', redirect: '/san-pham' },
   { path: '/san-pham', name: 'ProductList', component: ProductListView },
   { path: '/san-pham/them', name: 'ProductCreate', component: ProductCreateView },
+  { path: '/san-pham/bien-the', name: 'ProductVariant', component: ProductVariantView },
   {
     path: '/admin',
     component: AdminLayout,
