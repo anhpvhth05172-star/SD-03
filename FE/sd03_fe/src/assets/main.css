@@ -67,6 +67,10 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+a, a:hover, a:focus {
+  text-decoration: none !important;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
