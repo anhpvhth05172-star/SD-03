@@ -1,8 +1,10 @@
 <script setup>
 import { ref } from 'vue'
 
+const showFilter = ref(true)
+
 const tabs = [
-  'Tất Cả',
+  'Tất cả',
   'Chờ xác nhận',
   'Đã xác nhận',
   'Chờ giao hàng',
@@ -14,12 +16,15 @@ const tabs = [
 ]
 const activeTab = ref(0)
 
+const pages = [1, 2, 3, 4, 5]
+
 const invoices = [
   {
-    stt: 1,
     code: 'HD0123457',
     staff: 'Phạm Văn A',
     customer: 'Phạm Văn B',
+    initials: 'PB',
+    avatar: '#e0202a',
     phone: '012345689',
     total: '1.500.000₫',
     type: 'Tại quầy',
@@ -28,10 +33,11 @@ const invoices = [
     payStatus: 'Đã thanh toán',
   },
   {
-    stt: 2,
     code: 'HD0123458',
     staff: 'Admin 2',
     customer: 'Nguyễn Thị C',
+    initials: 'NC',
+    avatar: '#f59e0b',
     phone: '0987654321',
     total: '2.350.000₫',
     type: 'Online',
@@ -40,10 +46,11 @@ const invoices = [
     payStatus: 'Đã thanh toán',
   },
   {
-    stt: 3,
     code: 'HD0123459',
     staff: 'Admin 1',
     customer: 'Trần Văn D',
+    initials: 'TD',
+    avatar: '#8b5cf6',
     phone: '0912345678',
     total: '890.000₫',
     type: 'Online',
@@ -52,10 +59,11 @@ const invoices = [
     payStatus: 'Chưa thanh toán',
   },
   {
-    stt: 4,
     code: 'HD0123460',
     staff: 'Admin 3',
     customer: 'Lê Văn E',
+    initials: 'LE',
+    avatar: '#14b8a6',
     phone: '0908765432',
     total: '3.720.000₫',
     type: 'Tại quầy',
@@ -64,10 +72,11 @@ const invoices = [
     payStatus: 'Đã hoàn tiền',
   },
   {
-    stt: 5,
     code: 'HD0123461',
     staff: 'Phạm Văn A',
     customer: 'Đỗ Thị F',
+    initials: 'DF',
+    avatar: '#3b82f6',
     phone: '0977112233',
     total: '1.190.000₫',
     type: 'Online',
@@ -76,10 +85,11 @@ const invoices = [
     payStatus: 'Đã thanh toán',
   },
   {
-    stt: 6,
     code: 'HD0123462',
     staff: 'Admin 2',
     customer: 'Vũ Văn G',
+    initials: 'GV',
+    avatar: '#22c55e',
     phone: '0866009911',
     total: '5.400.000₫',
     type: 'Tại quầy',
@@ -89,35 +99,46 @@ const invoices = [
   },
 ]
 
-const statusClass = (value) => {
-  if (['Đã hoàn thành', 'Đã thanh toán', 'Đã xác nhận', 'Đã giao hàng'].includes(value)) return 'badge-green'
-  if (['Đã hủy', 'Đã hoàn tiền'].includes(value)) return 'badge-red'
-  if (['Chờ xác nhận', 'Chờ giao hàng'].includes(value)) return 'badge-amber'
-  return 'badge-gray'
+const statusPill = (value) => {
+  if (['Đã hoàn thành', 'Đã thanh toán', 'Đã xác nhận', 'Đã giao hàng'].includes(value)) return 'pill-green'
+  if (['Đã hủy', 'Đã hoàn tiền'].includes(value)) return 'pill-red'
+  if (['Chờ xác nhận', 'Chờ giao hàng'].includes(value)) return 'pill-amber'
+  return 'pill-gray'
 }
 </script>
 
 <template>
-  <div class="page">
-    <section class="card page-head">
-      <h2 class="page-title">Quản Lý Hóa Đơn</h2>
+  <div class="screen">
+    <section class="panel">
+      <h2 class="page-title">Quản lý hóa đơn</h2>
     </section>
 
-    <section class="card">
-      <div class="card-head">
-        <svg class="head-icon-gray" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M3 4.6h18l-7.1 8.5v5.9l-3.8 2v-7.9L3 4.6z" />
-        </svg>
-        <h3 class="card-head-title">Bộ Lọc</h3>
+    <section class="panel">
+      <div class="panel-head">
+        <span class="panel-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 4.6h18l-7.1 8.5v5.9l-3.8 2v-7.9L3 4.6z" />
+          </svg>
+        </span>
+        <h3 class="panel-title">Bộ lọc tìm kiếm</h3>
+        <div class="panel-right">
+          <span class="result-count">48 kết quả</span>
+          <button class="link-red" type="button" @click="showFilter = !showFilter">
+            {{ showFilter ? 'Ẩn bớt' : 'Hiện thêm' }}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path :d="showFilter ? 'M6 14.5l6-6 6 6' : 'M6 9.5l6 6 6-6'" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      <div class="filter-grid">
-        <div class="field">
+      <div v-show="showFilter" class="filter-row">
+        <div class="f-item">
           <label>Mã hóa đơn</label>
           <input type="text" placeholder="Nhập mã hóa đơn" />
         </div>
 
-        <div class="field">
+        <div class="f-item">
           <label>Ngày bắt đầu</label>
           <div class="date-box">
             <input type="text" value="28/05/2025" placeholder="dd/mm/yyyy" />
@@ -128,7 +149,7 @@ const statusClass = (value) => {
           </div>
         </div>
 
-        <div class="field">
+        <div class="f-item">
           <label>Ngày kết thúc</label>
           <div class="date-box">
             <input type="text" placeholder="dd/mm/yyyy" />
@@ -139,7 +160,7 @@ const statusClass = (value) => {
           </div>
         </div>
 
-        <div class="field">
+        <div class="f-item">
           <label>Loại đơn</label>
           <select>
             <option value="">Tất cả</option>
@@ -147,37 +168,42 @@ const statusClass = (value) => {
             <option value="online">Online</option>
           </select>
         </div>
-      </div>
 
-      <div class="filter-actions">
-        <button class="btn btn-blue" type="button">Tìm Kiếm</button>
-        <button class="btn btn-red" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 11a8 8 0 1 0-.9 4.5" />
-            <path d="M20 4.5V11h-6.5" />
-          </svg>
-          Làm Mới
-        </button>
+        <div class="filter-actions">
+          <button class="btn-reset" type="button" aria-label="Đặt lại">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 11a8 8 0 1 0-.9 4.5" />
+              <path d="M20 4.5V11h-6.5" />
+            </svg>
+          </button>
+          <button class="btn-apply" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <path d="M4 6h16M7 12h10M10 18h4" />
+            </svg>
+            Áp dụng
+          </button>
+        </div>
       </div>
     </section>
 
-    <section class="card">
-      <div class="card-head between">
-        <div class="head-left">
-          <span class="head-icon-red">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M6 2.5h12v19l-3-1.8-3 1.8-3-1.8-3 1.8v-19zM9.5 7.5h5M9.5 11.5h5M9.5 15.5h3.5" />
-            </svg>
-          </span>
-          <h3 class="card-head-title">Danh Sách Hóa Đơn</h3>
-        </div>
-
-        <button class="btn btn-green" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3.5v11M7.5 10.5l4.5 4.5 4.5-4.5M4.5 20.5h15" />
+    <section class="panel">
+      <div class="panel-head">
+        <span class="panel-icon is-red">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2.5h12v19l-3-1.8-3 1.8-3-1.8-3 1.8v-19zM9.5 7.5h5M9.5 11.5h5M9.5 15.5h3.5" />
           </svg>
-          Xuất File
-        </button>
+        </span>
+        <h3 class="panel-title">Danh sách hóa đơn</h3>
+        <span class="count-pill">48 hóa đơn</span>
+        <div class="panel-right">
+          <span class="panel-meta">Cập nhật lúc 08:32 25/05/2026</span>
+          <button class="btn-export" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3.5v11M7.5 10.5l4.5 4.5 4.5-4.5M4.5 20.5h15" />
+            </svg>
+            Xuất File
+          </button>
+        </div>
       </div>
 
       <div class="tabs">
@@ -194,428 +220,119 @@ const statusClass = (value) => {
       </div>
 
       <div class="table-wrap">
-        <table>
+        <table class="data-table">
           <thead>
             <tr>
-              <th class="col-stt">STT</th>
-              <th>Mã Hóa Đơn</th>
-              <th>Tên Nhân Viên</th>
-              <th>Tên Khách Hàng</th>
-              <th>SĐT Khách Hàng</th>
-              <th>Tổng Tiền</th>
-              <th>Loại Đơn</th>
-              <th>Ngày Tạo</th>
-              <th>Trạng Thái Hóa Đơn</th>
-              <th>Trạng Thái Thanh Toán</th>
-              <th class="col-action">Hành Động</th>
+              <th>Hóa đơn</th>
+              <th>Nhân viên</th>
+              <th>Loại đơn</th>
+              <th>Tổng tiền</th>
+              <th>Ngày tạo</th>
+              <th>Trạng thái hóa đơn</th>
+              <th>Trạng thái thanh toán</th>
+              <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in invoices" :key="row.stt">
-              <td class="col-stt">{{ row.stt }}</td>
-              <td class="cell-code">{{ row.code }}</td>
+            <tr v-for="row in invoices" :key="row.code">
+              <td>
+                <div class="entity">
+                  <span class="entity-avatar" :style="{ background: row.avatar }">{{ row.initials }}</span>
+                  <div class="entity-info">
+                    <div class="entity-line">
+                      <span class="entity-name">{{ row.code }}</span>
+                    </div>
+                    <div class="entity-sub">{{ row.customer }} • {{ row.phone }}</div>
+                  </div>
+                </div>
+              </td>
               <td>{{ row.staff }}</td>
-              <td>{{ row.customer }}</td>
-              <td>{{ row.phone }}</td>
-              <td class="cell-total">{{ row.total }}</td>
               <td>{{ row.type }}</td>
-              <td class="cell-date">{{ row.created }}</td>
+              <td class="cell-strong">{{ row.total }}</td>
+              <td>{{ row.created }}</td>
+              <td><span class="pill" :class="statusPill(row.status)">{{ row.status }}</span></td>
+              <td><span class="pill" :class="statusPill(row.payStatus)">{{ row.payStatus }}</span></td>
               <td>
-                <span class="badge" :class="statusClass(row.status)">{{ row.status }}</span>
-              </td>
-              <td>
-                <span class="badge" :class="statusClass(row.payStatus)">{{ row.payStatus }}</span>
-              </td>
-              <td class="col-action">
-                <button class="btn-eye" type="button" aria-label="Xem chi tiết">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                </button>
+                <div class="act-group">
+                  <button class="act-btn" type="button" aria-label="Xem">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
+                  <button class="act-btn is-red" type="button" aria-label="Sửa">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3" />
+                    </svg>
+                  </button>
+                  <button class="act-btn" type="button" aria-label="Thêm">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                      <path d="M12 6v12M6 12h12" />
+                    </svg>
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <div class="pagination">
-        <button class="page-btn" type="button" aria-label="Trang trước">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14.5 6l-6 6 6 6" />
-          </svg>
-        </button>
-        <button class="page-btn is-active" type="button">1</button>
-        <button class="page-btn" type="button" aria-label="Trang sau">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9.5 6l6 6-6 6" />
-          </svg>
-        </button>
+      <div class="panel-foot">
+        <span class="foot-text">Hiển thị 1-6 trong 48 hóa đơn</span>
+        <div class="pager">
+          <button class="page-btn" type="button" aria-label="Trang trước">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.5 6l-6 6 6 6" />
+            </svg>
+          </button>
+          <button
+            v-for="page in pages"
+            :key="page"
+            class="page-btn"
+            :class="{ 'is-active': page === 1 }"
+            type="button"
+          >
+            {{ page }}
+          </button>
+          <button class="page-btn" type="button" aria-label="Trang sau">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9.5 6l6 6-6 6" />
+            </svg>
+          </button>
+        </div>
       </div>
     </section>
   </div>
 </template>
 
 <style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.card {
-  background: var(--white);
-  border: 1px solid var(--card-line);
-  border-radius: 9px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  padding: 16px 18px 18px;
-}
-
-.page-head {
-  padding: 14px 18px;
-}
-
 .page-title {
   color: var(--red);
   font-size: 17px;
   font-weight: 700;
 }
 
-.card-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-bottom: 16px;
-}
-
-.card-head.between {
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.head-left {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-}
-
-.head-icon-gray {
-  width: 18px;
-  height: 18px;
-  color: #67676f;
-}
-
-.head-icon-red {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: var(--red-soft);
-  color: var(--red);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.head-icon-red svg {
-  width: 19px;
-  height: 19px;
-}
-
-.card-head-title {
-  font-size: 15.5px;
-  font-weight: 700;
-  color: #23232a;
-}
-
-.filter-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 22px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.field label {
-  font-size: 13px;
-  font-weight: 700;
-  color: #2b2b32;
-}
-
-.field input,
-.field select {
-  width: 100%;
-  height: 36px;
-  border: 1px solid #e2e2e8;
-  border-radius: 6px;
-  padding: 0 11px;
-  font-size: 13px;
-  color: var(--text);
-  background: #fafafb;
-  outline: none;
-}
-
-.field input::placeholder {
-  color: #a2a2ab;
-}
-
-.field input:focus,
-.field select:focus {
-  border-color: var(--red);
-  background: var(--white);
-}
-
-.date-box {
-  position: relative;
-}
-
-.date-box input {
-  padding-right: 34px;
-}
-
-.date-icon {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 15px;
-  height: 15px;
-  color: #4a4a52;
-  pointer-events: none;
-}
-
-.filter-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 20px;
-}
-
-.btn {
-  height: 36px;
-  padding: 0 20px;
+.btn-export {
+  height: 34px;
+  padding: 0 16px;
   border: none;
-  border-radius: 6px;
-  font-size: 13.5px;
+  border-radius: 7px;
+  background: var(--green);
+  color: #fff;
+  font-size: 13px;
   font-weight: 600;
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  gap: 7px;
+  cursor: pointer;
   transition: filter 0.15s ease;
 }
 
-.btn:hover {
+.btn-export:hover {
   filter: brightness(1.06);
 }
 
-.btn svg {
-  width: 15px;
-  height: 15px;
-}
-
-.btn-blue {
-  background: var(--blue);
-  color: var(--white);
-}
-
-.btn-red {
-  background: var(--red-bright);
-  color: var(--white);
-}
-
-.btn-green {
-  background: var(--green);
-  color: var(--white);
-}
-
-.tabs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.tab {
-  background: none;
-  border: 1px solid transparent;
-  padding: 6px 13px;
-  border-radius: 6px;
-  font-size: 12.5px;
-  color: #cf8f93;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.tab:hover {
-  color: var(--red);
-}
-
-.tab.is-active {
-  background: var(--red-soft);
-  border-color: #f6ccd0;
-  color: var(--red);
-  font-weight: 600;
-}
-
-.table-wrap {
-  overflow-x: auto;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 11.5px;
-}
-
-thead th {
-  background: #f4f5f7;
-  color: #2b2b32;
-  font-weight: 700;
-  text-align: left;
-  padding: 9px 7px;
-  line-height: 1.3;
-  white-space: normal;
-  border: 1px solid #ececef;
-}
-
-thead th:first-child {
-  border-radius: 6px 0 0 6px;
-}
-
-thead th:last-child {
-  border-radius: 0 6px 6px 0;
-}
-
-tbody td {
-  padding: 11px 7px;
-  color: #3a3a42;
-  border: 1px solid #f0f0f3;
-  white-space: nowrap;
-}
-
-tbody tr:hover td {
-  background: #fdf4f5;
-}
-
-.col-stt {
-  text-align: center;
-  width: 40px;
-}
-
-.col-action {
-  text-align: center;
-  width: 58px;
-}
-
-.cell-code {
-  font-weight: 600;
-  color: #23232a;
-}
-
-.cell-total {
-  font-weight: 600;
-}
-
-.cell-date {
-  font-size: 12px;
-  color: #5f5f68;
-}
-
-.badge {
-  display: inline-block;
-  padding: 3px 7px;
-  border-radius: 5px;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.badge-green {
-  background: #e7f8ee;
-  color: #15803d;
-}
-
-.badge-red {
-  background: #fdecec;
-  color: #dc2626;
-}
-
-.badge-amber {
-  background: #fdf3e3;
-  color: #d97706;
-}
-
-.badge-gray {
-  background: #f1f2f4;
-  color: #6b7280;
-}
-
-.btn-eye {
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: #2b2b30;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.btn-eye:hover {
-  background: var(--red-soft);
-  color: var(--red);
-}
-
-.btn-eye svg {
-  width: 17px;
-  height: 17px;
-}
-
-.pagination {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.page-btn {
-  min-width: 30px;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid #e4e4e9;
-  border-radius: 7px;
-  background: var(--white);
-  color: #55555e;
-  font-size: 13px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.page-btn:hover {
-  border-color: var(--red);
-  color: var(--red);
-}
-
-.page-btn.is-active {
-  background: #f1f2f5;
-  border-color: #dcdce2;
-  color: #1f1f24;
-  font-weight: 600;
-}
-
-.page-btn svg {
+.btn-export svg {
   width: 15px;
   height: 15px;
 }
