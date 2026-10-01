@@ -12,9 +12,6 @@ defineProps({
       </svg>
       <span class="crumb">Trang chủ</span>
       <span class="crumb-sep">/</span>
-      <svg class="crumb-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M6 2.5h8l4 4v15H6v-19zM14 2.5v4h4M9 12h6M9 16h6" />
-      </svg>
       <span class="crumb-current">{{ title }}</span>
     </nav>
 
@@ -43,7 +40,6 @@ defineProps({
   justify-content: space-between;
   gap: 20px;
   padding: 0 22px;
-  border-bottom: 1.5px solid var(--pink-line);
 }
 
 .breadcrumb {
@@ -67,10 +63,6 @@ defineProps({
 
 .crumb-sep {
   color: #b0b0b8;
-}
-
-.crumb-doc {
-  color: #7a7a83;
 }
 
 .crumb-current {

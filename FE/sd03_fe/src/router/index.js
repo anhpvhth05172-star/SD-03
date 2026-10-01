@@ -3,6 +3,12 @@ import AdminLayout from '../layouts/AdminLayout.vue'
 import InvoiceListPage from '../pages/InvoiceListPage.vue'
 import VoucherListPage from '../pages/VoucherListPage.vue'
 import DiscountEventPage from '../pages/DiscountEventPage.vue'
+import EmployeeListPage from '../pages/EmployeeListPage.vue'
+import EmployeeCreatePage from '../pages/EmployeeCreatePage.vue'
+import CustomerListPage from '../pages/CustomerListPage.vue'
+import CustomerCreatePage from '../pages/CustomerCreatePage.vue'
+import ProductListPage from '../pages/ProductListPage.vue'
+import ProductVariantPage from '../pages/ProductVariantPage.vue'
 import PlaceholderPage from '../pages/PlaceholderPage.vue'
 
 const routes = [
@@ -25,14 +31,24 @@ const routes = [
       { path: 'giam-gia', redirect: '/phieu-giam-gia' },
       { path: 'thong-ke', component: PlaceholderPage, meta: { title: 'Thống kê' } },
       { path: 'ban-hang', component: PlaceholderPage, meta: { title: 'Bán hàng tại quầy' } },
-      { path: 'san-pham', component: PlaceholderPage, meta: { title: 'Sản phẩm' } },
+      { path: 'san-pham', component: ProductListPage, meta: { title: 'Quản lý sản phẩm' } },
       {
         path: 'bien-the-san-pham',
-        component: PlaceholderPage,
+        component: ProductVariantPage,
         meta: { title: 'Biến thể sản phẩm' },
       },
-      { path: 'khach-hang', component: PlaceholderPage, meta: { title: 'Quản lý khách hàng' } },
-      { path: 'nhan-vien', component: PlaceholderPage, meta: { title: 'Quản lý nhân viên' } },
+      { path: 'khach-hang', component: CustomerListPage, meta: { title: 'Quản lý khách hàng' } },
+      {
+        path: 'khach-hang/them',
+        component: CustomerCreatePage,
+        meta: { title: 'Quản lý khách hàng' },
+      },
+      { path: 'nhan-vien', component: EmployeeListPage, meta: { title: 'Quản lý nhân viên' } },
+      {
+        path: 'nhan-vien/them',
+        component: EmployeeCreatePage,
+        meta: { title: 'Quản lý nhân viên' },
+      },
       { path: ':pathMatch(.*)*', redirect: '/hoa-don' },
     ],
   },

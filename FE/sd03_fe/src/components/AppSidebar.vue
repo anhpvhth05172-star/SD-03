@@ -82,7 +82,7 @@ const isActive = (item) => {
   if (item.children) {
     return item.children.some((child) => route.path.startsWith(child.path))
   }
-  return route.path === item.path
+  return route.path === item.path || route.path.startsWith(item.path + '/')
 }
 
 const toggle = (item) => {

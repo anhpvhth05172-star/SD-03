@@ -10,6 +10,7 @@
   --red-dark: #c11f27;
   --red-soft: #fdeef0;
   --blue: #3b82f6;
+  --blue-dark: #2f6fe0;
   --green: #22c55e;
   --black: #141416;
   --white: #ffffff;
@@ -17,6 +18,7 @@
   --grad-brand: linear-gradient(135deg, #0d0d0f 0%, #e0202a 100%);
   --grad-tri: linear-gradient(90deg, #0d0d0f 0%, #ffffff 50%, #e0202a 100%);
 
+  --app-bg: #ececef;
   --panel-bg: #f8f8fa;
   --card-line: #ececef;
   --line: #e9eaee;
@@ -35,7 +37,7 @@ body {
   font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 14px;
   color: var(--text);
-  background: var(--black);
+  background: var(--app-bg);
   -webkit-font-smoothing: antialiased;
 }
 
