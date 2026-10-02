@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AdminLayout from '../layouts/AdminLayout.vue'
 import InvoiceListPage from '../pages/InvoiceListPage.vue'
+import InvoiceFormPage from '../pages/InvoiceFormPage.vue'
 import VoucherListPage from '../pages/VoucherListPage.vue'
 import DiscountEventPage from '../pages/DiscountEventPage.vue'
 import EmployeeListPage from '../pages/EmployeeListPage.vue'
@@ -18,6 +19,8 @@ const routes = [
     component: AdminLayout,
     children: [
       { path: 'hoa-don', component: InvoiceListPage, meta: { title: 'Quản lý hóa đơn' } },
+      { path: 'hoa-don/them', component: InvoiceFormPage, meta: { title: 'Tạo hóa đơn' } },
+      { path: 'hoa-don/:id/sua', component: InvoiceFormPage, meta: { title: 'Sửa hóa đơn' } },
       {
         path: 'phieu-giam-gia',
         component: VoucherListPage,
