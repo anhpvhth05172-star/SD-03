@@ -24,7 +24,7 @@ const invoices = [
     staff: 'Phạm Văn A',
     customer: 'Phạm Văn B',
     initials: 'PB',
-    avatar: '#e0202a',
+    avatar: '#cc0000',
     phone: '012345689',
     total: '1.500.000₫',
     type: 'Tại quầy',
@@ -317,7 +317,7 @@ const statusPill = (value) => {
   padding: 0 16px;
   border: none;
   border-radius: 7px;
-  background: var(--green);
+  background: var(--red);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
@@ -325,11 +325,11 @@ const statusPill = (value) => {
   align-items: center;
   gap: 7px;
   cursor: pointer;
-  transition: filter 0.15s ease;
+  transition: background 0.15s ease;
 }
 
 .btn-export:hover {
-  filter: brightness(1.06);
+  background: var(--red-dark);
 }
 
 .btn-export svg {

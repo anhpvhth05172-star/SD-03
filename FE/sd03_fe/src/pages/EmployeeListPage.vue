@@ -25,7 +25,7 @@ const staffs = [
   {
     name: 'Nguyễn Minh Quân',
     initials: 'MQ',
-    color: '#e0202a',
+    color: '#cc0000',
     code: 'NV001',
     email: 'quan.nm@polyshoe.vn',
     role: 'Giám đốc điều hành',

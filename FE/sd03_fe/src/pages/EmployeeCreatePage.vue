@@ -106,8 +106,8 @@ const wards = ['', 'Phường 1', 'Phường 2', 'Phường 3', 'Phường 4', '
 .form-fields input:focus,
 .form-fields select:focus,
 .form-fields textarea:focus {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
 }
 
 .form-actions {
@@ -123,7 +123,7 @@ const wards = ['', 'Phường 1', 'Phường 2', 'Phường 3', 'Phường 4', '
   padding: 0 22px;
   border: none;
   border-radius: 7px;
-  background: var(--blue);
+  background: var(--red);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
@@ -132,7 +132,7 @@ const wards = ['', 'Phường 1', 'Phường 2', 'Phường 3', 'Phường 4', '
 }
 
 .btn-primary:hover {
-  background: var(--blue-dark);
+  background: var(--red-dark);
 }
 
 .btn-cancel {

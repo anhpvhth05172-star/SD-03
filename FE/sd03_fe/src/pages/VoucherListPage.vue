@@ -25,7 +25,7 @@ const vouchers = [
     code: 'PG001',
     sub: 'Giảm 20% cho đơn từ 500.000₫',
     initials: 'G2',
-    avatar: '#e0202a',
+    avatar: '#cc0000',
     event: 'Summer Sale 2026',
     discount: '20%',
     used: '45/200',

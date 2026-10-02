@@ -29,7 +29,7 @@
   padding: 0 18px;
   border: none;
   border-radius: 8px;
-  background: var(--blue);
+  background: var(--red);
   color: #fff;
   font-size: 13.5px;
   font-weight: 600;
@@ -42,7 +42,7 @@
 }
 
 .btn-add:hover {
-  background: var(--blue-dark);
+  background: var(--red-dark);
 }
 
 .btn-add svg {
@@ -85,7 +85,7 @@
 
 .tone-red {
   background: #fdecec;
-  color: #e0202a;
+  color: #cc0000;
 }
 
 .tone-green {
@@ -132,7 +132,7 @@
 }
 
 .note-red {
-  color: #e0202a;
+  color: #cc0000;
 }
 
 .note-green {
@@ -333,7 +333,7 @@
   padding: 0 18px;
   border: none;
   border-radius: 7px;
-  background: var(--blue);
+  background: var(--red);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
@@ -345,7 +345,7 @@
 }
 
 .btn-apply:hover {
-  background: var(--blue-dark);
+  background: var(--red-dark);
 }
 
 .btn-apply svg {
@@ -526,7 +526,7 @@
 
 .act-btn.is-red {
   background: #fdecec;
-  color: #e0202a;
+  color: #cc0000;
 }
 
 .act-btn.is-red:hover {

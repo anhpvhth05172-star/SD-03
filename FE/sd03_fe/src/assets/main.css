@@ -5,9 +5,9 @@
 }
 
 :root {
-  --red: #e0202a;
+  --red: #cc0000;
   --red-bright: #ef4444;
-  --red-dark: #c11f27;
+  --red-dark: #a30000;
   --red-soft: #fdeef0;
   --blue: #3b82f6;
   --blue-dark: #2f6fe0;
@@ -15,8 +15,8 @@
   --black: #141416;
   --white: #ffffff;
 
-  --grad-brand: linear-gradient(135deg, #0d0d0f 0%, #e0202a 100%);
-  --grad-tri: linear-gradient(90deg, #0d0d0f 0%, #ffffff 50%, #e0202a 100%);
+  --grad-brand: linear-gradient(135deg, #0d0d0f 0%, #cc0000 100%);
+  --grad-tri: linear-gradient(90deg, #0d0d0f 0%, #ffffff 50%, #cc0000 100%);
 
   --app-bg: #ececef;
   --panel-bg: #f8f8fa;

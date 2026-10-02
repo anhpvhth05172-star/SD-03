@@ -210,7 +210,7 @@ const statusPill = (value) => {
               @click="activeImage = i - 1"
             >
               <template v-if="i <= 2">
-                <span class="thumb-mark" :style="{ background: i === 1 ? '#e0202a' : '#23232a' }">G</span>
+                <span class="thumb-mark" :style="{ background: i === 1 ? '#cc0000' : '#23232a' }">G</span>
               </template>
               <template v-else>+</template>
             </button>
@@ -329,7 +329,7 @@ const statusPill = (value) => {
   padding: 0 16px;
   border: none;
   border-radius: 8px;
-  background: var(--green);
+  background: var(--red);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
@@ -337,11 +337,11 @@ const statusPill = (value) => {
   align-items: center;
   gap: 7px;
   cursor: pointer;
-  transition: filter 0.15s ease;
+  transition: background 0.15s ease;
 }
 
 .btn-export:hover {
-  filter: brightness(1.06);
+  background: var(--red-dark);
 }
 
 .btn-export svg {

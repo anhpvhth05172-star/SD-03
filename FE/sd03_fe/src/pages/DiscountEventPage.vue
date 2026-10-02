@@ -25,7 +25,7 @@ const events = [
     code: 'DG001',
     sub: 'Giảm giá toàn hệ thống - tất cả khách hàng',
     initials: 'SS',
-    avatar: '#e0202a',
+    avatar: '#cc0000',
     time: '01/05/2026 - 30/06/2026',
     discount: '10% - 30%',
     scope: 'Tất cả khách hàng',

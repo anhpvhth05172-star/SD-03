@@ -23,7 +23,7 @@ const customers = [
   {
     name: 'Nguyễn Văn An',
     initials: 'NA',
-    color: '#e0202a',
+    color: '#cc0000',
     code: 'KH001',
     contact: '0987 654 321 · an.nv@gmail.com',
     rank: 'Kim cương',

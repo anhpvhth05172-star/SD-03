@@ -23,7 +23,7 @@ const products = [
   {
     name: 'Giày Thể Thao Retro 90s',
     thumb: 'G',
-    color: '#e0202a',
+    color: '#cc0000',
     code: 'SP001',
     category: 'Giày thể thao',
     brand: 'Nike',
@@ -346,7 +346,7 @@ const stockClass = (value) => (value === 0 ? 'stock-zero' : value <= 5 ? 'stock-
   padding: 0 16px;
   border: none;
   border-radius: 8px;
-  background: var(--green);
+  background: var(--red);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
@@ -354,11 +354,11 @@ const stockClass = (value) => (value === 0 ? 'stock-zero' : value <= 5 ? 'stock-
   align-items: center;
   gap: 7px;
   cursor: pointer;
-  transition: filter 0.15s ease;
+  transition: background 0.15s ease;
 }
 
 .btn-export:hover {
-  filter: brightness(1.06);
+  background: var(--red-dark);
 }
 
 .btn-export svg {
