@@ -1,23 +1,9 @@
 <script setup>
 import { ref } from 'vue'
-import StatCard from '../components/StatCard.vue'
 
 const showFilter = ref(true)
 
 const pages = [1, 2, 3, 4, 5]
-
-const iconBox = [
-  'M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V4c0-1.1-1-2-2-2zm-5 12H9v-2h6v2zm5-7H4V4h16v3z',
-]
-const iconCheck = [
-  'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',
-]
-const iconAlert = [
-  'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z',
-]
-const iconOff = [
-  'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z',
-]
 
 const products = [
   {
@@ -119,41 +105,6 @@ const stockClass = (value) => (value === 0 ? 'stock-zero' : value <= 5 ? 'stock-
           Thêm sản phẩm
         </button>
       </div>
-    </div>
-
-    <div class="stat-row">
-      <StatCard
-        tone="red"
-        :icon="iconBox"
-        label="Tổng sản phẩm"
-        value="248"
-        note="+12 sản phẩm trong tháng"
-        note-tone="red"
-      />
-      <StatCard
-        tone="green"
-        :icon="iconCheck"
-        label="Đang bán"
-        value="227"
-        note="91% đang hoạt động"
-        note-tone="green"
-      />
-      <StatCard
-        tone="amber"
-        :icon="iconAlert"
-        label="Sắp hết hàng"
-        value="19"
-        note="Tồn kho ≤ 5 sản phẩm"
-        note-tone="amber"
-      />
-      <StatCard
-        tone="blue"
-        :icon="iconOff"
-        label="Ngừng bán"
-        value="08"
-        note="Không còn kinh doanh"
-        note-tone="blue"
-      />
     </div>
 
     <section class="panel">

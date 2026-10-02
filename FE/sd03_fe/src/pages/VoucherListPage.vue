@@ -1,23 +1,9 @@
 <script setup>
 import { ref } from 'vue'
-import StatCard from '../components/StatCard.vue'
 
 const showFilter = ref(true)
 
 const pages = [1, 2, 3, 4, 5]
-
-const iconTag = [
-  'M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58s1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41s-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z',
-]
-const iconCheck = [
-  'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',
-]
-const iconCard = [
-  'M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z',
-]
-const iconClock = [
-  'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z',
-]
 
 const vouchers = [
   {
@@ -114,41 +100,6 @@ const statusPill = (value) => {
         </svg>
         Thêm phiếu giảm giá
       </button>
-    </div>
-
-    <div class="stat-row">
-      <StatCard
-        tone="red"
-        :icon="iconTag"
-        label="Tổng phiếu"
-        value="128"
-        note="+12 phiếu trong tháng"
-        note-tone="red"
-      />
-      <StatCard
-        tone="green"
-        :icon="iconCheck"
-        label="Đang hoạt động"
-        value="45"
-        note="35% tổng số phiếu"
-        note-tone="green"
-      />
-      <StatCard
-        tone="purple"
-        :icon="iconCard"
-        label="Đã sử dụng"
-        value="60"
-        note="47% số phiếu đã phát"
-        note-tone="purple"
-      />
-      <StatCard
-        tone="amber"
-        :icon="iconClock"
-        label="Hết hạn"
-        value="23"
-        note="Cần gia hạn hoặc thu hồi"
-        note-tone="amber"
-      />
     </div>
 
     <section class="panel">

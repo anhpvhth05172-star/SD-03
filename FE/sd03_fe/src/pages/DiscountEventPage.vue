@@ -1,23 +1,9 @@
 <script setup>
 import { ref } from 'vue'
-import StatCard from '../components/StatCard.vue'
 
 const showFilter = ref(true)
 
 const pages = [1, 2]
-
-const iconEvent = [
-  'M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z',
-]
-const iconCheck = [
-  'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',
-]
-const iconClock = [
-  'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z',
-]
-const iconArchive = [
-  'M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z',
-]
 
 const events = [
   {
@@ -116,41 +102,6 @@ const statusPill = (value) => {
         </svg>
         Thêm đợt giảm giá
       </button>
-    </div>
-
-    <div class="stat-row">
-      <StatCard
-        tone="red"
-        :icon="iconEvent"
-        label="Tổng đợt"
-        value="12"
-        note="+2 đợt trong tháng"
-        note-tone="red"
-      />
-      <StatCard
-        tone="green"
-        :icon="iconCheck"
-        label="Đang diễn ra"
-        value="4"
-        note="Áp dụng toàn hệ thống"
-        note-tone="green"
-      />
-      <StatCard
-        tone="amber"
-        :icon="iconClock"
-        label="Sắp diễn ra"
-        value="3"
-        note="Chuẩn bị khởi chạy"
-        note-tone="amber"
-      />
-      <StatCard
-        tone="blue"
-        :icon="iconArchive"
-        label="Đã kết thúc"
-        value="5"
-        note="Đã lưu trữ"
-        note-tone="blue"
-      />
     </div>
 
     <section class="panel">

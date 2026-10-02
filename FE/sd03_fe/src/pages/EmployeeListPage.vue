@@ -1,25 +1,11 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import StatCard from '../components/StatCard.vue'
 
 const router = useRouter()
 const showFilter = ref(true)
 
 const pages = [1, 2, 3, 4, 5]
-
-const iconPeople = [
-  'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z',
-]
-const iconPerson = [
-  'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z',
-]
-const iconCalendar = [
-  'M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z',
-]
-const iconAssignment = [
-  'M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2.42 8.91L10 17.34 7.58 14.92 6.16 16.34 10 20.17l6.84-6.83-1.42-1.43z',
-]
 
 const staffs = [
   {
@@ -124,41 +110,6 @@ const statusPill = (value) => {
         </svg>
         Thêm nhân viên
       </button>
-    </div>
-
-    <div class="stat-row">
-      <StatCard
-        tone="red"
-        :icon="iconPeople"
-        label="Tổng số nhân viên"
-        value="48"
-        note="+6 nhân viên trong tháng"
-        note-tone="red"
-      />
-      <StatCard
-        tone="green"
-        :icon="iconPerson"
-        label="Đang làm việc"
-        value="42"
-        note="97% đang hoạt động"
-        note-tone="green"
-      />
-      <StatCard
-        tone="amber"
-        :icon="iconCalendar"
-        label="Chấm công hôm nay"
-        value="06"
-        note="Có mặt đúng giờ"
-        note-tone="amber"
-      />
-      <StatCard
-        tone="purple"
-        :icon="iconAssignment"
-        label="Cần phê duyệt đơn"
-        value="05"
-        note="Cần xem xét"
-        note-tone="purple"
-      />
     </div>
 
     <section class="panel">
