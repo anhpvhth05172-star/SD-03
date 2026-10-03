@@ -80,7 +80,7 @@ public class HoaDonService {
         }
         var result = hoaDonRepository.findByFilters(
             blankToNull(ma), tu, den, maLoaiDon, maTrangThai,
-            PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100), Sort.by(Sort.Direction.DESC, "ngayTao"))
+            PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 10), Sort.by(Sort.Direction.DESC, "ngayTao"))
         );
         return PageResponse.from(result.map(this::toDTO));
     }
