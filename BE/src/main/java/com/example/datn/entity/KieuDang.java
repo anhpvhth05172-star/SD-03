@@ -29,6 +29,9 @@ public class KieuDang {
     @Column(name = "ten_kieu_dang", nullable = false, length = 100)
     private String tenKieuDang;
 
+    @Column(name = "mo_ta", length = 500)
+    private String moTa;
+
     @Column(name = "trang_thai", nullable = false)
     private Boolean trangThai = true;
 }

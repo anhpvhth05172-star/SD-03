@@ -23,6 +23,9 @@ public class ThanGiay {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "ma_than_giay", length = 50)
+    private String maThanGiay;
+
     @Column(name = "ten_than_giay", nullable = false, length = 100)
     private String tenThanGiay;
 
