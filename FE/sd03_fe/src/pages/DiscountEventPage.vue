@@ -1,90 +1,65 @@
 <script setup>
-import { ref } from 'vue'
+import axios from "axios";
+import { inject, onMounted, ref } from "vue";
 
-const showFilter = ref(true)
+const showFilter = ref(true);
 
-const pages = [1, 2]
+const apiDiscountEvent = inject("baseAPI");
 
-const events = [
-  {
-    name: 'Summer Sale 2026',
-    code: 'DG001',
-    sub: 'Giảm giá toàn hệ thống - tất cả khách hàng',
-    initials: 'SS',
-    avatar: '#cc0000',
-    time: '01/05/2026 - 30/06/2026',
-    discount: '10% - 30%',
-    scope: 'Tất cả khách hàng',
-    vouchers: '120 phiếu',
-    status: 'Đang diễn ra',
-  },
-  {
-    name: 'Flash Sale 05/2026',
-    code: 'DG002',
-    sub: 'Sự kiện giảm giá trong 3 ngày',
-    initials: 'FS',
-    avatar: '#f59e0b',
-    time: '20/05/2026 - 22/05/2026',
-    discount: 'Tối đa 50%',
-    scope: 'Tất cả khách hàng',
-    vouchers: '80 phiếu',
-    status: 'Sắp diễn ra',
-  },
-  {
-    name: 'Ưu đãi thành viên mới',
-    code: 'DG003',
-    sub: 'Dành cho khách hàng đăng ký mới',
-    initials: 'UM',
-    avatar: '#8b5cf6',
-    time: '01/01/2026 - 31/12/2026',
-    discount: '15%',
-    scope: 'Khách hàng mới',
-    vouchers: '1000 phiếu',
-    status: 'Đang diễn ra',
-  },
-  {
-    name: 'Black Friday 2026',
-    code: 'DG004',
-    sub: 'Sự kiện giảm giá lớn nhất năm',
-    initials: 'BF',
-    avatar: '#14b8a6',
-    time: '27/11/2026 - 30/11/2026',
-    discount: 'Tối đa 60%',
-    scope: 'Tất cả khách hàng',
-    vouchers: '500 phiếu',
-    status: 'Sắp diễn ra',
-  },
-  {
-    name: 'Tết Nguyên Đán 2026',
-    code: 'DG005',
-    sub: 'Ưu đãi dịp Tết nguyên đán',
-    initials: 'TND',
-    avatar: '#3b82f6',
-    time: '15/02/2026 - 28/02/2026',
-    discount: '5% - 25%',
-    scope: 'Tất cả khách hàng',
-    vouchers: '300 phiếu',
-    status: 'Đã kết thúc',
-  },
-  {
-    name: 'Back To School',
-    code: 'DG006',
-    sub: 'Giảm giá mùa tựu trường',
-    initials: 'BS',
-    avatar: '#22c55e',
-    time: '10/08/2026 - 30/09/2026',
-    discount: '10% - 20%',
-    scope: 'Tất cả khách hàng',
-    vouchers: '150 phiếu',
-    status: 'Đã kết thúc',
-  },
-]
+const listEvent = ref([]);
+const page = ref(0); // Spring bắt đầu từ 0
+const pageSize = 8;
+const totalPages = ref(0);
+const totalElements = ref(0);
+
+const getData = async (p = 0) => {
+  try {
+    const res = await axios.get(apiDiscountEvent + "admin/dot-giam-gia", {
+      params: { page: p, size: pageSize },
+    });
+    if (res.status === 200) {
+      listEvent.value = res.data.content;
+      page.value = res.data.number;
+      totalPages.value = res.data.totalPages;
+      totalElements.value = res.data.totalElements;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const goToPage = (p) => {
+  if (p < 0 || p >= totalPages.value || p === page.value) return;
+  getData(p);
+};
+
+const formatDate = (s) => (s ? new Date(s).toLocaleDateString("vi-VN") : "");
+
+const getStatus = (d) => {
+  if (!d.trangThai) return "Đã kết thúc";
+  const now = new Date();
+  if (now < new Date(d.ngayBatDau)) return "Sắp diễn ra";
+  if (now > new Date(d.ngayKetThuc)) return "Đã kết thúc";
+  return "Đang diễn ra";
+};
 
 const statusPill = (value) => {
-  if (value === 'Đang diễn ra') return 'pill-green'
-  if (value === 'Sắp diễn ra') return 'pill-amber'
-  return 'pill-gray'
-}
+  if (value === "Đang diễn ra") return "pill-green";
+  if (value === "Sắp diễn ra") return "pill-amber";
+  return "pill-gray";
+};
+
+const colors = [
+  "#cc0000",
+  "#3b82f6",
+  "#f59e0b",
+  "#8b5cf6",
+  "#14b8a6",
+  "#22c55e",
+];
+const avatarColor = (id) => colors[id % colors.length];
+
+onMounted(() => getData(0));
 </script>
 
 <template>
@@ -93,11 +68,18 @@ const statusPill = (value) => {
       <div>
         <h1 class="screen-title">Quản lý đợt giảm giá</h1>
         <p class="screen-sub">
-          Quản lý các sự kiện giảm giá áp dụng cho tất cả khách hàng trên toàn hệ thống
+          Quản lý các sự kiện giảm giá áp dụng cho tất cả khách hàng trên toàn
+          hệ thống
         </p>
       </div>
       <button class="btn-add" type="button">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.2"
+          stroke-linecap="round"
+        >
           <path d="M12 6v12M6 12h12" />
         </svg>
         Thêm đợt giảm giá
@@ -113,10 +95,21 @@ const statusPill = (value) => {
         </span>
         <h3 class="panel-title">Tìm kiếm &amp; bộ lọc</h3>
         <div class="panel-right">
-          <span class="result-count">12 kết quả</span>
-          <button class="link-red" type="button" @click="showFilter = !showFilter">
-            {{ showFilter ? 'Ẩn bớt' : 'Hiện thêm' }}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <span class="result-count">{{ totalElements }} kết quả</span>
+          <button
+            class="link-red"
+            type="button"
+            @click="showFilter = !showFilter"
+          >
+            {{ showFilter ? "Ẩn bớt" : "Hiện thêm" }}
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <path :d="showFilter ? 'M6 14.5l6-6 6 6' : 'M6 9.5l6 6 6-6'" />
             </svg>
           </button>
@@ -142,8 +135,16 @@ const statusPill = (value) => {
         <div class="f-item">
           <label>Từ ngày</label>
           <div class="date-box">
-            <input type="text" value="01/05/2026" placeholder="dd/mm/yyyy" />
-            <svg class="date-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <input type="text" placeholder="dd/mm/yyyy" />
+            <svg
+              class="date-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <rect x="3.8" y="5.5" width="16.4" height="14.5" rx="2" />
               <path d="M8 3.2v4.2M16 3.2v4.2M3.8 10h16.4" />
             </svg>
@@ -154,7 +155,15 @@ const statusPill = (value) => {
           <label>Đến ngày</label>
           <div class="date-box">
             <input type="text" placeholder="dd/mm/yyyy" />
-            <svg class="date-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <svg
+              class="date-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <rect x="3.8" y="5.5" width="16.4" height="14.5" rx="2" />
               <path d="M8 3.2v4.2M16 3.2v4.2M3.8 10h16.4" />
             </svg>
@@ -163,13 +172,26 @@ const statusPill = (value) => {
 
         <div class="filter-actions">
           <button class="btn-reset" type="button" aria-label="Đặt lại">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <path d="M20 11a8 8 0 1 0-.9 4.5" />
               <path d="M20 4.5V11h-6.5" />
             </svg>
           </button>
           <button class="btn-apply" type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+            >
               <path d="M4 6h16M7 12h10M10 18h4" />
             </svg>
             Áp dụng
@@ -188,7 +210,7 @@ const statusPill = (value) => {
           </svg>
         </span>
         <h3 class="panel-title">Danh sách đợt giảm giá</h3>
-        <span class="count-pill">12 đợt</span>
+        <span class="count-pill">{{ totalElements }} đợt</span>
         <div class="panel-right">
           <span class="panel-meta">Cập nhật lúc 08:32 25/05/2026</span>
         </div>
@@ -208,68 +230,139 @@ const statusPill = (value) => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in events" :key="row.code">
+            <tr v-for="d in listEvent" :key="d.id">
               <td>
                 <div class="entity">
-                  <span class="entity-avatar" :style="{ background: row.avatar }">{{ row.initials }}</span>
+                  <span
+                    class="entity-avatar"
+                    :style="{ background: avatarColor(d.id) }"
+                    >{{ d.maDotGiamGia.slice(-2) }}</span
+                  >
                   <div class="entity-info">
                     <div class="entity-line">
-                      <span class="entity-name">{{ row.name }}</span>
-                      <span class="entity-code">{{ row.code }}</span>
+                      <span class="entity-name">{{ d.tenDotGiamGia }}</span>
+                      <span class="entity-code">{{ d.maDotGiamGia }}</span>
                     </div>
-                    <div class="entity-sub">{{ row.sub }}</div>
+                    <div class="entity-sub">
+                      Tạo ngày {{ formatDate(d.ngayTao) }}
+                    </div>
                   </div>
                 </div>
               </td>
-              <td>{{ row.time }}</td>
-              <td class="cell-strong">{{ row.discount }}</td>
-              <td>{{ row.scope }}</td>
-              <td>{{ row.vouchers }}</td>
-              <td><span class="pill" :class="statusPill(row.status)">{{ row.status }}</span></td>
+              <td>
+                {{ formatDate(d.ngayBatDau) }} - {{ formatDate(d.ngayKetThuc) }}
+              </td>
+              <td class="cell-strong">{{ d.phanTramGiam }}%</td>
+              <td>—</td>
+              <td>—</td>
+              <td>
+                <span class="pill" :class="statusPill(getStatus(d))">{{
+                  getStatus(d)
+                }}</span>
+              </td>
               <td>
                 <div class="act-group">
                   <button class="act-btn" type="button" aria-label="Xem">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path
+                        d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"
+                      />
                       <circle cx="12" cy="12" r="3" />
                     </svg>
                   </button>
                   <button class="act-btn is-red" type="button" aria-label="Sửa">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3" />
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.9"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path
+                        d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3"
+                      />
                     </svg>
                   </button>
                   <button class="act-btn" type="button" aria-label="Thêm">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.2"
+                      stroke-linecap="round"
+                    >
                       <path d="M12 6v12M6 12h12" />
                     </svg>
                   </button>
                 </div>
               </td>
             </tr>
+            <tr v-if="!listEvent.length">
+              <td colspan="7" style="text-align: center">Không có dữ liệu</td>
+            </tr>
           </tbody>
         </table>
       </div>
 
       <div class="panel-foot">
-        <span class="foot-text">Hiển thị 1-6 trong 12 đợt giảm giá</span>
+        <span class="foot-text">
+          Hiển thị {{ listEvent.length ? page * pageSize + 1 : 0 }}-{{
+            page * pageSize + listEvent.length
+          }}
+          trong {{ totalElements }} đợt giảm giá
+        </span>
         <div class="pager">
-          <button class="page-btn" type="button" aria-label="Trang trước">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <button
+            class="page-btn"
+            type="button"
+            aria-label="Trang trước"
+            :disabled="page === 0"
+            @click="goToPage(page - 1)"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <path d="M14.5 6l-6 6 6 6" />
             </svg>
           </button>
           <button
-            v-for="page in pages"
-            :key="page"
+            v-for="p in totalPages"
+            :key="p"
             class="page-btn"
-            :class="{ 'is-active': page === 1 }"
+            :class="{ 'is-active': p - 1 === page }"
             type="button"
+            @click="goToPage(p - 1)"
           >
-            {{ page }}
+            {{ p }}
           </button>
-          <button class="page-btn" type="button" aria-label="Trang sau">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <button
+            class="page-btn"
+            type="button"
+            aria-label="Trang sau"
+            :disabled="page >= totalPages - 1"
+            @click="goToPage(page + 1)"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <path d="M9.5 6l6 6-6 6" />
             </svg>
           </button>
