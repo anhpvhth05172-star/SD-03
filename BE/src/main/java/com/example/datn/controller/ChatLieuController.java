@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/chat-lieu")
 @RequiredArgsConstructor
-@CrossOrigin(originPatterns = "*")
+@CrossOrigin(origins = "*")
 public class ChatLieuController {
 
     private final ChatLieuService chatLieuService;
