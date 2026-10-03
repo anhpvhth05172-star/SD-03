@@ -46,9 +46,19 @@ const routes = [
         component: CustomerCreatePage,
         meta: { title: 'Quản lý khách hàng' },
       },
+      {
+        path: 'khach-hang/:id/sua',
+        component: CustomerCreatePage,
+        meta: { title: 'Quản lý khách hàng' },
+      },
       { path: 'nhan-vien', component: EmployeeListPage, meta: { title: 'Quản lý nhân viên' } },
       {
         path: 'nhan-vien/them',
+        component: EmployeeCreatePage,
+        meta: { title: 'Quản lý nhân viên' },
+      },
+      {
+        path: 'nhan-vien/:id/sua',
         component: EmployeeCreatePage,
         meta: { title: 'Quản lý nhân viên' },
       },

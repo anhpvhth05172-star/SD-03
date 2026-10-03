@@ -1,42 +1,159 @@
 <script setup>
-import { useRouter } from 'vue-router'
+import { onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { createCustomer, getCustomer, updateCustomer } from '../api/customer'
 
+const route = useRoute()
 const router = useRouter()
+const isEdit = !!route.params.id
+const saving = ref(false)
+const loading = ref(false)
+const errorMsg = ref('')
 
-const ranks = ['', 'Thường', 'Bạc', 'Vàng', 'Kim cương']
 const provinces = ['', 'Hà Nội', 'TP. Hồ Chí Minh', 'Đà Nẵng', 'Hải Phòng', 'Cần Thơ']
 const wards = ['', 'Phường 1', 'Phường 2', 'Phường 3', 'Phường 4', 'Phường 5']
+const gioiTinhs = [
+  { value: '', label: 'Chọn giới tính' },
+  { value: 'NAM', label: 'Nam' },
+  { value: 'NU', label: 'Nữ' },
+  { value: 'KHAC', label: 'Khác' },
+]
+const trangThais = [
+  { value: 'true', label: 'Đang hoạt động' },
+  { value: 'false', label: 'Đã khóa' },
+]
+
+const form = ref({
+  maKhachHang: '',
+  tenKhachHang: '',
+  matKhau: '',
+  email: '',
+  soDienThoai: '',
+  ngaySinh: '',
+  gioiTinh: '',
+  trangThai: 'true',
+  tinhThanhPho: '',
+  phuong: '',
+  diaChiCuThe: '',
+})
+
+const validate = () => {
+  if (!form.value.tenKhachHang.trim()) return 'Họ và tên không được để trống'
+  if (form.value.email && !/^[\w.+-]+@[\w-]+(\.[\w-]+)+$/.test(form.value.email.trim())) {
+    return 'Email không hợp lệ'
+  }
+  if (form.value.soDienThoai && !/^(0|\+84)\d{8,10}$/.test(form.value.soDienThoai.trim())) {
+    return 'Số điện thoại không hợp lệ'
+  }
+  if (form.value.matKhau && form.value.matKhau.length < 6) {
+    return 'Mật khẩu phải có ít nhất 6 ký tự'
+  }
+  return ''
+}
+
+const buildPayload = () => ({
+  maKhachHang: form.value.maKhachHang.trim() || null,
+  tenKhachHang: form.value.tenKhachHang.trim(),
+  matKhau: form.value.matKhau ? form.value.matKhau : null,
+  email: form.value.email.trim() || null,
+  soDienThoai: form.value.soDienThoai.trim() || null,
+  ngaySinh: form.value.ngaySinh || null,
+  gioiTinh: form.value.gioiTinh || null,
+  trangThai: form.value.trangThai === 'true',
+  tinhThanhPho: form.value.tinhThanhPho || null,
+  phuong: form.value.phuong || null,
+  diaChiCuThe: form.value.diaChiCuThe.trim() || null,
+})
+
+const submit = async () => {
+  const error = validate()
+  if (error) {
+    errorMsg.value = error
+    return
+  }
+  errorMsg.value = ''
+  saving.value = true
+  try {
+    const payload = buildPayload()
+    if (isEdit) {
+      await updateCustomer(route.params.id, payload)
+    } else {
+      await createCustomer(payload)
+    }
+    router.push('/khach-hang')
+  } catch (e) {
+    errorMsg.value = e.message
+  } finally {
+    saving.value = false
+  }
+}
+
+onMounted(async () => {
+  if (!isEdit) return
+  loading.value = true
+  try {
+    const kh = await getCustomer(route.params.id)
+    const diaChi = kh.diaChiMacDinh || {}
+    form.value = {
+      maKhachHang: kh.maKhachHang || '',
+      tenKhachHang: kh.tenKhachHang || '',
+      matKhau: '',
+      email: kh.email || '',
+      soDienThoai: kh.soDienThoai || '',
+      ngaySinh: kh.ngaySinh || '',
+      gioiTinh: kh.gioiTinh || '',
+      trangThai: kh.trangThai === false ? 'false' : 'true',
+      tinhThanhPho: diaChi.thanhPho || '',
+      phuong: diaChi.phuong || '',
+      diaChiCuThe: diaChi.diaChiCuThe || '',
+    }
+  } catch (e) {
+    errorMsg.value = e.message
+  } finally {
+    loading.value = false
+  }
+})
 </script>
 
 <template>
   <div class="create-wrap">
     <section class="create-card">
-      <h2 class="create-title">Tạo Tài Khoản Khách Hàng</h2>
+      <h2 class="create-title">{{ isEdit ? 'Cập nhật Tài Khoản Khách Hàng' : 'Tạo Tài Khoản Khách Hàng' }}</h2>
+
+      <p v-if="errorMsg" class="form-error">{{ errorMsg }}</p>
+      <p v-if="loading" class="form-error">Đang tải dữ liệu...</p>
 
       <div class="form-fields">
-        <input type="text" placeholder="Mã khách hàng" />
-        <input type="text" placeholder="Họ và tên" />
-        <input type="email" placeholder="Email" />
-        <input type="tel" placeholder="Số điện thoại" />
-        <input type="text" placeholder="Ngày sinh" />
+        <input v-model="form.maKhachHang" type="text" placeholder="Mã khách hàng (để trống sẽ tự sinh)" />
+        <input v-model="form.tenKhachHang" type="text" placeholder="Họ và tên" />
+        <input v-model="form.matKhau" type="password" :placeholder="isEdit ? 'Mật khẩu mới (bỏ trống để giữ nguyên)' : 'Mật khẩu (tối thiểu 6 ký tự, mặc định 123456)'" />
+        <input v-model="form.email" type="email" placeholder="Email" />
+        <input v-model="form.soDienThoai" type="tel" placeholder="Số điện thoại" />
+        <input v-model="form.ngaySinh" type="date" placeholder="Ngày sinh" />
 
-        <select>
-          <option v-for="item in ranks" :key="item" :value="item">{{ item || 'Chọn hạng thành viên' }}</option>
+        <select v-model="form.gioiTinh">
+          <option v-for="item in gioiTinhs" :key="item.value" :value="item.value">{{ item.label }}</option>
         </select>
 
-        <select>
+        <select v-if="isEdit" v-model="form.trangThai">
+          <option v-for="item in trangThais" :key="item.value" :value="item.value">{{ item.label }}</option>
+        </select>
+
+        <select v-model="form.tinhThanhPho">
           <option v-for="item in provinces" :key="item" :value="item">{{ item || 'Chọn tỉnh' }}</option>
         </select>
 
-        <select>
+        <select v-model="form.phuong">
           <option v-for="item in wards" :key="item" :value="item">{{ item || 'Chọn phường' }}</option>
         </select>
 
-        <textarea placeholder="Địa chỉ cụ thể" rows="3"></textarea>
+        <textarea v-model="form.diaChiCuThe" placeholder="Địa chỉ cụ thể" rows="3"></textarea>
       </div>
 
       <div class="form-actions">
-        <button class="btn-primary" type="button">Thêm</button>
+        <button class="btn-primary" type="button" :disabled="saving" @click="submit">
+          {{ saving ? 'Đang lưu...' : isEdit ? 'Cập nhật' : 'Thêm' }}
+        </button>
         <button class="btn-cancel" type="button" @click="router.push('/khach-hang')">Hủy</button>
       </div>
     </section>
@@ -67,6 +184,16 @@ const wards = ['', 'Phường 1', 'Phường 2', 'Phường 3', 'Phường 4', '
   font-weight: 700;
   color: #1d1d23;
   margin-bottom: 22px;
+}
+
+.form-error {
+  background: #fdecec;
+  color: #dc2626;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 7px;
+  padding: 9px 12px;
+  margin-bottom: 13px;
 }
 
 .form-fields {
@@ -103,10 +230,6 @@ const wards = ['', 'Phường 1', 'Phường 2', 'Phường 3', 'Phường 4', '
   color: #9a9aa3;
 }
 
-.form-fields select {
-  color: #9a9aa3;
-}
-
 .form-fields input:focus,
 .form-fields select:focus,
 .form-fields textarea:focus {
@@ -137,6 +260,11 @@ const wards = ['', 'Phường 1', 'Phường 2', 'Phường 3', 'Phường 4', '
 
 .btn-primary:hover {
   background: var(--red-dark);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .btn-cancel {
