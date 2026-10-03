@@ -55,8 +55,8 @@ public class PhieuGiamGia {
     @Column(name = "so_luong_da_su_dung", nullable = false)
     private Integer soLuongDaSuDung = 0;
 
-    @Column(name = "trang_thai", nullable = false)
-    private Boolean trangThai = true;
+    @Column(name = "trang_thai")
+    private Boolean trangThai;
 
     @Column(name = "ngay_tao", insertable = false, updatable = false)
     private LocalDateTime ngayTao;

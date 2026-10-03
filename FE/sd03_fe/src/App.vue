@@ -1,6 +1,10 @@
 <script setup>
+import { provide } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import Topbar from './components/Topbar.vue'
+
+let baseAPI = 'http://localhost:8080/'
+provide('baseAPI', baseAPI)
 </script>
 
 <template>

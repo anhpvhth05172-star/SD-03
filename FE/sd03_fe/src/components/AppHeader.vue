@@ -2,34 +2,30 @@
 defineProps({
   title: { type: String, default: '' },
 })
-
-defineEmits(['toggle-sidebar'])
 </script>
 
 <template>
   <header class="app-header">
-    <div class="header-left">
-      <button class="icon-btn menu-btn" type="button" aria-label="Thu gọn menu" @click="$emit('toggle-sidebar')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M4 6.5h16M4 12h16M4 17.5h16" />
-        </svg>
-      </button>
-      <h1 class="page-title">{{ title }}</h1>
-    </div>
+    <nav class="breadcrumb">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3.5 10.5L12 3.5l8.5 7v9a1.5 1.5 0 0 1-1.5 1.5h-4.5v-6h-5v6H5a1.5 1.5 0 0 1-1.5-1.5v-9z" />
+      </svg>
+      <span class="crumb">Trang chủ</span>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-current">{{ title }}</span>
+    </nav>
 
-    <div class="header-right">
-      <button class="icon-btn bell-btn" type="button" aria-label="Thông báo">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M18 8.5a6 6 0 1 0-12 0c0 6-2.5 7.5-2.5 7.5h17S18 14.5 18 8.5" />
-          <path d="M13.7 19.5a2 2 0 0 1-3.4 0" />
-        </svg>
-        <span class="dot"></span>
-      </button>
+    <div class="user-box">
+      <span class="notif-dot"></span>
       <div class="avatar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
           <circle cx="12" cy="7.5" r="4" />
         </svg>
+      </div>
+      <div class="user-meta">
+        <strong>Phạm Hoàng Anh</strong>
+        <span>Giám đốc</span>
       </div>
     </div>
   </header>
@@ -37,85 +33,86 @@ defineEmits(['toggle-sidebar'])
 
 <style scoped>
 .app-header {
-  height: 66px;
-  background: #ffffff;
+  height: 56px;
+  background: var(--white);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 26px;
-  position: sticky;
-  top: 0;
-  z-index: 20;
+  gap: 20px;
+  padding: 0 22px;
 }
 
-.header-left {
+.breadcrumb {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
+  color: #4a4a52;
+  font-size: 13px;
 }
 
-.page-title {
-  font-size: 21px;
-  font-weight: 700;
-  color: #1f1f1f;
+.breadcrumb svg {
+  width: 15px;
+  height: 15px;
+  color: #2b2b32;
 }
 
-.header-right {
+.crumb {
+  font-weight: 600;
+  color: #2b2b32;
+}
+
+.crumb-sep {
+  color: #b0b0b8;
+}
+
+.crumb-current {
+  color: #23232a;
+  font-weight: 600;
+}
+
+.user-box {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 10px;
 }
 
-.icon-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #2f2f2f;
-}
-
-.menu-btn svg {
-  width: 22px;
-  height: 22px;
-}
-
-.bell-btn {
-  position: relative;
-  color: var(--red);
-}
-
-.bell-btn svg {
-  width: 23px;
-  height: 23px;
-}
-
-.bell-btn .dot {
-  position: absolute;
-  top: -2px;
-  right: -3px;
-  width: 9px;
-  height: 9px;
+.notif-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--red);
-  border: 1.5px solid #fff;
 }
 
 .avatar {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background: var(--red-soft);
-  color: var(--red);
+  background: #f1f2f5;
+  color: #4b4b53;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .avatar svg {
-  width: 19px;
-  height: 19px;
+  width: 17px;
+  height: 17px;
+}
+
+.user-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.user-meta strong {
+  font-size: 11.5px;
+  color: #23232a;
+  font-weight: 600;
+}
+
+.user-meta span {
+  font-size: 10.5px;
+  color: #9a9aa3;
 }
 </style>

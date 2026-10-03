@@ -16,9 +16,10 @@ const title = computed(() => route.meta.title || 'Chức năng')
 <style scoped>
 .card {
   background: #ffffff;
-  border-radius: 10px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  padding: 28px 32px 34px;
+  border: 1px solid var(--card-line);
+  border-radius: 9px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  padding: 16px 18px 22px;
 }
 
 .card-title {
