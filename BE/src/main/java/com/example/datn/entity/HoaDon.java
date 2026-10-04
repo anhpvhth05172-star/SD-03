@@ -82,4 +82,7 @@ public class HoaDon {
 
     @Column(name = "ghi_chu", length = 1000)
     private String ghiChu;
+
+    @Column(name = "da_xoa", nullable = false)
+    private boolean daXoa;
 }

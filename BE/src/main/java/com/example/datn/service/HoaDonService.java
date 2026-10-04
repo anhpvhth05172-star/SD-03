@@ -115,8 +115,10 @@ public class HoaDonService {
     @Transactional
     public void delete(Long id) {
         HoaDon hoaDon = findOrThrow(id);
-        chiTietHoaDonRepository.deleteByHoaDonId(hoaDon.getId());
-        hoaDonRepository.delete(hoaDon);
+        hoaDon.setDaXoa(true);
+        hoaDon.setNguoiCapNhat("admin");
+        hoaDon.setNgayCapNhat(LocalDateTime.now());
+        hoaDonRepository.save(hoaDon);
     }
 
     @Transactional(readOnly = true)
@@ -308,8 +310,12 @@ public class HoaDonService {
     }
 
     private HoaDon findOrThrow(Long id) {
-        return hoaDonRepository.findById(id)
+        HoaDon hoaDon = hoaDonRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy hóa đơn #" + id));
+        if (hoaDon.isDaXoa()) {
+            throw new IllegalArgumentException("Không tìm thấy hóa đơn #" + id);
+        }
+        return hoaDon;
     }
 
     private HoaDonDTO toDTO(HoaDon h) {

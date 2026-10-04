@@ -22,6 +22,7 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
           AND (:denNgay IS NULL OR h.ngayTao <= :denNgay)
           AND (:loaiDon IS NULL OR h.loaiDon = :loaiDon)
           AND (:trangThai IS NULL OR h.trangThai = :trangThai)
+          AND h.daXoa = false
         """
     )
     Page<HoaDon> findByFilters(

@@ -129,7 +129,7 @@ const openDetail = async (row) => {
 }
 
 const removeRow = async (row) => {
-  if (!confirm(`Xóa hóa đơn ${row.maHoaDon}? Hành động này không thể hoàn tác.`)) return
+  if (!confirm(`Xóa (ẩn) hóa đơn ${row.maHoaDon}? Hóa đơn sẽ không hiển thị ở danh sách nữa.`)) return
   try {
     await deleteInvoice(row.id)
     await load()
