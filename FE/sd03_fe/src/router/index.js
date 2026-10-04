@@ -1,8 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import ProductListView from '../views/ProductListView.vue'
+import ProductCreateView from '../views/ProductCreateView.vue'
+import ProductVariantView from '../views/ProductVariantView.vue'
+
 import AdminLayout from '../layouts/AdminLayout.vue'
-import ProductListPage from '../pages/ProductListPage.vue'
-import ProductCreatePage from '../pages/ProductCreatePage.vue'
-import ProductVariantPage from '../pages/ProductVariantPage.vue'
 import InvoiceListPage from '../pages/InvoiceListPage.vue'
 import InvoiceFormPage from '../pages/InvoiceFormPage.vue'
 import VoucherListPage from '../pages/VoucherListPage.vue'
@@ -11,13 +12,15 @@ import EmployeeListPage from '../pages/EmployeeListPage.vue'
 import EmployeeCreatePage from '../pages/EmployeeCreatePage.vue'
 import CustomerListPage from '../pages/CustomerListPage.vue'
 import CustomerCreatePage from '../pages/CustomerCreatePage.vue'
+import ProductListPage from '../pages/ProductListPage.vue'
+import ProductVariantPage from '../pages/ProductVariantPage.vue'
 import PlaceholderPage from '../pages/PlaceholderPage.vue'
 
 const routes = [
   { path: '/', redirect: '/san-pham' },
-  { path: '/san-pham', name: 'ProductList', component: ProductListPage },
-  { path: '/san-pham/them', name: 'ProductCreate', component: ProductCreatePage },
-  { path: '/san-pham/bien-the', name: 'ProductVariant', component: ProductVariantPage },
+  { path: '/san-pham', name: 'ProductList', component: ProductListView },
+  { path: '/san-pham/them', name: 'ProductCreate', component: ProductCreateView },
+  { path: '/san-pham/bien-the', name: 'ProductVariant', component: ProductVariantView },
   {
     path: '/admin',
     component: AdminLayout,
@@ -42,10 +45,10 @@ const routes = [
       { path: 'khach-hang/them', component: CustomerCreatePage, meta: { title: 'Quản lý khách hàng' } },
       { path: 'nhan-vien', component: EmployeeListPage, meta: { title: 'Quản lý nhân viên' } },
       { path: 'nhan-vien/them', component: EmployeeCreatePage, meta: { title: 'Quản lý nhân viên' } },
-      { path: 'san-pham', component: ProductListPage, meta: { title: 'Quản lý sản phẩm' } },
-      { path: 'bien-the-san-pham', component: ProductVariantPage, meta: { title: 'Biến thể sản phẩm' } },
-      { path: 'thuoc-tinh', component: () => import('../pages/AttributeCategoryPage.vue'), meta: { title: 'Danh mục thuộc tính' } },
-      { path: 'thuoc-tinh/:tab', component: () => import('../pages/AttributeCategoryPage.vue'), meta: { title: 'Danh mục thuộc tính' } }
+      { path: 'san-pham', component: ProductListView, meta: { title: 'Quản lý sản phẩm' } },
+      { path: 'bien-the-san-pham', component: ProductVariantView, meta: { title: 'Biến thể sản phẩm' } },
+      { path: 'thuoc-tinh', component: () => import('../views/AttributeCategoryView.vue'), meta: { title: 'Danh mục thuộc tính' } },
+      { path: 'thuoc-tinh/:tab', component: () => import('../views/AttributeCategoryView.vue'), meta: { title: 'Danh mục thuộc tính' } }
     ]
   }
 ]
