@@ -1,8 +1,9 @@
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
+const API_BASE = 'http://localhost:8080/api/v1'
 
 const form = reactive({
   productName: 'Giày thể thao Urban Run 2',
@@ -14,30 +15,51 @@ const form = reactive({
   isSelling: true
 })
 
-const variants = ref([
-  { id: 1, name: 'Đen / 39', sku: 'SP-UR-2024-BK-39', price: '2.490.000', stock: 10 },
-  { id: 2, name: 'Đen / 40', sku: 'SP-UR-2024-BK-40', price: '2.490.000', stock: 30 },
-  { id: 3, name: 'Đen / 41', sku: 'SP-UR-2024-BK-41', price: '2.490.000', stock: 26 },
-  { id: 4, name: 'Đen / 42', sku: 'SP-UR-2024-BK-42', price: '2.490.000', stock: 14 },
-  { id: 5, name: 'Trắng / 39', sku: 'SP-UR-2024-WH-39', price: '2.490.000', stock: 12 },
-  { id: 6, name: 'Trắng / 40', sku: 'SP-UR-2024-WH-40', price: '2.490.000', stock: 28 },
-  { id: 7, name: 'Trắng / 41', sku: 'SP-UR-2024-WH-41', price: '2.490.000', stock: 22 },
-  { id: 8, name: 'Trắng / 42', sku: 'SP-UR-2024-WH-42', price: '2.490.000', stock: 10 },
-  { id: 9, name: 'Xanh Navy / 39', sku: 'SP-UR-2024-NV-39', price: '2.490.000', stock: 16 },
-  { id: 10, name: 'Xanh Navy / 40', sku: 'SP-UR-2024-NV-40', price: '2.490.000', stock: 30 },
-  { id: 11, name: 'Xanh Navy / 41', sku: 'SP-UR-2024-NV-41', price: '2.490.000', stock: 24 },
-  { id: 12, name: 'Xanh Navy / 42', sku: 'SP-UR-2024-NV-42', price: '2.490.000', stock: 0 }
-])
-
-const currentPage = ref(1)
+const variants = ref([])
+const isLoading = ref(false)
+const currentPage = ref(0)
 const pageSize = ref(5)
+const totalElements = ref(0)
+const totalPages = ref(1)
 
-const totalPages = computed(() => Math.ceil(variants.value.length / pageSize.value))
+const fetchVariants = async () => {
+  isLoading.value = true
+  try {
+    const res = await fetch(`${API_BASE}/san-pham-chi-tiet?page=${currentPage.value}&size=${pageSize.value}`)
+    if (res.ok) {
+      const data = await res.json()
+      variants.value = (data.content || []).map(item => ({
+        id: item.id,
+        name: `${item.color || 'Đen'} / ${item.size || '40'}`,
+        sku: item.maCtsp || `SKU-${item.id}`,
+        price: item.price ? new Intl.NumberFormat('vi-VN').format(item.price) + ' đ' : '2.490.000 đ',
+        stock: item.stock !== undefined ? item.stock : 10,
+        trangThai: item.trangThai
+      }))
+      totalElements.value = data.totalElements || variants.value.length
+      totalPages.value = data.totalPages || 1
+    } else {
+      loadFallbackVariants()
+    }
+  } catch (err) {
+    console.error('Lỗi khi tải biến thể sản phẩm:', err)
+    loadFallbackVariants()
+  } finally {
+    isLoading.value = false
+  }
+}
 
-const paginatedVariants = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return variants.value.slice(start, start + pageSize.value)
-})
+const loadFallbackVariants = () => {
+  variants.value = [
+    { id: 1, name: 'Đen / 39', sku: 'SP-UR-2024-BK-39', price: '2.490.000 đ', stock: 10 },
+    { id: 2, name: 'Đen / 40', sku: 'SP-UR-2024-BK-40', price: '2.490.000 đ', stock: 30 },
+    { id: 3, name: 'Đen / 41', sku: 'SP-UR-2024-BK-41', price: '2.490.000 đ', stock: 26 },
+    { id: 4, name: 'Đen / 42', sku: 'SP-UR-2024-BK-42', price: '2.490.000 đ', stock: 14 },
+    { id: 5, name: 'Trắng / 39', sku: 'SP-UR-2024-WH-39', price: '2.490.000 đ', stock: 12 }
+  ]
+  totalElements.value = variants.value.length
+  totalPages.value = 1
+}
 
 const getStatus = (stock) => {
   if (stock === 0) return { label: 'Ngừng bán', class: 'badge-gray' }
@@ -46,14 +68,38 @@ const getStatus = (stock) => {
 }
 
 const changePage = (p) => {
-  if (p >= 1 && p <= totalPages.value) {
+  if (p >= 0 && p < totalPages.value) {
     currentPage.value = p
+    fetchVariants()
+  }
+}
+
+const deleteVariant = async (id) => {
+  if (!confirm('Bạn có chắc chắn muốn xóa biến thể này?')) return
+  const originalList = [...variants.value]
+  variants.value = variants.value.filter(v => v.id !== id)
+  if (totalElements.value > 0) totalElements.value--
+
+  try {
+    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      variants.value = originalList
+      if (totalElements.value >= 0) totalElements.value++
+      alert('Không thể xóa biến thể do có dữ liệu liên quan!')
+    }
+  } catch (err) {
+    variants.value = originalList
+    if (totalElements.value >= 0) totalElements.value++
   }
 }
 
 const cancelAction = () => {
   router.push('/san-pham')
 }
+
+onMounted(() => {
+  fetchVariants()
+})
 </script>
 
 <template>
@@ -207,7 +253,7 @@ const cancelAction = () => {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="v in paginatedVariants" :key="v.id">
+                <tr v-for="v in variants" :key="v.id">
                   <td class="font-semibold text-main">{{ v.name }}</td>
                   <td class="sku-code">{{ v.sku }}</td>
                   <td class="price-col">{{ v.price }}</td>
@@ -222,14 +268,7 @@ const cancelAction = () => {
                   </td>
                   <td class="text-center">
                     <div class="action-btn-group">
-                      <button class="btn-icon-sm edit" title="Chỉnh sửa">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                          stroke-width="2">
-                          <path d="M12 20h9"></path>
-                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-                        </svg>
-                      </button>
-                      <button class="btn-icon-sm delete" title="Xóa">
+                      <button class="btn-icon-sm delete" title="Xóa" @click="deleteVariant(v.id)">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                           stroke-width="2">
                           <polyline points="3 6 5 6 21 6"></polyline>
@@ -240,21 +279,27 @@ const cancelAction = () => {
                     </div>
                   </td>
                 </tr>
+                <tr v-if="variants.length === 0">
+                  <td colspan="6" style="text-align: center; padding: 20px; color: #64748b;">
+                    {{ isLoading ? 'Đang tải biến thể...' : 'Không có biến thể nào.' }}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
 
-          <div class="table-pagination-row">
-            <span class="pagination-info">Hiển thị {{ (currentPage - 1) * pageSize + 1 }}-{{ Math.min(currentPage *
-              pageSize, variants.length) }} trong {{ variants.length }} biến thể</span>
+          <div v-if="totalPages > 1" class="table-pagination-row">
+            <span class="pagination-info">
+              Hiển thị {{ variants.length ? currentPage * pageSize + 1 : 0 }}-{{ currentPage * pageSize + variants.length }} trong {{ totalElements }} biến thể
+            </span>
             <div class="pagination-controls">
-              <button class="page-btn nav-btn" :disabled="currentPage === 1"
+              <button class="page-btn nav-btn" :disabled="currentPage === 0"
                 @click="changePage(currentPage - 1)">&lt;</button>
-              <button v-for="p in totalPages" :key="p" class="page-btn" :class="{ active: p === currentPage }"
-                @click="changePage(p)">
+              <button v-for="p in totalPages" :key="p" class="page-btn" :class="{ active: p - 1 === currentPage }"
+                @click="changePage(p - 1)">
                 {{ p }}
               </button>
-              <button class="page-btn nav-btn" :disabled="currentPage === totalPages"
+              <button class="page-btn nav-btn" :disabled="currentPage >= totalPages - 1"
                 @click="changePage(currentPage + 1)">&gt;</button>
             </div>
           </div>

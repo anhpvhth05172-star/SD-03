@@ -175,7 +175,7 @@ const openAddModal = () => {
   const nextNum = (attributesData[activeTab.value].length + 1).toString().padStart(3, '0')
   modalForm.ma = `${prefix}${nextNum}`
   modalForm.ten = ''
-  modalForm.mo_ta = ''
+  modalForm.mo_ta = activeTab.value === 'mau_sac' ? '#10b981' : ''
   modalForm.trang_thai = 'Hoạt động'
   isModalOpen.value = true
 }
@@ -186,7 +186,7 @@ const openEditModal = (item) => {
   formError.value = ''
   modalForm.ma = item.ma
   modalForm.ten = item.ten
-  modalForm.mo_ta = item.mo_ta || ''
+  modalForm.mo_ta = item.mo_ta || (activeTab.value === 'mau_sac' ? '#10b981' : '')
   modalForm.trang_thai = item.trang_thai
   isModalOpen.value = true
 }
@@ -220,7 +220,7 @@ const handleConfirmAction = async () => {
   const callback = confirmModal.onConfirm
   confirmModal.isOpen = false
   if (callback) {
-    await callback()
+    callback()
   }
 }
 
@@ -228,101 +228,102 @@ const handleCancelConfirm = () => {
   confirmModal.isOpen = false
 }
 
-const confirmSaveAttribute = () => {
+// INSTANT SAVE (0ms delay with Optimistic UI & background sync)
+const saveAttributeDirectly = async () => {
   formError.value = ''
-  if (!modalForm.ten.trim()) {
+  const tenTrimmed = modalForm.ten.trim()
+  if (!tenTrimmed) {
     formError.value = 'Vui lòng nhập tên thuộc tính!'
     showToast('Vui lòng nhập tên thuộc tính!', 'warning')
     return
   }
 
+  const category = activeTab.value
   const isEdit = isEditing.value
-  const actionName = isEdit ? 'lưu chỉnh sửa' : 'thêm mới'
+  const label = activeTabInfo.value.label
+  const currentId = editingId.value
 
-  openConfirmModal({
-    title: `Xác nhận ${actionName}`,
-    message: `Bạn có chắc chắn muốn ${actionName} ${activeTabInfo.value.label.toLowerCase()} "${modalForm.ten.trim()}" không?`,
-    confirmText: isEdit ? 'Lưu thay đổi' : 'Thêm ngay',
-    cancelText: 'Hủy bỏ',
-    variant: 'primary',
-    onConfirm: () => executeSaveAttribute()
-  })
-}
-
-const executeSaveAttribute = async () => {
   const payload = {
     ma: modalForm.ma,
-    ten: modalForm.ten.trim(),
+    ten: tenTrimmed,
     moTa: modalForm.mo_ta.trim(),
     trangThai: modalForm.trang_thai === 'Hoạt động'
   }
 
-  const category = activeTab.value
-  const isEdit = isEditing.value
-  const url = isEdit ? `${API_BASE}/${category}/${editingId.value}` : `${API_BASE}/${category}`
-  const method = isEdit ? 'PUT' : 'POST'
+  // 1. Close modal and show success toast IMMEDIATELY
+  closeModal()
+  showToast(
+    isEdit ? `Cập nhật thành công ${label}: ${tenTrimmed}` : `Thêm mới thành công ${label}: ${tenTrimmed}`,
+    'success'
+  )
 
+  // 2. Optimistic local state update
+  const list = attributesData[category]
+  let optimisticItem = null
+  let originalItemCopy = null
+
+  if (isEdit) {
+    const idx = list.findIndex(i => i.id === currentId)
+    if (idx !== -1) {
+      originalItemCopy = { ...list[idx] }
+      list[idx].ten = tenTrimmed
+      list[idx].mo_ta = payload.moTa
+      list[idx].trang_thai = modalForm.trang_thai
+    }
+  } else {
+    optimisticItem = {
+      id: `temp_${Date.now()}`,
+      ma: modalForm.ma,
+      ten: tenTrimmed,
+      mo_ta: payload.moTa,
+      trang_thai: modalForm.trang_thai
+    }
+    list.unshift(optimisticItem)
+  }
+
+  // 3. Background API sync
   try {
+    const url = isEdit ? `${API_BASE}/${category}/${currentId}` : `${API_BASE}/${category}`
+    const method = isEdit ? 'PUT' : 'POST'
+
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
 
-    if (!res.ok) {
-      const errData = await res.json()
-      let msg = errData.message || 'Lỗi xử lý thuộc tính!'
-      if (errData.errors) {
-        msg = Object.values(errData.errors).join(', ')
+    if (res.ok) {
+      const savedData = await res.json()
+      if (!isEdit && optimisticItem) {
+        optimisticItem.id = savedData.id
+        optimisticItem.ma = savedData.ma || optimisticItem.ma
       }
-      formError.value = msg
-      showToast(msg, 'warning')
-      return
-    }
-
-    const savedData = await res.json()
-    await fetchAttributes(category)
-
-    showToast(isEdit ? `Cập nhật thành công ${activeTabInfo.value.label}: ${savedData.ten}` : `Thêm mới thành công ${activeTabInfo.value.label}: ${savedData.ten}`, 'success')
-    closeModal()
-  } catch (err) {
-    console.error('API Error:', err)
-    const list = attributesData[category]
-    if (isEdit) {
-      const idx = list.findIndex(i => i.id === editingId.value)
-      if (idx !== -1) {
-        list[idx].ten = modalForm.ten.trim()
-        list[idx].mo_ta = modalForm.mo_ta.trim()
-        list[idx].trang_thai = modalForm.trang_thai
-      }
-      showToast(`Cập nhật thành công: ${modalForm.ten}`, 'success')
     } else {
-      list.push({
-        id: Date.now(),
-        ma: modalForm.ma,
-        ten: modalForm.ten.trim(),
-        mo_ta: modalForm.mo_ta.trim(),
-        trang_thai: modalForm.trang_thai
-      })
-      showToast(`Thêm mới thành công: ${modalForm.ten}`, 'success')
+      const errData = await res.json().catch(() => ({}))
+      const msg = errData.message || 'Lỗi đồng bộ dữ liệu với máy chủ'
+      showToast(msg, 'warning')
+      // Rollback
+      if (isEdit && originalItemCopy) {
+        const idx = list.findIndex(i => i.id === currentId)
+        if (idx !== -1) Object.assign(list[idx], originalItemCopy)
+      } else if (!isEdit && optimisticItem) {
+        attributesData[category] = list.filter(i => i.id !== optimisticItem.id)
+      }
     }
-    closeModal()
+  } catch (err) {
+    console.error('API Background Sync Error:', err)
   }
 }
 
-const confirmToggleStatus = (item) => {
-  const nextStatus = item.trang_thai === 'Hoạt động' ? 'Ngừng hoạt động' : 'Hoạt động'
-  openConfirmModal({
-    title: 'Xác nhận chuyển trạng thái',
-    message: `Bạn có chắc chắn muốn đổi trạng thái của ${activeTabInfo.value.label.toLowerCase()} "${item.ten}" sang "${nextStatus}" không?`,
-    confirmText: 'Đổi trạng thái',
-    cancelText: 'Hủy bỏ',
-    variant: 'warning',
-    onConfirm: () => executeToggleStatus(item)
-  })
-}
+// INSTANT TOGGLE STATUS (0ms delay with Optimistic UI)
+const toggleStatusFast = async (item) => {
+  const previousStatus = item.trang_thai
+  const newStatus = previousStatus === 'Hoạt động' ? 'Ngừng hoạt động' : 'Hoạt động'
+  
+  // Instant visual update
+  item.trang_thai = newStatus
+  showToast(`Đã chuyển trạng thái "${item.ten}" sang "${newStatus}"!`, 'success')
 
-const executeToggleStatus = async (item) => {
   const category = activeTab.value
   try {
     const res = await fetch(`${API_BASE}/${category}/${item.id}/toggle-status`, {
@@ -330,45 +331,59 @@ const executeToggleStatus = async (item) => {
     })
     if (res.ok) {
       const updated = await res.json()
-      item.trang_thai = updated.trangThai !== undefined ? updated.trangThai : updated.trang_thai
-      showToast(`Đã đổi trạng thái "${item.ten}" thành "${item.trang_thai}" thành công!`, 'success')
+      if (updated.trangThai !== undefined || updated.trang_thai) {
+        item.trang_thai = updated.trangThai !== undefined ? updated.trangThai : updated.trang_thai
+      }
     } else {
-      item.trang_thai = item.trang_thai === 'Hoạt động' ? 'Ngừng hoạt động' : 'Hoạt động'
-      showToast(`Đã đổi trạng thái "${item.ten}" thành "${item.trang_thai}" thành công!`, 'success')
+      // Revert if error
+      item.trang_thai = previousStatus
+      showToast('Lỗi cập nhật trạng thái trên máy chủ!', 'warning')
     }
   } catch (err) {
-    item.trang_thai = item.trang_thai === 'Hoạt động' ? 'Ngừng hoạt động' : 'Hoạt động'
-    showToast(`Đã đổi trạng thái "${item.ten}" thành "${item.trang_thai}" thành công!`, 'success')
+    console.error('Toggle status error:', err)
+    item.trang_thai = previousStatus
+    showToast('Lỗi kết nối máy chủ!', 'warning')
   }
 }
 
+// CONFIRM & INSTANT DELETE
 const confirmDeleteItem = (item) => {
   openConfirmModal({
     title: `Xác nhận xóa ${activeTabInfo.value.label}`,
-    message: `Bạn có chắc chắn muốn xóa ${activeTabInfo.value.label.toLowerCase()} "${item.ten}" không? Hành động này không thể khôi phục.`,
+    message: `Bạn có chắc chắn muốn xóa ${activeTabInfo.value.label.toLowerCase()} "${item.ten}" không?`,
     confirmText: 'Xóa ngay',
     cancelText: 'Hủy bỏ',
     variant: 'danger',
-    onConfirm: () => executeDelete(item)
+    onConfirm: () => executeDeleteFast(item)
   })
 }
 
-const executeDelete = async (item) => {
+const executeDeleteFast = async (item) => {
   const category = activeTab.value
+  const list = attributesData[category]
+  const targetIndex = list.findIndex(i => i.id === item.id)
+  const backupItem = { ...item }
+
+  // 1. Instant optimistic UI removal & instant Toast
+  if (targetIndex !== -1) {
+    list.splice(targetIndex, 1)
+  }
+  showToast(`Đã xóa ${activeTabInfo.value.label.toLowerCase()} "${item.ten}" thành công!`, 'success')
+
+  // 2. Background API call
   try {
     const res = await fetch(`${API_BASE}/${category}/${item.id}`, {
       method: 'DELETE'
     })
-    if (res.ok) {
-      showToast(`Đã xóa ${activeTabInfo.value.label.toLowerCase()} "${item.ten}" thành công!`, 'success')
-      fetchAttributes(category)
-    } else {
-      attributesData[category] = attributesData[category].filter(i => i.id !== item.id)
-      showToast(`Đã xóa ${activeTabInfo.value.label.toLowerCase()} "${item.ten}" thành công!`, 'success')
+    if (!res.ok) {
+      // Revert if error
+      list.splice(targetIndex, 0, backupItem)
+      showToast(`Không thể xóa "${item.ten}" do có dữ liệu liên quan!`, 'warning')
     }
   } catch (err) {
-    attributesData[category] = attributesData[category].filter(i => i.id !== item.id)
-    showToast(`Đã xóa ${activeTabInfo.value.label.toLowerCase()} "${item.ten}" thành công!`, 'success')
+    console.error('Delete error:', err)
+    list.splice(targetIndex, 0, backupItem)
+    showToast('Lỗi kết nối khi xóa thuộc tính!', 'warning')
   }
 }
 </script>
@@ -466,7 +481,7 @@ const executeDelete = async (item) => {
               <td>
                 <span class="badge-pill"
                   :class="{ 'badge-active': item.trang_thai === 'Hoạt động', 'badge-inactive': item.trang_thai === 'Ngừng hoạt động' }"
-                  @click="confirmToggleStatus(item)" title="Click để đổi trạng thái">
+                  @click="toggleStatusFast(item)" title="Click để đổi trạng thái tức thì">
                   <span class="dot"></span>
                   {{ item.trang_thai }}
                 </span>
@@ -579,7 +594,7 @@ const executeDelete = async (item) => {
 
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="closeModal">Hủy bỏ</button>
-            <button class="btn btn-primary" @click="confirmSaveAttribute">
+            <button class="btn btn-primary" @click="saveAttributeDirectly">
               {{ isEditing ? 'Lưu thay đổi' : '+ Thêm thuộc tính' }}
             </button>
           </div>
@@ -1261,6 +1276,34 @@ const executeDelete = async (item) => {
   gap: 10px;
 }
 
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.05s ease, background-color 0.15s ease;
+  user-select: none;
+}
+
+.badge-pill:active {
+  transform: scale(0.93);
+}
+
+.btn-add-attr:active,
+.btn-primary:active,
+.btn-secondary:active,
+.btn-action:active,
+.btn-confirm:active,
+.btn-cancel:active,
+.page-nav-btn:not(:disabled):active,
+.page-num-btn:active {
+  transform: scale(0.95);
+}
+
 .btn-secondary {
   background: #e2e8f0;
   color: #475569;
@@ -1269,6 +1312,7 @@ const executeDelete = async (item) => {
   border-radius: 8px;
   font-weight: 700;
   cursor: pointer;
+  transition: transform 0.05s ease, background 0.15s ease;
 }
 
 .btn-primary {
@@ -1279,6 +1323,7 @@ const executeDelete = async (item) => {
   border-radius: 8px;
   font-weight: 800;
   cursor: pointer;
+  transition: transform 0.05s ease, background 0.15s ease;
 }
 
 .form-error-alert {
@@ -1359,7 +1404,7 @@ const executeDelete = async (item) => {
   font-weight: 600;
   color: #475569;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: transform 0.05s ease, background 0.15s ease, color 0.15s ease;
 }
 
 .page-nav-btn:disabled {

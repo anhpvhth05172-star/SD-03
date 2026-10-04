@@ -1,348 +1,433 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
+const API_BASE = 'http://localhost:8080/api/v1'
 
 const navigateToAdd = () => {
   router.push('/san-pham/them')
 }
 
-const stats = [
-  {
-    title: 'Tổng sản phẩm',
-    value: '248',
-    badgeText: '+12 trong tháng này',
-    badgeType: 'badge-accent',
-    iconColor: '#fee2e2',
-    iconStroke: '#d92d20'
-  },
-  {
-    title: 'Đang kinh doanh',
-    value: '221',
-    badgeText: '89.7% danh mục',
-    badgeType: 'badge-success',
-    iconColor: '#ecfdf5',
-    iconStroke: '#059669'
-  },
-  {
-    title: 'Sắp hết hàng',
-    value: '18',
-    badgeText: 'Cần nhập thêm',
-    badgeType: 'badge-warning',
-    iconColor: '#fffbeb',
-    iconStroke: '#d97706'
-  },
-  {
-    title: 'Ngừng kinh doanh',
-    value: '9',
-    badgeText: 'Không hiển thị tại quầy',
-    badgeType: 'badge-secondary',
-    iconColor: '#f1f5f9',
-    iconStroke: '#64748b'
-  }
-]
+// Data State
+const products = ref([])
+const isLoading = ref(false)
+const totalElements = ref(0)
+const totalPages = ref(1)
+const currentPage = ref(0)
+const pageSize = ref(5)
+const pageSizeOptions = [5, 10, 20, 50]
 
-const products = ref([
-  {
-    id: 1,
-    code: 'SP-NK-0032',
-    name: "Nike Air Force 1 '07",
-    subtitle: 'Triple White · 8 biến thể',
-    brand: 'Nike',
-    origin: 'Việt Nam',
-    material: 'Da trần',
-    style: 'Năng động',
-    category: 'Sneaker',
-    price: 2929000,
-    stock: 84,
-    status: 'Đang bán'
-  },
-  {
-    id: 2,
-    code: 'SP-NB-0024',
-    name: 'New Balance 530',
-    subtitle: 'Silver Metallic / Navy · 5 biến thể',
-    brand: 'New Balance',
-    origin: 'China',
-    material: 'Da trần',
-    style: 'Năng động',
-    category: 'Sneaker',
-    price: 2850000,
-    stock: 12,
-    status: 'Sắp hết'
-  },
-  {
-    id: 3,
-    code: 'SP-CV-0011',
-    name: 'Converse Chuck 70 Hi',
-    subtitle: 'Black / Egret · 7 biến thể',
-    brand: 'Converse',
-    origin: 'Việt Nam',
-    material: 'Da trần',
-    style: 'Năng động',
-    category: 'Sneaker',
-    price: 1900000,
-    stock: 53,
-    status: 'Đang bán'
-  },
-  {
-    id: 4,
-    code: 'SP-VA-0009',
-    name: 'Vans Old Skool',
-    subtitle: 'Black / White · 4 biến thể',
-    brand: 'Vans',
-    origin: 'Việt Nam',
-    material: 'Vải Canvas',
-    style: 'Old skool',
-    category: 'Sneaker',
-    price: 1650000,
-    stock: 0,
-    status: 'Ngừng bán'
-  },
-  {
-    id: 5,
-    code: 'SP-PM-0015',
-    name: 'Puma Palermo',
-    subtitle: 'Green / Gum · 6 biến thể',
-    brand: 'Puma',
-    origin: 'Việt Nam',
-    material: 'Da lộn',
-    style: 'Năng động',
-    category: 'Sneaker',
-    price: 2400000,
-    stock: 31,
-    status: 'Đang bán'
-  }
-])
+// Filter Tabs (Status)
+const activeTab = ref('ALL') // 'ALL', 'ACTIVE', 'INACTIVE'
 
-const formatCurrency = (val) => {
-  return new Intl.NumberFormat('vi-VN').format(val) + ' đ'
+// Filters
+const filters = reactive({
+  keyword: '',
+  idThuongHieu: '',
+  idLoaiGiay: '',
+  idChatLieu: '',
+  idKieuDang: '',
+  idXuatXu: '',
+  doiTuong: ''
+})
+
+// Options for dropdowns
+const brands = ref([])
+const categories = ref([])
+const materials = ref([])
+const styles = ref([])
+const origins = ref([])
+
+let debounceTimer = null
+let currentAbortController = null
+
+// Load Dropdown Options
+const fetchOptions = async () => {
+  try {
+    const [resTH, resLG, resCL, resKD, resXX] = await Promise.all([
+      fetch(`${API_BASE}/attributes/thuong_hieu`),
+      fetch(`${API_BASE}/attributes/loai_giay`),
+      fetch(`${API_BASE}/attributes/chat_lieu`),
+      fetch(`${API_BASE}/attributes/kieu_dang`),
+      fetch(`${API_BASE}/attributes/xuat_xu`)
+    ])
+
+    if (resTH.ok) brands.value = await resTH.json()
+    if (resLG.ok) categories.value = await resLG.json()
+    if (resCL.ok) materials.value = await resCL.json()
+    if (resKD.ok) styles.value = await resKD.json()
+    if (resXX.ok) origins.value = await resXX.json()
+  } catch (err) {
+    console.error('Lỗi tải danh mục bộ lọc:', err)
+  }
 }
+
+// Memory cache for instant page switching
+const pageCache = new Map()
+
+// Fetch Products from Backend
+const fetchProducts = async (useCache = true) => {
+  const cacheKey = JSON.stringify({
+    page: currentPage.value,
+    size: pageSize.value,
+    tab: activeTab.value,
+    keyword: filters.keyword.trim(),
+    th: filters.idThuongHieu,
+    lg: filters.idLoaiGiay,
+    cl: filters.idChatLieu,
+    kd: filters.idKieuDang,
+    xx: filters.idXuatXu,
+    dt: filters.doiTuong
+  })
+
+  // Instant render from cache if available
+  if (useCache && pageCache.has(cacheKey)) {
+    const cached = pageCache.get(cacheKey)
+    products.value = cached.content
+    totalElements.value = cached.totalElements
+    totalPages.value = cached.totalPages
+  } else {
+    isLoading.value = true
+  }
+
+  if (currentAbortController) {
+    currentAbortController.abort()
+  }
+  currentAbortController = new AbortController()
+
+  try {
+    const params = new URLSearchParams()
+    params.append('page', currentPage.value)
+    params.append('size', pageSize.value)
+
+    if (filters.keyword && filters.keyword.trim()) params.append('keyword', filters.keyword.trim())
+    if (filters.idThuongHieu) params.append('idThuongHieu', filters.idThuongHieu)
+    if (filters.idLoaiGiay) params.append('idLoaiGiay', filters.idLoaiGiay)
+    if (filters.idChatLieu) params.append('idChatLieu', filters.idChatLieu)
+    if (filters.idKieuDang) params.append('idKieuDang', filters.idKieuDang)
+    if (filters.idXuatXu) params.append('idXuatXu', filters.idXuatXu)
+    if (filters.doiTuong) params.append('doiTuong', filters.doiTuong)
+
+    if (activeTab.value === 'ACTIVE') params.append('trangThai', 'true')
+    else if (activeTab.value === 'INACTIVE') params.append('trangThai', 'false')
+
+    const res = await fetch(`${API_BASE}/san-pham?${params.toString()}`, {
+      signal: currentAbortController.signal
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      const content = data.content || []
+      const total = data.totalElements !== undefined ? data.totalElements : content.length
+      const pages = data.totalPages || 1
+
+      products.value = content
+      totalElements.value = total
+      totalPages.value = pages
+
+      // Save to cache
+      pageCache.set(cacheKey, { content, totalElements: total, totalPages: pages })
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      console.error('Lỗi khi gọi API sản phẩm:', err)
+    }
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const selectTab = (tab) => {
+  activeTab.value = tab
+  currentPage.value = 0
+  fetchProducts(false)
+}
+
+const onFilterChange = () => {
+  currentPage.value = 0
+  fetchProducts(false)
+}
+
+const onSearchInput = () => {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    currentPage.value = 0
+    fetchProducts(false)
+  }, 200)
+}
+
+const changePage = (p) => {
+  if (p >= 0 && p < totalPages.value && p !== currentPage.value) {
+    currentPage.value = p
+    fetchProducts(true) // Instant cache read
+  }
+}
+
+const deleteProduct = async (id) => {
+  if (!confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) return
+  const originalList = [...products.value]
+  const targetProd = products.value.find(p => p.id === id)
+  
+  // Instant UI update
+  products.value = products.value.filter(p => p.id !== id)
+  if (totalElements.value > 0) totalElements.value--
+  
+  try {
+    const res = await fetch(`${API_BASE}/san-pham/${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      // Revert if error
+      products.value = originalList
+      if (totalElements.value >= 0) totalElements.value++
+      alert('Không thể xóa sản phẩm do có dữ liệu liên quan!')
+    } else {
+      pageCache.clear() // Clear cache so next page refresh is fresh
+    }
+  } catch (err) {
+    products.value = originalList
+    if (totalElements.value >= 0) totalElements.value++
+  }
+}
+
+onMounted(() => {
+  fetchOptions()
+  fetchProducts()
+})
+
+onUnmounted(() => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  if (currentAbortController) currentAbortController.abort()
+})
 </script>
 
 <template>
-  <div class="product-list-page">
-    <div class="page-header-row">
-      <div class="page-title-box">
-        <h1 class="page-title">Sản phẩm</h1>
-        <p class="page-subtitle">Quản lý thông tin, giá bán, biến thể và tồn kho sản phẩm.</p>
+  <div class="product-management-page">
+    <!-- Header -->
+    <div class="page-top-row">
+      <div class="page-intro">
+        <h1 class="page-heading">
+          Quản lý Sản phẩm
+          <span class="count-badge">{{ totalElements }} sản phẩm</span>
+        </h1>
+        <p class="page-subheading">
+          Quản lý toàn bộ danh mục sản phẩm, bộ lọc thuộc tính đa chiều &amp; chi tiết mặt hàng.
+        </p>
       </div>
 
-      <div class="page-actions-box">
-        <button class="btn btn-export">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-          Xuất Excel
-        </button>
-        <button class="btn btn-add-product" @click="navigateToAdd">
-          <span class="plus-icon">+</span>
-          Thêm sản phẩm
+      <div class="page-actions">
+        <button class="btn btn-add-new" @click="navigateToAdd">
+          <span class="plus-sign">+</span>
+          Thêm sản phẩm mới
         </button>
       </div>
     </div>
 
-    <div class="stats-grid">
-      <div v-for="(stat, index) in stats" :key="index" class="stat-card">
-        <div class="stat-icon-wrap" :style="{ backgroundColor: stat.iconColor }">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" :stroke="stat.iconStroke" stroke-width="2">
-            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
-            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
-          </svg>
-        </div>
-        <div class="stat-content">
-          <div class="stat-header">
-            <span class="stat-title">{{ stat.title }}</span>
-            <span class="stat-badge" :class="stat.badgeType">{{ stat.badgeText }}</span>
+    <!-- Filter Card -->
+    <div class="filter-box">
+      <!-- Status Tabs -->
+      <div class="status-tabs-row">
+        <button
+          class="status-tab"
+          :class="{ active: activeTab === 'ALL' }"
+          @click="selectTab('ALL')"
+        >
+          Tất cả ({{ totalElements }})
+        </button>
+        <button
+          class="status-tab"
+          :class="{ active: activeTab === 'ACTIVE' }"
+          @click="selectTab('ACTIVE')"
+        >
+          <span class="dot green-dot"></span>
+          Đang kinh doanh
+        </button>
+        <button
+          class="status-tab"
+          :class="{ active: activeTab === 'INACTIVE' }"
+          @click="selectTab('INACTIVE')"
+        >
+          <span class="dot gray-dot"></span>
+          Ngừng kinh doanh
+        </button>
+      </div>
+
+      <!-- Filters Grid -->
+      <div class="filters-grid">
+        <!-- Row 1 -->
+        <div class="filter-col flex-2">
+          <label class="filter-lbl">Tìm kiếm sản phẩm</label>
+          <div class="search-wrap">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              v-model="filters.keyword"
+              type="text"
+              class="form-control"
+              placeholder="Nhập tên hoặc mã sản phẩm (vd: SP001, Nike...)"
+              @input="onSearchInput"
+            />
           </div>
-          <div class="stat-value">{{ stat.value }}</div>
+        </div>
+
+        <div class="filter-col">
+          <label class="filter-lbl">Thương hiệu</label>
+          <select v-model="filters.idThuongHieu" class="form-select" @change="onFilterChange">
+            <option value="">Tất cả thương hiệu</option>
+            <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.ten }}</option>
+          </select>
+        </div>
+
+        <div class="filter-col">
+          <label class="filter-lbl">Loại giày</label>
+          <select v-model="filters.idLoaiGiay" class="form-select" @change="onFilterChange">
+            <option value="">Tất cả loại giày</option>
+            <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.ten }}</option>
+          </select>
+        </div>
+
+        <div class="filter-col">
+          <label class="filter-lbl">Chất liệu</label>
+          <select v-model="filters.idChatLieu" class="form-select" @change="onFilterChange">
+            <option value="">Tất cả chất liệu</option>
+            <option v-for="m in materials" :key="m.id" :value="m.id">{{ m.ten }}</option>
+          </select>
+        </div>
+
+        <!-- Row 2 -->
+        <div class="filter-col">
+          <label class="filter-lbl">Kiểu dáng</label>
+          <select v-model="filters.idKieuDang" class="form-select" @change="onFilterChange">
+            <option value="">Tất cả kiểu dáng</option>
+            <option v-for="s in styles" :key="s.id" :value="s.id">{{ s.ten }}</option>
+          </select>
+        </div>
+
+        <div class="filter-col">
+          <label class="filter-lbl">Xuất xứ</label>
+          <select v-model="filters.idXuatXu" class="form-select" @change="onFilterChange">
+            <option value="">Tất cả xuất xứ</option>
+            <option v-for="o in origins" :key="o.id" :value="o.id">{{ o.ten }}</option>
+          </select>
+        </div>
+
+        <div class="filter-col">
+          <label class="filter-lbl">Đối tượng</label>
+          <select v-model="filters.doiTuong" class="form-select" @change="onFilterChange">
+            <option value="">Tất cả đối tượng</option>
+            <option value="Nam">Nam</option>
+            <option value="Nữ">Nữ</option>
+            <option value="Unisex">Unisex</option>
+          </select>
         </div>
       </div>
     </div>
 
-    <div class="filter-card">
-      <div class="filter-header">
-        <div class="filter-header-title">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d92d20" stroke-width="2">
-            <line x1="4" y1="21" x2="4" y2="14"></line>
-            <line x1="4" y1="10" x2="4" y2="3"></line>
-            <line x1="12" y1="21" x2="12" y2="12"></line>
-            <line x1="12" y1="8" x2="12" y2="3"></line>
-            <line x1="20" y1="21" x2="20" y2="16"></line>
-            <line x1="20" y1="12" x2="20" y2="3"></line>
-            <line x1="1" y1="14" x2="7" y2="14"></line>
-            <line x1="9" y1="8" x2="15" y2="8"></line>
-            <line x1="17" y1="16" x2="23" y2="16"></line>
-          </svg>
-          <span>Bộ lọc tìm kiếm</span>
+    <!-- Table Card -->
+    <div class="table-container-card">
+      <div class="table-card-head">
+        <div class="head-left">
+          <h2 class="card-title">Danh sách sản phẩm</h2>
+          <span class="items-count-pill">{{ products.length }}/{{ totalElements }} mặt hàng</span>
         </div>
-        <div class="filter-total-count">Hiển thị 248 sản phẩm</div>
-      </div>
-
-      <div class="filter-fields-row">
-        <!-- Input Search -->
-        <div class="filter-group flex-2">
-          <label class="filter-label">Tìm kiếm</label>
-          <div class="search-input-wrap">
-            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input type="text" class="filter-input" placeholder="Tên hoặc mã sản phẩm..." />
-          </div>
-        </div>
-
-        <div class="filter-group flex-1">
-          <label class="filter-label">Danh mục</label>
-          <select class="filter-select">
-            <option>Tất cả danh mục</option>
-            <option>Giày thể thao</option>
-            <option>Sneaker</option>
-            <option>Giày chạy bộ</option>
+        <div class="head-right">
+          <span class="page-size-label">Kích thước trang:</span>
+          <select v-model="pageSize" class="page-size-select" @change="fetchProducts">
+            <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}/trang</option>
           </select>
-        </div>
-
-        <div class="filter-group flex-1">
-          <label class="filter-label">Trạng thái</label>
-          <select class="filter-select">
-            <option>Tất cả trạng thái</option>
-            <option>Đang bán</option>
-            <option>Sắp hết</option>
-            <option>Ngừng bán</option>
-          </select>
-        </div>
-
-        <div class="filter-group flex-1">
-          <label class="filter-label">Khoảng giá</label>
-          <select class="filter-select">
-            <option>Tất cả mức giá</option>
-            <option>&lt; 1.000.000 đ</option>
-            <option>1.000.000 - 3.000.000 đ</option>
-            <option>&gt; 3.000.000 đ</option>
-          </select>
-        </div>
-
-        <div class="filter-actions-group">
-          <button class="btn btn-reset">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="23 4 23 10 17 10"></polyline>
-              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-            </svg>
-            Đặt lại
-          </button>
-          <button class="btn btn-search">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            Tìm kiếm
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div class="table-card">
-      <div class="table-header-row">
-        <div class="table-title-box">
-          <h2 class="table-title">Danh sách sản phẩm</h2>
-          <span class="count-pill">248 sản phẩm</span>
-        </div>
-        <div class="table-sort-box">
-          <span class="sort-text">Cập nhật mới nhất</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="7 10 12 15 17 10"></polyline>
-          </svg>
         </div>
       </div>
 
-      <div class="table-wrapper">
-        <table class="products-table">
+      <div class="table-responsive">
+        <table class="data-table">
           <thead>
             <tr>
               <th width="40"><input type="checkbox" /></th>
-              <th width="70">Sản phẩm</th>
               <th width="130">Mã sản phẩm</th>
-              <th>Tên sản phẩm</th>
+              <th width="240">Tên sản phẩm</th>
               <th>Thương hiệu</th>
-              <th>Xuất xứ</th>
+              <th>Loại giày</th>
               <th>Chất liệu</th>
               <th>Kiểu dáng</th>
-              <th>Loại giày</th>
-              <th class="text-right">Giá bán</th>
-              <th class="text-center">Tồn kho</th>
-              <th>Trạng thái</th>
-              <th class="text-center" width="90">Hành động</th>
+              <th>Xuất xứ</th>
+              <th width="150">Trạng thái</th>
+              <th width="100" class="text-center">Thao tác</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="item in products" :key="item.id">
               <td><input type="checkbox" /></td>
               <td>
-                <div class="shoe-thumb">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8">
-                    <path d="M3 14c2-4 5-6 10-6h6a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-2z"></path>
-                  </svg>
+                <span class="code-badge">{{ item.maSanPham || `SP0${item.id}` }}</span>
+              </td>
+              <td>
+                <div class="product-info-cell">
+                  <span class="prod-title">{{ item.tenSanPham }}</span>
+                  <span v-if="item.doiTuong" class="prod-target">Dành cho: {{ item.doiTuong }}</span>
                 </div>
               </td>
-              <td><span class="product-code">{{ item.code }}</span></td>
+              <td>{{ item.tenThuongHieu || '---' }}</td>
               <td>
-                <div class="product-name-col">
-                  <span class="name-main">{{ item.name }}</span>
-                  <span class="name-sub">{{ item.subtitle }}</span>
-                </div>
+                <span class="type-pill">{{ item.tenLoaiGiay || 'Sneaker' }}</span>
               </td>
-              <td>{{ item.brand }}</td>
-              <td>{{ item.origin }}</td>
-              <td>{{ item.material }}</td>
-              <td>{{ item.style }}</td>
-              <td>{{ item.category }}</td>
-              <td class="text-right"><span class="price-val">{{ formatCurrency(item.price) }}</span></td>
-              <td class="text-center font-bold">{{ item.stock }}</td>
+              <td>{{ item.tenChatLieu || '---' }}</td>
+              <td>{{ item.tenKieuDang || '---' }}</td>
+              <td>{{ item.tenXuatXu || '---' }}</td>
               <td>
-                <span class="badge-pill" :class="{
-                  'badge-green': item.status === 'Đang bán',
-                  'badge-yellow': item.status === 'Sắp hết',
-                  'badge-gray': item.status === 'Ngừng bán'
-                }">
-                  <span class="badge-dot"></span>
-                  {{ item.status }}
+                <span class="status-pill" :class="{ 'is-active': item.trangThai, 'is-inactive': !item.trangThai }">
+                  <span class="status-dot"></span>
+                  {{ item.trangThai ? 'Đang kinh doanh' : 'Ngừng kinh doanh' }}
                 </span>
               </td>
               <td class="text-center">
-                <div class="action-buttons">
-                  <button class="btn-icon-edit" title="Chỉnh sửa">
+                <div class="action-btns">
+                  <button class="act-btn view-btn" title="Xem chi tiết" @click="router.push(`/san-pham/bien-the`)">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M12 20h9"></path>
-                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
                     </svg>
                   </button>
-                  <button class="btn-icon-more" title="Tùy chọn khác">
+                  <button class="act-btn del-btn" title="Xóa" @click="deleteProduct(item.id)">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="1"></circle>
-                      <circle cx="19" cy="12" r="1"></circle>
-                      <circle cx="5" cy="12" r="1"></circle>
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                     </svg>
                   </button>
                 </div>
+              </td>
+            </tr>
+
+            <tr v-if="products.length === 0">
+              <td colspan="10" style="text-align: center; padding: 36px; color: #64748b;">
+                {{ isLoading ? 'Đang tải dữ liệu từ database...' : 'Không có sản phẩm nào phù hợp.' }}
               </td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <div class="table-pagination-row">
-        <span class="pagination-info">Hiển thị 1-6 trong 248 sản phẩm</span>
-        <div class="pagination-controls">
-          <button class="page-btn nav-btn">&lt;</button>
-          <button class="page-btn active">1</button>
-          <button class="page-btn">2</button>
-          <button class="page-btn">3</button>
-          <button class="page-btn">4</button>
-          <button class="page-btn nav-btn">&gt;</button>
+      <!-- Pagination -->
+      <div v-if="totalPages > 1" class="table-card-foot">
+        <span class="foot-info">
+          Hiển thị {{ products.length ? currentPage * pageSize + 1 : 0 }} - {{ currentPage * pageSize + products.length }} trong tổng số {{ totalElements }} mặt hàng
+        </span>
+        <div class="foot-pager">
+          <button class="pager-btn" :disabled="currentPage === 0" @click="changePage(currentPage - 1)">
+            ‹ Trước
+          </button>
+          <button
+            v-for="p in totalPages"
+            :key="p"
+            class="pager-btn num-btn"
+            :class="{ active: p - 1 === currentPage }"
+            @click="changePage(p - 1)"
+          >
+            {{ p }}
+          </button>
+          <button class="pager-btn" :disabled="currentPage >= totalPages - 1" @click="changePage(currentPage + 1)">
+            Sau ›
+          </button>
         </div>
       </div>
     </div>
@@ -350,383 +435,306 @@ const formatCurrency = (val) => {
 </template>
 
 <style scoped>
-.product-list-page {
+.product-management-page {
   width: 100%;
 }
 
-.page-header-row {
+.page-top-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
-.page-title {
-  font-size: 26px;
+.page-heading {
+  font-size: 24px;
   font-weight: 800;
   color: #0f172a;
-  letter-spacing: -0.5px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.page-subtitle {
+.count-badge {
+  background: #fee2e2;
+  color: #d92d20;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.page-subheading {
   font-size: 13.5px;
   color: #64748b;
   margin-top: 4px;
 }
 
-.page-actions-box {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.btn-export {
-  background: #ffffff;
-  border: 1px solid #fee2e2;
-  color: #d92d20;
-  font-size: 13.5px;
-  font-weight: 600;
-  padding: 9px 18px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-export:hover {
-  background-color: #fff1f2;
-}
-
-.btn-add-product {
-  background-color: var(--primary);
+.btn-add-new {
+  background-color: #cc0000;
   color: #ffffff;
   border: none;
   font-size: 13.5px;
-  font-weight: 700;
-  padding: 10px 20px;
-  border-radius: var(--radius-md);
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(217, 45, 32, 0.25);
-  transition: all 0.15s;
+  box-shadow: 0 2px 6px rgba(204, 0, 0, 0.25);
+  transition: all 0.15s ease;
 }
 
-.btn-add-product:hover {
-  background-color: var(--primary-hover);
+.btn-add-new:hover {
+  background-color: #b30000;
   transform: translateY(-1px);
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+.plus-sign {
+  font-size: 16px;
+  font-weight: bold;
 }
 
-.stat-card {
+.filter-box {
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-lg);
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
   padding: 18px 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.status-tabs-row {
   display: flex;
   align-items: center;
-  gap: 16px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
-.stat-icon-wrap {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.stat-content {
-  flex: 1;
-}
-
-.stat-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-
-.stat-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #64748b;
-}
-
-.stat-badge {
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.badge-accent {
-  color: #d92d20;
-}
-
-.badge-success {
-  color: #059669;
-}
-
-.badge-warning {
-  color: #d97706;
-}
-
-.badge-secondary {
-  color: #64748b;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.filter-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  margin-bottom: 24px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
-}
-
-.filter-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.filter-header-title {
+.status-tab {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.filter-total-count {
-  font-size: 12.5px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid transparent;
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
   color: #64748b;
-  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.filter-fields-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
+.status-tab:hover {
+  background: #f8fafc;
 }
 
-.filter-group {
+.status-tab.active {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #d92d20;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.green-dot {
+  background-color: #10b981;
+}
+
+.gray-dot {
+  background-color: #94a3b8;
+}
+
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.flex-2 {
+  grid-column: span 1;
+}
+
+.filter-col {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.flex-2 {
-  flex: 2;
-}
-
-.flex-1 {
-  flex: 1;
-}
-
-.filter-label {
+.filter-lbl {
   font-size: 12.5px;
   font-weight: 600;
   color: #475569;
 }
 
-.search-input-wrap {
+.search-wrap {
   position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .search-icon {
   position: absolute;
   left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
   color: #94a3b8;
+  pointer-events: none;
 }
 
-.filter-input {
+.form-control {
   width: 100%;
-  height: 38px;
-  padding: 0 12px 0 36px;
+  padding: 8px 12px 8px 36px;
   border: 1px solid #e2e8f0;
-  border-radius: var(--radius-md);
-  font-size: 13.5px;
-  outline: none;
-}
-
-.filter-input:focus {
-  border-color: var(--primary);
-}
-
-.filter-select {
-  height: 38px;
-  padding: 0 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-md);
-  font-size: 13.5px;
-  outline: none;
-  background: #ffffff;
-  cursor: pointer;
-}
-
-.filter-actions-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.btn-reset {
-  height: 38px;
-  padding: 0 14px;
-  background: #ffffff;
-  border: 1px solid #fee2e2;
-  color: var(--primary);
-  border-radius: var(--radius-md);
+  border-radius: 8px;
   font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.15s;
 }
 
-.btn-search {
-  height: 38px;
-  padding: 0 18px;
-  background: var(--primary);
-  color: #ffffff;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
+.form-control:focus,
+.form-select:focus {
+  border-color: #d92d20;
 }
 
-.table-card {
-  background: #ffffff;
+.form-select {
+  width: 100%;
+  padding: 8px 12px;
   border: 1px solid #e2e8f0;
-  border-radius: var(--radius-lg);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #1e293b;
+  outline: none;
+  background-color: #ffffff;
+  cursor: pointer;
+}
+
+.table-container-card {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
 }
 
-.table-header-row {
-  padding: 18px 24px;
+.table-card-head {
+  padding: 16px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid #f1f5f9;
 }
 
-.table-title-box {
+.head-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
-.table-title {
-  font-size: 16px;
+.card-title {
+  font-size: 15px;
   font-weight: 700;
   color: #0f172a;
 }
 
-.count-pill {
-  padding: 3px 10px;
-  background: #fff1f2;
-  color: var(--primary);
+.items-count-pill {
+  background: #f1f5f9;
+  color: #64748b;
   font-size: 12px;
-  font-weight: 700;
-  border-radius: 20px;
-  border: 1px solid #fee2e2;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
 }
 
-.table-sort-box {
+.head-right {
   display: flex;
   align-items: center;
-  gap: 6px;
-  color: #64748b;
-  font-size: 13px;
-  cursor: pointer;
+  gap: 8px;
 }
 
-.table-wrapper {
+.page-size-label {
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.page-size-select {
+  padding: 4px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: #1e293b;
+  outline: none;
+}
+
+.table-responsive {
   overflow-x: auto;
 }
 
-.products-table {
+.data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13.5px;
-}
-
-.products-table th {
-  padding: 12px 16px;
-  background: #f8fafc;
-  color: #64748b;
-  font-weight: 600;
   text-align: left;
-  border-bottom: 1px solid #e2e8f0;
 }
 
-.products-table td {
-  padding: 14px 16px;
-  border-bottom: 1px solid #f1f5f9;
-  vertical-align: middle;
-}
-
-.shoe-thumb {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.product-code {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12.5px;
+.data-table th {
+  background: #fafafa;
+  padding: 12px 16px;
+  font-size: 12px;
   font-weight: 600;
-  color: #1e293b;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid #f1f5f9;
 }
 
-.product-name-col {
+.data-table td {
+  padding: 14px 16px;
+  font-size: 13px;
+  color: #334155;
+  border-bottom: 1px solid #f8fafc;
+}
+
+.code-badge {
+  background: #f1f5f9;
+  color: #334155;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.product-info-cell {
   display: flex;
   flex-direction: column;
 }
 
-.name-main {
+.prod-title {
   font-weight: 700;
   color: #0f172a;
 }
 
-.name-sub {
-  font-size: 12px;
+.prod-target {
+  font-size: 11.5px;
   color: #64748b;
+  margin-top: 2px;
 }
 
-.price-val {
-  font-weight: 700;
-  color: var(--primary);
+.type-pill {
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
 }
 
-.badge-pill {
+.status-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -736,101 +744,95 @@ const formatCurrency = (val) => {
   font-weight: 600;
 }
 
-.badge-green {
+.status-pill.is-active {
   background: #ecfdf5;
   color: #059669;
 }
 
-.badge-green .badge-dot {
+.status-pill.is-active .status-dot {
   background: #10b981;
 }
 
-.badge-yellow {
-  background: #fffbeb;
-  color: #d97706;
-}
-
-.badge-yellow .badge-dot {
-  background: #f59e0b;
-}
-
-.badge-gray {
+.status-pill.is-inactive {
   background: #f1f5f9;
   color: #64748b;
 }
 
-.badge-gray .badge-dot {
+.status-pill.is-inactive .status-dot {
   background: #94a3b8;
 }
 
-.badge-dot {
+.status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
 }
 
-.action-buttons {
+.action-btns {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
 }
 
-.btn-icon-edit,
-.btn-icon-more {
+.act-btn {
   background: none;
-  border: 1px solid #fee2e2;
+  border: 1px solid #e2e8f0;
   border-radius: 6px;
   padding: 5px;
-  color: var(--primary);
+  color: #64748b;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.15s ease;
 }
 
-.btn-icon-more {
-  border-color: #e2e8f0;
-  color: #64748b;
+.act-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
 }
 
-.table-pagination-row {
-  padding: 16px 24px;
+.table-card-foot {
+  padding: 14px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-top: 1px solid #f1f5f9;
 }
 
-.pagination-info {
-  font-size: 13px;
+.foot-info {
+  font-size: 12.5px;
   color: #64748b;
 }
 
-.pagination-controls {
+.foot-pager {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.page-btn {
-  width: 32px;
-  height: 32px;
+.pager-btn {
+  padding: 5px 10px;
   border-radius: 6px;
   border: 1px solid #e2e8f0;
   background: #ffffff;
   color: #475569;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   cursor: pointer;
 }
 
-.page-btn.active {
-  background: var(--primary);
+.pager-btn.num-btn {
+  min-width: 30px;
+  padding: 5px 0;
+  text-align: center;
+}
+
+.pager-btn.active {
+  background: #cc0000;
   color: #ffffff;
-  border-color: var(--primary);
+  border-color: #cc0000;
 }
 </style>
