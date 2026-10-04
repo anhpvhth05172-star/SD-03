@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { deleteInvoice, getInvoice, listInvoices } from '../api/invoice'
+import { deleteInvoice, getInvoice, listInvoices, restoreInvoice } from '../api/invoice'
 import { avatarColor, formatDateTime, formatVnd, initialsOf, payStatusOf } from '../utils/format'
 
 const router = useRouter()
@@ -17,8 +17,10 @@ const tabs = [
   'Đã hoàn thành',
   'Đã hủy',
   'Đã hoàn tiền',
+  'Đã xóa',
 ]
 const activeTab = ref(0)
+const isTrash = computed(() => activeTab.value === tabs.length - 1)
 
 const invoices = ref([])
 const loading = ref(false)
@@ -56,7 +58,11 @@ const buildParams = () => {
   if (tu) params.tuNgay = tu
   if (den) params.denNgay = den
   if (fLoaiDon.value) params.loaiDon = fLoaiDon.value
-  if (activeTab.value > 0) params.trangThai = tabs[activeTab.value]
+  if (activeTab.value === tabs.length - 1) {
+    params.daXoa = true
+  } else if (activeTab.value > 0) {
+    params.trangThai = tabs[activeTab.value]
+  }
   return params
 }
 
@@ -132,6 +138,16 @@ const removeRow = async (row) => {
   if (!confirm(`Xóa (ẩn) hóa đơn ${row.maHoaDon}? Hóa đơn sẽ không hiển thị ở danh sách nữa.`)) return
   try {
     await deleteInvoice(row.id)
+    await load()
+  } catch (e) {
+    alert(e.message)
+  }
+}
+
+const restoreRow = async (row) => {
+  if (!confirm(`Khôi phục hóa đơn ${row.maHoaDon}?`)) return
+  try {
+    await restoreInvoice(row.id)
     await load()
   } catch (e) {
     alert(e.message)
@@ -285,7 +301,7 @@ onMounted(load)
               <td colspan="8" class="empty-cell">Đang tải...</td>
             </tr>
             <tr v-else-if="invoices.length === 0">
-              <td colspan="8" class="empty-cell">Không có hóa đơn nào</td>
+              <td colspan="8" class="empty-cell">{{ isTrash ? 'Thùng rác trống' : 'Không có hóa đơn nào' }}</td>
             </tr>
             <template v-else>
             <tr v-for="row in invoices" :key="row.id">
@@ -307,7 +323,7 @@ onMounted(load)
               <td><span class="pill" :class="statusPill(row.trangThai)">{{ row.trangThai }}</span></td>
               <td><span class="pill" :class="statusPill(payStatusOf(row.trangThai))">{{ payStatusOf(row.trangThai) }}</span></td>
               <td>
-                <div class="act-group">
+                <div class="act-group" v-if="!isTrash">
                   <button class="act-btn" type="button" aria-label="Xem" @click="openDetail(row)">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
@@ -322,6 +338,14 @@ onMounted(load)
                   <button class="act-btn" type="button" aria-label="Xóa" @click="removeRow(row)">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="act-group" v-else>
+                  <button class="act-btn is-green" type="button" aria-label="Khôi phục" @click="restoreRow(row)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M9 14l-4-4 4-4" />
+                      <path d="M5 10h9a5 5 0 0 1 0 10h-3" />
                     </svg>
                   </button>
                 </div>
@@ -464,6 +488,16 @@ onMounted(load)
 .page-btn:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+.act-btn.is-green {
+  background: #e9f9ef;
+  color: #16a34a;
+}
+
+.act-btn.is-green:hover {
+  background: #16a34a;
+  color: #fff;
 }
 
 .modal-mask {

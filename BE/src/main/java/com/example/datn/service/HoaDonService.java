@@ -58,7 +58,7 @@ public class HoaDonService {
 
     @Transactional(readOnly = true)
     public PageResponse<HoaDonDTO> list(
-        String ma, LocalDate tuNgay, LocalDate denNgay, String loaiDon, String trangThai, int page, int size
+        String ma, LocalDate tuNgay, LocalDate denNgay, String loaiDon, String trangThai, boolean daXoa, int page, int size
     ) {
         LocalDateTime tu = tuNgay != null ? tuNgay.atStartOfDay() : null;
         LocalDateTime den = denNgay != null ? denNgay.atTime(LocalTime.MAX) : null;
@@ -79,7 +79,7 @@ public class HoaDonService {
             }
         }
         var result = hoaDonRepository.findByFilters(
-            blankToNull(ma), tu, den, maLoaiDon, maTrangThai,
+            blankToNull(ma), tu, den, maLoaiDon, maTrangThai, daXoa,
             PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 10), Sort.by(Sort.Direction.DESC, "ngayTao"))
         );
         return PageResponse.from(result.map(this::toDTO));
@@ -119,6 +119,19 @@ public class HoaDonService {
         hoaDon.setNguoiCapNhat("admin");
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         hoaDonRepository.save(hoaDon);
+    }
+
+    @Transactional
+    public HoaDonDTO restore(Long id) {
+        HoaDon hoaDon = hoaDonRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy hóa đơn #" + id));
+        if (!hoaDon.isDaXoa()) {
+            throw new IllegalArgumentException("Hóa đơn " + hoaDon.getMaHoaDon() + " chưa bị xóa");
+        }
+        hoaDon.setDaXoa(false);
+        hoaDon.setNguoiCapNhat("admin");
+        hoaDon.setNgayCapNhat(LocalDateTime.now());
+        return toFullDTO(hoaDonRepository.save(hoaDon));
     }
 
     @Transactional(readOnly = true)

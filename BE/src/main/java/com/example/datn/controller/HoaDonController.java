@@ -34,10 +34,11 @@ public class HoaDonController {
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate denNgay,
         @RequestParam(required = false) String loaiDon,
         @RequestParam(required = false) String trangThai,
+        @RequestParam(defaultValue = "false") boolean daXoa,
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "10") int size
     ) {
-        return hoaDonService.list(ma, tuNgay, denNgay, loaiDon, trangThai, page, size);
+        return hoaDonService.list(ma, tuNgay, denNgay, loaiDon, trangThai, daXoa, page, size);
     }
 
     @GetMapping("/form-data")
@@ -64,5 +65,10 @@ public class HoaDonController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         hoaDonService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}/khoi-phuc")
+    public HoaDonDTO restore(@PathVariable Long id) {
+        return hoaDonService.restore(id);
     }
 }
