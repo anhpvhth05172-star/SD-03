@@ -16,10 +16,10 @@ public class ApiExceptionHandler {
         return ResponseEntity.badRequest().body(message(message));
     }
 
-    @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<Map<String, String>> handleDataIntegrity(DataIntegrityViolationException ex) {
-        return ResponseEntity.badRequest().body(message("Dữ liệu vi phạm ràng buộc dữ liệu (duy nhất/khóa ngoại)"));
-    }
+//    @ExceptionHandler(DataIntegrityViolationException.class)
+//    public ResponseEntity<Map<String, String>> handleDataIntegrity(DataIntegrityViolationException ex) {
+//        return ResponseEntity.badRequest().body(message("Dữ liệu vi phạm ràng buộc dữ liệu (duy nhất/khóa ngoại)"));
+//    }
 
     private static Map<String, String> message(String text) {
         Map<String, String> body = new HashMap<>();

@@ -9,6 +9,6 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface PhieuGiamGiaRepository extends JpaRepository<PhieuGiamGia, Long> {
 
-    @Query("SELECT new com.example.datn.dto.PhieuGiamGiaDTO(pgg.id, pgg.maPhieuGiamGia, pgg.tenPhieuGiamGia, pgg.giaTriGiam, pgg.moTa, pgg.soLuongDaSuDung, pgg.ngayKetThuc, pgg.trangThai) FROM PhieuGiamGia pgg")
-    Page<PhieuGiamGiaDTO> getListPageDiscount(Pageable pageable);
+//    @Query("SELECT new com.example.datn.dto.PhieuGiamGiaDTO(pgg.id, pgg.maPhieuGiamGia, pgg.tenPhieuGiamGia, pgg.giaTriGiam, pgg.moTa, pgg.loaiGiamGia, pgg.soLuongDaSuDung, pgg.ngayKetThuc, pgg.trangThai) FROM PhieuGiamGia pgg")
+//    Page<PhieuGiamGiaDTO> getListPageDiscount(Pageable pageable);
 }

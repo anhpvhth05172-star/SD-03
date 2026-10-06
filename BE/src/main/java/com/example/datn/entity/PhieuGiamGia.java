@@ -31,10 +31,10 @@ public class PhieuGiamGia {
     @Column(name = "ten_phieu_giam_gia", nullable = false, length = 200)
     private String tenPhieuGiamGia;
 
-    @Column(name = "loai_giam_gia", nullable = false, length = 30)
+    @Column(name = "loai_giam_gia")
     private String loaiGiamGia;
 
-    @Column(name = "gia_tri_giam", nullable = false)
+    @Column(name = "gia_tri_giam")
     private BigDecimal giaTriGiam;
 
     @Column(name = "giam_toi_da")

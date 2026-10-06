@@ -23,6 +23,8 @@ public class PhieuGiamGiaDTO {
 
     private String moTa;
 
+    private String loaiGiamGia;
+
     private Integer soLuongDaSuDung;
 
     private LocalDateTime ngayKetThuc;
