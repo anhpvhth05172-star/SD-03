@@ -37,7 +37,8 @@ public class FormDataResponse {
         LocalDateTime ngayBatDau,
         LocalDateTime ngayKetThuc,
         Integer soLuong,
-        Integer soLuongDaSuDung
+        Integer soLuongDaSuDung,
+        Integer gioiHanMoiTaiKhoan
     ) {}
 
     public record SanPhamChiTietOption(

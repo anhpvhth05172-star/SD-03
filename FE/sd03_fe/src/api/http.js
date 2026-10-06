@@ -7,6 +7,14 @@ const http = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+http.interceptors.request.use((config) => {
+  const token = localStorage.getItem('polyshoes_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
 http.interceptors.response.use(
   (res) => res,
   (err) => {

@@ -1,0 +1,59 @@
+package com.example.datn.config;
+
+import com.example.datn.entity.KhachHang;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
+import java.util.Date;
+import javax.crypto.SecretKey;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+@Service
+public class JwtService {
+
+    private final SecretKey khoa;
+    private final long thoiGianSongMs;
+
+    public JwtService(
+        @Value("${app.jwt.secret}") String biMat,
+        @Value("${app.jwt.expiration-ms:86400000}") long thoiGianSongMs
+    ) {
+        this.khoa = Keys.hmacShaKeyFor(Decoders.BASE64.decode(biMat));
+        this.thoiGianSongMs = thoiGianSongMs;
+    }
+
+    public String taoToken(KhachHang khachHang) {
+        Date hienTai = new Date();
+        return Jwts.builder()
+            .subject(String.valueOf(khachHang.getId()))
+            .claim("tenTaiKhoan", khachHang.getTenTaiKhoan())
+            .claim("email", khachHang.getEmail())
+            .issuedAt(hienTai)
+            .expiration(new Date(hienTai.getTime() + thoiGianSongMs))
+            .signWith(khoa)
+            .compact();
+    }
+
+    public boolean hopLe(String token) {
+        try {
+            docClaims(token);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public Long layIdKhachHang(String token) {
+        return Long.valueOf(docClaims(token).getSubject());
+    }
+
+    private Claims docClaims(String token) {
+        return Jwts.parser()
+            .verifyWith(khoa)
+            .build()
+            .parseSignedClaims(token)
+            .getPayload();
+    }
+}

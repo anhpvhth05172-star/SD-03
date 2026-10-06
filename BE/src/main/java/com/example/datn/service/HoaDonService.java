@@ -9,6 +9,8 @@ import com.example.datn.dto.PageResponse;
 import com.example.datn.entity.ChiTietHoaDon;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.KhachHang;
+import com.example.datn.entity.LichSuHoaDon;
+import com.example.datn.entity.LichSuSuDungPhieuGiamGia;
 import com.example.datn.entity.NhanVien;
 import com.example.datn.entity.PhieuGiamGia;
 import com.example.datn.entity.PhuongThucThanhToan;
@@ -16,17 +18,22 @@ import com.example.datn.entity.SanPhamChiTiet;
 import com.example.datn.repository.ChiTietHoaDonRepository;
 import com.example.datn.repository.HoaDonRepository;
 import com.example.datn.repository.KhachHangRepository;
+import com.example.datn.repository.LichSuHoaDonRepository;
+import com.example.datn.repository.LichSuSuDungPhieuGiamGiaRepository;
 import com.example.datn.repository.NhanVienRepository;
 import com.example.datn.repository.PhieuGiamGiaRepository;
 import com.example.datn.repository.PhuongThucThanhToanRepository;
 import com.example.datn.repository.SanPhamChiTietRepository;
+import com.example.datn.util.PhieuGiamGiaUtil;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -48,6 +55,18 @@ public class HoaDonService {
         {"DA_HOAN_TIEN", "Đã hoàn tiền"},
     };
 
+    private static final Map<String, List<String>> TRANSITION_MAP = new HashMap<>();
+    static {
+        TRANSITION_MAP.put("CHO_XAC_NHAN", List.of("DA_XAC_NHAN", "DA_HUY"));
+        TRANSITION_MAP.put("DA_XAC_NHAN", List.of("CHO_GIAO_HANG", "DA_HUY"));
+        TRANSITION_MAP.put("CHO_GIAO_HANG", List.of("DANG_GIAO_HANG", "DA_HUY"));
+        TRANSITION_MAP.put("DANG_GIAO_HANG", List.of("DA_GIAO_HANG"));
+        TRANSITION_MAP.put("DA_GIAO_HANG", List.of("DA_HOAN_THANH"));
+        TRANSITION_MAP.put("DA_HOAN_THANH", List.of("DA_HOAN_TIEN"));
+        TRANSITION_MAP.put("DA_HUY", List.of());
+        TRANSITION_MAP.put("DA_HOAN_TIEN", List.of());
+    }
+
     private final HoaDonRepository hoaDonRepository;
     private final ChiTietHoaDonRepository chiTietHoaDonRepository;
     private final KhachHangRepository khachHangRepository;
@@ -55,6 +74,8 @@ public class HoaDonService {
     private final PhuongThucThanhToanRepository phuongThucThanhToanRepository;
     private final PhieuGiamGiaRepository phieuGiamGiaRepository;
     private final SanPhamChiTietRepository sanPhamChiTietRepository;
+    private final LichSuHoaDonRepository lichSuHoaDonRepository;
+    private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository;
 
     @Transactional(readOnly = true)
     public PageResponse<HoaDonDTO> list(
@@ -93,28 +114,59 @@ public class HoaDonService {
     @Transactional
     public HoaDonDTO create(HoaDonRequest req) {
         validateHeader(req, null);
+        PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
+        if (phieu != null) {
+            kiemTraGioiHanSuDung(phieu, req.getIdKhachHang(), null);
+        }
         HoaDon hoaDon = new HoaDon();
         fillHeader(hoaDon, req);
         List<DongTinh> lines = tinhToanVaLuu(hoaDon, req);
         hoaDon = hoaDonRepository.save(hoaDon);
         luuCacDong(hoaDon, lines, req);
+        if (phieu != null) {
+            ghiLichSuSuDung(hoaDon, phieu);
+        }
         return toFullDTO(hoaDon);
     }
 
     @Transactional
     public HoaDonDTO update(Long id, HoaDonRequest req) {
-        validateHeader(req, id);
         HoaDon hoaDon = findOrThrow(id);
+        if (!"CHO_XAC_NHAN".equals(hoaDon.getTrangThai())) {
+            throw new IllegalArgumentException(
+                "Chỉ hóa đơn Chờ xác nhận mới được sửa (trạng thái hiện tại: " + toTenTrangThai(hoaDon.getTrangThai()) + ")"
+            );
+        }
+        validateHeader(req, id);
+        if (!isBlank(req.getTrangThai()) && !hoaDon.getTrangThai().equals(toMaTrangThai(req.getTrangThai()))) {
+            throw new IllegalArgumentException(
+                "Hãy sử dụng PUT /api/hoa-don/{id}/trang-thai để đổi trạng thái hóa đơn"
+            );
+        }
         fillHeader(hoaDon, req);
+        PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
+        lichSuSuDungRepository.deleteByHoaDonId(hoaDon.getId());
+        if (phieu != null) {
+            kiemTraGioiHanSuDung(phieu, req.getIdKhachHang(), hoaDon.getId());
+        }
         List<DongTinh> lines = tinhToanVaLuu(hoaDon, req);
         chiTietHoaDonRepository.deleteByHoaDonId(hoaDon.getId());
         luuCacDong(hoaDon, lines, req);
+        if (phieu != null) {
+            ghiLichSuSuDung(hoaDon, phieu);
+        }
         return toFullDTO(hoaDon);
     }
 
     @Transactional
     public void delete(Long id) {
         HoaDon hoaDon = findOrThrow(id);
+        String trangThai = hoaDon.getTrangThai();
+        if (!"CHO_XAC_NHAN".equals(trangThai) && !"DA_HUY".equals(trangThai)) {
+            throw new IllegalArgumentException(
+                "Chỉ hóa đơn Chờ xác nhận hoặc Đã hủy mới được xóa (trạng thái hiện tại: " + toTenTrangThai(trangThai) + ")"
+            );
+        }
         hoaDon.setDaXoa(true);
         hoaDon.setNguoiCapNhat("admin");
         hoaDon.setNgayCapNhat(LocalDateTime.now());
@@ -134,6 +186,40 @@ public class HoaDonService {
         return toFullDTO(hoaDonRepository.save(hoaDon));
     }
 
+    @Transactional
+    public HoaDonDTO doiTrangThai(Long id, String trangThaiMoi) {
+        HoaDon hoaDon = findOrThrow(id);
+        if (isBlank(trangThaiMoi)) {
+            throw new IllegalArgumentException("Trạng thái mới không được để trống");
+        }
+        String maMoi = toMaTrangThai(trangThaiMoi);
+        String maHienTai = hoaDon.getTrangThai();
+        if (maMoi.equals(maHienTai)) {
+            throw new IllegalArgumentException("Trạng thái không thay đổi");
+        }
+        List<String> choPhep = TRANSITION_MAP.getOrDefault(maHienTai, List.of());
+        if (!choPhep.contains(maMoi)) {
+            throw new IllegalArgumentException(
+                "Không được chuyển từ " + toTenTrangThai(maHienTai) + " sang " + toTenTrangThai(maMoi)
+            );
+        }
+        hoaDon.setTrangThai(maMoi);
+        hoaDon.setNguoiCapNhat("admin");
+        hoaDon.setNgayCapNhat(LocalDateTime.now());
+        HoaDon saved = hoaDonRepository.save(hoaDon);
+        ghiLichSuTrangThai(saved, maHienTai, maMoi);
+        return toFullDTO(saved);
+    }
+
+    private void ghiLichSuTrangThai(HoaDon hoaDon, String tuMa, String denMa) {
+        LichSuHoaDon lichSu = new LichSuHoaDon();
+        lichSu.setHoaDon(hoaDon);
+        lichSu.setTrangThai(denMa);
+        lichSu.setHanhDong("CHUYEN_TRANG_THAI");
+        lichSu.setGhiChu("Chuyển từ " + toTenTrangThai(tuMa) + " sang " + toTenTrangThai(denMa));
+        lichSuHoaDonRepository.save(lichSu);
+    }
+
     @Transactional(readOnly = true)
     public FormDataResponse formData() {
         List<FormDataResponse.KhachHangOption> khachHangs = khachHangRepository.findAll().stream()
@@ -147,9 +233,12 @@ public class HoaDonService {
             .toList();
         List<FormDataResponse.PhieuGiamGiaOption> phieuGiamGias = phieuGiamGiaRepository.findAll().stream()
             .map(p -> new FormDataResponse.PhieuGiamGiaOption(
-                p.getId(), p.getMaPhieuGiamGia(), p.getTenPhieuGiamGia(), p.getLoaiGiamGia(),
+                p.getId(), p.getMaPhieuGiamGia(),
+                PhieuGiamGiaUtil.tenHienThi(p.getLoaiGiamGia(), p.getGiaTriGiam()),
+                p.getLoaiGiamGia(),
                 p.getGiaTriGiam(), p.getGiamToiDa(), p.getHoaDonToiThieu(),
-                p.getNgayBatDau(), p.getNgayKetThuc(), p.getSoLuong(), p.getSoLuongDaSuDung()
+                p.getNgayBatDau(), p.getNgayKetThuc(), p.getSoLuong(), p.getSoLuongDaSuDung(),
+                p.getGioiHanMoiTaiKhoan()
             ))
             .toList();
         List<FormDataResponse.SanPhamChiTietOption> spcts = sanPhamChiTietRepository.findAll().stream()
@@ -201,7 +290,7 @@ public class HoaDonService {
         hoaDon.setDiaChiNhanHang(req.getDiaChiNhanHang());
         hoaDon.setTrangThai(toMaTrangThai(req.getTrangThai()));
         hoaDon.setGhiChu(req.getGhiChu());
-        hoaDon.setNguoiCapNhat(isBlank(req.getNguoiCapNhat()) ? "admin" : req.getNguoiCapNhat().trim());
+        hoaDon.setNguoiCapNhat("admin");
         hoaDon.setNgayCapNhat(LocalDateTime.now());
 
         hoaDon.setKhachHang(req.getIdKhachHang() != null
@@ -263,7 +352,18 @@ public class HoaDonService {
             .add(hoaDon.getPhiVanChuyen());
         hoaDon.setTongTien(tong);
         BigDecimal giam = tinhGiamGia(hoaDon);
+        hoaDon.setTienGiam(giam);
         hoaDon.setTienSauGiamGia(tong.subtract(giam));
+        PhieuGiamGia phieu = hoaDon.getPhieuGiamGia();
+        if (phieu != null) {
+            hoaDon.setDotGiamGia(phieu.getDotGiamGia());
+            hoaDon.setTenGiamGiaUngDung(
+                PhieuGiamGiaUtil.tenHienThi(phieu.getLoaiGiamGia(), phieu.getGiaTriGiam())
+            );
+        } else {
+            hoaDon.setDotGiamGia(null);
+            hoaDon.setTenGiamGiaUngDung(null);
+        }
         return dong;
     }
 
@@ -304,6 +404,57 @@ public class HoaDonService {
             giam = hoaDon.getTongTien();
         }
         return giam.max(BigDecimal.ZERO);
+    }
+
+    /**
+     * Khoa dong phieu (PESSIMISTIC_WRITE) de 2 request dong thoi khong cung vuot gioi han,
+     * sau do kiem tra: ton tai, dang hoat dong, tai khoan hop le.
+     */
+    private PhieuGiamGia khoaVaKiemTraCoBan(HoaDonRequest req) {
+        if (req.getIdPhieuGiamGia() == null) {
+            return null;
+        }
+        PhieuGiamGia phieu = phieuGiamGiaRepository.findByIdForUpdate(req.getIdPhieuGiamGia())
+            .orElseThrow(() -> new IllegalArgumentException("Phiếu giảm giá không tồn tại"));
+        if (!Boolean.TRUE.equals(phieu.getTrangThai())) {
+            throw new IllegalArgumentException("Phiếu giảm giá không hoạt động");
+        }
+        if (req.getIdKhachHang() == null) {
+            throw new IllegalArgumentException("Vui lòng chọn khách hàng để sử dụng phiếu giảm giá");
+        }
+        return phieu;
+    }
+
+    /**
+     * Dem so lan tai khoan da su dung phieu (lich su) va kiem tra khong ghi trung tren cung hoa don.
+     */
+    private void kiemTraGioiHanSuDung(PhieuGiamGia phieu, Long idKhachHang, Long idHoaDon) {
+        int gioiHan = phieu.getGioiHanMoiTaiKhoan() != null ? phieu.getGioiHanMoiTaiKhoan() : 1;
+        long daDung = lichSuSuDungRepository.countByKhachHangIdAndPhieuGiamGiaId(idKhachHang, phieu.getId());
+        if (daDung >= gioiHan) {
+            throw new IllegalArgumentException(
+                "Tài khoản đã dùng phiếu "
+                    + PhieuGiamGiaUtil.tenHienThi(phieu.getLoaiGiamGia(), phieu.getGiaTriGiam())
+                    + " đủ " + gioiHan + " lần"
+            );
+        }
+        if (idHoaDon != null
+            && lichSuSuDungRepository.existsByHoaDonIdAndPhieuGiamGiaId(idHoaDon, phieu.getId())) {
+            throw new IllegalArgumentException("Hóa đơn đã sử dụng phiếu giảm giá này");
+        }
+    }
+
+    private void ghiLichSuSuDung(HoaDon hoaDon, PhieuGiamGia phieu) {
+        if (hoaDon.getKhachHang() == null) {
+            return;
+        }
+        LichSuSuDungPhieuGiamGia lichSu = new LichSuSuDungPhieuGiamGia();
+        lichSu.setKhachHang(hoaDon.getKhachHang());
+        lichSu.setPhieuGiamGia(phieu);
+        lichSu.setHoaDon(hoaDon);
+        lichSu.setSoTienGiam(hoaDon.getTienGiam() != null ? hoaDon.getTienGiam() : BigDecimal.ZERO);
+        lichSu.setThoiGian(LocalDateTime.now());
+        lichSuSuDungRepository.save(lichSu);
     }
 
     private void luuCacDong(HoaDon hoaDon, List<DongTinh> dong, HoaDonRequest req) {
@@ -353,7 +504,13 @@ public class HoaDonService {
             .idPhuongThucThanhToan(h.getPhuongThucThanhToan() != null ? h.getPhuongThucThanhToan().getId() : null)
             .tenPhuongThucThanhToan(h.getPhuongThucThanhToan() != null ? h.getPhuongThucThanhToan().getTenPhuongThuc() : null)
             .idPhieuGiamGia(h.getPhieuGiamGia() != null ? h.getPhieuGiamGia().getId() : null)
-            .tenPhieuGiamGia(h.getPhieuGiamGia() != null ? h.getPhieuGiamGia().getTenPhieuGiamGia() : null)
+            .tenPhieuGiamGia(h.getTenGiamGiaUngDung() != null
+                ? h.getTenGiamGiaUngDung()
+                : (h.getPhieuGiamGia() != null ? h.getPhieuGiamGia().getTenPhieuGiamGia() : null))
+            .idDotGiamGia(h.getDotGiamGia() != null ? h.getDotGiamGia().getId() : null)
+            .tenDotGiamGia(h.getDotGiamGia() != null ? h.getDotGiamGia().getTenDotGiamGia() : null)
+            .tienGiam(h.getTienGiam())
+            .tenGiamGiaUngDung(h.getTenGiamGiaUngDung())
             .build();
     }
 

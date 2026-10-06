@@ -44,6 +44,10 @@ public class HoaDon {
     @JoinColumn(name = "id_phieu_giam_gia")
     private PhieuGiamGia phieuGiamGia;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_dot_giam_gia")
+    private DotGiamGia dotGiamGia;
+
     @Column(name = "ma_hoa_don", nullable = false, unique = true, length = 50)
     private String maHoaDon;
 
@@ -58,6 +62,12 @@ public class HoaDon {
 
     @Column(name = "tien_sau_giam_gia", nullable = false)
     private BigDecimal tienSauGiamGia = BigDecimal.ZERO;
+
+    @Column(name = "tien_giam")
+    private BigDecimal tienGiam;
+
+    @Column(name = "ten_giam_gia_ung_dung", length = 200)
+    private String tenGiamGiaUngDung;
 
     @Column(name = "ten_khach_hang", length = 150)
     private String tenKhachHang;

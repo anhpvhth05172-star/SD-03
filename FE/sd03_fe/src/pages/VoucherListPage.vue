@@ -1,90 +1,119 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { listVouchers, suDungCuaToi } from '../api/voucher'
+import { getToken } from '../utils/auth'
 
 const showFilter = ref(true)
+const loading = ref(true)
+const error = ref('')
+const vouchers = ref([])
+const suDungMap = ref({})
+const capNhatLuc = ref('')
+const coDangNhap = ref(!!getToken())
 
-const pages = [1, 2, 3, 4, 5]
+const loc = ref({ ma: '', idDot: '', trangThai: '' })
+const locDaApDung = ref({ ma: '', idDot: '', trangThai: '' })
 
-const vouchers = [
-  {
-    name: 'GIAM20',
-    code: 'PG001',
-    sub: 'Giảm 20% cho đơn từ 500.000₫',
-    initials: 'G2',
-    avatar: '#cc0000',
-    event: 'Summer Sale 2026',
-    discount: '20%',
-    used: '45/200',
-    expiry: '01/06/2026',
-    status: 'Đang hoạt động',
-  },
-  {
-    name: 'FREESHIP',
-    code: 'PG002',
-    sub: 'Miễn phí vận chuyển đơn từ 300.000₫',
-    initials: 'FS',
-    avatar: '#3b82f6',
-    event: 'Summer Sale 2026',
-    discount: '100.000₫',
-    used: '120/500',
-    expiry: '30/06/2026',
-    status: 'Đang hoạt động',
-  },
-  {
-    name: 'GIAM50K',
-    code: 'PG003',
-    sub: 'Giảm 50.000₫ cho đơn từ 1.000.000₫',
-    initials: 'G5',
-    avatar: '#f59e0b',
-    event: 'Flash Sale 05/2026',
-    discount: '50.000₫',
-    used: '300/300',
-    expiry: '20/05/2026',
-    status: 'Hết hạn',
-  },
-  {
-    name: 'NEWUSER',
-    code: 'PG004',
-    sub: 'Giảm 15% cho khách hàng mới',
-    initials: 'NU',
-    avatar: '#8b5cf6',
-    event: 'Ưu đãi thành viên mới',
-    discount: '15%',
-    used: '88/1000',
-    expiry: '31/12/2026',
-    status: 'Đang hoạt động',
-  },
-  {
-    name: 'TANGRAM',
-    code: 'PG005',
-    sub: 'Tặng thêm 10% khi mua từ 2 sản phẩm',
-    initials: 'TR',
-    avatar: '#14b8a6',
-    event: 'Summer Sale 2026',
-    discount: '10%',
-    used: '0/150',
-    expiry: '15/07/2026',
-    status: 'Sắp diễn ra',
-  },
-  {
-    name: 'GIAM100',
-    code: 'PG006',
-    sub: 'Giảm 100.000₫ cho đơn từ 2.000.000₫',
-    initials: 'G1',
-    avatar: '#22c55e',
-    event: 'Flash Sale 05/2026',
-    discount: '100.000₫',
-    used: '64/80',
-    expiry: '10/05/2026',
-    status: 'Hết hạn',
-  },
-]
+const TRANG_THAI = ['Đang hoạt động', 'Sắp diễn ra', 'Hết hạn', 'Ngừng hoạt động']
+
+const statusCua = (v) => {
+  if (!v.trangThai) return 'Ngừng hoạt động'
+  const now = Date.now()
+  const batDau = v.ngayBatDau ? new Date(v.ngayBatDau).getTime() : 0
+  const ketThuc = v.ngayKetThuc ? new Date(v.ngayKetThuc).getTime() : Infinity
+  if (now < batDau) return 'Sắp diễn ra'
+  if (now > ketThuc) return 'Hết hạn'
+  return 'Đang hoạt động'
+}
 
 const statusPill = (value) => {
   if (value === 'Đang hoạt động') return 'pill-green'
   if (value === 'Sắp diễn ra') return 'pill-amber'
   return 'pill-gray'
 }
+
+const ngayHienThi = (value) => {
+  if (!value) return '—'
+  const d = new Date(value)
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+}
+
+const chuSoDau = (v) => {
+  if (v.loaiGiamGia === 'PERCENT') return String(Number(v.giaTriGiam))
+  return String(Math.floor(Number(v.giaTriGiam) / 1000)).slice(0, 2)
+}
+
+const cacDot = computed(() => {
+  const map = new Map()
+  for (const v of vouchers.value) {
+    if (v.dotGiamGia) map.set(v.dotGiamGia.id, v.dotGiamGia.ten)
+  }
+  return [...map.entries()].map(([id, ten]) => ({ id, ten }))
+})
+
+const rows = computed(() => {
+  const ap = locDaApDung.value
+  return vouchers.value
+    .map((v) => {
+      const su = suDungMap.value[v.id]
+      return {
+        key: v.id,
+        dotId: v.dotGiamGia ? v.dotGiamGia.id : null,
+        name: v.ten,
+        code: v.ma,
+        sub: `Tối đa ${v.gioiHanMoiTaiKhoan || 1} lần/khách · Còn ${Math.max(
+          0,
+          (v.soLuong ?? 0) - (v.soLuongDaSuDung ?? 0),
+        )} phiếu`,
+        initials: chuSoDau(v),
+        avatar: v.loaiGiamGia === 'PERCENT' ? '#cc0000' : '#3b82f6',
+        event: v.dotGiamGia ? `Đợt: ${v.dotGiamGia.ten}` : 'Không thuộc đợt',
+        discount: v.ten,
+        used: coDangNhap.value && su
+          ? `${su.soLanDaDung}/${su.gioiHanMoiTaiKhoan} lần`
+          : `${v.soLuongDaSuDung ?? 0}/${v.soLuong ?? 0}`,
+        expiry: ngayHienThi(v.ngayKetThuc),
+        status: statusCua(v),
+      }
+    })
+    .filter((r) => !ap.ma || r.code.toLowerCase().includes(ap.ma.toLowerCase()))
+    .filter((r) => !ap.idDot || String(r.dotId) === ap.idDot)
+    .filter((r) => !ap.trangThai || r.status === ap.trangThai)
+})
+
+const apDungBoLoc = () => {
+  locDaApDung.value = { ...loc.value }
+}
+
+const datLai = () => {
+  loc.value = { ma: '', idDot: '', trangThai: '' }
+  locDaApDung.value = { ...loc.value }
+}
+
+const tai = async () => {
+  loading.value = true
+  error.value = ''
+  try {
+    vouchers.value = await listVouchers()
+    capNhatLuc.value = new Date().toLocaleString('vi-VN')
+    if (coDangNhap.value) {
+      try {
+        const danhSach = await suDungCuaToi()
+        suDungMap.value = Object.fromEntries(danhSach.map((s) => [s.idPhieuGiamGia, s]))
+      } catch {
+        suDungMap.value = {}
+      }
+    } else {
+      suDungMap.value = {}
+    }
+  } catch (e) {
+    error.value = e.message || 'Không tải được danh sách phiếu giảm giá'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(tai)
 </script>
 
 <template>
@@ -92,14 +121,8 @@ const statusPill = (value) => {
     <div class="screen-head">
       <div>
         <h1 class="screen-title">Quản lý phiếu giảm giá</h1>
-        <p class="screen-sub">Tạo, theo dõi và phân phối các mã giảm giá đến khách hàng</p>
+        <p class="screen-sub">Danh sách phiếu giảm giá và giới hạn sử dụng theo từng tài khoản</p>
       </div>
-      <button class="btn-add" type="button">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-          <path d="M12 6v12M6 12h12" />
-        </svg>
-        Thêm phiếu giảm giá
-      </button>
     </div>
 
     <section class="panel">
@@ -111,7 +134,7 @@ const statusPill = (value) => {
         </span>
         <h3 class="panel-title">Tìm kiếm &amp; bộ lọc</h3>
         <div class="panel-right">
-          <span class="result-count">45 kết quả</span>
+          <span class="result-count">{{ rows.length }} kết quả</span>
           <button class="link-red" type="button" @click="showFilter = !showFilter">
             {{ showFilter ? 'Ẩn bớt' : 'Hiện thêm' }}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -124,42 +147,33 @@ const statusPill = (value) => {
       <div v-show="showFilter" class="filter-row">
         <div class="f-item">
           <label>Mã phiếu</label>
-          <input type="text" placeholder="Nhập mã phiếu giảm giá" />
+          <input v-model="loc.ma" type="text" placeholder="Nhập mã phiếu giảm giá" />
         </div>
 
         <div class="f-item">
           <label>Đợt giảm giá</label>
-          <select>
+          <select v-model="loc.idDot">
             <option value="">Tất cả</option>
-            <option value="summer">Summer Sale 2026</option>
-            <option value="flash">Flash Sale 05/2026</option>
-            <option value="member">Ưu đãi thành viên mới</option>
+            <option v-for="dot in cacDot" :key="dot.id" :value="String(dot.id)">{{ dot.ten }}</option>
           </select>
         </div>
 
         <div class="f-item">
           <label>Trạng thái</label>
-          <select>
+          <select v-model="loc.trangThai">
             <option value="">Tất cả</option>
-            <option value="active">Đang hoạt động</option>
-            <option value="upcoming">Sắp diễn ra</option>
-            <option value="expired">Hết hạn</option>
+            <option v-for="tt in TRANG_THAI" :key="tt" :value="tt">{{ tt }}</option>
           </select>
         </div>
 
-        <div class="f-item">
-          <label>Khách hàng</label>
-          <input type="text" placeholder="Nhập tên hoặc số điện thoại" />
-        </div>
-
         <div class="filter-actions">
-          <button class="btn-reset" type="button" aria-label="Đặt lại">
+          <button class="btn-reset" type="button" aria-label="Đặt lại" @click="datLai">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 11a8 8 0 1 0-.9 4.5" />
               <path d="M20 4.5V11h-6.5" />
             </svg>
           </button>
-          <button class="btn-apply" type="button">
+          <button class="btn-apply" type="button" @click="apDungBoLoc">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
               <path d="M4 6h16M7 12h10M10 18h4" />
             </svg>
@@ -179,9 +193,9 @@ const statusPill = (value) => {
           </svg>
         </span>
         <h3 class="panel-title">Danh sách phiếu giảm giá</h3>
-        <span class="count-pill">128 phiếu</span>
+        <span class="count-pill">{{ vouchers.length }} phiếu</span>
         <div class="panel-right">
-          <span class="panel-meta">Cập nhật lúc 08:32 25/05/2026</span>
+          <span v-if="capNhatLuc" class="panel-meta">Cập nhật lúc {{ capNhatLuc }}</span>
         </div>
       </div>
 
@@ -195,11 +209,22 @@ const statusPill = (value) => {
               <th>Đã dùng</th>
               <th>Hạn dùng</th>
               <th>Trạng thái</th>
-              <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in vouchers" :key="row.code">
+            <tr v-if="loading">
+              <td colspan="6" class="state-cell">Đang tải dữ liệu...</td>
+            </tr>
+            <tr v-else-if="error">
+              <td colspan="6" class="state-cell is-error">
+                {{ error }}
+                <button class="link-red" type="button" @click="tai">Thử lại</button>
+              </td>
+            </tr>
+            <tr v-else-if="!rows.length">
+              <td colspan="6" class="state-cell">Không có phiếu giảm giá nào</td>
+            </tr>
+            <tr v-for="row in rows" :key="row.key">
               <td>
                 <div class="entity">
                   <span class="entity-avatar" :style="{ background: row.avatar }">{{ row.initials }}</span>
@@ -217,57 +242,28 @@ const statusPill = (value) => {
               <td>{{ row.used }}</td>
               <td>{{ row.expiry }}</td>
               <td><span class="pill" :class="statusPill(row.status)">{{ row.status }}</span></td>
-              <td>
-                <div class="act-group">
-                  <button class="act-btn" type="button" aria-label="Xem">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  </button>
-                  <button class="act-btn is-red" type="button" aria-label="Sửa">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3" />
-                    </svg>
-                  </button>
-                  <button class="act-btn" type="button" aria-label="Thêm">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                      <path d="M12 6v12M6 12h12" />
-                    </svg>
-                  </button>
-                </div>
-              </td>
             </tr>
           </tbody>
         </table>
       </div>
 
       <div class="panel-foot">
-        <span class="foot-text">Hiển thị 1-6 trong 128 phiếu giảm giá</span>
-        <div class="pager">
-          <button class="page-btn" type="button" aria-label="Trang trước">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14.5 6l-6 6 6 6" />
-            </svg>
-          </button>
-          <button
-            v-for="page in pages"
-            :key="page"
-            class="page-btn"
-            :class="{ 'is-active': page === 1 }"
-            type="button"
-          >
-            {{ page }}
-          </button>
-          <button class="page-btn" type="button" aria-label="Trang sau">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M9.5 6l6 6-6 6" />
-            </svg>
-          </button>
-        </div>
+        <span class="foot-text">Hiển thị {{ rows.length }} trong {{ vouchers.length }} phiếu giảm giá</span>
       </div>
     </section>
   </div>
 </template>
 
-<style scoped></style>
+<style scoped>
+.state-cell {
+  text-align: center;
+  color: #9a9aa3;
+  padding: 24px 0;
+  font-size: 13.5px;
+}
+
+.state-cell.is-error {
+  color: #dc2626;
+  font-weight: 600;
+}
+</style>

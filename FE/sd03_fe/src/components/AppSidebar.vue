@@ -305,4 +305,8 @@ const toggle = (item) => {
   opacity: 0.65;
   flex-shrink: 0;
 }
+
+.sidebar .menu {
+  flex: 1;
+}
 </style>

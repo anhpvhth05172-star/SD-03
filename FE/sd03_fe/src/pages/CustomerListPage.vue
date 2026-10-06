@@ -1,123 +1,77 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { listCustomers } from '../api/customer'
+import { avatarColor, formatDate, formatVnd, initialsOf } from '../utils/format'
 
 const router = useRouter()
 const showFilter = ref(true)
+const loading = ref(true)
+const error = ref('')
+const customers = ref([])
+const capNhatLuc = ref('')
 
-const pages = [1, 2, 3, 4, 5]
+const loc = ref({ tim: '', trangThai: '' })
+const locDaApDung = ref({ tim: '', trangThai: '' })
 
-const customers = [
-  {
-    name: 'Nguyễn Văn An',
-    initials: 'NA',
-    color: '#cc0000',
-    code: 'KH001',
-    contact: '0987 654 321 · an.nv@gmail.com',
-    rank: 'Kim cương',
-    orders: '24 đơn',
-    spent: '18.500.000₫',
-    joined: '12/01/2024',
-    status: 'Đang hoạt động',
-  },
-  {
-    name: 'Trần Thị Bích',
-    initials: 'TB',
-    color: '#f59e0b',
-    code: 'KH002',
-    contact: '0912 345 678 · thb@gmail.com',
-    rank: 'Bạc',
-    orders: '12 đơn',
-    spent: '6.200.000₫',
-    joined: '03/05/2024',
-    status: 'Đang hoạt động',
-  },
-  {
-    name: 'Lê Minh Cường',
-    initials: 'LC',
-    color: '#8b5cf6',
-    code: 'KH003',
-    contact: '0983 112 233 · lmc@gmail.com',
-    rank: 'Vàng',
-    orders: '8 đơn',
-    spent: '4.750.000₫',
-    joined: '22/11/2024',
-    status: 'Đang hoạt động',
-  },
-  {
-    name: 'Phạm Thu Hà',
-    initials: 'PH',
-    color: '#14b8a6',
-    code: 'KH004',
-    contact: '0977 445 566 · pth@gmail.com',
-    rank: 'Thường',
-    orders: '3 đơn',
-    spent: '1.200.000₫',
-    joined: '15/03/2025',
-    status: 'Chưa xác thực',
-  },
-  {
-    name: 'Đặng Quốc Huy',
-    initials: 'ĐH',
-    color: '#3b82f6',
-    code: 'KH005',
-    contact: '0909 887 766 · dqh@gmail.com',
-    rank: 'Vàng',
-    orders: '15 đơn',
-    spent: '7.900.000₫',
-    joined: '08/07/2024',
-    status: 'Đang hoạt động',
-  },
-  {
-    name: 'Vũ Thị Kim Ngân',
-    initials: 'KN',
-    color: '#22c55e',
-    code: 'KH006',
-    contact: '0968 223 344 · vtkn@gmail.com',
-    rank: 'Bạc',
-    orders: '6 đơn',
-    spent: '3.100.000₫',
-    joined: '19/09/2025',
-    status: 'Đang hoạt động',
-  },
-  {
-    name: 'Bùi Anh Tú',
-    initials: 'BT',
-    color: '#f97316',
-    code: 'KH007',
-    contact: '0955 667 788 · bat@gmail.com',
-    rank: 'Thường',
-    orders: '2 đơn',
-    spent: '690.000₫',
-    joined: '27/12/2025',
-    status: 'Đã khóa',
-  },
-  {
-    name: 'Hồ Ngọc Hà',
-    initials: 'HH',
-    color: '#ec4899',
-    code: 'KH008',
-    contact: '0944 556 677 · hnh@gmail.com',
-    rank: 'Kim cương',
-    orders: '31 đơn',
-    spent: '24.300.000₫',
-    joined: '05/02/2023',
-    status: 'Đang hoạt động',
-  },
-]
+const TRANG_THAI = ['Đang hoạt động', 'Đã khóa']
 
 const statusPill = (value) => {
   if (value === 'Đang hoạt động') return 'pill-green'
-  if (value === 'Chưa xác thực') return 'pill-amber'
   return 'pill-gray'
 }
 
-const rankPill = (value) => {
-  if (value === 'Kim cương') return 'pill-blue'
-  if (value === 'Vàng') return 'pill-amber'
-  if (value === 'Bạc') return 'pill-gray'
-  return 'pill-green'
+const rows = computed(() => {
+  const ap = locDaApDung.value
+  return customers.value
+    .map((c) => ({
+      key: c.id,
+      name: c.tenKhachHang,
+      code: c.ma,
+      initials: initialsOf(c.tenKhachHang),
+      color: avatarColor(c.id),
+      contact: [c.soDienThoai || '—', c.email || '—'].join(' · '),
+      orders: `${c.soDon ?? 0} đơn`,
+      spent: formatVnd(c.tongChiTieu || 0),
+      joined: c.ngayTao ? formatDate(c.ngayTao) : '—',
+      status: c.trangThai ? 'Đang hoạt động' : 'Đã khóa',
+      kho: c.trangThai,
+    }))
+    .filter((r) => {
+      if (!ap.tim) return true
+      const tu = ap.tim.toLowerCase()
+      return (
+        r.name.toLowerCase().includes(tu) ||
+        r.contact.toLowerCase().includes(tu) ||
+        r.code.toLowerCase().includes(tu)
+      )
+    })
+    .filter((r) => !ap.trangThai || r.status === ap.trangThai)
+})
+
+const apDungBoLoc = () => {
+  locDaApDung.value = { ...loc.value }
 }
+
+const datLai = () => {
+  loc.value = { tim: '', trangThai: '' }
+  locDaApDung.value = { ...loc.value }
+}
+
+const tai = async () => {
+  loading.value = true
+  error.value = ''
+  try {
+    customers.value = await listCustomers()
+    capNhatLuc.value = new Date().toLocaleString('vi-VN')
+  } catch (e) {
+    error.value = e.message || 'Không tải được danh sách khách hàng'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(tai)
 </script>
 
 <template>
@@ -144,7 +98,7 @@ const rankPill = (value) => {
         </span>
         <h3 class="panel-title">Tìm kiếm &amp; bộ lọc</h3>
         <div class="panel-right">
-          <span class="result-count">48 kết quả</span>
+          <span class="result-count">{{ rows.length }} kết quả</span>
           <button class="link-red" type="button" @click="showFilter = !showFilter">
             {{ showFilter ? 'Ẩn bớt' : 'Hiện thêm' }}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -157,49 +111,25 @@ const rankPill = (value) => {
       <div v-show="showFilter" class="filter-row">
         <div class="f-item">
           <label>Tìm khách hàng</label>
-          <input type="text" placeholder="Nhập tên, SĐT hoặc email" />
-        </div>
-
-        <div class="f-item">
-          <label>Hạng thành viên</label>
-          <select>
-            <option value="">Tất cả</option>
-            <option value="diamond">Kim cương</option>
-            <option value="gold">Vàng</option>
-            <option value="silver">Bạc</option>
-            <option value="normal">Thường</option>
-          </select>
+          <input v-model="loc.tim" type="text" placeholder="Nhập tên, SĐT hoặc email" />
         </div>
 
         <div class="f-item">
           <label>Trạng thái</label>
-          <select>
+          <select v-model="loc.trangThai">
             <option value="">Tất cả</option>
-            <option value="active">Đang hoạt động</option>
-            <option value="unverified">Chưa xác thực</option>
-            <option value="locked">Đã khóa</option>
+            <option v-for="tt in TRANG_THAI" :key="tt" :value="tt">{{ tt }}</option>
           </select>
         </div>
 
-        <div class="f-item">
-          <label>Ngày đăng ký</label>
-          <div class="date-box">
-            <input type="text" value="01/01/2023" placeholder="dd/mm/yyyy" />
-            <svg class="date-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3.8" y="5.5" width="16.4" height="14.5" rx="2" />
-              <path d="M8 3.2v4.2M16 3.2v4.2M3.8 10h16.4" />
-            </svg>
-          </div>
-        </div>
-
         <div class="filter-actions">
-          <button class="btn-reset" type="button" aria-label="Đặt lại">
+          <button class="btn-reset" type="button" aria-label="Đặt lại" @click="datLai">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 11a8 8 0 1 0-.9 4.5" />
               <path d="M20 4.5V11h-6.5" />
             </svg>
           </button>
-          <button class="btn-apply" type="button">
+          <button class="btn-apply" type="button" @click="apDungBoLoc">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
               <path d="M4 6h16M7 12h10M10 18h4" />
             </svg>
@@ -219,9 +149,9 @@ const rankPill = (value) => {
           </svg>
         </span>
         <h3 class="panel-title">Danh sách khách hàng</h3>
-        <span class="count-pill">48 khách hàng</span>
+        <span class="count-pill">{{ customers.length }} khách hàng</span>
         <div class="panel-right">
-          <span class="panel-meta">Cập nhật lúc 08:32 25/05/2026</span>
+          <span v-if="capNhatLuc" class="panel-meta">Cập nhật lúc {{ capNhatLuc }}</span>
         </div>
       </div>
 
@@ -230,16 +160,26 @@ const rankPill = (value) => {
           <thead>
             <tr>
               <th>Khách hàng</th>
-              <th>Hạng thành viên</th>
               <th>Tổng đơn</th>
               <th>Tổng chi tiêu</th>
               <th>Ngày đăng ký</th>
               <th>Trạng thái</th>
-              <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in customers" :key="row.code">
+            <tr v-if="loading">
+              <td colspan="5" class="state-cell">Đang tải dữ liệu...</td>
+            </tr>
+            <tr v-else-if="error">
+              <td colspan="5" class="state-cell is-error">
+                {{ error }}
+                <button class="link-red" type="button" @click="tai">Thử lại</button>
+              </td>
+            </tr>
+            <tr v-else-if="!rows.length">
+              <td colspan="5" class="state-cell">Chưa có khách hàng nào</td>
+            </tr>
+            <tr v-for="row in rows" :key="row.key">
               <td>
                 <div class="entity">
                   <span class="entity-avatar" :style="{ background: row.color }">{{ row.initials }}</span>
@@ -252,63 +192,32 @@ const rankPill = (value) => {
                   </div>
                 </div>
               </td>
-              <td><span class="pill" :class="rankPill(row.rank)">{{ row.rank }}</span></td>
               <td>{{ row.orders }}</td>
-              <td>{{ row.spent }}</td>
+              <td class="cell-strong">{{ row.spent }}</td>
               <td>{{ row.joined }}</td>
               <td><span class="pill" :class="statusPill(row.status)">{{ row.status }}</span></td>
-              <td>
-                <div class="act-group">
-                  <button class="act-btn" type="button" aria-label="Xem">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  </button>
-                  <button class="act-btn is-red" type="button" aria-label="Sửa">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3" />
-                    </svg>
-                  </button>
-                  <button class="act-btn" type="button" aria-label="Khóa">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                      <rect x="5" y="11" width="14" height="9" rx="2" />
-                      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-                    </svg>
-                  </button>
-                </div>
-              </td>
             </tr>
           </tbody>
         </table>
       </div>
 
       <div class="panel-foot">
-        <span class="foot-text">Hiển thị 1-8 trong 48 khách hàng</span>
-        <div class="pager">
-          <button class="page-btn" type="button" aria-label="Trang trước">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14.5 6l-6 6 6 6" />
-            </svg>
-          </button>
-          <button
-            v-for="page in pages"
-            :key="page"
-            class="page-btn"
-            :class="{ 'is-active': page === 1 }"
-            type="button"
-          >
-            {{ page }}
-          </button>
-          <button class="page-btn" type="button" aria-label="Trang sau">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M9.5 6l6 6-6 6" />
-            </svg>
-          </button>
-        </div>
+        <span class="foot-text">Hiển thị {{ rows.length }} trong {{ customers.length }} khách hàng</span>
       </div>
     </section>
   </div>
 </template>
 
-<style scoped></style>
+<style scoped>
+.state-cell {
+  text-align: center;
+  color: #9a9aa3;
+  padding: 24px 0;
+  font-size: 13.5px;
+}
+
+.state-cell.is-error {
+  color: #dc2626;
+  font-weight: 600;
+}
+</style>

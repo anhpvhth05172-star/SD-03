@@ -4,6 +4,7 @@ import com.example.datn.dto.FormDataResponse;
 import com.example.datn.dto.HoaDonDTO;
 import com.example.datn.dto.HoaDonRequest;
 import com.example.datn.dto.PageResponse;
+import com.example.datn.dto.TrangThaiHoaDonRequest;
 import com.example.datn.service.HoaDonService;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
@@ -70,5 +71,10 @@ public class HoaDonController {
     @PutMapping("/{id}/khoi-phuc")
     public HoaDonDTO restore(@PathVariable Long id) {
         return hoaDonService.restore(id);
+    }
+
+    @PutMapping("/{id}/trang-thai")
+    public HoaDonDTO doiTrangThai(@PathVariable Long id, @RequestBody TrangThaiHoaDonRequest request) {
+        return hoaDonService.doiTrangThai(id, request.getTrangThai());
     }
 }

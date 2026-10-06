@@ -2,25 +2,30 @@ import { createRouter, createWebHistory } from 'vue-router'
 import AdminLayout from '../layouts/AdminLayout.vue'
 import InvoiceListPage from '../pages/InvoiceListPage.vue'
 import InvoiceFormPage from '../pages/InvoiceFormPage.vue'
+import InvoiceDetailPage from '../pages/InvoiceDetailPage.vue'
 import VoucherListPage from '../pages/VoucherListPage.vue'
 import DiscountEventPage from '../pages/DiscountEventPage.vue'
 import EmployeeListPage from '../pages/EmployeeListPage.vue'
 import EmployeeCreatePage from '../pages/EmployeeCreatePage.vue'
 import CustomerListPage from '../pages/CustomerListPage.vue'
 import CustomerCreatePage from '../pages/CustomerCreatePage.vue'
+import LoginPage from '../pages/LoginPage.vue'
+import RegisterPage from '../pages/RegisterPage.vue'
 import ProductListPage from '../pages/ProductListPage.vue'
 import ProductVariantPage from '../pages/ProductVariantPage.vue'
 import PlaceholderPage from '../pages/PlaceholderPage.vue'
 
 const routes = [
   { path: '/', redirect: '/hoa-don' },
+  { path: '/dang-nhap', component: LoginPage, meta: { title: 'Đăng nhập' } },
+  { path: '/dang-ky', component: RegisterPage, meta: { title: 'Đăng ký' } },
   {
     path: '/',
     component: AdminLayout,
     children: [
       { path: 'hoa-don', component: InvoiceListPage, meta: { title: 'Quản lý hóa đơn' } },
       { path: 'hoa-don/them', component: InvoiceFormPage, meta: { title: 'Tạo hóa đơn' } },
-      { path: 'hoa-don/:id/sua', component: InvoiceFormPage, meta: { title: 'Sửa hóa đơn' } },
+      { path: 'hoa-don/:id', component: InvoiceDetailPage, meta: { title: 'Chi tiết hóa đơn' } },
       {
         path: 'phieu-giam-gia',
         component: VoucherListPage,

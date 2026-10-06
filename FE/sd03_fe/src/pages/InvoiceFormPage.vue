@@ -1,12 +1,10 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { createInvoice, getInvoice, getInvoiceFormData, updateInvoice } from '../api/invoice'
+import { useRouter } from 'vue-router'
+import { createInvoice, getInvoiceFormData } from '../api/invoice'
 import { formatVnd } from '../utils/format'
 
-const route = useRoute()
 const router = useRouter()
-const isEdit = computed(() => !!route.params.id)
 const saving = ref(false)
 const loading = ref(false)
 
@@ -159,11 +157,7 @@ const submit = async () => {
   saving.value = true
   try {
     const payload = buildPayload()
-    if (isEdit.value) {
-      await updateInvoice(route.params.id, payload)
-    } else {
-      await createInvoice(payload)
-    }
+    await createInvoice(payload)
     router.push('/hoa-don')
   } catch (e) {
     alert(e.message)
@@ -179,30 +173,6 @@ onMounted(async () => {
   loading.value = true
   try {
     options.value = await getInvoiceFormData()
-    if (isEdit.value) {
-      const data = await getInvoice(route.params.id)
-      form.value = {
-        maHoaDon: data.maHoaDon,
-        loaiDon: data.loaiDon,
-        phiVanChuyen: Number(data.phiVanChuyen) || 0,
-        tenKhachHang: data.tenKhachHang || '',
-        soDienThoaiKhachHang: data.soDienThoaiKhachHang || '',
-        diaChiNhanHang: data.diaChiNhanHang || '',
-        trangThai: data.trangThai,
-        ghiChu: data.ghiChu || '',
-        idKhachHang: data.idKhachHang || '',
-        idNhanVien: data.idNhanVien || '',
-        idPhuongThucThanhToan: data.idPhuongThucThanhToan || '',
-        idPhieuGiamGia: data.idPhieuGiamGia || '',
-        chiTiet: data.chiTiet.map((line) => ({
-          idSanPhamChiTiet: line.idSanPhamChiTiet,
-          soLuong: line.soLuong,
-          donGia: Number(line.donGia),
-          ghiChu: line.ghiChu || '',
-        })),
-      }
-      if (form.value.chiTiet.length === 0) form.value.chiTiet.push(blankLine())
-    }
   } catch (e) {
     alert(e.message)
   } finally {
@@ -214,7 +184,7 @@ onMounted(async () => {
 <template>
   <div class="create-wrap">
     <section class="create-card" v-if="!loading">
-      <h2 class="create-title">{{ isEdit ? 'Cập nhật hóa đơn' : 'Tạo hóa đơn' }}</h2>
+      <h2 class="create-title">Tạo hóa đơn</h2>
 
       <div class="section-label">Thông tin hóa đơn</div>
       <div class="form-grid">
@@ -332,7 +302,7 @@ onMounted(async () => {
 
       <div class="form-actions">
         <button class="btn-primary" type="button" :disabled="saving" @click="submit">
-          {{ saving ? 'Đang lưu...' : isEdit ? 'Cập nhật' : 'Thêm' }}
+          {{ saving ? 'Đang lưu...' : 'Thêm' }}
         </button>
         <button class="btn-cancel" type="button" @click="router.push('/hoa-don')">Hủy</button>
       </div>

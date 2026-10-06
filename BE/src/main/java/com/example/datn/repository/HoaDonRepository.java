@@ -2,6 +2,7 @@ package com.example.datn.repository;
 
 import com.example.datn.entity.HoaDon;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -34,4 +35,14 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
         @Param("daXoa") boolean daXoa,
         Pageable pageable
     );
+
+    @Query(
+        """
+        SELECT h.khachHang.id, COUNT(h), COALESCE(SUM(h.tienSauGiamGia), 0)
+        FROM HoaDon h
+        WHERE h.khachHang IS NOT NULL AND h.daXoa = false
+        GROUP BY h.khachHang.id
+        """
+    )
+    List<Object[]> tongHopTheoKhachHang();
 }
