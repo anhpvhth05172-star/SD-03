@@ -33,7 +33,6 @@ const rankOptions = [
 const statusOptions = [
   { value: '', label: 'Tất cả' },
   { value: 'active', label: 'Đang hoạt động' },
-  { value: 'unverified', label: 'Chưa xác thực' },
   { value: 'locked', label: 'Đã khóa' },
 ]
 
@@ -66,6 +65,12 @@ const load = async () => {
   loading.value = true
   try {
     const data = await listCustomers(params)
+    const maxPage = data.totalPages > 0 ? data.totalPages - 1 : 0
+    if (page.value > maxPage) {
+      page.value = maxPage
+      loading.value = false
+      return await load()
+    }
     rows.value = data.content
     totalElements.value = data.totalElements
     totalPages.value = data.totalPages

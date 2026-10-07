@@ -21,6 +21,10 @@ public interface KhachHangRepository extends JpaRepository<KhachHang, Long> {
 
     boolean existsByTenTaiKhoanAndIdNot(String tenTaiKhoan, Long id);
 
+    boolean existsByEmail(String email);
+
+    boolean existsByEmailAndIdNot(String email, Long id);
+
     @Query("SELECT COALESCE(MAX(k.id), 0) FROM KhachHang k")
     Long findMaxId();
 

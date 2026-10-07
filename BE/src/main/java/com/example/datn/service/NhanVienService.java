@@ -34,6 +34,7 @@ public class NhanVienService {
     };
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+$");
     private static final Pattern SO_DIEN_THAI_PATTERN = Pattern.compile("^(0|\\+84)\\d{8,10}$");
+    private static final Pattern MA_NHAN_VIEN_PATTERN = Pattern.compile("^NV\\d{3,}$");
 
     private final NhanVienRepository nhanVienRepository;
     private final VaiTroRepository vaiTroRepository;
@@ -103,6 +104,16 @@ public class NhanVienService {
         if (req == null || isBlank(req.getTenTaiKhoan())) {
             throw new IllegalArgumentException("Tên nhân viên không được để trống");
         }
+        checkLength(req.getTenTaiKhoan(), 100, "Tên nhân viên");
+        checkLength(req.getMaNhanVien(), 50, "Mã nhân viên");
+        checkLength(req.getMatKhau(), 255, "Mật khẩu");
+        checkLength(req.getEmail(), 150, "Email");
+        checkLength(req.getSoDienThoai(), 20, "Số điện thoại");
+        checkLength(req.getQueQuan(), 300, "Quê quán");
+        checkLength(req.getPhuong(), 200, "Phường");
+        checkLength(req.getDiaChiCuThe(), 510, "Địa chỉ cụ thể");
+        checkLength(req.getAnhNhanVien(), 2000, "Ảnh nhân viên");
+        checkLength(req.getNguoiCapNhat(), 200, "Người cập nhật");
         String ten = req.getTenTaiKhoan().trim();
         boolean trungTen = excludeId == null
             ? nhanVienRepository.existsByTenTaiKhoan(ten)
@@ -112,6 +123,9 @@ public class NhanVienService {
         }
         if (!isBlank(req.getMaNhanVien())) {
             String ma = req.getMaNhanVien().trim();
+            if (!MA_NHAN_VIEN_PATTERN.matcher(ma).matches()) {
+                throw new IllegalArgumentException("Mã nhân viên không hợp lệ (định dạng NV001, NV002, ...)");
+            }
             boolean trungMa = excludeId == null
                 ? nhanVienRepository.existsByMaNhanVien(ma)
                 : nhanVienRepository.existsByMaNhanVienAndIdNot(ma, excludeId);
@@ -122,8 +136,17 @@ public class NhanVienService {
         if (excludeId == null && req.getIdVaiTro() == null) {
             throw new IllegalArgumentException("Vai trò không được để trống");
         }
-        if (!isBlank(req.getEmail()) && !EMAIL_PATTERN.matcher(req.getEmail().trim()).matches()) {
-            throw new IllegalArgumentException("Email không hợp lệ");
+        if (!isBlank(req.getEmail())) {
+            String email = req.getEmail().trim();
+            if (!EMAIL_PATTERN.matcher(email).matches()) {
+                throw new IllegalArgumentException("Email không hợp lệ");
+            }
+            boolean trungEmail = excludeId == null
+                ? nhanVienRepository.existsByEmail(email)
+                : nhanVienRepository.existsByEmailAndIdNot(email, excludeId);
+            if (trungEmail) {
+                throw new IllegalArgumentException("Email đã được sử dụng bởi nhân viên khác");
+            }
         }
         if (!isBlank(req.getSoDienThoai()) && !SO_DIEN_THAI_PATTERN.matcher(req.getSoDienThoai().trim()).matches()) {
             throw new IllegalArgumentException("Số điện thoại chỉ gồm 9-11 chữ số và bắt đầu bằng 0 hoặc +84");
@@ -248,6 +271,12 @@ public class NhanVienService {
 
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    private static void checkLength(String value, int max, String fieldName) {
+        if (value != null && value.trim().length() > max) {
+            throw new IllegalArgumentException(fieldName + " không được vượt quá " + max + " ký tự");
+        }
     }
 
     private static String blankToNull(String s) {

@@ -48,6 +48,7 @@ public class KhachHangService {
     };
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+$");
     private static final Pattern SO_DIEN_THAI_PATTERN = Pattern.compile("^(0|\\+84)\\d{8,10}$");
+    private static final Pattern MA_KHACH_HANG_PATTERN = Pattern.compile("^KH\\d{3,}$");
 
     private final KhachHangRepository khachHangRepository;
     private final DiaChiKhachHangRepository diaChiKhachHangRepository;
@@ -113,7 +114,16 @@ public class KhachHangService {
         if (req == null || isBlank(req.getTenKhachHang())) {
             throw new IllegalArgumentException("Họ và tên không được để trống");
         }
-        String ten = req.getTenKhachHang().trim();
+        checkLength(req.getTenKhachHang(), 200, "Họ và tên");
+        checkLength(req.getMaKhachHang(), 50, "Mã khách hàng");
+        checkLength(req.getTenTaiKhoan(), 100, "Tên đăng nhập");
+        checkLength(req.getMatKhau(), 255, "Mật khẩu");
+        checkLength(req.getEmail(), 150, "Email");
+        checkLength(req.getSoDienThoai(), 20, "Số điện thoại");
+        checkLength(req.getTinhThanhPho(), 200, "Tỉnh thành phố");
+        checkLength(req.getPhuong(), 200, "Phường");
+        checkLength(req.getDiaChiCuThe(), 510, "Địa chỉ cụ thể");
+        checkLength(req.getNguoiCapNhat(), 200, "Người cập nhật");
         if (!isBlank(req.getTenTaiKhoan())) {
             String tk = req.getTenTaiKhoan().trim();
             boolean trung = excludeId == null
@@ -125,6 +135,9 @@ public class KhachHangService {
         }
         if (!isBlank(req.getMaKhachHang())) {
             String ma = req.getMaKhachHang().trim();
+            if (!MA_KHACH_HANG_PATTERN.matcher(ma).matches()) {
+                throw new IllegalArgumentException("Mã khách hàng không hợp lệ (định dạng KH001, KH002, ...)");
+            }
             boolean trungMa = excludeId == null
                 ? khachHangRepository.existsByMaKhachHang(ma)
                 : khachHangRepository.existsByMaKhachHangAndIdNot(ma, excludeId);
@@ -132,8 +145,17 @@ public class KhachHangService {
                 throw new IllegalArgumentException("Mã khách hàng đã tồn tại");
             }
         }
-        if (!isBlank(req.getEmail()) && !EMAIL_PATTERN.matcher(req.getEmail().trim()).matches()) {
-            throw new IllegalArgumentException("Email không hợp lệ");
+        if (!isBlank(req.getEmail())) {
+            String email = req.getEmail().trim();
+            if (!EMAIL_PATTERN.matcher(email).matches()) {
+                throw new IllegalArgumentException("Email không hợp lệ");
+            }
+            boolean trungEmail = excludeId == null
+                ? khachHangRepository.existsByEmail(email)
+                : khachHangRepository.existsByEmailAndIdNot(email, excludeId);
+            if (trungEmail) {
+                throw new IllegalArgumentException("Email đã được sử dụng bởi khách hàng khác");
+            }
         }
         if (!isBlank(req.getSoDienThoai()) && !SO_DIEN_THAI_PATTERN.matcher(req.getSoDienThoai().trim()).matches()) {
             throw new IllegalArgumentException("Số điện thoại chỉ gồm 9-11 chữ số và bắt đầu bằng 0 hoặc +84");
@@ -394,6 +416,12 @@ public class KhachHangService {
 
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    private static void checkLength(String value, int max, String fieldName) {
+        if (value != null && value.trim().length() > max) {
+            throw new IllegalArgumentException(fieldName + " không được vượt quá " + max + " ký tự");
+        }
     }
 
     private static String blankToNull(String s) {

@@ -18,6 +18,10 @@ public interface NhanVienRepository extends JpaRepository<NhanVien, Long> {
 
     boolean existsByTenTaiKhoanAndIdNot(String tenTaiKhoan, Long id);
 
+    boolean existsByEmail(String email);
+
+    boolean existsByEmailAndIdNot(String email, Long id);
+
     @Query("SELECT COALESCE(MAX(n.id), 0) FROM NhanVien n")
     Long findMaxId();
 

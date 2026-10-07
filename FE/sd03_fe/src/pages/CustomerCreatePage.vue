@@ -39,15 +39,23 @@ const form = ref({
 
 const validate = () => {
   if (!form.value.tenKhachHang.trim()) return 'Họ và tên không được để trống'
+  if (form.value.tenKhachHang.trim().length > 200) return 'Họ và tên không được vượt quá 200 ký tự'
+  if (form.value.maKhachHang.trim() && !/^KH\d{3,}$/.test(form.value.maKhachHang.trim())) {
+    return 'Mã khách hàng không hợp lệ (định dạng KH001, KH002, ...)'
+  }
   if (form.value.email && !/^[\w.+-]+@[\w-]+(\.[\w-]+)+$/.test(form.value.email.trim())) {
     return 'Email không hợp lệ'
   }
+  if (form.value.email.trim().length > 150) return 'Email không được vượt quá 150 ký tự'
   if (form.value.soDienThoai && !/^(0|\+84)\d{8,10}$/.test(form.value.soDienThoai.trim())) {
     return 'Số điện thoại không hợp lệ'
   }
+  if (form.value.soDienThoai.trim().length > 20) return 'Số điện thoại không được vượt quá 20 ký tự'
   if (form.value.matKhau && form.value.matKhau.length < 6) {
     return 'Mật khẩu phải có ít nhất 6 ký tự'
   }
+  if (form.value.matKhau.length > 255) return 'Mật khẩu không được vượt quá 255 ký tự'
+  if (form.value.diaChiCuThe.trim().length > 510) return 'Địa chỉ cụ thể không được vượt quá 510 ký tự'
   return ''
 }
 
@@ -124,11 +132,11 @@ onMounted(async () => {
       <p v-if="loading" class="form-error">Đang tải dữ liệu...</p>
 
       <div class="form-fields">
-        <input v-model="form.maKhachHang" type="text" placeholder="Mã khách hàng (để trống sẽ tự sinh)" />
-        <input v-model="form.tenKhachHang" type="text" placeholder="Họ và tên" />
-        <input v-model="form.matKhau" type="password" :placeholder="isEdit ? 'Mật khẩu mới (bỏ trống để giữ nguyên)' : 'Mật khẩu (tối thiểu 6 ký tự, mặc định 123456)'" />
-        <input v-model="form.email" type="email" placeholder="Email" />
-        <input v-model="form.soDienThoai" type="tel" placeholder="Số điện thoại" />
+        <input v-model="form.maKhachHang" type="text" maxlength="50" placeholder="Mã khách hàng (để trống sẽ tự sinh)" />
+        <input v-model="form.tenKhachHang" type="text" maxlength="200" placeholder="Họ và tên" />
+        <input v-model="form.matKhau" type="password" maxlength="255" :placeholder="isEdit ? 'Mật khẩu mới (bỏ trống để giữ nguyên)' : 'Mật khẩu (tối thiểu 6 ký tự, mặc định 123456)'" />
+        <input v-model="form.email" type="email" maxlength="150" placeholder="Email" />
+        <input v-model="form.soDienThoai" type="tel" maxlength="20" placeholder="Số điện thoại" />
         <input v-model="form.ngaySinh" type="date" placeholder="Ngày sinh" />
 
         <select v-model="form.gioiTinh">
@@ -147,7 +155,7 @@ onMounted(async () => {
           <option v-for="item in wards" :key="item" :value="item">{{ item || 'Chọn phường' }}</option>
         </select>
 
-        <textarea v-model="form.diaChiCuThe" placeholder="Địa chỉ cụ thể" rows="3"></textarea>
+        <textarea v-model="form.diaChiCuThe" maxlength="510" placeholder="Địa chỉ cụ thể" rows="3"></textarea>
       </div>
 
       <div class="form-actions">

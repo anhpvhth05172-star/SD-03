@@ -26,8 +26,7 @@ const detailData = ref(null)
 const statusOptions = [
   { value: '', label: 'Tất cả' },
   { value: 'active', label: 'Đang hoạt động' },
-  { value: 'leave', label: 'Nghỉ phép' },
-  { value: 'suspend', label: 'Tạm ngưng' },
+  { value: 'locked', label: 'Đã khóa' },
 ]
 
 const parseDate = (value) => {
@@ -59,6 +58,12 @@ const load = async () => {
   loading.value = true
   try {
     const data = await listEmployees(params)
+    const maxPage = data.totalPages > 0 ? data.totalPages - 1 : 0
+    if (page.value > maxPage) {
+      page.value = maxPage
+      loading.value = false
+      return await load()
+    }
     rows.value = data.content
     totalElements.value = data.totalElements
     totalPages.value = data.totalPages
