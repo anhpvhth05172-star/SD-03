@@ -3,6 +3,8 @@ package com.example.datn.controller;
 import com.example.datn.dto.AuthResponse;
 import com.example.datn.dto.DangKyRequest;
 import com.example.datn.dto.DangNhapRequest;
+import com.example.datn.dto.DangXuatRequest;
+import com.example.datn.dto.RefreshRequest;
 import com.example.datn.dto.ThongTinResponse;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.exception.DangNhapThatBaiException;
@@ -43,6 +45,19 @@ public class AuthController {
     @PostMapping("/dang-nhap")
     public AuthResponse dangNhap(@RequestBody DangNhapRequest req) {
         return authService.dangNhap(req);
+    }
+
+    @PostMapping("/refresh")
+    public AuthResponse refresh(@RequestBody RefreshRequest req) {
+        return authService.refresh(req == null ? null : req.refreshToken());
+    }
+
+    @PostMapping("/dang-xuat")
+    public ResponseEntity<Map<String, String>> dangXuat(@RequestBody(required = false) DangXuatRequest req) {
+        authService.dangXuat(req == null ? null : req.refreshToken());
+        Map<String, String> body = new HashMap<>();
+        body.put("message", "Đăng xuất thành công");
+        return ResponseEntity.ok(body);
     }
 
     @GetMapping("/thong-tin")

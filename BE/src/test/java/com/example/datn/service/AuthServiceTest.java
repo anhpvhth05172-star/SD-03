@@ -29,9 +29,18 @@ class AuthServiceTest {
     private static final String JWT_SECRET = "VGVzdC1KV1QtU2VjcmV0LUtleS0wMTIzNDU2Nzg5QUJDREVGR0g=";
 
     private final KhachHangRepository khachHangRepository = mock(KhachHangRepository.class);
+    private final com.example.datn.repository.PhienDangNhapRepository phienDangNhapRepository = mock(
+        com.example.datn.repository.PhienDangNhapRepository.class
+    );
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final JwtService jwtService = new JwtService(JWT_SECRET, 3_600_000L);
-    private final AuthService service = new AuthService(khachHangRepository, passwordEncoder, jwtService);
+    private final AuthService service = new AuthService(
+        khachHangRepository,
+        passwordEncoder,
+        jwtService,
+        phienDangNhapRepository,
+        1_800_000L
+    );
 
     private DangKyRequest dangKyHopLe() {
         DangKyRequest req = new DangKyRequest();

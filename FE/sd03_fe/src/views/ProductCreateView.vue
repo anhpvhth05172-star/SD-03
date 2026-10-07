@@ -1,7 +1,8 @@
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import QuickAddModal from '../components/QuickAddModal.vue'
+import { getThuocTinh, createSanPham } from '../api/product'
 
 const router = useRouter()
 
@@ -14,57 +15,74 @@ const form = reactive({
   material: '',
   sole: '',
   collar: '',
+  origin: '',
+  upper: '',
   cushion: '',
   weight: ''
 })
 
-const brandOptions = [
-  { value: 'nike', label: 'Nike' },
-  { value: 'adidas', label: 'Adidas' },
-  { value: 'puma', label: 'Puma' },
-  { value: 'newbalance', label: 'New Balance' },
-  { value: 'converse', label: 'Converse' },
-  { value: 'vans', label: 'Vans' },
-  { value: 'asics', label: 'Asics' }
-]
+const brandOptions = ref([])
+const categoryOptions = ref([])
+const materialOptions = ref([])
+const soleOptions = ref([])
+const collarOptions = ref([])
+const originOptions = ref([])
+const upperOptions = ref([])
+const loadingOptions = ref(false)
 
-const categoryOptions = [
-  { value: 'sneaker', label: 'Sneaker' },
-  { value: 'running', label: 'Giày chạy bộ' },
-  { value: 'sport', label: 'Giày thể thao' },
-  { value: 'basketball', label: 'Giày bóng rổ' },
-  { value: 'high_top', label: 'Giày cổ cao' },
-  { value: 'skate', label: 'Giày trượt ván' }
-]
+const HEX_BY_NAME = {
+  'đen': '#111827',
+  'trắng': '#ffffff',
+  'đỏ': '#ef4444',
+  'xanh dương': '#3b82f6',
+  'xanh lá': '#10b981',
+  'xanh da trời': '#38bdf8',
+  'xanh navy': '#1e3a8a',
+  'vàng': '#f59e0b',
+  'cam': '#f97316',
+  'hồng': '#ec4899',
+  'xám': '#64748b',
+  'nâu': '#92400e',
+  'be': '#d6c7a8',
+  'tím': '#8b5cf6',
+}
+
+const hexByName = (name) => HEX_BY_NAME[(name || '').trim().toLowerCase()] || '#94a3b8'
+
+const loadThuocTinh = async () => {
+  loadingOptions.value = true
+  try {
+    const t = await getThuocTinh()
+    brandOptions.value = t.thuongHieu.map((i) => ({ value: i.id, label: i.ten }))
+    categoryOptions.value = t.loaiGiay.map((i) => ({ value: i.id, label: i.ten }))
+    materialOptions.value = t.chatLieu.map((i) => ({ value: i.id, label: i.ten }))
+    soleOptions.value = t.deGiay.map((i) => ({ value: i.id, label: i.ten }))
+    collarOptions.value = t.kieuDang.map((i) => ({ value: i.id, label: i.ten }))
+    originOptions.value = t.xuatXu.map((i) => ({ value: i.id, label: i.ten }))
+    upperOptions.value = t.thanGiay.map((i) => ({ value: i.id, label: i.ten }))
+    availableColors.value = t.mauSac.map((i) => ({
+      id: i.id,
+      ma: i.ma,
+      name: i.ten,
+      hex: hexByName(i.ten)
+    }))
+    availableSizes.value = t.kichCo.map((i) => ({ id: i.id, ma: i.ma, name: i.ten }))
+    selectedColors.value = availableColors.value.slice(0, 2)
+    selectedSizes.value = availableSizes.value.slice(1, 4)
+  } catch (e) {
+    showToast(e.message || 'Không tải được danh sách thuộc tính!', 'error')
+  } finally {
+    loadingOptions.value = false
+  }
+}
+
+onMounted(loadThuocTinh)
 
 const genderOptions = [
   { value: 'all', label: 'Tất cả' },
   { value: 'male', label: 'Nam' },
   { value: 'female', label: 'Nữ' },
   { value: 'unisex', label: 'Unisex' }
-]
-
-const materialOptions = [
-  { value: 'mesh', label: 'Vải dệt (Mesh)' },
-  { value: 'leather', label: 'Da thật (Leather)' },
-  { value: 'canvas', label: 'Vải Canvas' },
-  { value: 'suede', label: 'Da lộn (Suede)' },
-  { value: 'synthetic', label: 'Da nhân tạo (Synthetic)' },
-  { value: 'knit', label: 'Primeknit / Flyknit' }
-]
-
-const soleOptions = [
-  { value: 'rubber', label: 'Đế cao su (Rubber)' },
-  { value: 'boost', label: 'Đế Boost' },
-  { value: 'eva', label: 'Đế EVA' },
-  { value: 'phylon', label: 'Đế Phylon' },
-  { value: 'air', label: 'Đế đệm khí (Air)' }
-]
-
-const collarOptions = [
-  { value: 'low', label: 'Cổ thấp (Low-top)' },
-  { value: 'mid', label: 'Cổ lửng (Mid-top)' },
-  { value: 'high', label: 'Cổ cao (High-top)' }
 ]
 
 const cushionOptions = [
@@ -82,27 +100,11 @@ const weightOptions = [
   { value: 'heavy', label: '> 350g (Đầm chân)' }
 ]
 
-const availableColors = ref([
-  { id: 1, name: 'Đen', hex: '#111827' },
-  { id: 2, name: 'Trắng', hex: '#ffffff' },
-  { id: 3, name: 'Đỏ', hex: '#ef4444' },
-  { id: 4, name: 'Xanh dương', hex: '#3b82f6' },
-  { id: 5, name: 'Xám', hex: '#64748b' },
-  { id: 6, name: 'Xanh lá', hex: '#10b981' }
-])
+const availableColors = ref([])
+const availableSizes = ref([])
 
-const availableSizes = ref([
-  { id: 1, name: '38' },
-  { id: 2, name: '39' },
-  { id: 3, name: '40' },
-  { id: 4, name: '41' },
-  { id: 5, name: '42' },
-  { id: 6, name: '43' },
-  { id: 7, name: '44' }
-])
-
-const selectedColors = ref([availableColors.value[0], availableColors.value[1]])
-const selectedSizes = ref([availableSizes.value[1], availableSizes.value[2], availableSizes.value[3]])
+const selectedColors = ref([])
+const selectedSizes = ref([])
 
 const tempColorSelect = ref('')
 const tempSizeSelect = ref('')
@@ -176,10 +178,12 @@ const generateVariants = () => {
     selectedSizes.value.forEach(size => {
       generated.push({
         id: `${color.id}-${size.id}`,
+        colorId: color.id,
+        sizeId: size.id,
         color: color.name,
         colorHex: color.hex,
         size: size.name,
-        sku: `${form.code || 'SP'}-${color.name.toUpperCase().substring(0, 3)}-${size.name}`,
+        sku: `${form.code || 'SP'}-${color.ma || color.id}-${size.ma || size.id}`,
         price: bulkPrice.value || 2500000,
         stock: bulkStock.value || 50,
         status: 'Đang bán'
@@ -242,15 +246,105 @@ const goBack = () => {
   router.push('/san-pham')
 }
 
-const saveProduct = () => {
+const saving = ref(false)
+
+const genderLabel = () => {
+  const found = genderOptions.find((g) => g.value === form.gender)
+  return found ? found.label : form.gender
+}
+
+const saveProduct = async () => {
+  if (!form.code.trim()) {
+    showToast('Vui lòng nhập mã sản phẩm!', 'warning')
+    return
+  }
   if (!form.name.trim()) {
     showToast('Vui lòng nhập tên sản phẩm!', 'warning')
     return
   }
-  showToast('Đã lưu thông tin sản phẩm và các biến thể thành công!')
-  setTimeout(() => {
-    router.push('/san-pham')
-  }, 1200)
+  if (!form.brand) {
+    showToast('Vui lòng chọn thương hiệu!', 'warning')
+    return
+  }
+  if (!form.category) {
+    showToast('Vui lòng chọn loại giày!', 'warning')
+    return
+  }
+  if (!form.material) {
+    showToast('Vui lòng chọn chất liệu!', 'warning')
+    return
+  }
+  if (!form.origin) {
+    showToast('Vui lòng chọn xuất xứ!', 'warning')
+    return
+  }
+  if (!form.collar) {
+    showToast('Vui lòng chọn kiểu dáng!', 'warning')
+    return
+  }
+  if (!form.sole) {
+    showToast('Vui lòng chọn đế giày!', 'warning')
+    return
+  }
+  if (!form.upper) {
+    showToast('Vui lòng chọn thân giày!', 'warning')
+    return
+  }
+
+  const bienThe = []
+  if (hasGeneratedVariants.value) {
+    for (const v of variants.value) {
+      if (!v.colorId || !v.sizeId) {
+        showToast(
+          `Biến thể "${v.sku}" dùng thuộc tính thêm nhanh chưa có trong hệ thống. Vui lòng chọn màu/kích cỡ có sẵn!`,
+          'warning'
+        )
+        return
+      }
+      if (!v.price || Number(v.price) <= 0) {
+        showToast(`Giá bán của "${v.sku}" phải lớn hơn 0!`, 'warning')
+        return
+      }
+      if (v.stock === undefined || v.stock === null || Number(v.stock) < 0) {
+        showToast(`Số lượng của "${v.sku}" không được âm!`, 'warning')
+        return
+      }
+      bienThe.push({
+        maChiTietSanPham: v.sku,
+        idMauSac: Number(v.colorId),
+        idKichCo: Number(v.sizeId),
+        idThanGiay: Number(form.upper),
+        idDeGiay: Number(form.sole),
+        soLuong: Number(v.stock),
+        giaBan: Number(v.price),
+        trangThai: true
+      })
+    }
+  }
+
+  saving.value = true
+  try {
+    await createSanPham({
+      maSanPham: form.code.trim(),
+      tenSanPham: form.name.trim(),
+      doiTuong: genderLabel(),
+      idLoaiGiay: Number(form.category),
+      idThuongHieu: Number(form.brand),
+      idChatLieu: Number(form.material),
+      idXuatXu: Number(form.origin),
+      idKieuDang: Number(form.collar),
+      trangThai: true,
+      bienThe
+    })
+    showToast('Đã lưu thông tin sản phẩm và các biến thể thành công!')
+    setTimeout(() => {
+      router.push('/san-pham')
+    }, 1200)
+  } catch (e) {
+    showToast(e.message || 'Lưu sản phẩm thất bại!', 'error')
+  } finally {
+    saving.value = false
+  }
 }
 </script>
 
@@ -277,7 +371,7 @@ const saveProduct = () => {
           </svg>
           Tạo biến thể tự động
         </button>
-        <button class="btn btn-save-primary" @click="saveProduct">
+        <button class="btn btn-save-primary" @click="saveProduct" :disabled="saving">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
             <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -301,8 +395,8 @@ const saveProduct = () => {
 
       <div class="form-grid-2col margin-top-md">
         <div class="form-group">
-          <label class="field-label">Mã sản phẩm</label>
-          <input v-model="form.code" type="text" class="field-input disabled-input" readonly />
+          <label class="field-label">Mã sản phẩm <span class="required-star">*</span></label>
+          <input v-model="form.code" type="text" class="field-input" placeholder="Ví dụ: SP-NK-0032..." />
         </div>
 
         <div class="form-group">
@@ -342,6 +436,14 @@ const saveProduct = () => {
         </div>
 
         <div class="form-group">
+          <label class="field-label">Xuất xứ <span class="required-star">*</span></label>
+          <select v-model="form.origin" class="field-select">
+            <option value="" disabled selected>Chọn xuất xứ...</option>
+            <option v-for="item in originOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
           <label class="field-label">Đế giày <span class="required-star">*</span></label>
           <select v-model="form.sole" class="field-select">
             <option value="" disabled selected>Chọn đế giày...</option>
@@ -354,6 +456,14 @@ const saveProduct = () => {
           <select v-model="form.collar" class="field-select">
             <option value="" disabled selected>Chọn cổ giày...</option>
             <option v-for="item in collarOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="field-label">Thân giày <span class="required-star">*</span></label>
+          <select v-model="form.upper" class="field-select">
+            <option value="" disabled selected>Chọn thân giày...</option>
+            <option v-for="item in upperOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
           </select>
         </div>
 
@@ -1024,5 +1134,9 @@ const saveProduct = () => {
 
 .toast-warning {
   background: #d97706;
+}
+
+.toast-error {
+  background: #dc2626;
 }
 </style>

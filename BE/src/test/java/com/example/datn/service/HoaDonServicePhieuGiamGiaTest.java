@@ -17,7 +17,9 @@ import com.example.datn.entity.DotGiamGia;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.entity.LichSuSuDungPhieuGiamGia;
+import com.example.datn.entity.NhanVien;
 import com.example.datn.entity.PhieuGiamGia;
+import com.example.datn.entity.PhuongThucThanhToan;
 import com.example.datn.entity.SanPhamChiTiet;
 import com.example.datn.repository.ChiTietHoaDonRepository;
 import com.example.datn.repository.HoaDonRepository;
@@ -32,6 +34,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -41,6 +44,8 @@ class HoaDonServicePhieuGiamGiaTest {
     private static final Long KH_B = 200L;
     private static final Long PGG_ID = 1L;
     private static final Long SPCT_ID = 9L;
+    private static final Long PTTT_ID = 1L;
+    private static final Long NV_ID = 1L;
 
     private final HoaDonRepository hoaDonRepository = mock(HoaDonRepository.class);
     private final ChiTietHoaDonRepository chiTietHoaDonRepository = mock(ChiTietHoaDonRepository.class);
@@ -90,6 +95,26 @@ class HoaDonServicePhieuGiamGiaTest {
         return kh;
     }
 
+    private PhuongThucThanhToan phuongThucThanhToan() {
+        PhuongThucThanhToan p = new PhuongThucThanhToan();
+        p.setId(PTTT_ID);
+        p.setMaPhuongThuc("TIEN_MAT");
+        p.setTenPhuongThuc("Tiền mặt tại quầy");
+        p.setTrangThai(true);
+        return p;
+    }
+
+    @BeforeEach
+    void datPhuongThucThanhToan() {
+        when(phuongThucThanhToanRepository.findById(PTTT_ID))
+            .thenReturn(Optional.of(phuongThucThanhToan()));
+        NhanVien nv = new NhanVien();
+        nv.setId(NV_ID);
+        nv.setTenTaiKhoan("admin");
+        nv.setTrangThai(true);
+        when(nhanVienRepository.findById(NV_ID)).thenReturn(Optional.of(nv));
+    }
+
     private void chuanBi(PhieuGiamGia pgg) {
         when(hoaDonRepository.existsByMaHoaDon(anyString())).thenReturn(false);
         if (pgg != null) {
@@ -118,6 +143,12 @@ class HoaDonServicePhieuGiamGiaTest {
         HoaDonRequest req = new HoaDonRequest();
         req.setMaHoaDon("HDTEST001");
         req.setLoaiDon("Tại quầy");
+        req.setTrangThai("Chờ xác nhận");
+        req.setIdPhuongThucThanhToan(PTTT_ID);
+        req.setIdNhanVien(NV_ID);
+        req.setPhiVanChuyen(new BigDecimal("50000"));
+        req.setTenKhachHang("Nguyen Van A");
+        req.setSoDienThoaiKhachHang("0912345678");
         req.setIdKhachHang(idKhachHang);
         req.setIdPhieuGiamGia(idPhieu);
         ChiTietHoaDonRequest dong = new ChiTietHoaDonRequest();
@@ -134,15 +165,15 @@ class HoaDonServicePhieuGiamGiaTest {
 
         HoaDonDTO dto = service.create(yeuCau(PGG_ID, KH_A));
 
-        assertThat(dto.getTongTien()).isEqualByComparingTo("1000000");
-        assertThat(dto.getTienGiam()).isEqualByComparingTo("200000");
-        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("800000");
+        assertThat(dto.getTongTien()).isEqualByComparingTo("1050000");
+        assertThat(dto.getTienGiam()).isEqualByComparingTo("210000");
+        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("840000");
         assertThat(dto.getTenGiamGiaUngDung()).isEqualTo("Giảm 20%");
 
         ArgumentCaptor<HoaDon> capHd = ArgumentCaptor.forClass(HoaDon.class);
         verify(hoaDonRepository).save(capHd.capture());
-        assertThat(capHd.getValue().getTienGiam()).isEqualByComparingTo("200000");
-        assertThat(capHd.getValue().getTienSauGiamGia()).isEqualByComparingTo("800000");
+        assertThat(capHd.getValue().getTienGiam()).isEqualByComparingTo("210000");
+        assertThat(capHd.getValue().getTienSauGiamGia()).isEqualByComparingTo("840000");
         assertThat(capHd.getValue().getTenGiamGiaUngDung()).isEqualTo("Giảm 20%");
 
         ArgumentCaptor<LichSuSuDungPhieuGiamGia> capLs = ArgumentCaptor.forClass(LichSuSuDungPhieuGiamGia.class);
@@ -150,7 +181,7 @@ class HoaDonServicePhieuGiamGiaTest {
         assertThat(capLs.getValue().getKhachHang().getId()).isEqualTo(KH_A);
         assertThat(capLs.getValue().getPhieuGiamGia().getId()).isEqualTo(PGG_ID);
         assertThat(capLs.getValue().getHoaDon().getId()).isEqualTo(10L);
-        assertThat(capLs.getValue().getSoTienGiam()).isEqualByComparingTo("200000");
+        assertThat(capLs.getValue().getSoTienGiam()).isEqualByComparingTo("210000");
         assertThat(capLs.getValue().getThoiGian()).isNotNull();
     }
 
@@ -167,8 +198,8 @@ class HoaDonServicePhieuGiamGiaTest {
 
         HoaDonDTO dto = service.create(yeuCau(PGG_ID, KH_A));
 
-        assertThat(dto.getTienGiam()).isEqualByComparingTo("200000");
-        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("800000");
+        assertThat(dto.getTienGiam()).isEqualByComparingTo("210000");
+        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("840000");
         assertThat(dto.getIdDotGiamGia()).isEqualTo(5L);
         assertThat(dto.getTenDotGiamGia()).isEqualTo("Sale tháng 10");
     }
@@ -274,7 +305,7 @@ class HoaDonServicePhieuGiamGiaTest {
         HoaDonDTO dto = service.create(yeuCau(PGG_ID, KH_A));
 
         assertThat(dto.getTienGiam()).isEqualByComparingTo("60000");
-        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("940000");
+        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("990000");
         assertThat(dto.getTenGiamGiaUngDung()).isEqualTo("Giảm 60.000đ");
     }
 
@@ -298,9 +329,25 @@ class HoaDonServicePhieuGiamGiaTest {
         HoaDonDTO dto = service.create(yeuCau(null, KH_A));
 
         assertThat(dto.getTienGiam()).isEqualByComparingTo("0");
-        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("1000000");
+        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("1050000");
         assertThat(dto.getTenGiamGiaUngDung()).isNull();
         verify(lichSuSuDungRepository, org.mockito.Mockito.never())
             .save(any(LichSuSuDungPhieuGiamGia.class));
+    }
+
+    @Test
+    void trungSanPhamNhieuDong_BatLoi() {
+        chuanBi(null);
+
+        HoaDonRequest req = yeuCau(null, KH_A);
+        ChiTietHoaDonRequest dong2 = new ChiTietHoaDonRequest();
+        dong2.setIdSanPhamChiTiet(SPCT_ID);
+        dong2.setSoLuong(2);
+        dong2.setDonGia(new BigDecimal("1000000"));
+        req.setChiTiet(List.of(req.getChiTiet().get(0), dong2));
+
+        assertThatThrownBy(() -> service.create(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("bị trùng ở nhiều dòng");
     }
 }

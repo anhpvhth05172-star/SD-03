@@ -1,7 +1,8 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { dangXuat, getUser } from '../utils/auth'
+import { dangXuat, getRefreshToken, getUser } from '../utils/auth'
+import { huyPhien } from '../api/auth'
 
 defineProps({
   title: { type: String, default: '' },
@@ -15,9 +16,14 @@ watch(route, () => {
   nguoiDung.value = getUser()
 })
 
-const xulyDangXuat = () => {
+const xulyDangXuat = async () => {
+  const refreshToken = getRefreshToken()
+  try {
+    if (refreshToken) await huyPhien(refreshToken)
+  } catch {
+    dangXuat()
+  }
   dangXuat()
-  nguoiDung.value = null
   router.push('/dang-nhap')
 }
 </script>

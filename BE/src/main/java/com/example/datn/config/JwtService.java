@@ -24,12 +24,16 @@ public class JwtService {
         this.thoiGianSongMs = thoiGianSongMs;
     }
 
-    public String taoToken(KhachHang khachHang) {
+    public String taoToken(KhachHang khachHang, Long idPhien) {
         Date hienTai = new Date();
-        return Jwts.builder()
+        var builder = Jwts.builder()
             .subject(String.valueOf(khachHang.getId()))
             .claim("tenTaiKhoan", khachHang.getTenTaiKhoan())
-            .claim("email", khachHang.getEmail())
+            .claim("email", khachHang.getEmail());
+        if (idPhien != null) {
+            builder.claim("phienId", idPhien);
+        }
+        return builder
             .issuedAt(hienTai)
             .expiration(new Date(hienTai.getTime() + thoiGianSongMs))
             .signWith(khoa)
@@ -47,6 +51,14 @@ public class JwtService {
 
     public Long layIdKhachHang(String token) {
         return Long.valueOf(docClaims(token).getSubject());
+    }
+
+    public Long layIdPhien(String token) {
+        Object giaTri = docClaims(token).get("phienId");
+        if (giaTri == null) {
+            return null;
+        }
+        return Long.valueOf(giaTri.toString());
     }
 
     private Claims docClaims(String token) {

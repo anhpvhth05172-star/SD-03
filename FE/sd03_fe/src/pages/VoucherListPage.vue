@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { listVouchers, suDungCuaToi } from '../api/voucher'
-import { getToken } from '../utils/auth'
+import { getToken, isTokenExpired } from '../utils/auth'
 
 const showFilter = ref(true)
 const loading = ref(true)
@@ -96,6 +96,10 @@ const tai = async () => {
   try {
     vouchers.value = await listVouchers()
     capNhatLuc.value = new Date().toLocaleString('vi-VN')
+    // Danh sach da tai xong (da co co hoi refresh phien). Danh gia lai trang thai dang nhap:
+    // chi goi API can authentication khi Access Token con han, tranh bi chuyen /dang-nhap
+    // khi phien da het han tren trang cong khai.
+    coDangNhap.value = !!getToken() && !isTokenExpired(getToken())
     if (coDangNhap.value) {
       try {
         const danhSach = await suDungCuaToi()

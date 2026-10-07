@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { createInvoice, getInvoiceFormData } from '../api/invoice'
+import { createInvoice, getInvoiceFormData, listInvoices } from '../api/invoice'
 import { formatVnd } from '../utils/format'
 
 const router = useRouter()
@@ -80,6 +80,15 @@ const giamGia = computed(() => {
 const canhbaoPgg = computed(() => {
   const pgg = pggById.value[form.value.idPhieuGiamGia]
   if (!pgg) return ''
+  if (pgg.trangThai === false) return 'Phiếu giảm giá này không hoạt động'
+  if (!form.value.idKhachHang) return 'Vui lòng chọn khách hàng để sử dụng phiếu giảm giá'
+  if (
+    pgg.soLuong !== null &&
+    pgg.soLuong !== undefined &&
+    Number(pgg.soLuongDaSuDung || 0) >= Number(pgg.soLuong)
+  ) {
+    return 'Phiếu giảm giá đã hết lượt sử dụng'
+  }
   if (Number(pgg.hoaDonToiThieu) > 0 && tongTien.value < Number(pgg.hoaDonToiThieu)) {
     return `Hóa đơn cần từ ${formatVnd(pgg.hoaDonToiThieu)} mới dùng phiếu này`
   }
@@ -92,6 +101,13 @@ const canhbaoPgg = computed(() => {
 const tienSauGiam = computed(() => Math.max(0, tongTien.value - giamGia.value))
 
 const lineThanhTien = (line) => (Number(line.soLuong) || 0) * (Number(line.donGia) || 0)
+
+const dongLoi = computed(() =>
+  Object.keys(errors.value)
+    .filter((k) => k.startsWith('dong'))
+    .map((k) => ({ dong: Number(k.slice(4)) + 1, msg: errors.value[k] }))
+    .sort((a, b) => a.dong - b.dong),
+)
 
 const addLine = () => form.value.chiTiet.push(blankLine())
 
@@ -137,25 +153,130 @@ const buildPayload = () => ({
   })),
 })
 
+const errors = ref({})
+
+const coKyTuDieuKhien = (s) =>
+  [...s].some((c) => {
+    const n = c.charCodeAt(0)
+    return n <= 8 || n === 11 || n === 12 || (n >= 14 && n <= 31) || n === 127
+  })
+
 const validate = () => {
-  if (!form.value.maHoaDon.trim()) return 'Mã hóa đơn không được để trống'
-  for (const line of form.value.chiTiet) {
-    if (!line.idSanPhamChiTiet) return 'Mỗi dòng phải chọn sản phẩm'
-    if (!(Number(line.soLuong) >= 1)) return 'Số lượng phải lớn hơn 0'
-    if (Number(line.donGia) < 0 || isNaN(Number(line.donGia))) return 'Đơn giá không hợp lệ'
+  const e = {}
+  const ma = String(form.value.maHoaDon || '').trim()
+  if (!ma) e.maHoaDon = 'Mã hóa đơn không được để trống'
+  else if (ma.length > 50) e.maHoaDon = 'Mã hóa đơn quá độ dài tối đa (50 ký tự)'
+
+  if (!form.value.loaiDon) e.loaiDon = 'Vui lòng chọn loại đơn'
+  if (!form.value.trangThai) e.trangThai = 'Vui lòng chọn trạng thái'
+  if (!form.value.idPhuongThucThanhToan) {
+    e.idPhuongThucThanhToan = 'Vui lòng chọn phương thức thanh toán'
   }
-  if (canhbaoPgg.value) return canhbaoPgg.value
-  return ''
+  if (!form.value.idNhanVien) e.idNhanVien = 'Vui lòng chọn nhân viên'
+
+  const ten = String(form.value.tenKhachHang || '').trim()
+  if (!ten) e.tenKhachHang = 'Tên khách hàng không được để trống'
+  else if (ten.length > 150) e.tenKhachHang = 'Tên khách hàng quá độ dài tối đa (150 ký tự)'
+  else if (!/^[\p{L}\s.'-]+$/u.test(ten)) {
+    e.tenKhachHang = 'Tên khách hàng chỉ được chứa chữ, khoảng trắng và dấu . \' -'
+  }
+
+  const sdt = String(form.value.soDienThoaiKhachHang || '').trim()
+  if (!sdt) e.soDienThoaiKhachHang = 'Số điện thoại không được để trống'
+  else if (!/^0\d{9,10}$/.test(sdt)) {
+    e.soDienThoaiKhachHang = 'Số điện thoại phải gồm 10 hoặc 11 chữ số và bắt đầu bằng 0'
+  }
+
+  const phiRaw = form.value.phiVanChuyen
+  if (phiRaw === '' || phiRaw === null || phiRaw === undefined) {
+    e.phiVanChuyen = 'Phí vận chuyển không được để trống'
+  } else {
+    const phi = Number(phiRaw)
+    if (!Number.isFinite(phi)) e.phiVanChuyen = 'Phí vận chuyển chỉ được nhập số'
+    else if (phi < 0) e.phiVanChuyen = 'Phí vận chuyển không được âm'
+    else if (phi <= 1000) e.phiVanChuyen = 'Phí vận chuyển phải lớn hơn 1000'
+  }
+
+  const diaChi = String(form.value.diaChiNhanHang || '').trim()
+  if (form.value.loaiDon === 'Online' && !diaChi) {
+    e.diaChiNhanHang = 'Đơn online phải có địa chỉ nhận hàng'
+  } else if (diaChi) {
+    if (diaChi.length > 500) {
+      e.diaChiNhanHang = 'Địa chỉ nhận hàng quá độ dài tối đa (500 ký tự)'
+    } else if (!/^[\p{L}\p{N}\s.,\/-]+$/u.test(diaChi)) {
+      e.diaChiNhanHang = 'Địa chỉ nhận hàng chứa ký tự không hợp lệ'
+    }
+  }
+
+  const ghiChu = String(form.value.ghiChu || '').trim()
+  if (ghiChu.length > 1000) e.ghiChu = 'Ghi chú quá độ dài tối đa (1000 ký tự)'
+  else if (coKyTuDieuKhien(ghiChu)) e.ghiChu = 'Ghi chú chứa ký tự không hợp lệ'
+
+  if (!form.value.chiTiet.length) {
+    e.chiTiet = 'Vui lòng thêm ít nhất một sản phẩm'
+  } else {
+    const daChon = new Set()
+    form.value.chiTiet.forEach((line, i) => {
+      if (e['dong' + i]) return
+      if (!line.idSanPhamChiTiet) {
+        e['dong' + i] = 'Vui lòng chọn sản phẩm'
+        return
+      }
+      if (daChon.has(line.idSanPhamChiTiet)) {
+        const sp = spctById.value[line.idSanPhamChiTiet]
+        e['dong' + i] = `Sản phẩm "${sp ? sp.ma : line.idSanPhamChiTiet}" đã tồn tại ở dòng trước`
+        return
+      }
+      daChon.add(line.idSanPhamChiTiet)
+
+      const soLuongTrong =
+        line.soLuong === '' || line.soLuong === null || line.soLuong === undefined
+      const soLuong = Number(line.soLuong)
+      if (soLuongTrong || !Number.isInteger(soLuong) || soLuong < 1) {
+        e['dong' + i] = 'Số lượng phải là số nguyên lớn hơn 0'
+        return
+      }
+
+      const donGiaTrong =
+        line.donGia === '' || line.donGia === null || line.donGia === undefined
+      const donGia = Number(line.donGia)
+      if (donGiaTrong || !Number.isFinite(donGia) || donGia <= 0) {
+        e['dong' + i] = 'Đơn giá phải lớn hơn 0'
+        return
+      }
+
+      const spct = spctById.value[line.idSanPhamChiTiet]
+      if (spct && (spct.trangThai === false || spct.trangThaiSanPham === false)) {
+        e['dong' + i] = `Sản phẩm "${spct.ma}" đã ngừng bán`
+        return
+      }
+      if (spct && spct.soLuong !== null && spct.soLuong !== undefined && soLuong > Number(spct.soLuong)) {
+        e['dong' + i] = `Sản phẩm "${spct.ma}" chỉ còn ${spct.soLuong} trong kho`
+      }
+    })
+  }
+
+  if (form.value.idKhachHang) {
+    const kh = options.value.khachHangs.find((k) => k.id === form.value.idKhachHang)
+    if (kh && kh.trangThai === false) e.khachHang = 'Khách hàng đã bị vô hiệu hóa'
+  }
+
+  if (canhbaoPgg.value) e.idPhieuGiamGia = canhbaoPgg.value
+
+  errors.value = e
+  return Object.keys(e).length === 0
 }
 
 const submit = async () => {
-  const error = validate()
-  if (error) {
-    alert(error)
-    return
-  }
+  if (!validate()) return
   saving.value = true
   try {
+    const ma = form.value.maHoaDon.trim()
+    const kiemTra = await listInvoices({ ma, size: 100 })
+    if ((kiemTra.content || []).some((h) => h.maHoaDon === ma)) {
+      errors.value = { ...errors.value, maHoaDon: `Mã hóa đơn "${ma}" đã tồn tại` }
+      return
+    }
     const payload = buildPayload()
     await createInvoice(payload)
     router.push('/hoa-don')
@@ -167,7 +288,8 @@ const submit = async () => {
 }
 
 const optionLabel = (s) =>
-  `${s.ma} - ${s.tenSanPham} (${s.tenKichCo} / ${s.tenMau}) - ${formatVnd(s.giaBan)} - còn ${s.soLuong}`
+  `${s.ma} - ${s.tenSanPham} (${s.tenKichCo} / ${s.tenMau}) - ${formatVnd(s.giaBan)} - còn ${s.soLuong}` +
+  (s.trangThai === false || s.trangThaiSanPham === false ? ' - ngừng bán' : '')
 
 onMounted(async () => {
   loading.value = true
@@ -190,7 +312,8 @@ onMounted(async () => {
       <div class="form-grid">
         <div class="field">
           <label>Mã hóa đơn *</label>
-          <input v-model="form.maHoaDon" type="text" placeholder="Mã hóa đơn" />
+          <input v-model="form.maHoaDon" type="text" placeholder="Mã hóa đơn" readonly />
+          <div v-if="errors.maHoaDon" class="field-error">{{ errors.maHoaDon }}</div>
         </div>
         <div class="field">
           <label>Loại đơn *</label>
@@ -198,60 +321,85 @@ onMounted(async () => {
             <option value="Tại quầy">Tại quầy</option>
             <option value="Online">Online</option>
           </select>
+          <div v-if="errors.loaiDon" class="field-error">{{ errors.loaiDon }}</div>
         </div>
         <div class="field">
           <label>Trạng thái *</label>
           <select v-model="form.trangThai">
             <option v-for="s in statusOptions" :key="s" :value="s">{{ s }}</option>
           </select>
+          <div v-if="errors.trangThai" class="field-error">{{ errors.trangThai }}</div>
         </div>
         <div class="field">
-          <label>Phương thức thanh toán</label>
+          <label>Phương thức thanh toán *</label>
           <select v-model="form.idPhuongThucThanhToan">
             <option value="">— Không chọn —</option>
             <option v-for="p in options.phuongThucThanhToans" :key="p.id" :value="p.id">{{ p.ten }}</option>
           </select>
+          <div v-if="errors.idPhuongThucThanhToan" class="field-error">{{ errors.idPhuongThucThanhToan }}</div>
         </div>
         <div class="field">
-          <label>Nhân viên</label>
+          <label>Nhân viên *</label>
           <select v-model="form.idNhanVien">
             <option value="">— Không chọn —</option>
             <option v-for="n in options.nhanViens" :key="n.id" :value="n.id">{{ n.ten }}</option>
           </select>
+          <div v-if="errors.idNhanVien" class="field-error">{{ errors.idNhanVien }}</div>
         </div>
         <div class="field">
           <label>Khách hàng</label>
           <select v-model="form.idKhachHang" @change="onKhachHangChange">
             <option value="">— Khách lẻ —</option>
-            <option v-for="k in options.khachHangs" :key="k.id" :value="k.id">{{ k.ten }} ({{ k.soDienThoai }})</option>
+            <option
+              v-for="k in options.khachHangs"
+              :key="k.id"
+              :value="k.id"
+              :disabled="k.trangThai === false"
+            >
+              {{ k.ten }} ({{ k.soDienThoai }}){{ k.trangThai === false ? ' - đã vô hiệu hóa' : '' }}
+            </option>
           </select>
+          <div v-if="errors.khachHang" class="field-error">{{ errors.khachHang }}</div>
         </div>
         <div class="field">
-          <label>Tên khách hàng</label>
+          <label>Tên khách hàng *</label>
           <input v-model="form.tenKhachHang" type="text" placeholder="Tên khách hàng" />
+          <div v-if="errors.tenKhachHang" class="field-error">{{ errors.tenKhachHang }}</div>
         </div>
         <div class="field">
-          <label>Số điện thoại</label>
+          <label>Số điện thoại *</label>
           <input v-model="form.soDienThoaiKhachHang" type="tel" placeholder="Số điện thoại" />
+          <div v-if="errors.soDienThoaiKhachHang" class="field-error">{{ errors.soDienThoaiKhachHang }}</div>
         </div>
         <div class="field">
-          <label>Phí vận chuyển (₫)</label>
-          <input v-model.number="form.phiVanChuyen" type="number" min="0" placeholder="0" />
+          <label>Phí vận chuyển (₫) *</label>
+          <input v-model.number="form.phiVanChuyen" type="number" min="1001" placeholder="0" />
+          <div v-if="errors.phiVanChuyen" class="field-error">{{ errors.phiVanChuyen }}</div>
         </div>
         <div class="field">
           <label>Phiếu giảm giá</label>
           <select v-model="form.idPhieuGiamGia">
             <option value="">— Không dùng —</option>
-            <option v-for="p in options.phieuGiamGias" :key="p.id" :value="p.id">{{ p.ten }}</option>
+            <option
+              v-for="p in options.phieuGiamGias"
+              :key="p.id"
+              :value="p.id"
+              :disabled="p.trangThai === false"
+            >
+              {{ p.ten }}{{ p.trangThai === false ? ' (ngừng hoạt động)' : '' }}
+            </option>
           </select>
+          <div v-if="errors.idPhieuGiamGia" class="field-error">{{ errors.idPhieuGiamGia }}</div>
         </div>
         <div class="field field-wide">
           <label>Địa chỉ nhận hàng</label>
           <input v-model="form.diaChiNhanHang" type="text" placeholder="Địa chỉ nhận hàng" />
+          <div v-if="errors.diaChiNhanHang" class="field-error">{{ errors.diaChiNhanHang }}</div>
         </div>
         <div class="field field-wide">
           <label>Ghi chú</label>
           <textarea v-model="form.ghiChu" rows="2" placeholder="Ghi chú"></textarea>
+          <div v-if="errors.ghiChu" class="field-error">{{ errors.ghiChu }}</div>
         </div>
       </div>
 
@@ -271,7 +419,14 @@ onMounted(async () => {
             <td class="col-sp">
               <select v-model="line.idSanPhamChiTiet" @change="onProductChange(line)">
                 <option value="">— Chọn sản phẩm —</option>
-                <option v-for="s in options.sanPhamChiTiets" :key="s.id" :value="s.id">{{ optionLabel(s) }}</option>
+                <option
+                  v-for="s in options.sanPhamChiTiets"
+                  :key="s.id"
+                  :value="s.id"
+                  :disabled="s.trangThai === false || s.trangThaiSanPham === false"
+                >
+                  {{ optionLabel(s) }}
+                </option>
               </select>
             </td>
             <td class="col-sl"><input v-model.number="line.soLuong" type="number" min="1" /></td>
@@ -292,6 +447,10 @@ onMounted(async () => {
         </tbody>
       </table>
       <button class="line-add" type="button" @click="addLine">+ Thêm dòng sản phẩm</button>
+      <div v-if="errors.chiTiet" class="field-error">{{ errors.chiTiet }}</div>
+      <ul v-if="dongLoi.length" class="line-error-list">
+        <li v-for="lo in dongLoi" :key="lo.dong">Dòng {{ lo.dong }}: {{ lo.msg }}</li>
+      </ul>
 
       <div class="totals-box">
         <div class="t-row"><span>Tổng tiền</span><span>{{ formatVnd(tongTien) }}</span></div>
@@ -401,6 +560,36 @@ onMounted(async () => {
 
 .field-wide {
   grid-column: span 3;
+}
+
+.field-error {
+  font-size: 11.5px;
+  color: var(--red);
+  margin-top: 4px;
+  line-height: 1.35;
+}
+
+.field input[readonly] {
+  background: #f7f7f9;
+  color: #6b6b73;
+  cursor: default;
+}
+
+.line-error-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.line-error-list li {
+  font-size: 12px;
+  color: var(--red);
+  background: var(--red-soft);
+  border-radius: 6px;
+  padding: 6px 9px;
 }
 
 .line-table {

@@ -44,13 +44,10 @@ const parseDate = (value) => {
 
 const buildParams = () => {
   const params = { page: page.value, size }
-  if (fMa.value.trim()) params.ma = fMa.value.trim()
+  if (fMa.value) params.ma = fMa.value
   const tu = parseDate(fTuNgay.value)
   const den = parseDate(fDenNgay.value)
-  if (tu === undefined || den === undefined) {
-    alert('Sai định dạng ngày (dd/mm/yyyy)')
-    return null
-  }
+  if (tu === undefined || den === undefined) return null
   if (tu) params.tuNgay = tu
   if (den) params.denNgay = den
   if (fLoaiDon.value) params.loaiDon = fLoaiDon.value
@@ -60,9 +57,29 @@ const buildParams = () => {
   return params
 }
 
+const showNotFound = () => {
+  invoices.value = []
+  totalElements.value = 0
+  totalPages.value = 0
+}
+
+const fmtNgay = (iso) => {
+  const [y, m, d] = String(iso).split('-')
+  return `${d}/${m}/${y}`
+}
+
+const appliedRange = ref('')
+
 const load = async () => {
   const params = buildParams()
-  if (!params) return
+  if (!params) {
+    showNotFound()
+    return
+  }
+  const parts = []
+  if (params.tuNgay) parts.push(`Từ ${fmtNgay(params.tuNgay)}`)
+  if (params.denNgay) parts.push(`đến ${fmtNgay(params.denNgay)}`)
+  appliedRange.value = parts.join(' ')
   loading.value = true
   try {
     const data = await listInvoices(params)
@@ -72,8 +89,8 @@ const load = async () => {
     const now = new Date()
     const p = (x) => String(x).padStart(2, '0')
     updatedAt.value = `${p(now.getHours())}:${p(now.getMinutes())} ${p(now.getDate())}/${p(now.getMonth() + 1)}/${now.getFullYear()}`
-  } catch (e) {
-    alert(e.message)
+  } catch {
+    showNotFound()
   } finally {
     loading.value = false
   }
@@ -145,7 +162,7 @@ onMounted(load)
         </span>
         <h3 class="panel-title">Bộ lọc tìm kiếm</h3>
         <div class="panel-right">
-          <span class="result-count">{{ totalElements }} kết quả</span>
+          <span class="result-count">{{ totalElements }} kết quả<template v-if="appliedRange"> • {{ appliedRange }}</template></span>
           <button class="link-red" type="button" @click="showFilter = !showFilter">
             {{ showFilter ? 'Ẩn bớt' : 'Hiện thêm' }}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -159,7 +176,12 @@ onMounted(load)
         <div class="filter-row">
           <div class="f-item">
             <label>Mã hóa đơn</label>
-            <input v-model="fMa" type="text" placeholder="Nhập mã hóa đơn" @keyup.enter="applyFilter" />
+            <input
+              v-model="fMa"
+              type="text"
+              placeholder="Nhập mã hóa đơn"
+              @keyup.enter="applyFilter"
+            />
           </div>
 
           <div class="f-item">
@@ -174,22 +196,14 @@ onMounted(load)
           <div class="f-item">
             <label>Từ ngày</label>
             <div class="date-box">
-              <input v-model="fTuNgay" type="text" placeholder="dd/mm/yyyy" />
-              <svg class="date-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3.8" y="5.5" width="16.4" height="14.5" rx="2" />
-                <path d="M8 3.2v4.2M16 3.2v4.2M3.8 10h16.4" />
-              </svg>
+              <input v-model="fTuNgay" type="date" @keyup.enter="applyFilter" />
             </div>
           </div>
 
           <div class="f-item">
             <label>Đến ngày</label>
             <div class="date-box">
-              <input v-model="fDenNgay" type="text" placeholder="dd/mm/yyyy" />
-              <svg class="date-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3.8" y="5.5" width="16.4" height="14.5" rx="2" />
-                <path d="M8 3.2v4.2M16 3.2v4.2M3.8 10h16.4" />
-              </svg>
+              <input v-model="fDenNgay" type="date" @keyup.enter="applyFilter" />
             </div>
           </div>
         </div>
@@ -264,7 +278,7 @@ onMounted(load)
               <td colspan="8" class="empty-cell">Đang tải...</td>
             </tr>
             <tr v-else-if="invoices.length === 0">
-              <td colspan="8" class="empty-cell">Không có hóa đơn nào</td>
+              <td colspan="8" class="empty-cell">Không tìm được thông tin</td>
             </tr>
             <template v-else>
             <tr v-for="row in invoices" :key="row.id">
@@ -344,6 +358,10 @@ onMounted(load)
 
 .filter-actions {
   margin-top: 14px;
+}
+
+.date-box input[type="date"] {
+  padding-right: 8px;
 }
 
 .btn-reset {

@@ -20,7 +20,7 @@ public class FormDataResponse {
     private List<PhieuGiamGiaOption> phieuGiamGias;
     private List<SanPhamChiTietOption> sanPhamChiTiets;
 
-    public record KhachHangOption(Long id, String ten, String soDienThoai) {}
+    public record KhachHangOption(Long id, String ten, String soDienThoai, Boolean trangThai) {}
 
     public record NhanVienOption(Long id, String ten) {}
 
@@ -38,7 +38,8 @@ public class FormDataResponse {
         LocalDateTime ngayKetThuc,
         Integer soLuong,
         Integer soLuongDaSuDung,
-        Integer gioiHanMoiTaiKhoan
+        Integer gioiHanMoiTaiKhoan,
+        Boolean trangThai
     ) {}
 
     public record SanPhamChiTietOption(
@@ -48,6 +49,8 @@ public class FormDataResponse {
         String tenKichCo,
         String tenMau,
         BigDecimal giaBan,
-        Integer soLuong
+        Integer soLuong,
+        Boolean trangThai,
+        Boolean trangThaiSanPham
     ) {}
 }

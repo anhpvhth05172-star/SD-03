@@ -12,6 +12,7 @@ import lombok.Setter;
 public class AuthResponse {
 
     private String token;
+    private String refreshToken;
     private Long idKhachHang;
     private String tenTaiKhoan;
     private String email;

@@ -1,6 +1,7 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { getSanPhams } from '../api/product'
 
 const router = useRouter()
 
@@ -8,113 +9,116 @@ const navigateToAdd = () => {
   router.push('/san-pham/them')
 }
 
-const stats = [
-  {
-    title: 'Tổng sản phẩm',
-    value: '248',
-    badgeText: '+12 trong tháng này',
-    badgeType: 'badge-accent',
-    iconColor: '#fee2e2',
-    iconStroke: '#d92d20'
-  },
-  {
-    title: 'Đang kinh doanh',
-    value: '221',
-    badgeText: '89.7% danh mục',
-    badgeType: 'badge-success',
-    iconColor: '#ecfdf5',
-    iconStroke: '#059669'
-  },
-  {
-    title: 'Sắp hết hàng',
-    value: '18',
-    badgeText: 'Cần nhập thêm',
-    badgeType: 'badge-warning',
-    iconColor: '#fffbeb',
-    iconStroke: '#d97706'
-  },
-  {
-    title: 'Ngừng kinh doanh',
-    value: '9',
-    badgeText: 'Không hiển thị tại quầy',
-    badgeType: 'badge-secondary',
-    iconColor: '#f1f5f9',
-    iconStroke: '#64748b'
-  }
-]
+const goVariant = (id) => {
+  router.push(`/san-pham/${id}/bien-the`)
+}
 
-const products = ref([
-  {
-    id: 1,
-    code: 'SP-NK-0032',
-    name: "Nike Air Force 1 '07",
-    subtitle: 'Triple White · 8 biến thể',
-    brand: 'Nike',
-    origin: 'Việt Nam',
-    material: 'Da trần',
-    style: 'Năng động',
-    category: 'Sneaker',
-    price: 2929000,
-    stock: 84,
-    status: 'Đang bán'
-  },
-  {
-    id: 2,
-    code: 'SP-NB-0024',
-    name: 'New Balance 530',
-    subtitle: 'Silver Metallic / Navy · 5 biến thể',
-    brand: 'New Balance',
-    origin: 'China',
-    material: 'Da trần',
-    style: 'Năng động',
-    category: 'Sneaker',
-    price: 2850000,
-    stock: 12,
-    status: 'Sắp hết'
-  },
-  {
-    id: 3,
-    code: 'SP-CV-0011',
-    name: 'Converse Chuck 70 Hi',
-    subtitle: 'Black / Egret · 7 biến thể',
-    brand: 'Converse',
-    origin: 'Việt Nam',
-    material: 'Da trần',
-    style: 'Năng động',
-    category: 'Sneaker',
-    price: 1900000,
-    stock: 53,
-    status: 'Đang bán'
-  },
-  {
-    id: 4,
-    code: 'SP-VA-0009',
-    name: 'Vans Old Skool',
-    subtitle: 'Black / White · 4 biến thể',
-    brand: 'Vans',
-    origin: 'Việt Nam',
-    material: 'Vải Canvas',
-    style: 'Old skool',
-    category: 'Sneaker',
-    price: 1650000,
-    stock: 0,
-    status: 'Ngừng bán'
-  },
-  {
-    id: 5,
-    code: 'SP-PM-0015',
-    name: 'Puma Palermo',
-    subtitle: 'Green / Gum · 6 biến thể',
-    brand: 'Puma',
-    origin: 'Việt Nam',
-    material: 'Da lộn',
-    style: 'Năng động',
-    category: 'Sneaker',
-    price: 2400000,
-    stock: 31,
-    status: 'Đang bán'
+const products = ref([])
+const keyword = ref('')
+const loading = ref(false)
+const error = ref('')
+const currentPage = ref(1)
+const pageSize = 10
+
+const mapSanPham = (sp) => ({
+  id: sp.id,
+  code: sp.maSanPham,
+  name: sp.tenSanPham,
+  subtitle: `${sp.soLuongBienThe} biến thể`,
+  brand: sp.tenThuongHieu || '—',
+  origin: sp.tenXuatXu || '—',
+  material: sp.tenChatLieu || '—',
+  style: sp.tenKieuDang || '—',
+  category: sp.tenLoaiGiay || '—',
+  price: sp.giaNhoNhat || 0,
+  stock: sp.tongTonKho,
+  status: sp.trangThai === false ? 'Ngừng bán' : sp.tongTonKho <= 15 ? 'Sắp hết' : 'Đang bán',
+})
+
+const load = async () => {
+  loading.value = true
+  error.value = ''
+  try {
+    const data = await getSanPhams(keyword.value.trim())
+    products.value = data.map(mapSanPham)
+    currentPage.value = 1
+  } catch (e) {
+    error.value = e.message || 'Không tải được danh sách sản phẩm'
+  } finally {
+    loading.value = false
   }
-])
+}
+
+const resetSearch = () => {
+  keyword.value = ''
+  load()
+}
+
+onMounted(load)
+
+const stats = computed(() => {
+  const total = products.value.length
+  const dangBan = products.value.filter((p) => p.status === 'Đang bán').length
+  const sapHet = products.value.filter((p) => p.status === 'Sắp hết').length
+  const ngungBan = products.value.filter((p) => p.status === 'Ngừng bán').length
+  return [
+    {
+      title: 'Tổng sản phẩm',
+      value: String(total),
+      badgeText: `${total} trong danh mục`,
+      badgeType: 'badge-accent',
+      iconColor: '#fee2e2',
+      iconStroke: '#d92d20',
+    },
+    {
+      title: 'Đang kinh doanh',
+      value: String(dangBan),
+      badgeText: total ? `${Math.round((dangBan / total) * 100)}% danh mục` : '0% danh mục',
+      badgeType: 'badge-success',
+      iconColor: '#ecfdf5',
+      iconStroke: '#059669',
+    },
+    {
+      title: 'Sắp hết hàng',
+      value: String(sapHet),
+      badgeText: 'Cần nhập thêm',
+      badgeType: 'badge-warning',
+      iconColor: '#fffbeb',
+      iconStroke: '#d97706',
+    },
+    {
+      title: 'Ngừng kinh doanh',
+      value: String(ngungBan),
+      badgeText: 'Không hiển thị tại quầy',
+      badgeType: 'badge-secondary',
+      iconColor: '#f1f5f9',
+      iconStroke: '#64748b',
+    },
+  ]
+})
+
+const totalPages = computed(() => Math.max(1, Math.ceil(products.value.length / pageSize)))
+
+const pageItems = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return products.value.slice(start, start + pageSize)
+})
+
+const pageNumbers = computed(() => Array.from({ length: totalPages.value }, (_, i) => i + 1))
+
+const paginationInfo = computed(() => {
+  const total = products.value.length
+  if (total === 0) return 'Hiển thị 0 sản phẩm'
+  const from = (currentPage.value - 1) * pageSize + 1
+  const to = Math.min(currentPage.value * pageSize, total)
+  return `Hiển thị ${from}-${to} trong ${total} sản phẩm`
+})
+
+const changePage = (p) => {
+  if (p >= 1 && p <= totalPages.value) {
+    currentPage.value = p
+  }
+}
 
 const formatCurrency = (val) => {
   return new Intl.NumberFormat('vi-VN').format(val) + ' đ'
@@ -179,7 +183,7 @@ const formatCurrency = (val) => {
           </svg>
           <span>Bộ lọc tìm kiếm</span>
         </div>
-        <div class="filter-total-count">Hiển thị 248 sản phẩm</div>
+        <div class="filter-total-count">Hiển thị {{ products.length }} sản phẩm</div>
       </div>
 
       <div class="filter-fields-row">
@@ -192,7 +196,13 @@ const formatCurrency = (val) => {
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <input type="text" class="filter-input" placeholder="Tên hoặc mã sản phẩm..." />
+            <input
+              type="text"
+              class="filter-input"
+              placeholder="Tên hoặc mã sản phẩm..."
+              v-model="keyword"
+              @keyup.enter="load"
+            />
           </div>
         </div>
 
@@ -227,14 +237,14 @@ const formatCurrency = (val) => {
         </div>
 
         <div class="filter-actions-group">
-          <button class="btn btn-reset">
+          <button class="btn btn-reset" @click="resetSearch">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="23 4 23 10 17 10"></polyline>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
             </svg>
             Đặt lại
           </button>
-          <button class="btn btn-search">
+          <button class="btn btn-search" @click="load">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -249,7 +259,7 @@ const formatCurrency = (val) => {
       <div class="table-header-row">
         <div class="table-title-box">
           <h2 class="table-title">Danh sách sản phẩm</h2>
-          <span class="count-pill">248 sản phẩm</span>
+          <span class="count-pill">{{ products.length }} sản phẩm</span>
         </div>
         <div class="table-sort-box">
           <span class="sort-text">Cập nhật mới nhất</span>
@@ -279,70 +289,90 @@ const formatCurrency = (val) => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in products" :key="item.id">
-              <td><input type="checkbox" /></td>
-              <td>
-                <div class="shoe-thumb">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8">
-                    <path d="M3 14c2-4 5-6 10-6h6a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-2z"></path>
-                  </svg>
-                </div>
-              </td>
-              <td><span class="product-code">{{ item.code }}</span></td>
-              <td>
-                <div class="product-name-col">
-                  <span class="name-main">{{ item.name }}</span>
-                  <span class="name-sub">{{ item.subtitle }}</span>
-                </div>
-              </td>
-              <td>{{ item.brand }}</td>
-              <td>{{ item.origin }}</td>
-              <td>{{ item.material }}</td>
-              <td>{{ item.style }}</td>
-              <td>{{ item.category }}</td>
-              <td class="text-right"><span class="price-val">{{ formatCurrency(item.price) }}</span></td>
-              <td class="text-center font-bold">{{ item.stock }}</td>
-              <td>
-                <span class="badge-pill" :class="{
-                  'badge-green': item.status === 'Đang bán',
-                  'badge-yellow': item.status === 'Sắp hết',
-                  'badge-gray': item.status === 'Ngừng bán'
-                }">
-                  <span class="badge-dot"></span>
-                  {{ item.status }}
-                </span>
-              </td>
-              <td class="text-center">
-                <div class="action-buttons">
-                  <button class="btn-icon-edit" title="Chỉnh sửa">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M12 20h9"></path>
-                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-                    </svg>
-                  </button>
-                  <button class="btn-icon-more" title="Tùy chọn khác">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="1"></circle>
-                      <circle cx="19" cy="12" r="1"></circle>
-                      <circle cx="5" cy="12" r="1"></circle>
-                    </svg>
-                  </button>
-                </div>
+            <tr v-if="loading">
+              <td colspan="13" style="padding: 28px; text-align: center; color: #64748b">
+                Đang tải danh sách sản phẩm...
               </td>
             </tr>
+            <tr v-else-if="error">
+              <td colspan="13" style="padding: 28px; text-align: center; color: #dc2626">
+                {{ error }}
+                <button class="btn btn-search" style="margin-left: 10px" @click="load">Thử lại</button>
+              </td>
+            </tr>
+            <tr v-else-if="pageItems.length === 0">
+              <td colspan="13" style="padding: 28px; text-align: center; color: #64748b">
+                Không có sản phẩm nào
+              </td>
+            </tr>
+            <template v-else>
+              <tr v-for="item in pageItems" :key="item.id">
+                <td><input type="checkbox" /></td>
+                <td>
+                  <div class="shoe-thumb">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8">
+                      <path d="M3 14c2-4 5-6 10-6h6a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-2z"></path>
+                    </svg>
+                  </div>
+                </td>
+                <td><span class="product-code">{{ item.code }}</span></td>
+                <td>
+                  <div class="product-name-col">
+                    <span class="name-main">{{ item.name }}</span>
+                    <span class="name-sub">{{ item.subtitle }}</span>
+                  </div>
+                </td>
+                <td>{{ item.brand }}</td>
+                <td>{{ item.origin }}</td>
+                <td>{{ item.material }}</td>
+                <td>{{ item.style }}</td>
+                <td>{{ item.category }}</td>
+                <td class="text-right"><span class="price-val">{{ formatCurrency(item.price) }}</span></td>
+                <td class="text-center font-bold">{{ item.stock }}</td>
+                <td>
+                  <span class="badge-pill" :class="{
+                    'badge-green': item.status === 'Đang bán',
+                    'badge-yellow': item.status === 'Sắp hết',
+                    'badge-gray': item.status === 'Ngừng bán'
+                  }">
+                    <span class="badge-dot"></span>
+                    {{ item.status }}
+                  </span>
+                </td>
+                <td class="text-center">
+                  <div class="action-buttons">
+                    <button class="btn-icon-more" title="Xem biến thể" @click="goVariant(item.id)">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
 
-      <div class="table-pagination-row">
-        <span class="pagination-info">Hiển thị 1-6 trong 248 sản phẩm</span>
+      <div class="table-pagination-row" v-if="products.length > 0">
+        <span class="pagination-info">{{ paginationInfo }}</span>
         <div class="pagination-controls">
-          <button class="page-btn nav-btn">&lt;</button>
-          <button class="page-btn active">1</button>
-          <button class="page-btn">2</button>
-          <button class="page-btn">3</button>
-          <button class="page-btn">4</button>
-          <button class="page-btn nav-btn">&gt;</button>
+          <button class="page-btn nav-btn" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">&lt;</button>
+          <button
+            v-for="p in pageNumbers"
+            :key="p"
+            class="page-btn"
+            :class="{ active: p === currentPage }"
+            @click="changePage(p)"
+          >
+            {{ p }}
+          </button>
+          <button class="page-btn nav-btn" :disabled="currentPage === totalPages" @click="changePage(currentPage + 1)">&gt;</button>
         </div>
       </div>
     </div>

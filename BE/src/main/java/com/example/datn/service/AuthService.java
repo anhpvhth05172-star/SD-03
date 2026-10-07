@@ -5,16 +5,23 @@ import com.example.datn.dto.AuthResponse;
 import com.example.datn.dto.DangKyRequest;
 import com.example.datn.dto.DangNhapRequest;
 import com.example.datn.entity.KhachHang;
+import com.example.datn.entity.PhienDangNhap;
 import com.example.datn.exception.DangNhapThatBaiException;
 import com.example.datn.repository.KhachHangRepository;
+import com.example.datn.repository.PhienDangNhapRepository;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
+import java.util.Base64;
+import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 public class AuthService {
 
     private static final String EMAIL_REGEX = "^[\\w.%+-]+@[\\w.-]+\\.[A-Za-z]{2,}$";
@@ -22,6 +29,23 @@ public class AuthService {
     private final KhachHangRepository khachHangRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final PhienDangNhapRepository phienDangNhapRepository;
+
+    private final long thoiGianPhienMs;
+
+    public AuthService(
+        KhachHangRepository khachHangRepository,
+        PasswordEncoder passwordEncoder,
+        JwtService jwtService,
+        PhienDangNhapRepository phienDangNhapRepository,
+        @Value("${app.auth.session-inactivity-ms:1800000}") long thoiGianPhienMs
+    ) {
+        this.khachHangRepository = khachHangRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
+        this.phienDangNhapRepository = phienDangNhapRepository;
+        this.thoiGianPhienMs = thoiGianPhienMs;
+    }
 
     @Transactional
     public KhachHang dangKy(DangKyRequest req) {
@@ -68,7 +92,7 @@ public class AuthService {
         return khachHangRepository.save(khachHang);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse dangNhap(DangNhapRequest req) {
         if (req == null || isBlank(req.getTaiKhoan()) || isBlank(req.getMatKhau())) {
             throw new DangNhapThatBaiException("Vui lòng nhập tài khoản và mật khẩu");
@@ -82,14 +106,92 @@ public class AuthService {
         if (Boolean.FALSE.equals(khachHang.getTrangThai())) {
             throw new DangNhapThatBaiException("Tài khoản đã bị khóa");
         }
+
+        LocalDateTime bayGio = LocalDateTime.now();
+        String refreshToken = taoRefreshToken();
+        PhienDangNhap phien = new PhienDangNhap();
+        phien.setIdKhachHang(khachHang.getId());
+        phien.setRefreshTokenHash(sha256(refreshToken));
+        phien.setNgayTao(bayGio);
+        phien.setHoatDongCuoi(bayGio);
+        phien.setRevoked(false);
+        phienDangNhapRepository.save(phien);
+
         return new AuthResponse(
-            jwtService.taoToken(khachHang),
+            jwtService.taoToken(khachHang, phien.getId()),
+            refreshToken,
             khachHang.getId(),
             khachHang.getTenTaiKhoan(),
             khachHang.getEmail(),
             khachHang.getTenKhachHang(),
             khachHang.getVaiTro()
         );
+    }
+
+    @Transactional
+    public AuthResponse refresh(String refreshToken) {
+        if (isBlank(refreshToken)) {
+            throw new DangNhapThatBaiException("Phiên đăng nhập không hợp lệ");
+        }
+        PhienDangNhap phien = phienDangNhapRepository
+            .findByRefreshTokenHash(sha256(refreshToken))
+            .orElseThrow(() -> new DangNhapThatBaiException("Phiên đăng nhập không hợp lệ"));
+        LocalDateTime bayGio = LocalDateTime.now();
+        if (phien.isRevoked() || phien.hetHan(bayGio, thoiGianPhienMs)) {
+            throw new DangNhapThatBaiException("Phiên đăng nhập đã hết hạn");
+        }
+        KhachHang khachHang = khachHangRepository
+            .findById(phien.getIdKhachHang())
+            .orElseThrow(() -> new DangNhapThatBaiException("Phiên đăng nhập không hợp lệ"));
+        if (Boolean.FALSE.equals(khachHang.getTrangThai())) {
+            throw new DangNhapThatBaiException("Tài khoản đã bị khóa");
+        }
+
+        phien.setHoatDongCuoi(bayGio);
+        phienDangNhapRepository.save(phien);
+
+        return new AuthResponse(
+            jwtService.taoToken(khachHang, phien.getId()),
+            refreshToken,
+            khachHang.getId(),
+            khachHang.getTenTaiKhoan(),
+            khachHang.getEmail(),
+            khachHang.getTenKhachHang(),
+            khachHang.getVaiTro()
+        );
+    }
+
+    @Transactional
+    public void dangXuat(String refreshToken) {
+        if (isBlank(refreshToken)) {
+            return;
+        }
+        Optional<PhienDangNhap> phien = phienDangNhapRepository.findByRefreshTokenHash(sha256(refreshToken));
+        if (phien.isPresent() && !phien.get().isRevoked()) {
+            phien.get().setRevoked(true);
+            phien.get().setNgayDangXuat(LocalDateTime.now());
+            phienDangNhapRepository.save(phien.get());
+        }
+    }
+
+    private static String taoRefreshToken() {
+        byte[] bytes = new byte[48];
+        ThreadLocalRandom.current().nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private static String sha256(String giaTri) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(giaTri.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("Khong tim duoc SHA-256", e);
+        }
     }
 
     private String taoMaKhachHang() {

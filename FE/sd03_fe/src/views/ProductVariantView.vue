@@ -1,45 +1,244 @@
 <script setup>
-import { ref, reactive, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { getSanPham, getSanPhamChiTiets, getThuocTinh, createSanPhamChiTiet } from '../api/product'
 
+const route = useRoute()
 const router = useRouter()
 
 const form = reactive({
-  productName: 'Giày thể thao Urban Run 2',
-  skuCode: 'SP-UR-2024',
-  price: '2.490.000',
-  stock: '120',
+  productName: '',
+  skuCode: '',
+  price: '',
+  stock: '',
   note: 'Áp dụng giá chung cho các biến thể chưa có giá riêng. Tồn kho sẽ được điều chỉnh theo từng SKU.',
   hasMultipleVariants: true,
-  isSelling: true
+  isSelling: true,
+  idMauSac: null,
+  idKichCo: null
 })
 
-const variants = ref([
-  { id: 1, name: 'Đen / 39', sku: 'SP-UR-2024-BK-39', price: '2.490.000', stock: 10 },
-  { id: 2, name: 'Đen / 40', sku: 'SP-UR-2024-BK-40', price: '2.490.000', stock: 30 },
-  { id: 3, name: 'Đen / 41', sku: 'SP-UR-2024-BK-41', price: '2.490.000', stock: 26 },
-  { id: 4, name: 'Đen / 42', sku: 'SP-UR-2024-BK-42', price: '2.490.000', stock: 14 },
-  { id: 5, name: 'Trắng / 39', sku: 'SP-UR-2024-WH-39', price: '2.490.000', stock: 12 },
-  { id: 6, name: 'Trắng / 40', sku: 'SP-UR-2024-WH-40', price: '2.490.000', stock: 28 },
-  { id: 7, name: 'Trắng / 41', sku: 'SP-UR-2024-WH-41', price: '2.490.000', stock: 22 },
-  { id: 8, name: 'Trắng / 42', sku: 'SP-UR-2024-WH-42', price: '2.490.000', stock: 10 },
-  { id: 9, name: 'Xanh Navy / 39', sku: 'SP-UR-2024-NV-39', price: '2.490.000', stock: 16 },
-  { id: 10, name: 'Xanh Navy / 40', sku: 'SP-UR-2024-NV-40', price: '2.490.000', stock: 30 },
-  { id: 11, name: 'Xanh Navy / 41', sku: 'SP-UR-2024-NV-41', price: '2.490.000', stock: 24 },
-  { id: 12, name: 'Xanh Navy / 42', sku: 'SP-UR-2024-NV-42', price: '2.490.000', stock: 0 }
-])
+const variants = ref([])
+const loading = ref(false)
+const error = ref('')
+
+const thuocTinh = ref({ mauSac: [], kichCo: [], thanGiay: [], deGiay: [] })
+
+const notice = ref('')
+let noticeTimer = null
+const thongBao = (msg) => {
+  notice.value = msg
+  clearTimeout(noticeTimer)
+  noticeTimer = setTimeout(() => {
+    notice.value = ''
+  }, 3500)
+}
+
+const showAttrModal = ref(false)
+const attrForm = reactive({ type: 'mauSac', id: null })
+const attrError = ref('')
+const attrOptions = computed(() =>
+  attrForm.type === 'mauSac' ? thuocTinh.value.mauSac : thuocTinh.value.kichCo
+)
+
+const showVariantModal = ref(false)
+const variantForm = reactive({
+  idMauSac: null,
+  idKichCo: null,
+  idThanGiay: null,
+  idDeGiay: null,
+  giaBan: '',
+  soLuong: 0
+})
+const variantError = ref('')
+const creatingVariant = ref(false)
+
+const formatCurrency = (val) => {
+  return new Intl.NumberFormat('vi-VN').format(val) + ' đ'
+}
+
+const load = async () => {
+  const id = route.params.id
+  loading.value = true
+  error.value = ''
+  try {
+    const [sp, danhSach, tt] = await Promise.all([
+      getSanPham(id),
+      getSanPhamChiTiets(id),
+      getThuocTinh()
+    ])
+    thuocTinh.value = {
+      mauSac: tt.mauSac || [],
+      kichCo: tt.kichCo || [],
+      thanGiay: tt.thanGiay || [],
+      deGiay: tt.deGiay || []
+    }
+    form.productName = sp.tenSanPham
+    form.skuCode = sp.maSanPham
+    form.isSelling = sp.trangThai !== false
+    const tongTon = danhSach.reduce((sum, c) => sum + (c.soLuong || 0), 0)
+    const giaNhoNhat = danhSach.reduce(
+      (min, c) => (c.giaBan != null && (min === null || c.giaBan < min) ? c.giaBan : min),
+      null
+    )
+    form.price = giaNhoNhat != null ? formatCurrency(giaNhoNhat) : 'Chưa có giá'
+    form.stock = String(tongTon)
+    variants.value = danhSach.map((c) => ({
+      id: c.id,
+      name: `${c.tenMau || '—'} / ${c.tenKichCo || '—'}`,
+      sku: c.maChiTietSanPham,
+      price: formatCurrency(c.giaBan || 0),
+      stock: c.soLuong || 0,
+      trangThai: c.trangThai
+    }))
+  } catch (e) {
+    error.value = e.message || 'Không tải được danh sách biến thể'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(load)
+
+onUnmounted(() => clearTimeout(noticeTimer))
+
+const timMau = (id) => thuocTinh.value.mauSac.find((m) => m.id === id)
+const timKichCo = (id) => thuocTinh.value.kichCo.find((k) => k.id === id)
+
+const moThemThuocTinh = () => {
+  attrForm.type = 'mauSac'
+  attrForm.id = null
+  attrError.value = ''
+  showAttrModal.value = true
+}
+
+const doiLoaiThuocTinh = () => {
+  attrForm.id = null
+  attrError.value = ''
+}
+
+const huyThemThuocTinh = () => {
+  showAttrModal.value = false
+}
+
+const luuThuocTinh = () => {
+  if (attrForm.id == null) {
+    attrError.value = 'Hãy chọn giá trị thuộc tính.'
+    return
+  }
+  if (attrForm.type === 'mauSac') {
+    form.idMauSac = attrForm.id
+    thongBao(`Đã thêm thuộc tính Màu sắc: ${timMau(attrForm.id)?.ten || ''}`)
+  } else {
+    form.idKichCo = attrForm.id
+    thongBao(`Đã thêm thuộc tính Kích cỡ: ${timKichCo(attrForm.id)?.ten || ''}`)
+  }
+  showAttrModal.value = false
+}
+
+const skuTuDong = computed(() => {
+  const m = timMau(variantForm.idMauSac)
+  const k = timKichCo(variantForm.idKichCo)
+  if (!m || !k) return ''
+  return `${form.skuCode || 'SP'}-${m.ma || m.id}-${k.ma || k.id}`
+})
+
+const giaTuGiaChung = () => {
+  const digits = String(form.price || '').replace(/\D/g, '')
+  return digits ? Number(digits) : ''
+}
+
+const moThemBienThe = () => {
+  variantForm.idMauSac = form.idMauSac
+  variantForm.idKichCo = form.idKichCo
+  variantForm.idThanGiay = null
+  variantForm.idDeGiay = null
+  variantForm.giaBan = giaTuGiaChung()
+  variantForm.soLuong = 0
+  variantError.value = ''
+  showVariantModal.value = true
+}
+
+const huyThemBienThe = () => {
+  if (creatingVariant.value) return
+  showVariantModal.value = false
+}
+
+const taoBienTheMoi = async () => {
+  variantError.value = ''
+  const { idMauSac, idKichCo, idThanGiay, idDeGiay, giaBan, soLuong } = variantForm
+
+  if (idMauSac == null || idKichCo == null) {
+    variantError.value = 'Chưa đủ dữ liệu: bạn phải chọn màu sắc và kích cỡ cho biến thể.'
+    return
+  }
+  const tenToHop = `${timMau(idMauSac)?.ten || '—'} / ${timKichCo(idKichCo)?.ten || '—'}`
+  if (variants.value.some((v) => v.name === tenToHop)) {
+    variantError.value = `Tổ hợp "${tenToHop}" đã tồn tại trong danh sách. Hãy chọn tổ hợp khác.`
+    return
+  }
+  if (idThanGiay == null) {
+    variantError.value = 'Chưa đủ dữ liệu: bạn phải chọn thân giày.'
+    return
+  }
+  if (idDeGiay == null) {
+    variantError.value = 'Chưa đủ dữ liệu: bạn phải chọn đế giày.'
+    return
+  }
+  const gia = Number(giaBan)
+  if (!Number.isFinite(gia) || gia <= 0) {
+    variantError.value = 'Giá bán phải lớn hơn 0.'
+    return
+  }
+  const ton = Number(soLuong)
+  if (!Number.isFinite(ton) || ton < 0) {
+    variantError.value = 'Số lượng tồn kho không được âm.'
+    return
+  }
+  const sku = skuTuDong.value
+  if (!sku) {
+    variantError.value = 'Không sinh được mã biến thể, hãy kiểm tra lại màu sắc và kích cỡ.'
+    return
+  }
+  if (variants.value.some((v) => v.sku === sku)) {
+    variantError.value = `Mã biến thể "${sku}" đã tồn tại. Hãy chọn tổ hợp khác.`
+    return
+  }
+
+  creatingVariant.value = true
+  try {
+    await createSanPhamChiTiet(route.params.id, {
+      maChiTietSanPham: sku,
+      idMauSac: Number(idMauSac),
+      idKichCo: Number(idKichCo),
+      idThanGiay: Number(idThanGiay),
+      idDeGiay: Number(idDeGiay),
+      soLuong: Math.round(ton),
+      giaBan: gia,
+      trangThai: true
+    })
+    showVariantModal.value = false
+    await load()
+    thongBao(`Đã tạo biến thể "${sku}" thành công`)
+  } catch (e) {
+    variantError.value = e.message || 'Không tạo được biến thể.'
+  } finally {
+    creatingVariant.value = false
+  }
+}
 
 const currentPage = ref(1)
 const pageSize = ref(5)
 
-const totalPages = computed(() => Math.ceil(variants.value.length / pageSize.value))
+const totalPages = computed(() => Math.max(1, Math.ceil(variants.value.length / pageSize.value)))
 
 const paginatedVariants = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return variants.value.slice(start, start + pageSize.value)
 })
 
-const getStatus = (stock) => {
+const getStatus = (stock, trangThai) => {
+  if (trangThai === false) return { label: 'Ngừng bán', class: 'badge-gray' }
   if (stock === 0) return { label: 'Ngừng bán', class: 'badge-gray' }
   if (stock <= 15) return { label: 'Sắp hết', class: 'badge-yellow' }
   return { label: 'Đang bán', class: 'badge-green' }
@@ -108,18 +307,18 @@ const cancelAction = () => {
           <div class="form-grid-2col">
             <div class="form-group">
               <label class="field-label">Sản phẩm gốc <span class="required-star">*</span></label>
-              <input type="text" class="field-input" v-model="form.productName" />
+              <input type="text" class="field-input" v-model="form.productName" readonly />
             </div>
 
             <div class="form-group">
               <label class="field-label">Mã SKU gốc <span class="required-star">*</span></label>
-              <input type="text" class="field-input" v-model="form.skuCode" />
+              <input type="text" class="field-input" v-model="form.skuCode" readonly />
             </div>
 
             <div class="form-group">
               <label class="field-label">Giá bán chung <span class="required-star">*</span></label>
               <div class="input-with-icon">
-                <input type="text" class="field-input" v-model="form.price" />
+                <input type="text" class="field-input" v-model="form.price" readonly />
                 <span class="input-right-icon">đ</span>
               </div>
             </div>
@@ -127,7 +326,7 @@ const cancelAction = () => {
             <div class="form-group">
               <label class="field-label">Tồn kho ban đầu <span class="required-star">*</span></label>
               <div class="input-with-icon">
-                <input type="text" class="field-input" v-model="form.stock" />
+                <input type="text" class="field-input" v-model="form.stock" readonly />
                 <span class="input-right-icon">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2">
                     <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
@@ -155,7 +354,7 @@ const cancelAction = () => {
               </span>
               <h2>Thuộc tính biến thể</h2>
             </div>
-            <button class="btn-text-action">+ Thêm thuộc tính</button>
+            <button class="btn-text-action" @click="moThemThuocTinh">+ Thêm thuộc tính</button>
           </div>
 
           <div class="toggle-switch-row">
@@ -168,13 +367,19 @@ const cancelAction = () => {
 
           <div class="attributes-summary-box">
             <div class="attr-select-group">
-              <select class="attr-select">
-                <option>Màu sắc: Đen, Trắng, Xanh Navy</option>
+              <select class="attr-select" v-model="form.idMauSac">
+                <option :value="null">Màu sắc: Chọn giá trị</option>
+                <option v-for="m in thuocTinh.mauSac" :key="m.id" :value="m.id">
+                  Màu sắc: {{ m.ten }}
+                </option>
               </select>
             </div>
             <div class="attr-select-group">
-              <select class="attr-select">
-                <option>Kích cỡ: 39, 40, 41, 42</option>
+              <select class="attr-select" v-model="form.idKichCo">
+                <option :value="null">Kích cỡ: Chọn giá trị</option>
+                <option v-for="k in thuocTinh.kichCo" :key="k.id" :value="k.id">
+                  Kích cỡ: {{ k.ten }}
+                </option>
               </select>
             </div>
           </div>
@@ -191,7 +396,7 @@ const cancelAction = () => {
               <h2>Danh sách biến thể</h2>
               <span class="count-pill">{{ variants.length }} biến thể</span>
             </div>
-            <button class="btn-text-action">+ Thêm biến thể</button>
+            <button class="btn-text-action" :disabled="creatingVariant" @click="moThemBienThe">+ Thêm biến thể</button>
           </div>
 
           <div class="table-container">
@@ -207,44 +412,62 @@ const cancelAction = () => {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="v in paginatedVariants" :key="v.id">
-                  <td class="font-semibold text-main">{{ v.name }}</td>
-                  <td class="sku-code">{{ v.sku }}</td>
-                  <td class="price-col">{{ v.price }}</td>
-                  <td class="text-center stock-col"
-                    :class="{ 'text-warning-stock': v.stock <= 15 && v.stock > 0, 'text-danger-stock': v.stock === 0 }">
-                    {{ v.stock }}</td>
-                  <td>
-                    <span class="badge-pill" :class="getStatus(v.stock).class">
-                      <span class="badge-dot"></span>
-                      {{ getStatus(v.stock).label }}
-                    </span>
-                  </td>
-                  <td class="text-center">
-                    <div class="action-btn-group">
-                      <button class="btn-icon-sm edit" title="Chỉnh sửa">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                          stroke-width="2">
-                          <path d="M12 20h9"></path>
-                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-                        </svg>
-                      </button>
-                      <button class="btn-icon-sm delete" title="Xóa">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                          stroke-width="2">
-                          <polyline points="3 6 5 6 21 6"></polyline>
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
-                          </path>
-                        </svg>
-                      </button>
-                    </div>
+                <tr v-if="loading">
+                  <td colspan="6" style="padding: 28px; text-align: center; color: #64748b">
+                    Đang tải danh sách biến thể...
                   </td>
                 </tr>
+                <tr v-else-if="error">
+                  <td colspan="6" style="padding: 28px; text-align: center; color: #dc2626">
+                    {{ error }}
+                    <button class="btn-text-action" style="margin-left: 8px" @click="load">Thử lại</button>
+                  </td>
+                </tr>
+                <tr v-else-if="variants.length === 0">
+                  <td colspan="6" style="padding: 28px; text-align: center; color: #64748b">
+                    Sản phẩm chưa có biến thể nào
+                  </td>
+                </tr>
+                <template v-else>
+                  <tr v-for="v in paginatedVariants" :key="v.id">
+                    <td class="font-semibold text-main">{{ v.name }}</td>
+                    <td class="sku-code">{{ v.sku }}</td>
+                    <td class="price-col">{{ v.price }}</td>
+                    <td class="text-center stock-col"
+                      :class="{ 'text-warning-stock': v.stock <= 15 && v.stock > 0, 'text-danger-stock': v.stock === 0 }">
+                      {{ v.stock }}</td>
+                    <td>
+                      <span class="badge-pill" :class="getStatus(v.stock, v.trangThai).class">
+                        <span class="badge-dot"></span>
+                        {{ getStatus(v.stock, v.trangThai).label }}
+                      </span>
+                    </td>
+                    <td class="text-center">
+                      <div class="action-btn-group">
+                        <button class="btn-icon-sm edit" title="Chưa hỗ trợ trong phiên bản này" disabled>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M12 20h9"></path>
+                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                          </svg>
+                        </button>
+                        <button class="btn-icon-sm delete" title="Chưa hỗ trợ trong phiên bản này" disabled>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                            </path>
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
               </tbody>
             </table>
           </div>
 
-          <div class="table-pagination-row">
+          <div class="table-pagination-row" v-if="!loading && !error && variants.length > 0">
             <span class="pagination-info">Hiển thị {{ (currentPage - 1) * pageSize + 1 }}-{{ Math.min(currentPage *
               pageSize, variants.length) }} trong {{ variants.length }} biến thể</span>
             <div class="pagination-controls">
@@ -401,6 +624,111 @@ const cancelAction = () => {
             <span class="bulb-icon">💡</span>
             <p class="hint-text">Bạn có thể lưu nháp để hoàn thiện thông tin sau. Các trường có dấu * là bắt buộc.</p>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="notice" class="toast-notice">{{ notice }}</div>
+
+    <div v-if="showAttrModal" class="modal-overlay" @click.self="huyThemThuocTinh">
+      <div class="modal-box">
+        <h3 class="modal-title">Thêm thuộc tính biến thể</h3>
+
+        <div class="modal-field">
+          <label class="modal-label">Loại thuộc tính <span class="required-star">*</span></label>
+          <div class="radio-row">
+            <label class="radio-label">
+              <input type="radio" value="mauSac" v-model="attrForm.type" @change="doiLoaiThuocTinh" />
+              Màu sắc
+            </label>
+            <label class="radio-label">
+              <input type="radio" value="kichCo" v-model="attrForm.type" @change="doiLoaiThuocTinh" />
+              Kích cỡ
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-label">Giá trị thuộc tính <span class="required-star">*</span></label>
+          <select class="modal-select" v-model="attrForm.id">
+            <option :value="null">-- Chọn giá trị --</option>
+            <option v-for="o in attrOptions" :key="o.id" :value="o.id">{{ o.ten }}</option>
+          </select>
+        </div>
+
+        <p v-if="attrError" class="modal-error">{{ attrError }}</p>
+
+        <div class="modal-actions">
+          <button class="btn btn-outline-cancel" @click="huyThemThuocTinh">Hủy</button>
+          <button class="btn btn-save-primary" @click="luuThuocTinh">Lưu</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showVariantModal" class="modal-overlay" @click.self="huyThemBienThe">
+      <div class="modal-box">
+        <h3 class="modal-title">Thêm biến thể mới</h3>
+
+        <div class="modal-grid-2">
+          <div class="modal-field">
+            <label class="modal-label">Màu sắc <span class="required-star">*</span></label>
+            <select class="modal-select" v-model="variantForm.idMauSac">
+              <option :value="null">-- Chọn màu sắc --</option>
+              <option v-for="m in thuocTinh.mauSac" :key="m.id" :value="m.id">{{ m.ten }}</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Kích cỡ <span class="required-star">*</span></label>
+            <select class="modal-select" v-model="variantForm.idKichCo">
+              <option :value="null">-- Chọn kích cỡ --</option>
+              <option v-for="k in thuocTinh.kichCo" :key="k.id" :value="k.id">{{ k.ten }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-grid-2">
+          <div class="modal-field">
+            <label class="modal-label">Thân giày <span class="required-star">*</span></label>
+            <select class="modal-select" v-model="variantForm.idThanGiay">
+              <option :value="null">-- Chọn thân giày --</option>
+              <option v-for="t in thuocTinh.thanGiay" :key="t.id" :value="t.id">{{ t.ten }}</option>
+            </select>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Đế giày <span class="required-star">*</span></label>
+            <select class="modal-select" v-model="variantForm.idDeGiay">
+              <option :value="null">-- Chọn đế giày --</option>
+              <option v-for="d in thuocTinh.deGiay" :key="d.id" :value="d.id">{{ d.ten }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-field">
+          <label class="modal-label">Mã biến thể (tự động)</label>
+          <input type="text" class="modal-input" :value="skuTuDong" readonly
+            placeholder="Chọn màu sắc và kích cỡ để sinh mã" />
+        </div>
+
+        <div class="modal-grid-2">
+          <div class="modal-field">
+            <label class="modal-label">Giá bán (đ) <span class="required-star">*</span></label>
+            <input type="number" class="modal-input" v-model.number="variantForm.giaBan" min="1"
+              placeholder="VD: 1250000" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Số lượng <span class="required-star">*</span></label>
+            <input type="number" class="modal-input" v-model.number="variantForm.soLuong" min="0"
+              placeholder="VD: 20" />
+          </div>
+        </div>
+
+        <p v-if="variantError" class="modal-error">{{ variantError }}</p>
+
+        <div class="modal-actions">
+          <button class="btn btn-outline-cancel" :disabled="creatingVariant" @click="huyThemBienThe">Hủy</button>
+          <button class="btn btn-save-primary" :disabled="creatingVariant" @click="taoBienTheMoi">
+            {{ creatingVariant ? 'Đang tạo...' : 'Tạo biến thể' }}
+          </button>
         </div>
       </div>
     </div>
@@ -1100,5 +1428,127 @@ input:checked+.slider:before {
   background: #d92d20;
   color: #ffffff;
   border-color: #d92d20;
+}
+
+.toast-notice {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  background: #047857;
+  color: #ffffff;
+  padding: 11px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 1200;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.25);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.modal-box {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 22px;
+  width: min(520px, 92vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3);
+}
+
+.modal-title {
+  margin: 0 0 16px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.modal-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.modal-field {
+  margin-bottom: 14px;
+}
+
+.modal-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.modal-select,
+.modal-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.modal-input[readonly] {
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.modal-select:focus,
+.modal-input:focus {
+  outline: none;
+  border-color: #d92d20;
+  box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.12);
+}
+
+.radio-row {
+  display: flex;
+  gap: 18px;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #0f172a;
+  cursor: pointer;
+  margin: 0;
+}
+
+.modal-error {
+  color: #dc2626;
+  font-size: 13px;
+  margin: 0 0 4px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.modal-actions .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-text-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 </style>
