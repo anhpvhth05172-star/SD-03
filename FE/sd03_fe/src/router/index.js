@@ -2,6 +2,9 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { getToken, getRefreshToken, isTokenExpired, dangXuat } from '../utils/auth'
 import { refreshSession } from '../api/http'
 import AdminLayout from '../layouts/AdminLayout.vue'
+import ProductListPage from '../pages/ProductListPage.vue'
+import ProductCreatePage from '../pages/ProductCreatePage.vue'
+import ProductVariantPage from '../pages/ProductVariantPage.vue'
 import InvoiceListPage from '../pages/InvoiceListPage.vue'
 import InvoiceFormPage from '../pages/InvoiceFormPage.vue'
 import InvoiceDetailPage from '../pages/InvoiceDetailPage.vue'
@@ -13,10 +16,6 @@ import CustomerListPage from '../pages/CustomerListPage.vue'
 import CustomerCreatePage from '../pages/CustomerCreatePage.vue'
 import LoginPage from '../pages/LoginPage.vue'
 import RegisterPage from '../pages/RegisterPage.vue'
-import ProductListView from '../views/ProductListView.vue'
-import ProductCreateView from '../views/ProductCreateView.vue'
-import ProductVariantView from '../views/ProductVariantView.vue'
-import ProductVariantPage from '../pages/ProductVariantPage.vue'
 import PlaceholderPage from '../pages/PlaceholderPage.vue'
 
 const routes = [
@@ -63,18 +62,12 @@ const routes = [
         component: PlaceholderPage,
         meta: { title: 'Bán hàng tại quầy', requiresAuth: true },
       },
-      { path: 'san-pham', component: ProductListView, meta: { title: 'Quản lý sản phẩm' } },
-      { path: 'san-pham/them', component: ProductCreateView, meta: { title: 'Thêm sản phẩm' } },
-      {
-        path: 'san-pham/:id/bien-the',
-        component: ProductVariantView,
-        meta: { title: 'Biến thể sản phẩm' },
-      },
-      {
-        path: 'bien-the-san-pham',
-        component: ProductVariantPage,
-        meta: { title: 'Biến thể sản phẩm' },
-      },
+      { path: 'san-pham', name: 'ProductList', component: ProductListPage, meta: { title: 'Quản lý sản phẩm' } },
+      { path: 'san-pham/them', name: 'ProductCreate', component: ProductCreatePage, meta: { title: 'Thêm mới sản phẩm' } },
+      { path: 'san-pham/bien-the', name: 'ProductVariant', component: ProductVariantPage, meta: { title: 'Biến thể sản phẩm' } },
+      { path: 'bien-the-san-pham', component: ProductVariantPage, meta: { title: 'Biến thể sản phẩm' } },
+      { path: 'thuoc-tinh', component: () => import('../pages/AttributeCategoryPage.vue'), meta: { title: 'Danh mục thuộc tính' } },
+      { path: 'thuoc-tinh/:category', component: () => import('../pages/AttributeCategoryPage.vue'), meta: { title: 'Danh mục thuộc tính' } },
       {
         path: 'khach-hang',
         component: CustomerListPage,
@@ -97,6 +90,13 @@ const routes = [
       },
       { path: ':pathMatch(.*)*', redirect: '/hoa-don' },
     ],
+  },
+  {
+    path: '/admin/:pathMatch(.*)*',
+    redirect: (to) => {
+      const sub = to.params.pathMatch
+      return sub ? `/${sub}` : '/san-pham'
+    },
   },
 ]
 

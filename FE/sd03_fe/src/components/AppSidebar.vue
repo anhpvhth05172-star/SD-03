@@ -42,6 +42,24 @@ const menu = [
     ],
   },
   {
+    label: 'Danh mục thuộc tính',
+    path: '/thuoc-tinh',
+    icon: [
+      'M4 6h2v2H4V6zm0 5h2v2H4v-2zm0 5h2v2H4v-2zm4-10h12v2H8V6zm0 5h12v2H8v-2zm0 5h12v2H8v-2z',
+    ],
+    children: [
+      { label: 'Thương hiệu', path: '/thuoc-tinh/thuong-hieu', emoji: '🏷️' },
+      { label: 'Xuất xứ', path: '/thuoc-tinh/xuat-xu', emoji: '🌐' },
+      { label: 'Chất liệu', path: '/thuoc-tinh/chat-lieu', emoji: '🧵' },
+      { label: 'Kiểu dáng', path: '/thuoc-tinh/kieu-dang', emoji: '👟' },
+      { label: 'Loại giày', path: '/thuoc-tinh/loai-giay', emoji: '📌' },
+      { label: 'Kích cỡ', path: '/thuoc-tinh/kich-co', emoji: '📐' },
+      { label: 'Màu sắc', path: '/thuoc-tinh/mau-sac', emoji: '🎨' },
+      { label: 'Thân giày', path: '/thuoc-tinh/than-giay', emoji: '🥾' },
+      { label: 'Đế giày', path: '/thuoc-tinh/de-giay', emoji: '👣' },
+    ],
+  },
+  {
     label: 'Quản lý khách hàng',
     path: '/khach-hang',
     icon: [
@@ -129,7 +147,14 @@ const toggle = (item) => {
             @click="toggle(item)"
           >
             <span class="menu-icon">
-              <svg viewBox="0 0 24 24" fill="currentColor">
+              <svg
+                viewBox="0 0 24 24"
+                :fill="item.stroke ? 'none' : 'currentColor'"
+                :stroke="item.stroke ? 'currentColor' : 'none'"
+                :stroke-width="item.stroke ? 2 : 0"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path
                   v-for="(d, index) in item.icon"
                   :key="index"
@@ -161,7 +186,8 @@ const toggle = (item) => {
               class="sub-item"
               active-class="is-active"
             >
-              <span class="sub-dot"></span>
+              <span v-if="child.emoji" class="sub-emoji">{{ child.emoji }}</span>
+              <span v-else class="sub-dot"></span>
               {{ child.label }}
             </router-link>
           </div>
@@ -173,11 +199,11 @@ const toggle = (item) => {
 
 <style scoped>
 .sidebar {
-  width: 244px;
+  width: 252px;
   flex-shrink: 0;
   background: var(--white);
   border-radius: 12px;
-  padding: 16px 14px 22px;
+  padding: 16px 12px 22px;
 }
 
 .sidebar.is-collapsed {
@@ -308,5 +334,14 @@ const toggle = (item) => {
 
 .sidebar .menu {
   flex: 1;
+}
+
+.sub-emoji {
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 </style>

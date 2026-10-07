@@ -1,58 +1,69 @@
 package com.example.datn.controller;
 
-import com.example.datn.dto.SanPhamChiTietDTO;
-import com.example.datn.dto.SanPhamChiTietRequest;
-import com.example.datn.dto.SanPhamDTO;
 import com.example.datn.dto.SanPhamRequest;
-import com.example.datn.dto.ThuocTinhResponse;
+import com.example.datn.dto.SanPhamResponse;
 import com.example.datn.service.SanPhamService;
-import java.util.List;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/v1/san-pham")
+@CrossOrigin(originPatterns = "*")
 @RequiredArgsConstructor
 public class SanPhamController {
 
     private final SanPhamService sanPhamService;
 
-    @GetMapping("/san-pham")
-    public List<SanPhamDTO> list(@RequestParam(required = false) String keyword) {
-        return sanPhamService.layDanhSach(keyword);
-    }
-
-    @PostMapping("/san-pham")
-    public SanPhamDTO create(@RequestBody SanPhamRequest request) {
-        return sanPhamService.taoSanPham(request);
-    }
-
-    @GetMapping("/san-pham/{id}")
-    public SanPhamDTO detail(@PathVariable Long id) {
-        return sanPhamService.laySanPham(id);
-    }
-
-    @GetMapping("/san-pham/{id}/chi-tiet")
-    public List<SanPhamChiTietDTO> variants(@PathVariable Long id) {
-        return sanPhamService.layBienThe(id);
-    }
-
-    @PostMapping("/san-pham/{id}/chi-tiet")
-    public SanPhamChiTietDTO createVariant(
-        @PathVariable Long id,
-        @RequestBody SanPhamChiTietRequest request
+    @GetMapping
+    public ResponseEntity<com.example.datn.dto.PageResponse<SanPhamResponse>> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long idThuongHieu,
+            @RequestParam(required = false) Long idLoaiGiay,
+            @RequestParam(required = false) Long idChatLieu,
+            @RequestParam(required = false) Long idKieuDang,
+            @RequestParam(required = false) Long idXuatXu,
+            @RequestParam(required = false) String doiTuong,
+            @RequestParam(required = false) Boolean trangThai
     ) {
-        return sanPhamService.taoBienThe(id, request);
+        Page<SanPhamResponse> result = sanPhamService.getAll(page, size, keyword, idThuongHieu, idLoaiGiay, idChatLieu, idKieuDang, idXuatXu, doiTuong, trangThai);
+        return ResponseEntity.ok(com.example.datn.dto.PageResponse.from(result));
     }
 
-    @GetMapping("/thuoc-tinh")
-    public ThuocTinhResponse thuocTinh() {
-        return sanPhamService.layThuocTinh();
+    @GetMapping("/{id}")
+    public ResponseEntity<SanPhamResponse> getById(@PathVariable Long id) {
+        return ResponseEntity.ok(sanPhamService.getById(id));
+    }
+
+    @PostMapping
+    public ResponseEntity<SanPhamResponse> create(@Valid @RequestBody SanPhamRequest request) {
+        SanPhamResponse response = sanPhamService.create(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<SanPhamResponse> update(
+            @PathVariable Long id,
+            @Valid @RequestBody SanPhamRequest request
+    ) {
+        SanPhamResponse response = sanPhamService.update(id, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}/toggle-status")
+    public ResponseEntity<SanPhamResponse> toggleStatus(@PathVariable Long id) {
+        SanPhamResponse response = sanPhamService.toggleStatus(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        sanPhamService.delete(id);
+        return ResponseEntity.noContent().build();
     }
 }

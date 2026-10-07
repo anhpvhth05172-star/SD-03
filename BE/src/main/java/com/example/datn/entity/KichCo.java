@@ -29,6 +29,9 @@ public class KichCo {
     @Column(name = "ten_kich_co", nullable = false, length = 50)
     private String tenKichCo;
 
+    @Column(name = "mo_ta", length = 500)
+    private String moTa;
+
     @Column(name = "trang_thai", nullable = false)
     private Boolean trangThai = true;
 }

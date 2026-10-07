@@ -29,6 +29,9 @@ public class MauSac {
     @Column(name = "ten_mau", nullable = false, length = 100)
     private String tenMau;
 
+    @Column(name = "mo_ta", length = 500)
+    private String moTa;
+
     @Column(name = "trang_thai", nullable = false)
     private Boolean trangThai = true;
 }

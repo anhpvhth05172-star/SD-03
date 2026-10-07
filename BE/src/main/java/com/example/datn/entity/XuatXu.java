@@ -29,6 +29,9 @@ public class XuatXu {
     @Column(name = "ten_xuat_xu", nullable = false, length = 100)
     private String tenXuatXu;
 
+    @Column(name = "mo_ta", length = 500)
+    private String moTa;
+
     @Column(name = "trang_thai", nullable = false)
     private Boolean trangThai = true;
 }

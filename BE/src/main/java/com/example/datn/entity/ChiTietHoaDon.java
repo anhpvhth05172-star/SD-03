@@ -12,6 +12,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -20,13 +21,16 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 @Entity
 @Table(
     name = "chi_tiet_hoa_don",
-    uniqueConstraints = @UniqueConstraint(
-        name = "UQ_cthd",
-        columnNames = {"id_hoa_don", "id_san_pham_chi_tiet"}
-    )
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "UQ_cthd",
+            columnNames = {"id_hoa_don", "id_san_pham_chi_tiet"}
+        )
+    }
 )
 public class ChiTietHoaDon {
 
@@ -54,6 +58,8 @@ public class ChiTietHoaDon {
     @Column(name = "ghi_chu", length = 500)
     private String ghiChu;
 
+    @Builder.Default
     @Column(name = "trang_thai", nullable = false)
     private Boolean trangThai = true;
 }
+
