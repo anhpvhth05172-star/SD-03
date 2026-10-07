@@ -34,4 +34,11 @@ public class PhieuGiamGiaRestController {
     public PhieuGiamGia detail(@PathVariable Long id) {
         return phieuGiamGiaService.detail(id);
     }
+
+    @PutMapping("/update")
+    public String update(@RequestBody PhieuGiamGia phieuGiamGia) {
+        phieuGiamGiaService.update(phieuGiamGia);
+
+        return "sua thanh cong!";
+    }
 }

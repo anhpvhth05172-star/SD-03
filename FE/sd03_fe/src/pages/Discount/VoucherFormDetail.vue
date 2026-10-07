@@ -36,26 +36,26 @@
 
         <!-- Số liệu chính -->
         <div class="row g-3 mb-4">
-          <div class="col-md-4">
+          <div class="col-md-6">
             <div class="stat-box">
               <div class="stat-label">Mức giảm</div>
               <div class="stat-value">{{ Number(d.phanTramGiam) }}%</div>
             </div>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <div class="stat-box">
               <div class="stat-label">Thời lượng</div>
               <div class="stat-value">{{ totalDays }} ngày</div>
             </div>
           </div>
-          <div class="col-md-4">
+          <!-- <div class="col-md-4">
             <div class="stat-box">
-              <div class="stat-label">Cấu hình</div>
+              <div class="stat-label">Mô tả</div>
               <div class="stat-value">
-                {{ d.trangThai ? "Đang bật" : "Đã tắt" }}
+                {{ d.moTa }}
               </div>
             </div>
-          </div>
+          </div> -->
         </div>
 
         <!-- Tiến độ thời gian -->

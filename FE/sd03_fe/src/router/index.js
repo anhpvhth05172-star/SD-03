@@ -15,6 +15,8 @@ import DiscountForm from "@/pages/Discount/DiscountForm.vue";
 import VoucherForm from "@/pages/Discount/VoucherForm.vue";
 import DiscountFormDetail from "@/pages/Discount/DiscountFormDetail.vue";
 import VoucherFormDetail from "@/pages/Discount/VoucherFormDetail.vue";
+import DiscountFormUpdate from "@/pages/Discount/DiscountFormUpdate.vue";
+import VoucherFormUpdate from "@/pages/Discount/VoucherFormUpdate.vue";
 
 const routes = [
   { path: "/", redirect: "/admin" },
@@ -99,6 +101,11 @@ const routes = [
         meta: { title: "Chi tiết phiếu giảm giá" },
       },
       {
+        path: "phieu-giam-gia/update/:id",
+        component: VoucherFormUpdate,
+        meta: { title: "Cập nhật phiếu giảm giá" },
+      },
+      {
         path: "dot-giam-gia/add",
         component: VoucherForm,
         meta: { title: "Thêm phiếu giảm giá" },
@@ -107,6 +114,11 @@ const routes = [
         path: "dot-giam-gia/detail/:id",
         component: VoucherFormDetail,
         meta: { title: "Chi tiết đợt giảm giá" },
+      },
+      {
+        path: "dot-giam-gia/update/:id",
+        component: DiscountFormUpdate,
+        meta: { title: "Cập nhật đợt giảm giá" },
       },
       { path: ":pathMatch(.*)*", redirect: "/hoa-don" },
     ],

@@ -34,4 +34,14 @@ public class DotGiamGiaServiceImpl implements DotGiamGiaService {
     public DotGiamGia detailDotGiamGia(Long id) {
         return dotGiamGiaRepository.findById(id).orElse(null);
     }
+
+    @Override
+    public void updateDotGiamGia(DotGiamGia dotGiamGia) {
+        dotGiamGiaRepository.save(dotGiamGia);
+    }
+
+    @Override
+    public Page<DotGiamGia> searching(String ten, Boolean trangThai, LocalDateTime from, LocalDateTime to, Pageable pageable) {
+        return dotGiamGiaRepository.search(ten, trangThai, from, to, pageable);
+    }
 }

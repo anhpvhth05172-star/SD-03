@@ -5,7 +5,7 @@
         <div class="voucher-icon">
           <i class="bi bi-ticket-perforated"></i>
         </div>
-        <h5 class="mb-0 fw-semibold">Thông tin phiếu</h5>
+        <h5 class="mb-0 fw-semibold">Thêm phiếu giảm giá</h5>
       </div>
 
       <form @submit.prevent="submit()" novalidate>
@@ -142,17 +142,6 @@
               :disabled="form.unlimited"
             />
             <div class="invalid-feedback">{{ errors.quantity }}</div>
-            <div class="form-check mt-3">
-              <input
-                id="unlimited"
-                v-model="form.unlimited"
-                class="form-check-input"
-                type="checkbox"
-              />
-              <label class="form-check-label" for="unlimited"
-                >Vô hạn số lượng</label
-              >
-            </div>
           </div>
 
           <div class="col-md-6">

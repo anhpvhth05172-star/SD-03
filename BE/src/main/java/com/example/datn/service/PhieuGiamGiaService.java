@@ -16,4 +16,6 @@ public interface PhieuGiamGiaService {
     void addPhieuGiamGia(PhieuGiamGia phieuGiamGia);
 
     PhieuGiamGia detail(Long id);
+
+    void update(PhieuGiamGia phieuGiamGia);
 }

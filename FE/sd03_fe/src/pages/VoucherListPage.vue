@@ -211,12 +211,12 @@ onMounted(() => getData(0));
             </tr>
           </thead>
           <tbody>
-            <tr v-for="d in listDiscount" :key="d.id">
+            <tr v-for="(d, i) in listDiscount" :key="i.index">
               <td>
                 <div class="entity">
                   <span
                     class="entity-avatar"
-                    :style="{ background: avatarColor(d.id) }"
+                    :style="{ background: avatarColor(i + 1) }"
                     >{{ d.maPhieuGiamGia.slice(-2) }}</span
                   >
                   <div class="entity-info">
@@ -263,7 +263,12 @@ onMounted(() => getData(0));
                       <circle cx="12" cy="12" r="3" />
                     </svg>
                   </RouterLink>
-                  <button class="act-btn is-red" type="button" aria-label="Sửa">
+                  <RouterLink
+                    :to="`/admin/phieu-giam-gia/update/${d.id}`"
+                    class="act-btn is-red"
+                    type="button"
+                    aria-label="Sửa"
+                  >
                     <svg
                       viewBox="0 0 24 24"
                       fill="none"
@@ -276,18 +281,7 @@ onMounted(() => getData(0));
                         d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3"
                       />
                     </svg>
-                  </button>
-                  <button class="act-btn" type="button" aria-label="Thêm">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2.2"
-                      stroke-linecap="round"
-                    >
-                      <path d="M12 6v12M6 12h12" />
-                    </svg>
-                  </button>
+                  </RouterLink>
                 </div>
               </td>
             </tr>

@@ -52,8 +52,8 @@ public class PhieuGiamGia {
     @Column(name = "so_luong", nullable = false)
     private Integer soLuong = 0;
 
-    @Column(name = "so_luong_da_su_dung", nullable = false)
-    private Integer soLuongDaSuDung = 0;
+    @Column(name = "so_luong_da_su_dung")
+    private Integer soLuongDaSuDung;
 
     @Column(name = "trang_thai")
     private Boolean trangThai;
