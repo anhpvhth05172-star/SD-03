@@ -1,1149 +1,886 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
+const route = useRoute()
 const API_BASE = 'http://localhost:8080/api/v1'
 
-const form = reactive({
-  productName: 'Giày thể thao Urban Run 2',
-  skuCode: 'SP-UR-2024',
-  price: '2.490.000',
-  stock: '120',
-  note: 'Áp dụng giá chung cho các biến thể chưa có giá riêng. Tồn kho sẽ được điều chỉnh theo từng SKU.',
-  hasMultipleVariants: true,
-  isSelling: true
-})
+const showToast = ref(true)
+const isLoading = ref(false)
 
 const variants = ref([])
-const isLoading = ref(false)
-const currentPage = ref(0)
-const pageSize = ref(5)
 const totalElements = ref(0)
 const totalPages = ref(1)
+const currentPage = ref(0)
+const pageSize = ref(5)
+const pageSizeOptions = [5, 10, 20, 50]
 
-const fetchVariants = async () => {
-  isLoading.value = true
+const filters = reactive({
+  search: '',
+  idMauSac: '',
+  idKichCo: '',
+  trangThai: ''
+})
+
+const colorsList = ref([])
+const sizesList = ref([])
+
+const selectedProductCode = ref('SD03')
+const selectedProductName = ref('Tất cả biến thể sản phẩm')
+
+const initProductHeaderInfo = () => {
+  if (route.query.tenSanPham) {
+    selectedProductName.value = route.query.tenSanPham
+  } else {
+    selectedProductName.value = 'Tất cả biến thể sản phẩm'
+  }
+
+  if (route.query.maSanPham) {
+    selectedProductCode.value = route.query.maSanPham
+  } else if (route.query.idSanPham) {
+    selectedProductCode.value = `SP0${route.query.idSanPham}`
+  } else {
+    selectedProductCode.value = 'SD03'
+  }
+}
+
+let debounceTimer = null
+let currentAbortController = null
+
+try {
+  const cached = localStorage.getItem('variant_list_cache')
+  if (cached && !route.query.idSanPham) {
+    const parsed = JSON.parse(cached)
+    if (parsed && Array.isArray(parsed.content)) {
+      variants.value = parsed.content
+      totalElements.value = parsed.totalElements || parsed.content.length
+      totalPages.value = parsed.totalPages || 1
+    }
+  }
+} catch (e) { }
+
+const fetchFilterOptions = async () => {
   try {
-    const res = await fetch(`${API_BASE}/san-pham-chi-tiet?page=${currentPage.value}&size=${pageSize.value}`)
+    const [resColor, resSize] = await Promise.all([
+      fetch(`${API_BASE}/attributes/mau_sac`),
+      fetch(`${API_BASE}/attributes/kich_co`)
+    ])
+    if (resColor.ok) colorsList.value = await resColor.json()
+    if (resSize.ok) sizesList.value = await resSize.json()
+  } catch (e) {
+    console.error('Lỗi khi tải danh mục màu sắc / kích cỡ:', e)
+  }
+}
+
+const buildParams = (pageIndex) => {
+  const params = new URLSearchParams()
+  params.append('page', pageIndex)
+  params.append('size', pageSize.value)
+
+  if (filters.search && filters.search.trim()) {
+    params.append('search', filters.search.trim())
+  }
+  if (filters.idMauSac) {
+    params.append('idMauSac', filters.idMauSac)
+  }
+  if (filters.idKichCo) {
+    params.append('idKichCo', filters.idKichCo)
+  }
+  if (filters.trangThai !== '') {
+    params.append('trangThai', filters.trangThai)
+  }
+  if (route.query.idSanPham) {
+    params.append('idSanPham', route.query.idSanPham)
+  }
+
+  return params
+}
+
+const fetchVariants = async (useCache = true) => {
+  isLoading.value = true
+  variants.value = []
+
+  if (currentAbortController) {
+    currentAbortController.abort()
+  }
+  currentAbortController = new AbortController()
+
+  try {
+    const params = buildParams(currentPage.value)
+    const res = await fetch(`${API_BASE}/san-pham-chi-tiet?${params.toString()}`, {
+      signal: currentAbortController.signal
+    })
+
     if (res.ok) {
       const data = await res.json()
-      variants.value = (data.content || []).map(item => ({
-        id: item.id,
-        name: `${item.color || 'Đen'} / ${item.size || '40'}`,
-        sku: item.maCtsp || `SKU-${item.id}`,
-        price: item.price ? new Intl.NumberFormat('vi-VN').format(item.price) + ' đ' : '2.490.000 đ',
-        stock: item.stock !== undefined ? item.stock : 10,
-        trangThai: item.trangThai
-      }))
-      totalElements.value = data.totalElements || variants.value.length
-      totalPages.value = data.totalPages || 1
+      const content = data.content || []
+      const total = data.totalElements !== undefined ? data.totalElements : content.length
+      const pages = data.totalPages || 1
+
+      variants.value = content
+      totalElements.value = total
+      totalPages.value = pages
+
+      if (currentPage.value === 0 && !filters.search && !filters.idMauSac && !filters.idKichCo && filters.trangThai === '') {
+        localStorage.setItem('variant_list_cache', JSON.stringify({ content, totalElements: total, totalPages: pages }))
+      }
     } else {
-      loadFallbackVariants()
+      if (variants.value.length === 0 && !route.query.idSanPham) {
+        useFallbackData()
+      }
     }
   } catch (err) {
-    console.error('Lỗi khi tải biến thể sản phẩm:', err)
-    loadFallbackVariants()
+    if (err.name !== 'AbortError') {
+      console.error('Lỗi khi tải biến thể sản phẩm:', err)
+      if (variants.value.length === 0 && !route.query.idSanPham) {
+        useFallbackData()
+      }
+    }
   } finally {
     isLoading.value = false
   }
 }
 
-const loadFallbackVariants = () => {
-  variants.value = [
-    { id: 1, name: 'Đen / 39', sku: 'SP-UR-2024-BK-39', price: '2.490.000 đ', stock: 10 },
-    { id: 2, name: 'Đen / 40', sku: 'SP-UR-2024-BK-40', price: '2.490.000 đ', stock: 30 },
-    { id: 3, name: 'Đen / 41', sku: 'SP-UR-2024-BK-41', price: '2.490.000 đ', stock: 26 },
-    { id: 4, name: 'Đen / 42', sku: 'SP-UR-2024-BK-42', price: '2.490.000 đ', stock: 14 },
-    { id: 5, name: 'Trắng / 39', sku: 'SP-UR-2024-WH-39', price: '2.490.000 đ', stock: 12 }
-  ]
-  totalElements.value = variants.value.length
+watch(
+  () => route.query,
+  () => {
+    initProductHeaderInfo()
+    currentPage.value = 0
+    fetchVariants(false)
+  },
+  { immediate: true }
+)
+
+const useFallbackData = () => {
+  variants.value = []
+  totalElements.value = 0
   totalPages.value = 1
 }
 
-const getStatus = (stock) => {
-  if (stock === 0) return { label: 'Ngừng bán', class: 'badge-gray' }
-  if (stock <= 15) return { label: 'Sắp hết', class: 'badge-yellow' }
-  return { label: 'Đang bán', class: 'badge-green' }
+const onSearchInput = () => {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    currentPage.value = 0
+    fetchVariants(false)
+  }, 150)
+}
+
+const onFilterChange = () => {
+  currentPage.value = 0
+  fetchVariants(false)
 }
 
 const changePage = (p) => {
-  if (p >= 0 && p < totalPages.value) {
+  if (p >= 0 && p < totalPages.value && p !== currentPage.value) {
     currentPage.value = p
-    fetchVariants()
+    fetchVariants(false)
   }
 }
 
-const deleteVariant = async (id) => {
-  if (!confirm('Bạn có chắc chắn muốn xóa biến thể này?')) return
-  const originalList = [...variants.value]
-  variants.value = variants.value.filter(v => v.id !== id)
-  if (totalElements.value > 0) totalElements.value--
+const formatPrice = (val) => {
+  if (!val) return '0 đ'
+  return new Intl.NumberFormat('vi-VN').format(val) + ' đ'
+}
+
+const getColorHex = (item) => {
+  if (item.colorHex && item.colorHex.startsWith('#')) return item.colorHex
+  const name = (item.color || '').toLowerCase()
+  if (name.includes('đen')) return '#000000'
+  if (name.includes('trắng')) return '#ffffff'
+  if (name.includes('đỏ')) return '#d92d20'
+  if (name.includes('xanh rêu')) return '#15803d'
+  if (name.includes('xanh')) return '#2563eb'
+  if (name.includes('vàng')) return '#eab308'
+  if (name.includes('bạc') || name.includes('xám')) return '#94a3b8'
+  return '#475569'
+}
+
+const getVariantStatusLabel = (item) => {
+  if (item.trangThai === false) return 'Ngừng bán'
+  const stock = item.stock !== undefined ? Number(item.stock) : 0
+  if (stock === 0) return 'Hết hàng'
+  if (stock < 5) return 'Sắp hết hàng'
+  return 'Còn hàng'
+}
+
+const getVariantStatusClass = (item) => {
+  if (item.trangThai === false) return 'is-stopped'
+  const stock = item.stock !== undefined ? Number(item.stock) : 0
+  if (stock === 0) return 'is-out-of-stock'
+  if (stock < 5) return 'is-low-stock'
+  return 'is-selling'
+}
+
+const toastNotice = reactive({
+  show: false,
+  type: 'success',
+  title: '',
+  message: ''
+})
+let toastTimer = null
+
+const showToastNotice = (title, message, type = 'success') => {
+  toastNotice.title = title
+  toastNotice.message = message
+  toastNotice.type = type
+  toastNotice.show = true
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    toastNotice.show = false
+  }, 3500)
+}
+
+const toggleStatus = async (item) => {
+  const oldStatus = item.trangThai
+  const newStatus = !oldStatus
+  item.trangThai = newStatus
+  const statusLabel = newStatus ? 'Đang bán' : 'Ngừng bán'
+  const itemCode = item.maCtsp || item.maSp || `SKU-${item.id}`
 
   try {
-    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      variants.value = originalList
-      if (totalElements.value >= 0) totalElements.value++
-      alert('Không thể xóa biến thể do có dữ liệu liên quan!')
+    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/${item.id}/toggle-status`, { method: 'PATCH' })
+    if (res.ok) {
+      showToastNotice(
+        'Cập nhật trạng thái thành công',
+        `Đã chuyển trạng thái biến thể (${itemCode}) sang "${statusLabel}"`,
+        newStatus ? 'success' : 'warning'
+      )
+    } else {
+      item.trangThai = oldStatus
+      showToastNotice('Lỗi cập nhật', 'Không thể chuyển đổi trạng thái biến thể sản phẩm', 'danger')
     }
   } catch (err) {
-    variants.value = originalList
-    if (totalElements.value >= 0) totalElements.value++
+    item.trangThai = oldStatus
+    showToastNotice('Lỗi kết nối', 'Không thể kết nối tới máy chủ', 'danger')
   }
 }
 
-const cancelAction = () => {
-  router.push('/san-pham')
+// EDIT MODAL STATE
+const isEditModalOpen = ref(false)
+const editingVariantId = ref(null)
+const editForm = reactive({
+  maCtsp: '',
+  idMauSac: '',
+  idKichCo: '',
+  stock: 10,
+  price: 1000000,
+  trangThai: true
+})
+const formError = ref('')
+
+const openEditModal = (item) => {
+  editingVariantId.value = item.id
+  formError.value = ''
+  editForm.maCtsp = item.maCtsp || `SPCT0${item.id}`
+  editForm.idMauSac = item.idMauSac || (colorsList.value.find(c => (c.ten || c.tenMau) === item.color)?.id || '')
+  editForm.idKichCo = item.idKichCo || (sizesList.value.find(s => (s.ten || s.tenKichCo) === item.size)?.id || '')
+  editForm.stock = item.stock !== undefined ? item.stock : 10
+  editForm.price = item.price !== undefined ? item.price : 1000000
+  editForm.trangThai = item.trangThai !== false
+  isEditModalOpen.value = true
+}
+
+const closeEditModal = () => {
+  isEditModalOpen.value = false
+  formError.value = ''
+}
+
+const saveEditVariant = async () => {
+  if (editForm.idMauSac === '' || editForm.idMauSac === null) {
+    formError.value = 'Vui lòng chọn màu sắc cho biến thể!'
+    return
+  }
+  if (editForm.idKichCo === '' || editForm.idKichCo === null) {
+    formError.value = 'Vui lòng chọn kích cỡ cho biến thể!'
+    return
+  }
+  const stockNum = Number(editForm.stock)
+  if (editForm.stock === null || editForm.stock === undefined || isNaN(stockNum) || stockNum < 0 || stockNum > 100000) {
+    formError.value = 'Số lượng tồn phải là số nguyên từ 0 đến 100,000!'
+    return
+  }
+  const priceNum = Number(editForm.price)
+  if (!editForm.price || isNaN(priceNum) || priceNum < 1000 || priceNum > 1000000000) {
+    formError.value = 'Giá bán phải từ 1,000 VNĐ đến 1,000,000,000 VNĐ!'
+    return
+  }
+
+  const currentId = editingVariantId.value
+  const targetIdx = variants.value.findIndex(v => v.id === currentId)
+  if (targetIdx === -1) return
+
+  // Kiểm tra trùng lặp biến thể khác trong cùng danh sách
+  const currentVariant = variants.value[targetIdx]
+  const isDuplicate = variants.value.some(v => 
+    v.id !== currentId && 
+    (v.idSanPham === currentVariant.idSanPham || !v.idSanPham) &&
+    Number(v.idMauSac) === Number(editForm.idMauSac) && 
+    Number(v.idKichCo) === Number(editForm.idKichCo)
+  )
+  if (isDuplicate) {
+    formError.value = 'Biến thể với Màu sắc và Kích cỡ này đã tồn tại trong sản phẩm!'
+    return
+  }
+
+  const backupItem = { ...variants.value[targetIdx] }
+  const selectedColor = colorsList.value.find(c => c.id === Number(editForm.idMauSac))
+  const selectedSize = sizesList.value.find(s => s.id === Number(editForm.idKichCo))
+
+  // 1. Optimistic UI update
+  variants.value[targetIdx].stock = Number(editForm.stock)
+  variants.value[targetIdx].price = Number(editForm.price)
+  variants.value[targetIdx].trangThai = editForm.trangThai
+  variants.value[targetIdx].maCtsp = editForm.maCtsp
+  if (selectedColor) {
+    variants.value[targetIdx].idMauSac = selectedColor.id
+    variants.value[targetIdx].color = selectedColor.ten || selectedColor.tenMau
+    variants.value[targetIdx].colorHex = selectedColor.moTa || '#64748b'
+  }
+  if (selectedSize) {
+    variants.value[targetIdx].idKichCo = selectedSize.id
+    variants.value[targetIdx].size = selectedSize.ten || selectedSize.tenKichCo
+  }
+
+  closeEditModal()
+  showToastNotice('Thành công', `Đã cập nhật biến thể "${variants.value[targetIdx].maCtsp}" thành công!`, 'success')
+
+  // 2. Background API Sync
+  try {
+    const payload = {
+      idMauSac: editForm.idMauSac ? Number(editForm.idMauSac) : null,
+      idKichCo: editForm.idKichCo ? Number(editForm.idKichCo) : null,
+      soLuong: Number(editForm.stock),
+      giaBan: Number(editForm.price),
+      trangThai: editForm.trangThai,
+      maChiTietSanPham: editForm.maCtsp
+    }
+
+    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/${currentId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    if (res.ok) {
+      fetchVariants(false)
+    } else {
+      const err = await res.json().catch(() => ({}))
+      variants.value[targetIdx] = backupItem
+      showToastNotice('Lỗi cập nhật', err.message || 'Không thể lưu thay đổi vào hệ thống', 'danger')
+    }
+  } catch (e) {
+    console.error('Update variant error:', e)
+    variants.value[targetIdx] = backupItem
+    showToastNotice('Lỗi kết nối', 'Không thể kết nối máy chủ', 'danger')
+  }
+}
+
+// CONFIRM MODAL STATE
+const confirmModal = reactive({
+  isOpen: false,
+  title: '',
+  message: '',
+  confirmText: 'Xác nhận xóa',
+  cancelText: 'Hủy bỏ',
+  variant: 'danger',
+  onConfirm: null
+})
+
+const openConfirmModal = ({ title, message, confirmText = 'Xác nhận', cancelText = 'Hủy bỏ', variant = 'danger', onConfirm }) => {
+  confirmModal.title = title
+  confirmModal.message = message
+  confirmModal.confirmText = confirmText
+  confirmModal.cancelText = cancelText
+  confirmModal.variant = variant
+  confirmModal.onConfirm = onConfirm
+  confirmModal.isOpen = true
+}
+
+const handleConfirmAction = async () => {
+  const callback = confirmModal.onConfirm
+  confirmModal.isOpen = false
+  if (callback) {
+    callback()
+  }
+}
+
+const handleCancelConfirm = () => {
+  confirmModal.isOpen = false
+}
+
+const confirmDeleteVariant = (item) => {
+  const itemCode = item.maCtsp || `SKU-${item.id}`
+  openConfirmModal({
+    title: 'Xác nhận xóa biến thể sản phẩm',
+    message: `Bạn có chắc chắn muốn xóa biến thể "${itemCode}" (${item.color || 'Màu mặc định'} - Size ${item.size || 'Mặc định'}) không? Thao tác này sẽ xóa vĩnh viễn biến thể khỏi hệ thống.`,
+    confirmText: 'Xóa ngay',
+    cancelText: 'Hủy bỏ',
+    variant: 'danger',
+    onConfirm: () => executeDeleteVariant(item)
+  })
+}
+
+const executeDeleteVariant = async (item) => {
+  const targetId = item.id
+  const originalList = [...variants.value]
+  const targetIdx = variants.value.findIndex(v => v.id === targetId)
+  if (targetIdx !== -1) {
+    variants.value.splice(targetIdx, 1)
+  }
+  if (totalElements.value > 0) totalElements.value--
+
+  showToastNotice('Đã xóa', `Đã xóa biến thể "${item.maCtsp || `ID ${targetId}`}" thành công!`, 'success')
+
+  try {
+    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/${targetId}`, { method: 'DELETE' })
+    if (res.ok) {
+      fetchVariants(false)
+    } else {
+      const err = await res.json().catch(() => ({}))
+      variants.value = originalList
+      if (totalElements.value >= 0) totalElements.value++
+      showToastNotice('Không thể xóa', err.message || 'Không thể xóa biến thể do có hóa đơn hoặc dữ liệu liên quan!', 'danger')
+    }
+  } catch (e) {
+    console.error('Delete variant error:', e)
+    variants.value = originalList
+    if (totalElements.value >= 0) totalElements.value++
+    showToastNotice('Lỗi kết nối', 'Không thể kết nối máy chủ', 'danger')
+  }
+}
+
+const resetFilters = () => {
+  filters.search = ''
+  filters.idMauSac = ''
+  filters.idKichCo = ''
+  filters.trangThai = ''
+  currentPage.value = 0
+  if (route.query.idSanPham || route.query.tenSanPham || route.query.maSanPham) {
+    router.push({ path: '/san-pham/bien-the' })
+  } else {
+    fetchVariants(false)
+  }
 }
 
 onMounted(() => {
-  fetchVariants()
+  fetchFilterOptions()
+})
+
+onUnmounted(() => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  if (currentAbortController) currentAbortController.abort()
 })
 </script>
 
 <template>
-  <div class="variant-page">
-    <div class="page-header-row">
-      <div class="page-title-box">
-        <h1 class="page-title">Biến thể sản phẩm</h1>
+  <div class="product-variant-page">
+
+    <div class="page-top-bar">
+      <div class="title-info">
+        <h1 class="heading-title">
+          Biến thể của: <span class="highlight-product">{{ selectedProductName }}</span>
+        </h1>
+        <p class="product-code-sub">Mã sản phẩm: {{ selectedProductCode }}</p>
       </div>
 
-      <div class="page-actions-box">
-        <button class="btn btn-outline-cancel" @click="cancelAction">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-          Hủy
-        </button>
-        <button class="btn btn-outline-draft">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-            <polyline points="7 3 7 8 15 8"></polyline>
-          </svg>
-          Lưu nháp
-        </button>
-        <button class="btn btn-save-primary">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-            <polyline points="7 3 7 8 15 8"></polyline>
-          </svg>
-          Lưu thay đổi
-        </button>
+
+      <transition name="toast-fade">
+        <div v-if="toastNotice.show" class="toast-card" :class="toastNotice.type">
+          <div class="toast-icon" :class="toastNotice.type">
+            <svg v-if="toastNotice.type === 'success'" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <svg v-else-if="toastNotice.type === 'warning'" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2.5">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+          </div>
+          <div class="toast-content">
+            <div class="toast-title">{{ toastNotice.title }}</div>
+            <div class="toast-sub">{{ toastNotice.message }}</div>
+          </div>
+          <button class="toast-close" @click="toastNotice.show = false">×</button>
+        </div>
+        <div v-else-if="showToast" class="toast-card">
+          <div class="toast-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </div>
+          <div class="toast-content">
+            <div class="toast-title">Xem CTSP thành công</div>
+            <div class="toast-sub">Đang xem CTSP của {{ selectedProductName }} ({{ selectedProductCode }})</div>
+          </div>
+          <button class="toast-close" @click="showToast = false">×</button>
+        </div>
+      </transition>
+    </div>
+
+
+    <div class="filter-card">
+      <div class="filter-row-top">
+
+        <div class="filter-search-box">
+          <label class="filter-lbl">Tìm kiếm theo tên hoặc mã phân loại</label>
+          <div class="search-input-wrap">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input v-model="filters.search" type="text" class="form-control"
+              placeholder="Nhập mã sản phẩm, phân loại, màu sắc..." @input="onSearchInput" />
+          </div>
+        </div>
+
+        <div class="filter-action-btns">
+          <button class="btn-action-outline" @click="resetFilters">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6"></path>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+            Đặt lại bộ lọc
+          </button>
+          <button class="btn-action-outline">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            Tải QR
+          </button>
+          <button class="btn-action-outline">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            Xuất Excel
+          </button>
+        </div>
+      </div>
+
+
+      <div class="filter-dropdowns-grid">
+        <div class="filter-col">
+          <label class="filter-lbl">Màu sắc</label>
+          <select v-model="filters.idMauSac" class="form-select" @change="onFilterChange">
+            <option value="">Tất cả màu sắc</option>
+            <option v-for="c in colorsList" :key="c.id" :value="c.id">{{ c.ten || c.tenMau }}</option>
+          </select>
+        </div>
+
+        <div class="filter-col">
+          <label class="filter-lbl">Kích cỡ</label>
+          <select v-model="filters.idKichCo" class="form-select" @change="onFilterChange">
+            <option value="">Tất cả kích cỡ</option>
+            <option v-for="s in sizesList" :key="s.id" :value="s.id">{{ s.ten || s.tenKichCo }}</option>
+          </select>
+        </div>
+
+        <div class="filter-col">
+          <label class="filter-lbl">Trạng thái</label>
+          <select v-model="filters.trangThai" class="form-select" @change="onFilterChange">
+            <option value="">Tất cả trạng thái</option>
+            <option :value="true">Đang bán</option>
+            <option :value="false">Ngừng bán</option>
+          </select>
+        </div>
       </div>
     </div>
 
-    <div class="variant-grid-layout">
-      <div class="grid-left-col">
-        <div class="card-box">
-          <div class="card-header">
-            <div class="card-header-title">
-              <span class="header-icon-circle">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path
-                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
-                </svg>
-              </span>
-              <h2>Thông tin chung</h2>
-            </div>
-          </div>
 
-          <div class="form-grid-2col">
-            <div class="form-group">
-              <label class="field-label">Sản phẩm gốc <span class="required-star">*</span></label>
-              <input type="text" class="field-input" v-model="form.productName" />
-            </div>
+    <div class="table-card">
+      <div class="table-responsive">
+        <table class="variant-data-table">
+          <thead>
+            <tr>
+              <th width="40" class="text-center"><input type="checkbox" /></th>
+              <th width="50" class="text-center">STT</th>
+              <th width="110">Mã SP</th>
+              <th width="120">Mã CTSP</th>
+              <th width="80" class="text-center">Ảnh</th>
+              <th width="140">Màu sắc</th>
+              <th width="90">Kích cỡ</th>
+              <th width="90">Số lượng</th>
+              <th width="140">Giá bán</th>
+              <th width="90">Giảm</th>
+              <th width="130">Trạng thái</th>
+              <th width="120" class="text-center">Hành động</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-if="isLoading && variants.length === 0">
+              <tr v-for="n in 5" :key="`skel-${n}`" class="skel-row">
+                <td class="text-center">
+                  <div class="skel-box skel-check"></div>
+                </td>
+                <td class="text-center">
+                  <div class="skel-box skel-num"></div>
+                </td>
+                <td>
+                  <div class="skel-box skel-text"></div>
+                </td>
+                <td>
+                  <div class="skel-box skel-text"></div>
+                </td>
+                <td class="text-center">
+                  <div class="skel-box skel-img"></div>
+                </td>
+                <td>
+                  <div class="skel-box skel-text"></div>
+                </td>
+                <td>
+                  <div class="skel-box skel-num"></div>
+                </td>
+                <td>
+                  <div class="skel-box skel-num"></div>
+                </td>
+                <td>
+                  <div class="skel-box skel-text"></div>
+                </td>
+                <td>
+                  <div class="skel-box skel-num"></div>
+                </td>
+                <td>
+                  <div class="skel-box skel-pill"></div>
+                </td>
+                <td class="text-center">
+                  <div class="skel-box skel-actions"></div>
+                </td>
+              </tr>
+            </template>
 
-            <div class="form-group">
-              <label class="field-label">Mã SKU gốc <span class="required-star">*</span></label>
-              <input type="text" class="field-input" v-model="form.skuCode" />
-            </div>
+            <template v-else>
+              <tr v-for="(item, idx) in variants" :key="item.id">
+                <td class="text-center"><input type="checkbox" /></td>
+                <td class="text-center index-col">{{ currentPage * pageSize + idx + 1 }}</td>
+                <td class="code-col">{{ item.maSp || 'SP020' }}</td>
+                <td class="code-ctsp-col">{{ item.maCtsp || `SPCT0${item.id}` }}</td>
+                <td class="text-center">
+                  <img v-if="item.img" :src="item.img" alt="Thumbnail" class="variant-thumb" @error="item.img = null" />
+                  <div v-else class="variant-thumb-placeholder" :style="{ backgroundColor: getColorHex(item) + '22', color: getColorHex(item) }">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                  </div>
+                </td>
+                <td>
+                  <div class="color-cell">
+                    <span class="color-dot" :style="{ backgroundColor: getColorHex(item) }"></span>
+                    <span class="color-name">{{ item.color || 'Đen trắng' }}</span>
+                  </div>
+                </td>
+                <td class="size-col">{{ item.size || '44.5' }}</td>
+                <td class="stock-col">
+                  <span class="stock-badge" :class="getVariantStatusClass(item)">
+                    {{ item.stock !== undefined ? item.stock : 0 }}
+                  </span>
+                </td>
+                <td class="price-val">{{ formatPrice(item.price || 0) }}</td>
+                <td class="discount-val">{{ item.discount || '-' }}</td>
+                <td>
+                  <span class="status-pill-badge" :class="getVariantStatusClass(item)">
+                    <span class="status-indicator-dot"></span>
+                    {{ getVariantStatusLabel(item) }}
+                  </span>
+                </td>
+                <td class="text-center">
+                  <div class="action-icon-group">
 
-            <div class="form-group">
-              <label class="field-label">Giá bán chung <span class="required-star">*</span></label>
-              <div class="input-with-icon">
-                <input type="text" class="field-input" v-model="form.price" />
-                <span class="input-right-icon">đ</span>
-              </div>
-            </div>
+                    <button class="act-circle-btn power-btn" :class="{ active: item.trangThai !== false }"
+                      :title="item.trangThai !== false ? 'Ngừng kinh doanh' : 'Kích hoạt kinh doanh'"
+                      @click="toggleStatus(item)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.2">
+                        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                        <line x1="12" y1="2" x2="12" y2="12"></line>
+                      </svg>
+                    </button>
 
-            <div class="form-group">
-              <label class="field-label">Tồn kho ban đầu <span class="required-star">*</span></label>
-              <div class="input-with-icon">
-                <input type="text" class="field-input" v-model="form.stock" />
-                <span class="input-right-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2">
-                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
-                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
-                  </svg>
-                </span>
-              </div>
-            </div>
-          </div>
+                    <button class="act-circle-btn edit-btn" title="Chỉnh sửa biến thể" @click="openEditModal(item)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                      </svg>
+                    </button>
 
-          <div class="form-group margin-top-md">
-            <label class="field-label">Ghi chú quản lý</label>
-            <textarea class="field-textarea" rows="2" v-model="form.note"></textarea>
-          </div>
-        </div>
+                    <button class="act-circle-btn del-btn" title="Xóa biến thể" @click="confirmDeleteVariant(item)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
 
-        <div class="card-box margin-top-lg">
-          <div class="card-header border-bottom-none">
-            <div class="card-header-title">
-              <span class="header-icon-circle">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path
-                    d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
-                </svg>
-              </span>
-              <h2>Thuộc tính biến thể</h2>
-            </div>
-            <button class="btn-text-action">+ Thêm thuộc tính</button>
-          </div>
-
-          <div class="toggle-switch-row">
-            <span class="toggle-label">Sản phẩm có nhiều biến thể</span>
-            <label class="switch">
-              <input type="checkbox" v-model="form.hasMultipleVariants" />
-              <span class="slider round"></span>
-            </label>
-          </div>
-
-          <div class="attributes-summary-box">
-            <div class="attr-select-group">
-              <select class="attr-select">
-                <option>Màu sắc: Đen, Trắng, Xanh Navy</option>
-              </select>
-            </div>
-            <div class="attr-select-group">
-              <select class="attr-select">
-                <option>Kích cỡ: 39, 40, 41, 42</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div class="card-box margin-top-lg">
-          <div class="card-header border-bottom-none">
-            <div class="card-header-title">
-              <span class="header-icon-circle">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" />
-                </svg>
-              </span>
-              <h2>Danh sách biến thể</h2>
-              <span class="count-pill">{{ variants.length }} biến thể</span>
-            </div>
-            <button class="btn-text-action">+ Thêm biến thể</button>
-          </div>
-
-          <div class="table-container">
-            <table class="variants-table">
-              <thead>
-                <tr>
-                  <th width="130">BIẾN THỂ</th>
-                  <th>SKU</th>
-                  <th width="110">GIÁ BÁN</th>
-                  <th width="80" class="text-center">TỒN KHO</th>
-                  <th width="120">TRẠNG THÁI</th>
-                  <th width="90" class="text-center">HÀNH ĐỘNG</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="v in variants" :key="v.id">
-                  <td class="font-semibold text-main">{{ v.name }}</td>
-                  <td class="sku-code">{{ v.sku }}</td>
-                  <td class="price-col">{{ v.price }}</td>
-                  <td class="text-center stock-col"
-                    :class="{ 'text-warning-stock': v.stock <= 15 && v.stock > 0, 'text-danger-stock': v.stock === 0 }">
-                    {{ v.stock }}</td>
-                  <td>
-                    <span class="badge-pill" :class="getStatus(v.stock).class">
-                      <span class="badge-dot"></span>
-                      {{ getStatus(v.stock).label }}
-                    </span>
-                  </td>
-                  <td class="text-center">
-                    <div class="action-btn-group">
-                      <button class="btn-icon-sm delete" title="Xóa" @click="deleteVariant(v.id)">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                          stroke-width="2">
-                          <polyline points="3 6 5 6 21 6"></polyline>
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
-                          </path>
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-                <tr v-if="variants.length === 0">
-                  <td colspan="6" style="text-align: center; padding: 20px; color: #64748b;">
-                    {{ isLoading ? 'Đang tải biến thể...' : 'Không có biến thể nào.' }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div v-if="totalPages > 1" class="table-pagination-row">
-            <span class="pagination-info">
-              Hiển thị {{ variants.length ? currentPage * pageSize + 1 : 0 }}-{{ currentPage * pageSize + variants.length }} trong {{ totalElements }} biến thể
-            </span>
-            <div class="pagination-controls">
-              <button class="page-btn nav-btn" :disabled="currentPage === 0"
-                @click="changePage(currentPage - 1)">&lt;</button>
-              <button v-for="p in totalPages" :key="p" class="page-btn" :class="{ active: p - 1 === currentPage }"
-                @click="changePage(p - 1)">
-                {{ p }}
-              </button>
-              <button class="page-btn nav-btn" :disabled="currentPage >= totalPages - 1"
-                @click="changePage(currentPage + 1)">&gt;</button>
-            </div>
-          </div>
-        </div>
+              <tr v-if="variants.length === 0">
+                <td colspan="12" style="text-align: center; padding: 40px; color: #64748b;">
+                  Không tìm thấy biến thể sản phẩm nào phù hợp.
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
       </div>
 
-      <div class="grid-right-col">
-        <div class="card-box">
-          <div class="card-header flex-column-start">
-            <div class="card-header-title">
-              <span class="header-icon-circle">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <circle cx="12" cy="12" r="3.2" />
-                  <path
-                    d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z" />
-                </svg>
-              </span>
-              <h2>Hình ảnh biến thể</h2>
-            </div>
-            <span class="subtext-hint">Tối đa 5 ảnh, mỗi ảnh không quá 5 MB</span>
-          </div>
-
-          <div class="upload-dropzone">
-            <div class="cloud-icon-circle">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d92d20" stroke-width="2">
-                <path
-                  d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM12 11v6m0-6l-3 3m3-3l3 3" />
-              </svg>
-            </div>
-            <p class="drop-main-text">Kéo thả hình ảnh vào đây</p>
-            <p class="drop-sub-text">hoặc chọn tệp từ thiết bị của bạn</p>
-            <button class="btn btn-select-file">Chọn hình ảnh</button>
-          </div>
-
-          <div class="image-slots-grid">
-            <div class="image-slot active-slot">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d92d20" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-              <span class="slot-label text-red">Ảnh chính</span>
-            </div>
-            <div class="image-slot">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-              <span class="slot-label">Ảnh phụ</span>
-            </div>
-            <div class="image-slot">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-              <span class="slot-label">Ảnh phụ</span>
-            </div>
-            <div class="image-slot">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-              <span class="slot-label">Ảnh phụ</span>
-            </div>
-          </div>
+      <div class="table-footer-pagination">
+        <div class="foot-info">
+          Hiển thị {{ variants.length ? currentPage * pageSize + 1 : 0 }} - {{ currentPage * pageSize + variants.length
+          }}
+          trong {{ totalElements }} biến thể chi tiết
+          <span class="page-badge-pill">Trang {{ currentPage + 1 }}/{{ totalPages }}</span>
         </div>
 
-        <div class="card-box margin-top-lg">
-          <div class="card-header border-bottom-none">
-            <div class="card-header-title">
-              <span class="header-icon-circle">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path
-                    d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
-                </svg>
-              </span>
-              <h2>Thiết lập đăng bán</h2>
-            </div>
-          </div>
+        <div class="foot-controls">
+          <span class="page-size-lbl">Kích thước trang:</span>
+          <select v-model="pageSize" class="page-size-select" @change="fetchVariants(false)">
+            <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}/trang</option>
+          </select>
 
-          <div class="toggle-switch-row">
-            <span class="toggle-label">Đang kinh doanh</span>
-            <label class="switch">
-              <input type="checkbox" v-model="form.isSelling" />
-              <span class="slider round"></span>
-            </label>
-          </div>
+          <div class="pager-btns-group">
+            <button class="pager-nav-btn" :disabled="currentPage === 0" @click="changePage(0)"
+              title="Trang đầu">«</button>
+            <button class="pager-nav-btn" :disabled="currentPage === 0" @click="changePage(currentPage - 1)"
+              title="Trang trước">‹</button>
 
-          <div class="status-alert-box">
-            <div class="status-left">
-              <span class="status-dot-green"></span>
-              <span class="status-text font-bold">Bản sống / Đăng bán</span>
-            </div>
-            <button class="btn-link-action">Sửa lẹ</button>
-          </div>
-        </div>
+            <button v-for="p in totalPages" :key="p" class="pager-num-btn" :class="{ active: p - 1 === currentPage }"
+              @click="changePage(p - 1)">
+              {{ p }}
+            </button>
 
-        <div class="card-box margin-top-lg">
-          <div class="card-header border-bottom-none flex-column-start">
-            <div class="card-header-title full-width justify-between">
-              <div class="flex-align-center gap-8">
-                <span class="header-icon-circle">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                    <path
-                      d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                  </svg>
-                </span>
-                <h2>Hoàn tất biến thể</h2>
-              </div>
-            </div>
-          </div>
-
-          <div class="progress-info-row">
-            <span class="progress-title">Mức độ hoàn thiện</span>
-            <span class="progress-percent">35%</span>
-          </div>
-          <div class="progress-track">
-            <div class="progress-fill" style="width: 35%;"></div>
-          </div>
-
-          <div class="completion-checklist">
-            <div class="checklist-item checked">
-              <span class="check-icon-circle green">✓</span>
-              <span class="check-label">Trạng thái đăng bán đã thiết lập</span>
-            </div>
-            <div class="checklist-item">
-              <span class="check-icon-circle gray"></span>
-              <span class="check-label">Thêm tên, SKU và phân loại sản phẩm</span>
-            </div>
-            <div class="checklist-item">
-              <span class="check-icon-circle gray"></span>
-              <span class="check-label">Thiết lập giá bán và tồn kho</span>
-            </div>
-            <div class="checklist-item">
-              <span class="check-icon-circle gray"></span>
-              <span class="check-label">Tải lên ít nhất 1 hình ảnh</span>
-            </div>
-          </div>
-
-          <div class="yellow-hint-box">
-            <span class="bulb-icon">💡</span>
-            <p class="hint-text">Bạn có thể lưu nháp để hoàn thiện thông tin sau. Các trường có dấu * là bắt buộc.</p>
+            <button class="pager-nav-btn" :disabled="currentPage >= totalPages - 1" @click="changePage(currentPage + 1)"
+              title="Trang sau">›</button>
+            <button class="pager-nav-btn" :disabled="currentPage >= totalPages - 1" @click="changePage(totalPages - 1)"
+              title="Trang cuối">»</button>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Modal Chỉnh Sửa Biến Thể -->
+    <transition name="fade">
+      <div v-if="isEditModalOpen" class="modal-backdrop" @click.self="closeEditModal">
+        <div class="modal-box">
+          <div class="modal-header">
+            <h3>Chỉnh sửa biến thể sản phẩm</h3>
+            <button class="btn-close" @click="closeEditModal">✕</button>
+          </div>
+
+          <div class="modal-body">
+            <div v-if="formError" class="form-error-alert">
+              <span>⚠️ {{ formError }}</span>
+            </div>
+
+            <div class="form-group margin-bottom">
+              <label class="form-lbl">Mã chi tiết sản phẩm (Mã CTSP)</label>
+              <input v-model="editForm.maCtsp" type="text" class="form-inp disabled" readonly />
+            </div>
+
+            <div class="form-row-2col margin-bottom">
+              <div class="form-group">
+                <label class="form-lbl">Màu sắc <span class="required">*</span></label>
+                <select v-model="editForm.idMauSac" class="form-inp">
+                  <option value="" disabled>-- Chọn màu sắc --</option>
+                  <option v-for="c in colorsList" :key="c.id" :value="c.id">
+                    {{ c.ten || c.tenMau }}
+                  </option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-lbl">Kích cỡ <span class="required">*</span></label>
+                <select v-model="editForm.idKichCo" class="form-inp">
+                  <option value="" disabled>-- Chọn kích cỡ --</option>
+                  <option v-for="s in sizesList" :key="s.id" :value="s.id">
+                    {{ s.ten || s.tenKichCo }}
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row-2col margin-bottom">
+              <div class="form-group">
+                <label class="form-lbl">Số lượng tồn kho <span class="required">*</span></label>
+                <input v-model.number="editForm.stock" type="number" min="0" class="form-inp"
+                  placeholder="Nhập số lượng tồn..." />
+              </div>
+
+              <div class="form-group">
+                <label class="form-lbl">Giá bán (VNĐ) <span class="required">*</span></label>
+                <input v-model.number="editForm.price" type="number" min="0" step="10000" class="form-inp"
+                  placeholder="Nhập giá bán..." />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-lbl">Trạng thái kinh doanh</label>
+              <select v-model="editForm.trangThai" class="form-inp">
+                <option :value="true">Đang bán</option>
+                <option :value="false">Ngừng bán</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="closeEditModal">Hủy bỏ</button>
+            <button class="btn btn-primary" @click="saveEditVariant">
+              Lưu thay đổi
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Confirmation Modal Dialog -->
+    <transition name="fade">
+      <div v-if="confirmModal.isOpen" class="modal-backdrop modal-backdrop-blur" @click.self="handleCancelConfirm">
+        <div class="confirm-modal-box">
+          <button class="confirm-close-btn" @click="handleCancelConfirm" title="Đóng">✕</button>
+
+          <div class="confirm-hero-badge badge-danger">
+            <div class="confirm-icon-glow">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+            </div>
+          </div>
+
+          <h3 class="confirm-title">{{ confirmModal.title }}</h3>
+          <p class="confirm-message">{{ confirmModal.message }}</p>
+
+          <div class="confirm-actions">
+            <button class="btn-cancel" @click="handleCancelConfirm">
+              {{ confirmModal.cancelText }}
+            </button>
+            <button class="btn-submit btn-danger" @click="handleConfirmAction">
+              {{ confirmModal.confirmText }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
-<style scoped>
-.variant-page {
-  width: 100%;
-}
+<style scoped src="@/assets/styles/ProductVariantPage.css"></style>
 
-.page-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-
-.page-title {
-  font-size: 26px;
-  font-weight: 800;
-  color: #0f172a;
-  letter-spacing: -0.5px;
-}
-
-.page-actions-box {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.btn-outline-cancel,
-.btn-outline-draft {
-  background: #ffffff;
-  border: 1px solid #fee2e2;
-  color: #d92d20;
-  font-size: 13.5px;
-  font-weight: 600;
-  padding: 9px 18px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-outline-cancel:hover,
-.btn-outline-draft:hover {
-  background-color: #fff1f2;
-  border-color: #fca5a5;
-}
-
-.btn-save-primary {
-  background-color: var(--primary);
-  color: #ffffff;
-  border: none;
-  font-size: 13.5px;
-  font-weight: 700;
-  padding: 10px 20px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(217, 45, 32, 0.25);
-  transition: all 0.15s;
-}
-
-.btn-save-primary:hover {
-  background-color: var(--primary-hover);
-  transform: translateY(-1px);
-}
-
-/* 2-Column Grid Layout */
-.variant-grid-layout {
-  display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 20px;
-  align-items: start;
-}
-
-.card-box {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-lg);
-  padding: 20px 24px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 16px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.border-bottom-none {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.flex-column-start {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-.card-header-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.card-header-title h2 {
-  font-size: 15px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.header-icon-circle {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background-color: #fee2e2;
-  color: #d92d20;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.subtext-hint {
-  font-size: 12px;
-  color: #64748b;
-
-}
-
-.btn-text-action {
-  background: none;
-  border: none;
-  color: #d92d20;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-text-action:hover {
-  text-decoration: underline !important;
-}
-
-/* Form Styling */
-.form-grid-2col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px 20px;
-}
-
-.field-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 6px;
-}
-
-.required-star {
-  color: #d92d20;
-}
-
-.field-input {
-  height: 40px;
-  padding: 0 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-md);
-  font-size: 13.5px;
-  color: #0f172a;
-  outline: none;
-  width: 100%;
-}
-
-.field-input:focus {
-  border-color: #d92d20;
-}
-
-.input-with-icon {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.input-right-icon {
-  position: absolute;
-  right: 14px;
-  font-weight: 600;
-  color: #64748b;
-  font-size: 13.5px;
-  display: flex;
-  align-items: center;
-}
-
-.field-textarea {
-  width: 100%;
-  padding: 10px 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-md);
-  font-size: 13.5px;
-  font-family: inherit;
-  color: #334155;
-  outline: none;
-  resize: vertical;
-}
-
-.field-textarea:focus {
-  border-color: #d92d20;
-}
-
-.margin-top-md {
-  margin-top: 16px;
-}
-
-.margin-top-lg {
-  margin-top: 20px;
-}
-
-/* Toggle Switch Row */
-.toggle-switch-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 0;
-}
-
-.toggle-label {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-/* Switch UI */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-}
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #cbd5e1;
-  transition: .2s;
-}
-
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: .2s;
-}
-
-input:checked+.slider {
-  background-color: #d92d20;
-}
-
-input:checked+.slider:before {
-  transform: translateX(20px);
-}
-
-.slider.round {
-  border-radius: 34px;
-}
-
-.slider.round:before {
-  border-radius: 50%;
-}
-
-/* Attributes Summary Box */
-.attributes-summary-box {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 8px;
-}
-
-.attr-select {
-  width: 100%;
-  height: 38px;
-  padding: 0 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #334155;
-  background: #ffffff;
-}
-
-/* Variants Table */
-.table-container {
-  margin-top: 14px;
-  overflow-x: auto;
-}
-
-.variants-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.variants-table th {
-  padding: 10px 14px;
-  background: #f8fafc;
-  color: #64748b;
-  font-weight: 700;
-  text-align: left;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.variants-table td {
-  padding: 12px 14px;
-  border-bottom: 1px solid #f1f5f9;
-  vertical-align: middle;
-}
-
-.sku-code {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: #475569;
-}
-
-.price-col {
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.stock-col {
-  font-weight: 700;
-}
-
-/* Dropzone Upload */
-.upload-dropzone {
-  background: #fafafa;
-  border: 2px dashed #fca5a5;
-  border-radius: 12px;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  margin-top: 12px;
-}
-
-.cloud-icon-circle {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: #fee2e2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 10px;
-}
-
-.drop-main-text {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.drop-sub-text {
-  font-size: 12px;
-  color: #64748b;
-  margin-top: 2px;
-  margin-bottom: 14px;
-}
-
-.btn-select-file {
-  background: #ffffff;
-  border: 1px solid #fca5a5;
-  color: #d92d20;
-  font-weight: 600;
-  font-size: 12.5px;
-  padding: 6px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.image-slots-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.image-slot {
-  height: 64px;
-  border-radius: 8px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  cursor: pointer;
-}
-
-.active-slot {
-  border-color: #d92d20;
-  background-color: #fff1f2;
-}
-
-.slot-label {
-  font-size: 10.5px;
-  color: #64748b;
-  font-weight: 600;
-}
-
-.text-red {
-  color: #d92d20;
-}
-
-/* Status Alert Box */
-.status-alert-box {
-  background-color: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  border-radius: 8px;
-  padding: 10px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 10px;
-}
-
-.status-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.status-dot-green {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background-color: #10b981;
-}
-
-.status-text {
-  font-size: 12.5px;
-  color: #059669;
-}
-
-.btn-link-action {
-  background: none;
-  border: none;
-  color: #059669;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  text-decoration: underline !important;
-}
-
-/* Completion Checklist */
-.progress-info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 10px;
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.progress-percent {
-  color: #d92d20;
-  font-weight: 800;
-}
-
-.progress-track {
-  height: 6px;
-  width: 100%;
-  background: #e2e8f0;
-  border-radius: 10px;
-  margin-top: 6px;
-  margin-bottom: 16px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: #d92d20;
-  border-radius: 10px;
-}
-
-.completion-checklist {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.checklist-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12.5px;
-  color: #475569;
-}
-
-.check-icon-circle {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 800;
-  flex-shrink: 0;
-}
-
-.check-icon-circle.green {
-  background: #ecfdf5;
-  color: #059669;
-  border: 1px solid #a7f3d0;
-}
-
-.check-icon-circle.gray {
-  border: 1.5px solid #cbd5e1;
-}
-
-.yellow-hint-box {
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: 8px;
-  padding: 10px 12px;
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  margin-top: 18px;
-}
-
-.hint-text {
-  font-size: 12px;
-  color: #b45309;
-  line-height: 1.4;
-}
-
-/* Status Badges & Stock Highlights */
-.text-warning-stock {
-  color: #d97706 !important;
-  font-weight: 800 !important;
-}
-
-.text-danger-stock {
-  color: #dc2626 !important;
-  font-weight: 800 !important;
-}
-
-.badge-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
-  border-radius: 20px;
-  font-size: 11.5px;
-  font-weight: 700;
-}
-
-.badge-green {
-  background: #ecfdf5;
-  color: #059669;
-}
-
-.badge-green .badge-dot {
-  background: #10b981;
-}
-
-.badge-yellow {
-  background: #fffbeb;
-  color: #d97706;
-}
-
-.badge-yellow .badge-dot {
-  background: #f59e0b;
-}
-
-.badge-gray {
-  background: #f1f5f9;
-  color: #64748b;
-}
-
-.badge-gray .badge-dot {
-  background: #94a3b8;
-}
-
-.badge-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-
-.action-btn-group {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.btn-icon-sm {
-  background: #ffffff;
-  border: 1px solid #fee2e2;
-  border-radius: 6px;
-  padding: 5px;
-  color: #d92d20;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
-}
-
-.btn-icon-sm:hover {
-  background: #fff1f2;
-}
-
-.btn-icon-sm.delete {
-  border-color: #fee2e2;
-  color: #d92d20;
-}
-
-/* Pagination Bar */
-.table-pagination-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-top: 14px;
-  margin-top: 14px;
-  border-top: 1px solid #f1f5f9;
-}
-
-.pagination-info {
-  font-size: 12.5px;
-  color: #64748b;
-  font-weight: 500;
-}
-
-.pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.page-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.page-btn:hover:not(:disabled) {
-  border-color: #d92d20;
-  color: #d92d20;
-}
-
-.page-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.page-btn.active {
-  background: #d92d20;
-  color: #ffffff;
-  border-color: #d92d20;
-}
-</style>

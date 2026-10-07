@@ -36,10 +36,30 @@ public class KichCoServiceImpl implements KichCoService {
         return toResponse(item);
     }
 
+    private void validateKichCoName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("Kích cỡ không được để trống!");
+        }
+        String trimmed = name.trim().replace(",", ".");
+        if (!trimmed.matches("^\\d+(\\.\\d+)?$")) {
+            throw new IllegalArgumentException("Kích cỡ giày phải là số (ví dụ: 38, 39, 40, 40.5, 41), không được nhập chữ!");
+        }
+        try {
+            double val = Double.parseDouble(trimmed);
+            if (val <= 0 || val > 100) {
+                throw new IllegalArgumentException("Kích cỡ giày phải là số hợp lệ từ 10 đến 60!");
+            }
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Kích cỡ giày không hợp lệ!");
+        }
+    }
+
     @Override
     @Transactional
     public AttributeResponse create(AttributeRequest request) {
         String name = request.getTen().trim();
+        validateKichCoName(name);
+
         if (kichCoRepository.existsByTenKichCoIgnoreCase(name)) {
             throw new DuplicateRecordException("Tên Kích cỡ '" + name + "' đã tồn tại trong hệ thống!");
         }
@@ -61,6 +81,7 @@ public class KichCoServiceImpl implements KichCoService {
     public AttributeResponse update(Long id, AttributeRequest request) {
         KichCo entity = findById(id);
         String name = request.getTen().trim();
+        validateKichCoName(name);
 
         if (kichCoRepository.existsByTenKichCoIgnoreCaseAndIdNot(name, id)) {
             throw new DuplicateRecordException("Tên Kích cỡ '" + name + "' đã tồn tại ở bản ghi khác!");

@@ -19,7 +19,7 @@ public class SanPhamController {
     private final SanPhamService sanPhamService;
 
     @GetMapping
-    public ResponseEntity<Page<SanPhamResponse>> getAll(
+    public ResponseEntity<com.example.datn.dto.PageResponse<SanPhamResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String keyword,
@@ -32,7 +32,7 @@ public class SanPhamController {
             @RequestParam(required = false) Boolean trangThai
     ) {
         Page<SanPhamResponse> result = sanPhamService.getAll(page, size, keyword, idThuongHieu, idLoaiGiay, idChatLieu, idKieuDang, idXuatXu, doiTuong, trangThai);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(com.example.datn.dto.PageResponse.from(result));
     }
 
     @GetMapping("/{id}")

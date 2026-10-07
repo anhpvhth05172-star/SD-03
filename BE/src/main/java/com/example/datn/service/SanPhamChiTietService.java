@@ -11,6 +11,7 @@ public interface SanPhamChiTietService {
     List<SanPhamChiTietResponse> getBySanPhamId(Long idSanPham);
     SanPhamChiTietResponse getById(Long id);
     List<SanPhamChiTietResponse> createBatch(List<SanPhamChiTietRequest> requests);
+    SanPhamChiTietResponse update(Long id, SanPhamChiTietRequest request);
     SanPhamChiTietResponse toggleStatus(Long id);
     void delete(Long id);
 }

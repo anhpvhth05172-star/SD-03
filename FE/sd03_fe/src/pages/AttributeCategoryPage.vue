@@ -228,13 +228,14 @@ const handleCancelConfirm = () => {
   confirmModal.isOpen = false
 }
 
-// INSTANT SAVE (0ms delay with Optimistic UI & background sync)
+const isSubmitting = ref(false)
+
+// SAVE / UPDATE ATTRIBUTE
 const saveAttributeDirectly = async () => {
   formError.value = ''
-  const tenTrimmed = modalForm.ten.trim()
+  const tenTrimmed = (modalForm.ten || '').trim()
   if (!tenTrimmed) {
     formError.value = 'Vui lòng nhập tên thuộc tính!'
-    showToast('Vui lòng nhập tên thuộc tính!', 'warning')
     return
   }
 
@@ -243,45 +244,28 @@ const saveAttributeDirectly = async () => {
   const label = activeTabInfo.value.label
   const currentId = editingId.value
 
+  if (category === 'kich_co') {
+    const formatted = tenTrimmed.replace(',', '.')
+    if (!/^\d+(\.\d+)?$/.test(formatted)) {
+      formError.value = 'Kích cỡ giày phải là số (ví dụ: 38, 39, 40, 40.5, 41), không được nhập chữ!'
+      return
+    }
+    const num = Number(formatted)
+    if (isNaN(num) || num <= 0 || num > 100) {
+      formError.value = 'Kích cỡ giày phải là số hợp lệ từ 10 đến 60!'
+      return
+    }
+  }
+
   const payload = {
-    ma: modalForm.ma,
+    ma: modalForm.ma ? modalForm.ma.trim() : null,
     ten: tenTrimmed,
-    moTa: modalForm.mo_ta.trim(),
+    moTa: (modalForm.mo_ta || '').trim(),
     trangThai: modalForm.trang_thai === 'Hoạt động'
   }
 
-  // 1. Close modal and show success toast IMMEDIATELY
-  closeModal()
-  showToast(
-    isEdit ? `Cập nhật thành công ${label}: ${tenTrimmed}` : `Thêm mới thành công ${label}: ${tenTrimmed}`,
-    'success'
-  )
+  isSubmitting.value = true
 
-  // 2. Optimistic local state update
-  const list = attributesData[category]
-  let optimisticItem = null
-  let originalItemCopy = null
-
-  if (isEdit) {
-    const idx = list.findIndex(i => i.id === currentId)
-    if (idx !== -1) {
-      originalItemCopy = { ...list[idx] }
-      list[idx].ten = tenTrimmed
-      list[idx].mo_ta = payload.moTa
-      list[idx].trang_thai = modalForm.trang_thai
-    }
-  } else {
-    optimisticItem = {
-      id: `temp_${Date.now()}`,
-      ma: modalForm.ma,
-      ten: tenTrimmed,
-      mo_ta: payload.moTa,
-      trang_thai: modalForm.trang_thai
-    }
-    list.unshift(optimisticItem)
-  }
-
-  // 3. Background API sync
   try {
     const url = isEdit ? `${API_BASE}/${category}/${currentId}` : `${API_BASE}/${category}`
     const method = isEdit ? 'PUT' : 'POST'
@@ -293,37 +277,29 @@ const saveAttributeDirectly = async () => {
     })
 
     if (res.ok) {
-      const savedData = await res.json()
-      if (!isEdit && optimisticItem) {
-        optimisticItem.id = savedData.id
-        optimisticItem.ma = savedData.ma || optimisticItem.ma
-      }
+      closeModal()
+      showToast(
+        isEdit ? `Cập nhật thành công ${label}: "${tenTrimmed}"` : `Thêm mới thành công ${label}: "${tenTrimmed}"`,
+        'success'
+      )
+      await fetchAttributes(category)
     } else {
       const errData = await res.json().catch(() => ({}))
-      const msg = errData.message || 'Lỗi đồng bộ dữ liệu với máy chủ'
+      const msg = errData.message || (isEdit ? 'Cập nhật thất bại!' : 'Thêm mới thất bại!')
+      formError.value = msg
       showToast(msg, 'warning')
-      // Rollback
-      if (isEdit && originalItemCopy) {
-        const idx = list.findIndex(i => i.id === currentId)
-        if (idx !== -1) Object.assign(list[idx], originalItemCopy)
-      } else if (!isEdit && optimisticItem) {
-        attributesData[category] = list.filter(i => i.id !== optimisticItem.id)
-      }
     }
   } catch (err) {
-    console.error('API Background Sync Error:', err)
+    console.error('Save attribute error:', err)
+    formError.value = 'Không thể kết nối đến máy chủ!'
+    showToast('Không thể kết nối đến máy chủ!', 'warning')
+  } finally {
+    isSubmitting.value = false
   }
 }
 
-// INSTANT TOGGLE STATUS (0ms delay with Optimistic UI)
+// TOGGLE STATUS
 const toggleStatusFast = async (item) => {
-  const previousStatus = item.trang_thai
-  const newStatus = previousStatus === 'Hoạt động' ? 'Ngừng hoạt động' : 'Hoạt động'
-  
-  // Instant visual update
-  item.trang_thai = newStatus
-  showToast(`Đã chuyển trạng thái "${item.ten}" sang "${newStatus}"!`, 'success')
-
   const category = activeTab.value
   try {
     const res = await fetch(`${API_BASE}/${category}/${item.id}/toggle-status`, {
@@ -331,22 +307,19 @@ const toggleStatusFast = async (item) => {
     })
     if (res.ok) {
       const updated = await res.json()
-      if (updated.trangThai !== undefined || updated.trang_thai) {
-        item.trang_thai = updated.trangThai !== undefined ? updated.trangThai : updated.trang_thai
-      }
+      item.trang_thai = updated.trangThai !== undefined ? updated.trangThai : (updated.status ? 'Hoạt động' : 'Ngừng hoạt động')
+      showToast(`Đã cập nhật trạng thái "${item.ten}" thành "${item.trang_thai}"!`, 'success')
     } else {
-      // Revert if error
-      item.trang_thai = previousStatus
-      showToast('Lỗi cập nhật trạng thái trên máy chủ!', 'warning')
+      const errData = await res.json().catch(() => ({}))
+      showToast(errData.message || 'Lỗi cập nhật trạng thái trên máy chủ!', 'warning')
     }
   } catch (err) {
     console.error('Toggle status error:', err)
-    item.trang_thai = previousStatus
     showToast('Lỗi kết nối máy chủ!', 'warning')
   }
 }
 
-// CONFIRM & INSTANT DELETE
+// CONFIRM & DELETE
 const confirmDeleteItem = (item) => {
   openConfirmModal({
     title: `Xác nhận xóa ${activeTabInfo.value.label}`,
@@ -360,32 +333,23 @@ const confirmDeleteItem = (item) => {
 
 const executeDeleteFast = async (item) => {
   const category = activeTab.value
-  const list = attributesData[category]
-  const targetIndex = list.findIndex(i => i.id === item.id)
-  const backupItem = { ...item }
-
-  // 1. Instant optimistic UI removal & instant Toast
-  if (targetIndex !== -1) {
-    list.splice(targetIndex, 1)
-  }
-  showToast(`Đã xóa ${activeTabInfo.value.label.toLowerCase()} "${item.ten}" thành công!`, 'success')
-
-  // 2. Background API call
   try {
     const res = await fetch(`${API_BASE}/${category}/${item.id}`, {
       method: 'DELETE'
     })
-    if (!res.ok) {
-      // Revert if error
-      list.splice(targetIndex, 0, backupItem)
-      showToast(`Không thể xóa "${item.ten}" do có dữ liệu liên quan!`, 'warning')
+    if (res.ok) {
+      showToast(`Đã xóa ${activeTabInfo.value.label.toLowerCase()} "${item.ten}" thành công!`, 'success')
+      await fetchAttributes(category)
+    } else {
+      const errData = await res.json().catch(() => ({}))
+      showToast(errData.message || `Không thể xóa "${item.ten}" do có dữ liệu liên quan!`, 'warning')
     }
   } catch (err) {
     console.error('Delete error:', err)
-    list.splice(targetIndex, 0, backupItem)
     showToast('Lỗi kết nối khi xóa thuộc tính!', 'warning')
   }
 }
+
 </script>
 
 <template>
@@ -594,8 +558,8 @@ const executeDeleteFast = async (item) => {
 
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="closeModal">Hủy bỏ</button>
-            <button class="btn btn-primary" @click="saveAttributeDirectly">
-              {{ isEditing ? 'Lưu thay đổi' : '+ Thêm thuộc tính' }}
+            <button class="btn btn-primary" :disabled="isSubmitting" @click="saveAttributeDirectly">
+              {{ isSubmitting ? 'Đang lưu...' : (isEditing ? 'Lưu thay đổi' : '+ Thêm thuộc tính') }}
             </button>
           </div>
         </div>
@@ -644,784 +608,4 @@ const executeDeleteFast = async (item) => {
   </div>
 </template>
 
-<style scoped>
-.attribute-management-page {
-  width: 100%;
-}
-
-.toast-floating {
-  position: fixed;
-  bottom: 28px;
-  right: 28px;
-  background: #0f172a;
-  color: #ffffff;
-  padding: 14px 22px;
-  border-radius: 12px;
-  font-weight: 700;
-  font-size: 14px;
-  z-index: 1000;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-left: 5px solid #22c55e;
-}
-
-.toast-warning {
-  background: #78350f;
-  border-left-color: #f59e0b;
-}
-
-/* Redesigned Confirmation Modal */
-.modal-backdrop-blur {
-  backdrop-filter: blur(6px);
-  background: rgba(15, 23, 42, 0.55);
-}
-
-.confirm-modal-box {
-  background: #ffffff;
-  width: 420px;
-  max-width: 92vw;
-  border-radius: 24px;
-  padding: 32px 28px 24px;
-  position: relative;
-  text-align: center;
-  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  animation: modalScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.confirm-close-btn {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  background: #f1f5f9;
-  border: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  color: #64748b;
-  font-size: 14px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
-}
-
-.confirm-close-btn:hover {
-  background: #e2e8f0;
-  color: #0f172a;
-}
-
-.confirm-hero-badge {
-  width: 64px;
-  height: 64px;
-  border-radius: 20px;
-  margin: 0 auto 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.badge-danger {
-  background: #fef2f2;
-  border: 1px solid #fecdd3;
-  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.15);
-}
-
-.badge-warning {
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  box-shadow: 0 8px 20px rgba(245, 158, 11, 0.15);
-}
-
-.badge-primary {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.15);
-}
-
-.confirm-icon-glow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.confirm-title {
-  font-size: 20px;
-  font-weight: 800;
-  color: #0f172a;
-  margin-bottom: 10px;
-  letter-spacing: -0.4px;
-}
-
-.confirm-message {
-  font-size: 14px;
-  color: #475569;
-  line-height: 1.6;
-  margin-bottom: 26px;
-  padding: 0 8px;
-}
-
-.confirm-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.btn-cancel {
-  flex: 1;
-  height: 44px;
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  font-weight: 700;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-cancel:hover {
-  background: #e2e8f0;
-  color: #0f172a;
-}
-
-.btn-submit {
-  flex: 1;
-  height: 44px;
-  border: none;
-  border-radius: 12px;
-  font-weight: 700;
-  font-size: 14px;
-  color: #ffffff;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-submit.btn-danger {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
-}
-
-.btn-submit.btn-danger:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(239, 68, 68, 0.45);
-}
-
-.btn-submit.btn-warning {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
-}
-
-.btn-submit.btn-warning:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.45);
-}
-
-.btn-submit.btn-primary {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
-}
-
-.btn-submit.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.45);
-}
-
-@keyframes modalScaleUp {
-  0% {
-    transform: scale(0.9);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-/* Header */
-.page-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-
-.page-title {
-  font-size: 26px;
-  font-weight: 800;
-  color: #0f172a;
-  letter-spacing: -0.5px;
-}
-
-.page-subtitle {
-  font-size: 14px;
-  color: #64748b;
-  margin-top: 4px;
-}
-
-.btn-add-attr {
-  background: linear-gradient(135deg, #d92d20 0%, #b42318 100%);
-  color: #ffffff;
-  border: none;
-  font-size: 14px;
-  font-weight: 700;
-  padding: 11px 22px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(217, 45, 32, 0.3);
-  transition: all 0.2s;
-}
-
-.btn-add-attr:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(217, 45, 32, 0.4);
-}
-
-/* Tabs Nav */
-.tabs-nav-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-  margin-bottom: 20px;
-}
-
-.attr-tab-btn {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 10px 18px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #475569;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s;
-}
-
-.attr-tab-btn:hover {
-  background: #f8fafc;
-  color: #0f172a;
-}
-
-.attr-tab-btn.active {
-  background: #fff1f2;
-  border-color: #fee2e2;
-  color: #d92d20;
-}
-
-.tab-count-badge {
-  background: #f1f5f9;
-  padding: 2px 7px;
-  border-radius: 12px;
-  font-size: 11px;
-  color: #64748b;
-}
-
-.attr-tab-btn.active .tab-count-badge {
-  background: #d92d20;
-  color: #ffffff;
-}
-
-/* Filter Card */
-.filter-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 16px 20px;
-  margin-bottom: 20px;
-}
-
-.filter-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.search-box {
-  position: relative;
-  flex: 1;
-  max-width: 420px;
-}
-
-.search-icon {
-  position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #94a3b8;
-}
-
-.filter-input {
-  width: 100%;
-  height: 42px;
-  padding: 0 16px 0 42px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font-size: 14px;
-  outline: none;
-}
-
-.status-filter {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.filter-lbl {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #475569;
-}
-
-.filter-select {
-  height: 42px;
-  padding: 0 14px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font-size: 13.5px;
-  outline: none;
-  background: #ffffff;
-}
-
-/* Table Card */
-.table-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
-}
-
-.table-header {
-  padding: 18px 24px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.table-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.table-title h2 {
-  font-size: 17px;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.count-pill {
-  background: #f1f5f9;
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #475569;
-}
-
-.table-responsive {
-  overflow-x: auto;
-}
-
-.attr-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-.attr-table th {
-  padding: 14px 18px;
-  background: #f8fafc;
-  color: #475569;
-  font-weight: 700;
-  border-bottom: 1px solid #e2e8f0;
-  text-align: left;
-}
-
-.attr-table td {
-  padding: 14px 18px;
-  border-bottom: 1px solid #f1f5f9;
-  vertical-align: middle;
-}
-
-.code-pill {
-  font-family: monospace;
-  font-weight: 700;
-  background: #f1f5f9;
-  padding: 3px 8px;
-  border-radius: 4px;
-  color: #334155;
-  font-size: 12.5px;
-}
-
-.name-main {
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.color-preview-cell {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.color-circle {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-}
-
-.color-hex {
-  font-family: monospace;
-  font-weight: 700;
-  color: #334155;
-}
-
-.text-slate-desc {
-  color: #475569;
-  font-size: 13.5px;
-}
-
-.badge-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.badge-active {
-  background: #ecfdf5;
-  color: #059669;
-}
-
-.badge-active .dot {
-  background: #10b981;
-}
-
-.badge-inactive {
-  background: #f1f5f9;
-  color: #64748b;
-}
-
-.badge-inactive .dot {
-  background: #94a3b8;
-}
-
-.dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-
-.action-btns {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.btn-action {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 6px;
-  cursor: pointer;
-  color: #475569;
-}
-
-.btn-action.edit:hover {
-  color: #d92d20;
-  border-color: #fee2e2;
-  background: #fff1f2;
-}
-
-.btn-action.del:hover {
-  color: #ef4444;
-  border-color: #fee2e2;
-  background: #fff1f2;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 40px;
-  color: #94a3b8;
-}
-
-/* Modal */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(2px);
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.modal-box {
-  width: 460px;
-  background: #ffffff;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15);
-}
-
-.modal-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid #f1f5f9;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.modal-header h3 {
-  font-size: 17px;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.btn-close {
-  background: none;
-  border: none;
-  font-size: 16px;
-  color: #94a3b8;
-  cursor: pointer;
-}
-
-.modal-body {
-  padding: 24px;
-}
-
-.margin-bottom {
-  margin-bottom: 16px;
-}
-
-.form-lbl {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #334155;
-  margin-bottom: 6px;
-  display: block;
-}
-
-.required {
-  color: #d92d20;
-}
-
-.form-inp {
-  width: 100%;
-  height: 44px;
-  padding: 0 14px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font-size: 14px;
-  outline: none;
-}
-
-.form-inp.disabled {
-  background: #f8fafc;
-  color: #64748b;
-  font-weight: 700;
-}
-
-.form-textarea {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font-size: 14px;
-  font-family: inherit;
-  outline: none;
-}
-
-.color-input-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.color-picker-box {
-  width: 44px;
-  height: 44px;
-  padding: 2px;
-  border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  cursor: pointer;
-}
-
-.modal-footer {
-  padding: 16px 24px;
-  background: #f8fafc;
-  border-top: 1px solid #f1f5f9;
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.badge-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 0.05s ease, background-color 0.15s ease;
-  user-select: none;
-}
-
-.badge-pill:active {
-  transform: scale(0.93);
-}
-
-.btn-add-attr:active,
-.btn-primary:active,
-.btn-secondary:active,
-.btn-action:active,
-.btn-confirm:active,
-.btn-cancel:active,
-.page-nav-btn:not(:disabled):active,
-.page-num-btn:active {
-  transform: scale(0.95);
-}
-
-.btn-secondary {
-  background: #e2e8f0;
-  color: #475569;
-  border: none;
-  padding: 10px 18px;
-  border-radius: 8px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 0.05s ease, background 0.15s ease;
-}
-
-.btn-primary {
-  background: #d92d20;
-  color: #ffffff;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: transform 0.05s ease, background 0.15s ease;
-}
-
-.form-error-alert {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #dc2626;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 13.5px;
-  font-weight: 700;
-  margin-bottom: 16px;
-}
-
-/* Pagination Footer */
-.pagination-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  background: #ffffff;
-  border-top: 1px solid #f1f5f9;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.pagination-info {
-  font-size: 13.5px;
-  color: #64748b;
-}
-
-.pagination-info strong {
-  color: #0f172a;
-}
-
-.pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.page-size-selector {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.page-size-lbl {
-  font-size: 13px;
-  color: #64748b;
-  font-weight: 600;
-}
-
-.page-size-select {
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font-size: 13px;
-  background: #ffffff;
-  outline: none;
-  cursor: pointer;
-}
-
-.page-btn-group {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.page-nav-btn,
-.page-num-btn {
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #475569;
-  cursor: pointer;
-  transition: transform 0.05s ease, background 0.15s ease, color 0.15s ease;
-}
-
-.page-nav-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.page-nav-btn:not(:disabled):hover,
-.page-num-btn:hover {
-  background: #f8fafc;
-  color: #0f172a;
-  border-color: #cbd5e1;
-}
-
-.page-num-btn.active {
-  background: #d92d20;
-  color: #ffffff;
-  border-color: #d92d20;
-}
-</style>
+<style scoped src="@/assets/styles/AttributeCategoryPage.css"></style>

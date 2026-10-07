@@ -1,10 +1,13 @@
 package com.example.datn.controller;
 
+import com.example.datn.dto.SanPhamChiTietRequest;
 import com.example.datn.dto.SanPhamChiTietResponse;
 import com.example.datn.service.SanPhamChiTietService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -13,12 +16,13 @@ import java.util.List;
 @RequestMapping("/api/v1/san-pham-chi-tiet")
 @CrossOrigin(originPatterns = "*")
 @RequiredArgsConstructor
+@Validated
 public class SanPhamChiTietController {
 
     private final SanPhamChiTietService sanPhamChiTietService;
 
     @GetMapping
-    public ResponseEntity<Page<SanPhamChiTietResponse>> getAll(
+    public ResponseEntity<com.example.datn.dto.PageResponse<SanPhamChiTietResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search,
@@ -28,7 +32,7 @@ public class SanPhamChiTietController {
             @RequestParam(required = false) Boolean trangThai
     ) {
         Page<SanPhamChiTietResponse> result = sanPhamChiTietService.getAll(page, size, search, idSanPham, idMauSac, idKichCo, trangThai);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(com.example.datn.dto.PageResponse.from(result));
     }
 
     @GetMapping("/by-san-pham/{idSanPham}")
@@ -42,8 +46,15 @@ public class SanPhamChiTietController {
     }
 
     @PostMapping("/batch")
-    public ResponseEntity<List<SanPhamChiTietResponse>> createBatch(@RequestBody List<com.example.datn.dto.SanPhamChiTietRequest> requests) {
+    public ResponseEntity<List<SanPhamChiTietResponse>> createBatch(@RequestBody List<@Valid SanPhamChiTietRequest> requests) {
         return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(sanPhamChiTietService.createBatch(requests));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<SanPhamChiTietResponse> update(
+            @PathVariable Long id,
+            @RequestBody @Valid SanPhamChiTietRequest request) {
+        return ResponseEntity.ok(sanPhamChiTietService.update(id, request));
     }
 
     @PatchMapping("/{id}/toggle-status")
@@ -57,3 +68,4 @@ public class SanPhamChiTietController {
         return ResponseEntity.noContent().build();
     }
 }
+

@@ -1,114 +1,114 @@
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import QuickAddModal from '../components/QuickAddModal.vue'
 
 const router = useRouter()
+const API_BASE = 'http://localhost:8080/api/v1'
 
 const form = reactive({
-  code: 'SP-NK-2026',
+  code: '423305',
   name: '',
   brand: '',
   category: '',
-  gender: 'all',
+  gender: 'Nam',
   material: '',
-  sole: '',
-  collar: '',
-  cushion: '',
-  weight: ''
+  style: '',
+  origin: '',
+  feature: '',
+  description: ''
 })
 
-const brandOptions = [
-  { value: 'nike', label: 'Nike' },
-  { value: 'adidas', label: 'Adidas' },
-  { value: 'puma', label: 'Puma' },
-  { value: 'newbalance', label: 'New Balance' },
-  { value: 'converse', label: 'Converse' },
-  { value: 'vans', label: 'Vans' },
-  { value: 'asics', label: 'Asics' }
-]
+const errors = reactive({
+  name: '',
+  brand: '',
+  category: '',
+  material: '',
+  style: '',
+  origin: ''
+})
 
-const categoryOptions = [
-  { value: 'sneaker', label: 'Sneaker' },
-  { value: 'running', label: 'Giày chạy bộ' },
-  { value: 'sport', label: 'Giày thể thao' },
-  { value: 'basketball', label: 'Giày bóng rổ' },
-  { value: 'high_top', label: 'Giày cổ cao' },
-  { value: 'skate', label: 'Giày trượt ván' }
-]
+const clearErrors = () => {
+  errors.name = ''
+  errors.brand = ''
+  errors.category = ''
+  errors.material = ''
+  errors.style = ''
+  errors.origin = ''
+}
+
+const brandOptions = ref([])
+const categoryOptions = ref([])
+const materialOptions = ref([])
+const styleOptions = ref([])
+const originOptions = ref([])
+const colorOptions = ref([])
+const sizeOptions = ref([])
 
 const genderOptions = [
-  { value: 'all', label: 'Tất cả' },
-  { value: 'male', label: 'Nam' },
-  { value: 'female', label: 'Nữ' },
-  { value: 'unisex', label: 'Unisex' }
+  { value: 'Nam', label: 'Nam' },
+  { value: 'Nữ', label: 'Nữ' },
+  { value: 'Unisex', label: 'Tất cả (Unisex)' }
 ]
 
-const materialOptions = [
-  { value: 'mesh', label: 'Vải dệt (Mesh)' },
-  { value: 'leather', label: 'Da thật (Leather)' },
-  { value: 'canvas', label: 'Vải Canvas' },
-  { value: 'suede', label: 'Da lộn (Suede)' },
-  { value: 'synthetic', label: 'Da nhân tạo (Synthetic)' },
-  { value: 'knit', label: 'Primeknit / Flyknit' }
-]
-
-const soleOptions = [
-  { value: 'rubber', label: 'Đế cao su (Rubber)' },
-  { value: 'boost', label: 'Đế Boost' },
-  { value: 'eva', label: 'Đế EVA' },
-  { value: 'phylon', label: 'Đế Phylon' },
-  { value: 'air', label: 'Đế đệm khí (Air)' }
-]
-
-const collarOptions = [
-  { value: 'low', label: 'Cổ thấp (Low-top)' },
-  { value: 'mid', label: 'Cổ lửng (Mid-top)' },
-  { value: 'high', label: 'Cổ cao (High-top)' }
-]
-
-const cushionOptions = [
-  { value: 'air', label: 'Nike Air / Air Max' },
-  { value: 'react', label: 'React Foam' },
-  { value: 'boost', label: 'Ultraboost' },
-  { value: 'cloudfoam', label: 'Cloudfoam' },
-  { value: 'zoom', label: 'Zoom Air' },
-  { value: 'ortholite', label: 'Lót đệm OrthoLite' }
-]
-
-const weightOptions = [
-  { value: 'light', label: '< 250g (Siêu nhẹ)' },
-  { value: 'normal', label: '250g - 350g (Tiêu chuẩn)' },
-  { value: 'heavy', label: '> 350g (Đầm chân)' }
-]
-
-const availableColors = ref([
-  { id: 1, name: 'Đen', hex: '#111827' },
-  { id: 2, name: 'Trắng', hex: '#ffffff' },
-  { id: 3, name: 'Đỏ', hex: '#ef4444' },
-  { id: 4, name: 'Xanh dương', hex: '#3b82f6' },
-  { id: 5, name: 'Xám', hex: '#64748b' },
-  { id: 6, name: 'Xanh lá', hex: '#10b981' }
-])
-
-const availableSizes = ref([
-  { id: 1, name: '38' },
-  { id: 2, name: '39' },
-  { id: 3, name: '40' },
-  { id: 4, name: '41' },
-  { id: 5, name: '42' },
-  { id: 6, name: '43' },
-  { id: 7, name: '44' }
-])
-
-const selectedColors = ref([availableColors.value[0], availableColors.value[1]])
-const selectedSizes = ref([availableSizes.value[1], availableSizes.value[2], availableSizes.value[3]])
-
+const selectedColors = ref([])
+const selectedSizes = ref([])
 const tempColorSelect = ref('')
 const tempSizeSelect = ref('')
 
+const isAllChecked = ref(true)
+const defaultQty = ref(10)
+const defaultPrice = ref(1500000)
+
+const hasGeneratedVariants = ref(false)
+const colorGroups = ref([])
+
+const colorImages = reactive({})
+
+const isModalOpen = ref(false)
+const modalType = ref('color')
+
+const toast = reactive({ show: false, message: '', type: 'success' })
+const showToast = (message, type = 'success') => {
+  toast.message = message
+  toast.type = type
+  toast.show = true
+  setTimeout(() => { toast.show = false }, 3500)
+}
+
+const fetchOptions = async () => {
+  try {
+    const [bRes, cRes, mRes, sRes, oRes, colRes, szRes] = await Promise.all([
+      fetch(`${API_BASE}/attributes/thuong_hieu`),
+      fetch(`${API_BASE}/attributes/loai_giay`),
+      fetch(`${API_BASE}/attributes/chat_lieu`),
+      fetch(`${API_BASE}/attributes/kieu_dang`),
+      fetch(`${API_BASE}/attributes/xuat_xu`),
+      fetch(`${API_BASE}/attributes/mau_sac`),
+      fetch(`${API_BASE}/attributes/kich_co`)
+    ])
+
+    if (bRes.ok) brandOptions.value = await bRes.json()
+    if (cRes.ok) categoryOptions.value = await cRes.json()
+    if (mRes.ok) materialOptions.value = await mRes.json()
+    if (sRes.ok) styleOptions.value = await sRes.json()
+    if (oRes.ok) originOptions.value = await oRes.json()
+    if (colRes.ok) colorOptions.value = await colRes.json()
+    if (szRes.ok) sizeOptions.value = await szRes.json()
+  } catch (err) {
+    console.error('Lỗi tải danh mục thuộc tính từ máy chủ:', err)
+  }
+}
+
+const generateCode = () => {
+  const num = Math.floor(100000 + Math.random() * 900000)
+  form.code = `${num}`
+}
+
 const handleSelectColor = (e) => {
-  const col = availableColors.value.find(c => c.id === Number(e.target.value))
+  const val = e.target.value
+  if (!val) return
+  const col = colorOptions.value.find(c => c.id === Number(val) || c.ten === val)
   if (col && !selectedColors.value.some(c => c.id === col.id)) {
     selectedColors.value.push(col)
   }
@@ -120,7 +120,9 @@ const removeColor = (id) => {
 }
 
 const handleSelectSize = (e) => {
-  const sz = availableSizes.value.find(s => s.id === Number(e.target.value))
+  const val = e.target.value
+  if (!val) return
+  const sz = sizeOptions.value.find(s => s.id === Number(val) || s.ten === val)
   if (sz && !selectedSizes.value.some(s => s.id === sz.id)) {
     selectedSizes.value.push(sz)
   }
@@ -131,898 +133,532 @@ const removeSize = (id) => {
   selectedSizes.value = selectedSizes.value.filter(s => s.id !== id)
 }
 
-const isModalOpen = ref(false)
-const modalType = ref('color')
+const generateVariants = () => {
+  if (selectedColors.value.length === 0 || selectedSizes.value.length === 0) {
+    showToast('Vui lòng chọn ít nhất 1 màu sắc và 1 kích cỡ!', 'warning')
+    return
+  }
+
+  const groups = []
+  selectedColors.value.forEach(color => {
+    const items = []
+    selectedSizes.value.forEach((size, idx) => {
+      items.push({
+        checked: true,
+        stt: idx + 1,
+        sizeId: size.id,
+        sizeName: size.ten || size.name,
+        qty: defaultQty.value || 0,
+        price: defaultPrice.value || 0
+      })
+    })
+
+    groups.push({
+      colorId: color.id,
+      colorName: color.ten || color.name,
+      colorCode: color.ma || '#111827',
+      sizeSummary: selectedSizes.value.map(s => `Size ${s.ten || s.name}`).join(' • '),
+      items
+    })
+
+    if (!colorImages[color.id]) {
+      colorImages[color.id] = []
+    }
+  })
+
+  colorGroups.value = groups
+  hasGeneratedVariants.value = true
+  showToast(`Đã tạo thành công danh sách biến thể cho ${selectedColors.value.length} màu sắc!`)
+}
+
+const applyBulkValues = () => {
+  colorGroups.value.forEach(group => {
+    group.items.forEach(item => {
+      if (item.checked) {
+        if (defaultQty.value !== null && defaultQty.value !== undefined) item.qty = defaultQty.value
+        if (defaultPrice.value !== null && defaultPrice.value !== undefined) item.price = defaultPrice.value
+      }
+    })
+  })
+  showToast('Đã áp dụng số lượng và giá bán mặc định cho các biến thể đã chọn!')
+}
+
+const toggleCheckAll = (e) => {
+  const checked = e.target.checked
+  isAllChecked.value = checked
+  colorGroups.value.forEach(group => {
+    group.items.forEach(item => item.checked = checked)
+  })
+}
+
+const removeItem = (groupIndex, itemIndex) => {
+  colorGroups.value[groupIndex].items.splice(itemIndex, 1)
+  if (colorGroups.value[groupIndex].items.length === 0) {
+    colorGroups.value.splice(groupIndex, 1)
+  }
+}
+
+const triggerImageUpload = (colorId) => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  input.multiple = true
+  input.onchange = (e) => {
+    const files = Array.from(e.target.files)
+    files.forEach(file => {
+      const reader = new FileReader()
+      reader.onload = (uploadEvent) => {
+        const base64Url = uploadEvent.target.result
+        if (!colorImages[colorId]) colorImages[colorId] = []
+        colorImages[colorId].push(base64Url)
+      }
+      reader.readAsDataURL(file)
+    })
+    showToast(`Đã tải lên ${files.length} ảnh sản phẩm!`)
+  }
+  input.click()
+}
 
 const openQuickAdd = (type) => {
   modalType.value = type
   isModalOpen.value = true
 }
 
-const handleAttributeAdded = (item) => {
-  if (item.type === 'color') {
-    const newColor = {
-      id: Date.now(),
-      name: item.name,
-      hex: item.code || '#ef4444'
+const handleAttributeAdded = async (item) => {
+  try {
+    const endpoint = item.type === 'color' ? 'mau_sac' : 'kich_co'
+    const payload = {
+      ten: item.name.trim(),
+      moTa: item.code || item.description || '',
+      trangThai: true
     }
-    availableColors.value.push(newColor)
-    selectedColors.value.push(newColor)
-    showToast(`Đã thêm màu sắc mới: ${item.name}`)
-  } else {
-    const newSize = {
-      id: Date.now(),
-      name: item.name
+
+    const res = await fetch(`${API_BASE}/attributes/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    if (res.ok) {
+      const saved = await res.json()
+      if (item.type === 'color') {
+        const newCol = { id: saved.id, ten: saved.ten, ma: saved.moTa || item.code || '#111827' }
+        colorOptions.value.push(newCol)
+        selectedColors.value.push(newCol)
+        showToast(`Đã lưu màu sắc mới: ${saved.ten}`)
+      } else {
+        const newSz = { id: saved.id, ten: saved.ten }
+        sizeOptions.value.push(newSz)
+        selectedSizes.value.push(newSz)
+        showToast(`Đã lưu kích cỡ mới: ${saved.ten}`)
+      }
+    } else {
+      const errData = await res.json().catch(() => ({}))
+      showToast(errData.message || 'Không thể lưu thuộc tính mới vào CSDL', 'warning')
     }
-    availableSizes.value.push(newSize)
-    selectedSizes.value.push(newSize)
-    showToast(`Đã thêm kích cỡ mới: ${item.name}`)
+  } catch (err) {
+    console.error('Quick add attribute error:', err)
+    showToast('Lỗi kết nối khi thêm nhanh thuộc tính', 'error')
   }
 }
 
-const variants = ref([])
-const hasGeneratedVariants = ref(false)
-const bulkPrice = ref(2500000)
-const bulkStock = ref(50)
+const validateForm = () => {
+  clearErrors()
+  let isValid = true
 
-const generateVariants = () => {
-  if (selectedColors.value.length === 0 || selectedSizes.value.length === 0) {
-    showToast('Vui lòng chọn ít nhất 1 màu sắc và 1 kích cỡ để tạo biến thể!', 'warning')
+  if (!form.name || !form.name.trim()) {
+    errors.name = 'Vui lòng nhập tên sản phẩm'
+    isValid = false
+  }
+  if (!form.brand) {
+    errors.brand = 'Vui lòng chọn Thương hiệu'
+    isValid = false
+  }
+  if (!form.category) {
+    errors.category = 'Vui lòng chọn Loại giày'
+    isValid = false
+  }
+  if (!form.material) {
+    errors.material = 'Vui lòng chọn Chất liệu'
+    isValid = false
+  }
+  if (!form.style) {
+    errors.style = 'Vui lòng chọn Kiểu dáng'
+    isValid = false
+  }
+  if (!form.origin) {
+    errors.origin = 'Vui lòng chọn Xuất xứ'
+    isValid = false
+  }
+
+  return isValid
+}
+
+const saveProduct = async () => {
+  if (!validateForm()) {
+    showToast('Vui lòng điền đầy đủ các thuộc tính bắt buộc (*)!', 'warning')
     return
   }
 
-  const generated = []
-  selectedColors.value.forEach(color => {
-    selectedSizes.value.forEach(size => {
-      generated.push({
-        id: `${color.id}-${size.id}`,
-        color: color.name,
-        colorHex: color.hex,
-        size: size.name,
-        sku: `${form.code || 'SP'}-${color.name.toUpperCase().substring(0, 3)}-${size.name}`,
-        price: bulkPrice.value || 2500000,
-        stock: bulkStock.value || 50,
-        status: 'Đang bán'
-      })
+  const payload = {
+    tenSanPham: form.name.trim(),
+    idThuongHieu: Number(form.brand),
+    idLoaiGiay: Number(form.category),
+    idChatLieu: Number(form.material),
+    idKieuDang: Number(form.style),
+    idXuatXu: Number(form.origin),
+    doiTuong: form.gender,
+    tinhNang: form.feature ? form.feature.trim() : '',
+    moTa: form.description ? form.description.trim() : '',
+    trangThai: true
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/san-pham`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     })
-  })
 
-  variants.value = generated
-  hasGeneratedVariants.value = true
-  showToast(`Đã tạo thành công ${generated.length} biến thể tự động!`)
-
-  setTimeout(() => {
-    const el = document.getElementById('variants-section')
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' })
+    if (!res.ok) {
+      const errorText = await res.text()
+      try {
+        const errorObj = JSON.parse(errorText)
+        if (errorObj.message) throw new Error(errorObj.message)
+      } catch (e) {
+        if (errorText.includes('tồn tại')) {
+          errors.name = 'Tên sản phẩm đã tồn tại trong cơ sở dữ liệu'
+          throw new Error('Tên sản phẩm đã tồn tại')
+        }
+      }
+      throw new Error('Thêm sản phẩm mới thất bại')
     }
-  }, 100)
-}
 
-const applyBulkPrice = () => {
-  if (!bulkPrice.value) return
-  variants.value.forEach(v => {
-    v.price = bulkPrice.value
-  })
-  showToast(`Đã cập nhật giá bán cho ${variants.value.length} biến thể!`)
-}
+    const createdProduct = await res.json()
 
-const applyBulkStock = () => {
-  if (bulkStock.value === undefined || bulkStock.value === null) return
-  variants.value.forEach(v => {
-    v.stock = bulkStock.value
-  })
-  showToast(`Đã cập nhật số lượng tồn kho cho ${variants.value.length} biến thể!`)
-}
+    if (colorGroups.value.length > 0) {
+      const variantRequests = []
+      let invalidVariantError = null
 
-const removeVariant = (id) => {
-  variants.value = variants.value.filter(v => v.id !== id)
-}
+      for (const group of colorGroups.value) {
+        for (const item of group.items) {
+          if (item.checked) {
+            const qty = Number(item.qty)
+            const price = Number(item.price)
 
-const formatCurrency = (val) => {
-  return new Intl.NumberFormat('vi-VN').format(val) + ' đ'
-}
+            if (isNaN(qty) || qty < 0 || qty > 100000) {
+              invalidVariantError = `Biến thể (Màu: ${group.colorName}, Size: ${item.sizeName}) có số lượng không hợp lệ (phải từ 0 đến 100,000).`
+              break
+            }
+            if (isNaN(price) || price < 1000 || price > 1000000000) {
+              invalidVariantError = `Biến thể (Màu: ${group.colorName}, Size: ${item.sizeName}) có giá bán không hợp lệ (phải từ 1,000đ đến 1,000,000,000đ).`
+              break
+            }
 
-const toast = reactive({
-  show: false,
-  message: '',
-  type: 'success'
-})
+            const imageList = colorImages[group.colorId] || []
+            const firstImg = imageList.length > 0 ? imageList[0] : null
 
-const showToast = (message, type = 'success') => {
-  toast.message = message
-  toast.type = type
-  toast.show = true
-  setTimeout(() => {
-    toast.show = false
-  }, 3500)
+            variantRequests.push({
+              idSanPham: createdProduct.id,
+              idMauSac: Number(group.colorId),
+              idKichCo: Number(item.sizeId),
+              soLuong: qty,
+              giaBan: price,
+              hinhAnh: firstImg,
+              trangThai: true
+            })
+          }
+        }
+        if (invalidVariantError) break
+      }
+
+      if (invalidVariantError) {
+        showToast(invalidVariantError, 'warning')
+        return
+      }
+
+      if (variantRequests.length > 0) {
+        const batchRes = await fetch(`${API_BASE}/san-pham-chi-tiet/batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(variantRequests)
+        })
+        if (!batchRes.ok) {
+          const errData = await batchRes.json().catch(() => ({}))
+          console.error('Không thể lưu danh sách biến thể sản phẩm:', errData)
+          showToast(errData.message || 'Lỗi khi lưu danh sách biến thể', 'error')
+        }
+      }
+    }
+
+    localStorage.removeItem('product_initial_list_cache')
+    localStorage.removeItem('variant_list_cache')
+
+    showToast(`Đã lưu thành công sản phẩm ${createdProduct.maSanPham || form.code} và các biến thể vào CSDL!`)
+
+    setTimeout(() => {
+      router.push('/san-pham')
+    }, 1200)
+  } catch (err) {
+    showToast(err.message || 'Không thể kết nối đến cơ sở dữ liệu', 'error')
+  }
 }
 
 const goBack = () => {
   router.push('/san-pham')
 }
 
-const saveProduct = () => {
-  if (!form.name.trim()) {
-    showToast('Vui lòng nhập tên sản phẩm!', 'warning')
-    return
-  }
-  showToast('Đã lưu thông tin sản phẩm và các biến thể thành công!')
-  setTimeout(() => {
-    router.push('/san-pham')
-  }, 1200)
-}
+onMounted(() => {
+  generateCode()
+  fetchOptions()
+})
 </script>
 
 <template>
-  <div class="product-create-page">
-    <!-- Header Row -->
-    <div class="page-header-row">
-      <div class="page-title-box">
-        <h1 class="page-title">Thêm sản phẩm mới</h1>
-        <p class="page-subtitle">Nhập thuộc tính sản phẩm và hệ thống sẽ tự động tạo danh sách biến thể SKU.</p>
+  <div class="create-product-container">
+    <div class="top-nav-bar">
+      <div class="top-left"></div>
+      <button class="btn btn-back-outline" @click="goBack">
+        ← Quay lại danh sách
+      </button>
+    </div>
+
+    <div class="form-card">
+      <div class="form-grid-2col">
+        <div class="form-field">
+          <label class="form-label">Mã sản phẩm</label>
+          <input v-model="form.code" type="text" class="form-input input-readonly" readonly />
+        </div>
+
+        <div class="form-field">
+          <label class="form-label required">Sản phẩm</label>
+          <input v-model="form.name" type="text" class="form-input" :class="{ 'input-err': errors.name }"
+            placeholder="Nhập tên sản phẩm (vd: ASICS GEL-Kayano 31)..." />
+          <span v-if="errors.name" class="err-txt">{{ errors.name }}</span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label required">Thương hiệu</label>
+          <select v-model="form.brand" class="form-select" :class="{ 'input-err': errors.brand }">
+            <option value="" disabled selected>Chọn thương hiệu...</option>
+            <option v-for="b in brandOptions" :key="b.id" :value="b.id">{{ b.ten }}</option>
+          </select>
+          <span v-if="errors.brand" class="err-txt">{{ errors.brand }}</span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label required">Loại giày</label>
+          <select v-model="form.category" class="form-select" :class="{ 'input-err': errors.category }">
+            <option value="" disabled selected>Chọn loại giày...</option>
+            <option v-for="c in categoryOptions" :key="c.id" :value="c.id">{{ c.ten }}</option>
+          </select>
+          <span v-if="errors.category" class="err-txt">{{ errors.category }}</span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label required">Giới tính / Đối tượng</label>
+          <select v-model="form.gender" class="form-select">
+            <option v-for="g in genderOptions" :key="g.value" :value="g.value">{{ g.label }}</option>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label required">Chất liệu</label>
+          <select v-model="form.material" class="form-select" :class="{ 'input-err': errors.material }">
+            <option value="" disabled selected>Chọn chất liệu...</option>
+            <option v-for="m in materialOptions" :key="m.id" :value="m.id">{{ m.ten }}</option>
+          </select>
+          <span v-if="errors.material" class="err-txt">{{ errors.material }}</span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label required">Kiểu dáng</label>
+          <select v-model="form.style" class="form-select" :class="{ 'input-err': errors.style }">
+            <option value="" disabled selected>Chọn kiểu dáng...</option>
+            <option v-for="s in styleOptions" :key="s.id" :value="s.id">{{ s.ten }}</option>
+          </select>
+          <span v-if="errors.style" class="err-txt">{{ errors.style }}</span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label required">Xuất xứ</label>
+          <select v-model="form.origin" class="form-select" :class="{ 'input-err': errors.origin }">
+            <option value="" disabled selected>Chọn xuất xứ...</option>
+            <option v-for="o in originOptions" :key="o.id" :value="o.id">{{ o.ten }}</option>
+          </select>
+          <span v-if="errors.origin" class="err-txt">{{ errors.origin }}</span>
+        </div>
+
+        <div class="form-field full-row">
+          <label class="form-label">Tính năng sản phẩm</label>
+          <input v-model="form.feature" type="text" class="form-input"
+            placeholder="Mô tả các tính năng nổi bật (vd: Êm chân, thoáng khí...)" />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-card margin-top">
+      <div class="attr-row">
+        <label class="attr-label required">Màu sắc</label>
+        <div class="attr-input-wrap">
+          <select v-model="tempColorSelect" class="form-select attr-select" @change="handleSelectColor">
+            <option value="" disabled selected>Chọn màu</option>
+            <option v-for="col in colorOptions" :key="col.id" :value="col.id">{{ col.ten }}</option>
+          </select>
+          <button class="btn btn-quick-add" @click="openQuickAdd('color')">+ Thêm nhanh</button>
+        </div>
       </div>
 
-      <div class="page-actions-box">
-        <button class="btn btn-outline-cancel" @click="goBack">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-            <line x1="19" y1="12" x2="5" y2="12"></line>
-            <polyline points="12 19 5 12 12 5"></polyline>
-          </svg>
-          Quay lại
-        </button>
-        <button class="btn btn-generate-hdr" @click="generateVariants">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-          </svg>
+      <div v-if="selectedColors.length > 0" class="badges-row">
+        <span v-for="c in selectedColors" :key="c.id" class="badge-chip">
+          <span class="color-dot" :style="{ backgroundColor: c.ma || '#111827' }"></span>
+          {{ c.ten }}
+          <button class="btn-remove-chip" @click="removeColor(c.id)">✕</button>
+        </span>
+      </div>
+
+      <div class="attr-row margin-top">
+        <label class="attr-label required">Kích cỡ</label>
+        <div class="attr-input-wrap">
+          <select v-model="tempSizeSelect" class="form-select attr-select" @change="handleSelectSize">
+            <option value="" disabled selected>Chọn size</option>
+            <option v-for="sz in sizeOptions" :key="sz.id" :value="sz.id">Size {{ sz.ten }}</option>
+          </select>
+          <button class="btn btn-quick-add" @click="openQuickAdd('size')">+ Thêm nhanh</button>
+        </div>
+      </div>
+
+      <div v-if="selectedSizes.length > 0" class="badges-row">
+        <span v-for="s in selectedSizes" :key="s.id" class="badge-chip size-chip">
+          Size {{ s.ten }}
+          <button class="btn-remove-chip" @click="removeSize(s.id)">✕</button>
+        </span>
+      </div>
+
+      <div class="generate-btn-row">
+        <button class="btn btn-red-primary" @click="generateVariants">
           Tạo biến thể tự động
-        </button>
-        <button class="btn btn-save-primary" @click="saveProduct">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-            <polyline points="7 3 7 8 15 8"></polyline>
-          </svg>
-          Lưu sản phẩm
         </button>
       </div>
     </div>
 
-    <section class="card-box">
-      <div class="card-header-title">
-        <span class="header-icon-circle">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-            <path
-              d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
-          </svg>
-        </span>
-        <h2>1. Thông tin cơ bản sản phẩm</h2>
-      </div>
+    <div class="form-card margin-top">
+      <label class="card-section-label">Mô tả</label>
+      <textarea v-model="form.description" rows="3" class="form-textarea" placeholder="Mô tả sản phẩm"></textarea>
+    </div>
 
-      <div class="form-grid-2col margin-top-md">
-        <div class="form-group">
-          <label class="field-label">Mã sản phẩm</label>
-          <input v-model="form.code" type="text" class="field-input disabled-input" readonly />
-        </div>
+    <div v-if="hasGeneratedVariants" class="form-card margin-top">
+      <div class="bulk-header-row">
+        <label class="checkbox-label">
+          <input type="checkbox" :checked="isAllChecked" @change="toggleCheckAll" class="custom-checkbox" />
+          <span>Chọn tất cả biến thể</span>
+        </label>
 
-        <div class="form-group">
-          <label class="field-label">Tên sản phẩm <span class="required-star">*</span></label>
-          <input v-model="form.name" type="text" class="field-input" placeholder="Ví dụ: Nike Air Max 270..." />
-        </div>
-
-        <div class="form-group">
-          <label class="field-label">Thương hiệu <span class="required-star">*</span></label>
-          <select v-model="form.brand" class="field-select">
-            <option value="" disabled selected>Chọn thương hiệu...</option>
-            <option v-for="item in brandOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="field-label">Loại giày <span class="required-star">*</span></label>
-          <select v-model="form.category" class="field-select">
-            <option value="" disabled selected>Chọn loại giày...</option>
-            <option v-for="item in categoryOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="field-label">Giới tính <span class="required-star">*</span></label>
-          <select v-model="form.gender" class="field-select">
-            <option v-for="item in genderOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="field-label">Chất liệu <span class="required-star">*</span></label>
-          <select v-model="form.material" class="field-select">
-            <option value="" disabled selected>Chọn chất liệu...</option>
-            <option v-for="item in materialOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="field-label">Đế giày <span class="required-star">*</span></label>
-          <select v-model="form.sole" class="field-select">
-            <option value="" disabled selected>Chọn đế giày...</option>
-            <option v-for="item in soleOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="field-label">Cổ giày <span class="required-star">*</span></label>
-          <select v-model="form.collar" class="field-select">
-            <option value="" disabled selected>Chọn cổ giày...</option>
-            <option v-for="item in collarOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="field-label">Công nghệ đệm <span class="required-star">*</span></label>
-          <select v-model="form.cushion" class="field-select">
-            <option value="" disabled selected>Chọn công nghệ đệm...</option>
-            <option v-for="item in cushionOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="field-label">Trọng lượng <span class="required-star">*</span></label>
-          <select v-model="form.weight" class="field-select">
-            <option value="" disabled selected>Chọn trọng lượng...</option>
-            <option v-for="item in weightOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-          </select>
-        </div>
-      </div>
-    </section>
-
-    <section class="card-box margin-top-lg">
-      <div class="card-header-title">
-        <span class="header-icon-circle">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-            <path
-              d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.53 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-4 9c-.83 0-1.5-.67-1.5-1.5S7.17 9 8 9s1.5.67 1.5 1.5S8.83 12 8 12zm4 0c-.83 0-1.5-.67-1.5-1.5S11.17 9 12 9s1.5.67 1.5 1.5S12.83 12 12 12zm4 0c-.83 0-1.5-.67-1.5-1.5S15.17 9 16 9s1.5.67 1.5 1.5S16.83 12 16 12z" />
-          </svg>
-        </span>
-        <h2>2. Thuộc tính biến thể (Màu sắc & Kích cỡ)</h2>
-      </div>
-
-      <div class="attribute-selection-row margin-top-md">
-        <div class="attr-label-col">
-          <span class="field-label">Màu sắc <span class="required-star">*</span></span>
-        </div>
-        <div class="attr-content-col">
-          <div class="flex-align-center gap-10">
-            <select v-model="tempColorSelect" class="field-select attr-dropdown" @change="handleSelectColor">
-              <option value="" disabled selected>Chọn màu sắc...</option>
-              <option v-for="color in availableColors" :key="color.id" :value="color.id">{{ color.name }}</option>
-            </select>
-            <button class="btn btn-quick-add" @click="openQuickAdd('color')">
-              <span class="plus-sign">+</span> Thêm màu mới
-            </button>
+        <div class="bulk-inputs-right">
+          <div class="bulk-field">
+            <label class="bulk-lbl">Số lượng mặc định</label>
+            <input v-model.number="defaultQty" type="number" class="bulk-num-input" placeholder="0" min="0" />
           </div>
 
-          <!-- Color Tags -->
-          <div v-if="selectedColors.length > 0" class="tags-container margin-top-sm">
-            <div v-for="col in selectedColors" :key="col.id" class="chip-tag color-chip">
-              <span class="color-dot-swatch"
-                :style="{ backgroundColor: col.hex, border: col.hex === '#ffffff' ? '1px solid #cbd5e1' : 'none' }"></span>
-              <span class="chip-text">{{ col.name }}</span>
-              <button class="chip-remove-btn" @click="removeColor(col.id)">&times;</button>
-            </div>
+          <div class="bulk-field">
+            <label class="bulk-lbl required">Giá bán mặc định</label>
+            <input v-model.number="defaultPrice" type="number" class="bulk-num-input" placeholder="0" min="0" />
           </div>
+
+          <button class="btn btn-outline-red" @click="applyBulkValues">Áp dụng</button>
         </div>
       </div>
 
-      <!-- Row Kích Cỡ -->
-      <div class="attribute-selection-row margin-top-md">
-        <div class="attr-label-col">
-          <span class="field-label">Kích cỡ (Size) <span class="required-star">*</span></span>
-        </div>
-        <div class="attr-content-col">
-          <div class="flex-align-center gap-10">
-            <select v-model="tempSizeSelect" class="field-select attr-dropdown" @change="handleSelectSize">
-              <option value="" disabled selected>Chọn size...</option>
-              <option v-for="sz in availableSizes" :key="sz.id" :value="sz.id">Size {{ sz.name }}</option>
-            </select>
-            <button class="btn btn-quick-add" @click="openQuickAdd('size')">
-              <span class="plus-sign">+</span> Thêm size mới
-            </button>
+      <div v-for="(group, gIdx) in colorGroups" :key="group.colorId" class="color-group-box margin-top">
+        <div class="group-header">
+          <div class="group-title">
+            <span class="color-dot" :style="{ backgroundColor: group.colorCode }"></span>
+            <strong>{{ group.colorName }}</strong>
           </div>
-
-          <!-- Size Tags -->
-          <div v-if="selectedSizes.length > 0" class="tags-container margin-top-sm">
-            <div v-for="sz in selectedSizes" :key="sz.id" class="chip-tag size-chip">
-              <span class="chip-text">Size {{ sz.name }}</span>
-              <button class="chip-remove-btn" @click="removeSize(sz.id)">&times;</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Action Button Generate -->
-      <div class="generate-btn-banner margin-top-lg">
-        <button class="btn btn-hero-generate" @click="generateVariants">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-          </svg>
-          Tự động sinh danh sách {{ selectedColors.length * selectedSizes.length }} biến thể (SKU)
-        </button>
-      </div>
-    </section>
-
-    <!-- Section 3: Bảng danh sách biến thể tự động -->
-    <section v-if="hasGeneratedVariants" id="variants-section" class="card-box margin-top-lg">
-      <div class="card-header flex-align-center justify-between">
-        <div class="card-header-title">
-          <span class="header-icon-circle">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" />
-            </svg>
-          </span>
-          <h2>3. Danh sách biến thể tự động</h2>
-          <span class="count-pill">{{ variants.length }} biến thể</span>
+          <span class="group-summary-badge">{{ group.sizeSummary }}</span>
         </div>
 
-        <!-- Bulk Controls Bar -->
-        <div class="bulk-bar">
-          <div class="bulk-group">
-            <span class="bulk-label">Giá chung:</span>
-            <input v-model.number="bulkPrice" type="number" class="bulk-input" step="10000" />
-            <button class="btn btn-apply-bulk" @click="applyBulkPrice">Áp dụng giá</button>
-          </div>
-          <div class="bulk-group">
-            <span class="bulk-label">SL chung:</span>
-            <input v-model.number="bulkStock" type="number" class="bulk-input" min="0" />
-            <button class="btn btn-apply-bulk" @click="applyBulkStock">Áp dụng SL</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Variants Table -->
-      <div class="table-responsive margin-top-md">
-        <table class="variants-table">
+        <table class="variant-data-table">
           <thead>
             <tr>
-              <th width="50" class="text-center">STT</th>
-              <th width="140">MÀU SẮC</th>
-              <th width="100">KÍCH CỠ</th>
-              <th width="200">MÃ SKU</th>
-              <th width="180">GIÁ BÁN (VNĐ)</th>
-              <th width="140" class="text-center">SỐ LƯỢNG KHO</th>
-              <th width="130">TRẠNG THÁI</th>
-              <th width="70" class="text-center">XÓA</th>
+              <th width="40"></th>
+              <th width="60">STT</th>
+              <th>Kích cỡ</th>
+              <th width="220">Số lượng</th>
+              <th width="240">Giá bán</th>
+              <th width="80" class="text-center">Xóa</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(v, index) in variants" :key="v.id">
-              <td class="text-center font-bold text-muted">{{ index + 1 }}</td>
+            <tr v-for="(item, iIdx) in group.items" :key="item.sizeId">
               <td>
-                <div class="color-cell">
-                  <span class="color-dot-swatch"
-                    :style="{ backgroundColor: v.colorHex, border: v.colorHex === '#ffffff' ? '1px solid #cbd5e1' : 'none' }"></span>
-                  <span class="font-semibold">{{ v.color }}</span>
-                </div>
+                <input type="checkbox" v-model="item.checked" class="custom-checkbox" />
+              </td>
+              <td class="text-muted">{{ item.stt }}</td>
+              <td class="font-medium">Size {{ item.sizeName }}</td>
+              <td>
+                <input v-model.number="item.qty" type="number" class="table-num-input" min="0" />
               </td>
               <td>
-                <span class="size-badge">Size {{ v.size }}</span>
-              </td>
-              <td>
-                <input v-model="v.sku" type="text" class="cell-input code-font" />
-              </td>
-              <td>
-                <input v-model.number="v.price" type="number" class="cell-input price-font" />
-              </td>
-              <td>
-                <input v-model.number="v.stock" type="number" class="cell-input stock-font text-center" min="0" />
-              </td>
-              <td>
-                <span class="badge-status green">
-                  <span class="status-dot"></span> Đang bán
-                </span>
+                <input v-model.number="item.price" type="number" class="table-num-input" min="0" />
               </td>
               <td class="text-center">
-                <button class="btn-icon-del" @click="removeVariant(v.id)" title="Xóa biến thể">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  </svg>
+                <button class="btn-icon-trash" @click="removeItem(gIdx, iIdx)" title="Xóa">
+                  🗑
                 </button>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
+    </div>
 
-      <!-- Save Actions Footer -->
-      <div class="card-footer-actions margin-top-lg">
-        <button class="btn btn-outline-cancel" @click="goBack">Hủy bỏ</button>
-        <button class="btn btn-save-primary btn-lg" @click="saveProduct">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-            <polyline points="7 3 7 8 15 8"></polyline>
-          </svg>
-          Lưu tất cả sản phẩm & biến thể
-        </button>
+    <div v-if="hasGeneratedVariants" class="pink-tint-card margin-top">
+      <div class="tint-header">
+        <h3 class="tint-title">Ảnh sản phẩm chi tiết</h3>
+        <p class="tint-subtitle">Thêm ảnh cho từng màu sắc (biến thể đại diện) để tự động đồng bộ cho toàn bộ kích cỡ.
+        </p>
       </div>
-    </section>
 
-    <!-- Modals & Toasts -->
+      <div class="images-grid margin-top">
+        <div v-for="group in colorGroups" :key="group.colorId" class="color-image-card">
+          <div class="img-card-head">
+            <div class="img-head-text">
+              <span class="img-card-title">Ảnh sản phẩm màu {{ group.colorName.toLowerCase() }}</span>
+              <span class="img-card-sub">Áp dụng cho {{ group.items.length }} kích cỡ cùng màu • Size {{
+                group.items.map(i => i.sizeName).join(', ')}}</span>
+            </div>
+            <button class="btn btn-red-solid" @click="triggerImageUpload(group.colorId)">+ Thêm ảnh</button>
+          </div>
+
+          <div class="img-dropzone" @click="triggerImageUpload(group.colorId)">
+            <div v-if="colorImages[group.colorId] && colorImages[group.colorId].length > 0" class="preview-thumbs-grid">
+              <img v-for="(src, idx) in colorImages[group.colorId]" :key="idx" :src="src" class="thumb-preview" />
+            </div>
+            <div v-else class="empty-dropzone-content">
+              <div class="icon-box-placeholder">🖼</div>
+              <p class="placeholder-text-main">Nhóm màu này chưa có ảnh</p>
+              <p class="placeholder-text-sub">Thêm một bộ ảnh để áp dụng cho toàn bộ kích cỡ cùng màu.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fixed-bottom-bar">
+      <button class="btn btn-save-fixed" @click="saveProduct">
+        💾 Lưu sản phẩm (F4)
+      </button>
+    </div>
+
     <QuickAddModal :is-open="isModalOpen" :type="modalType" @close="isModalOpen = false" @add="handleAttributeAdded" />
 
-    <transition name="toast-fade">
-      <div v-if="toast.show" class="toast-card" :class="'toast-' + toast.type">
-        <span class="toast-icon">✓</span>
-        <span class="toast-msg">{{ toast.message }}</span>
+    <transition name="fade">
+      <div v-if="toast.show" class="toast-floating" :class="'toast-' + toast.type">
+        <span>{{ toast.message }}</span>
       </div>
     </transition>
   </div>
 </template>
 
-<style scoped>
-.product-create-page {
-  width: 100%;
-}
-
-.page-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-
-.page-title {
-  font-size: 26px;
-  font-weight: 800;
-  color: #0f172a;
-  letter-spacing: -0.5px;
-}
-
-.page-subtitle {
-  font-size: 13.5px;
-  color: #64748b;
-  margin-top: 4px;
-}
-
-.page-actions-box {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.btn-outline-cancel {
-  background: #ffffff;
-  border: 1px solid #fee2e2;
-  color: #d92d20;
-  font-size: 13.5px;
-  font-weight: 600;
-  padding: 9px 18px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-outline-cancel:hover {
-  background-color: #fff1f2;
-  border-color: #fca5a5;
-}
-
-.btn-generate-hdr {
-  background: #fff1f2;
-  border: 1px solid #fee2e2;
-  color: #d92d20;
-  font-size: 13.5px;
-  font-weight: 700;
-  padding: 9px 18px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-}
-
-.btn-save-primary {
-  background-color: var(--primary);
-  color: #ffffff;
-  border: none;
-  font-size: 13.5px;
-  font-weight: 700;
-  padding: 10px 20px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(217, 45, 32, 0.25);
-  transition: all 0.15s;
-}
-
-.btn-save-primary:hover {
-  background-color: var(--primary-hover);
-  transform: translateY(-1px);
-}
-
-/* Card Box */
-.card-box {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-lg);
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
-}
-
-.card-header-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.card-header-title h2 {
-  font-size: 16px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.header-icon-circle {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background-color: #fee2e2;
-  color: #d92d20;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.form-grid-2col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px 24px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.field-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
-}
-
-.required-star {
-  color: #d92d20;
-}
-
-.field-input,
-.field-select {
-  height: 40px;
-  padding: 0 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-md);
-  font-size: 13.5px;
-  color: #0f172a;
-  outline: none;
-  background: #ffffff;
-  width: 100%;
-}
-
-.disabled-input {
-  background-color: #f8fafc;
-  color: #64748b;
-  font-weight: 600;
-}
-
-.field-input:focus,
-.field-select:focus {
-  border-color: #d92d20;
-}
-
-/* Attribute Selection Row */
-.attribute-selection-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 20px;
-}
-
-.attr-label-col {
-  width: 140px;
-  padding-top: 10px;
-}
-
-.attr-content-col {
-  flex: 1;
-}
-
-.attr-dropdown {
-  width: 240px;
-}
-
-.btn-quick-add {
-  background: #ffffff;
-  border: 1px dashed #d92d20;
-  color: #d92d20;
-  font-weight: 600;
-  font-size: 13px;
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.btn-quick-add:hover {
-  background: #fff1f2;
-}
-
-.tags-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.chip-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.color-dot-swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-}
-
-.chip-remove-btn {
-  background: none;
-  border: none;
-  color: #94a3b8;
-  font-size: 16px;
-  cursor: pointer;
-  line-height: 1;
-}
-
-.chip-remove-btn:hover {
-  color: #d92d20;
-}
-
-/* Hero Generate Banner */
-.generate-btn-banner {
-  background: #fafafa;
-  border: 1px dashed #cbd5e1;
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  justify-content: center;
-}
-
-.btn-hero-generate {
-  background: #d92d20;
-  color: #ffffff;
-  border: none;
-  font-size: 14.5px;
-  font-weight: 700;
-  padding: 12px 28px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(217, 45, 32, 0.3);
-  transition: all 0.15s;
-}
-
-.btn-hero-generate:hover {
-  background-color: #b42318;
-  transform: translateY(-1px);
-}
-
-/* Bulk Bar */
-.bulk-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.bulk-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #64748b;
-}
-
-.bulk-input {
-  width: 110px;
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 13px;
-}
-
-.btn-apply-bulk {
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 7px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.btn-apply-bulk:hover {
-  background: #e2e8f0;
-}
-
-/* Table */
-.table-responsive {
-  overflow-x: auto;
-}
-
-.variants-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13.5px;
-}
-
-.variants-table th {
-  padding: 12px 14px;
-  background: #f8fafc;
-  color: #64748b;
-  font-weight: 700;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.variants-table td {
-  padding: 12px 14px;
-  border-bottom: 1px solid #f1f5f9;
-  vertical-align: middle;
-}
-
-.color-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.size-badge {
-  padding: 4px 10px;
-  background: #f1f5f9;
-  border-radius: 6px;
-  font-weight: 700;
-  font-size: 12.5px;
-  color: #334155;
-}
-
-.cell-input {
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  width: 100%;
-  font-size: 13px;
-}
-
-.code-font {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 600;
-}
-
-.price-font {
-  font-weight: 700;
-  color: #d92d20;
-}
-
-.badge-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.badge-status.green {
-  background: #ecfdf5;
-  color: #059669;
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #10b981;
-}
-
-.btn-icon-del {
-  background: none;
-  border: 1px solid #fee2e2;
-  border-radius: 6px;
-  padding: 5px;
-  color: #d92d20;
-  cursor: pointer;
-}
-
-.btn-icon-del:hover {
-  background: #fff1f2;
-}
-
-.card-footer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.btn-lg {
-  padding: 12px 24px;
-  font-size: 14px;
-}
-
-.margin-top-md {
-  margin-top: 16px;
-}
-
-.margin-top-lg {
-  margin-top: 24px;
-}
-
-.margin-top-sm {
-  margin-top: 10px;
-}
-
-.flex-align-center {
-  display: flex;
-  align-items: center;
-}
-
-.gap-10 {
-  gap: 10px;
-}
-
-.justify-between {
-  justify-content: space-between;
-}
-
-.count-pill {
-  padding: 3px 10px;
-  background: #fff1f2;
-  color: #d92d20;
-  font-size: 12px;
-  font-weight: 700;
-  border-radius: 20px;
-  border: 1px solid #fee2e2;
-}
-
-.toast-card {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  background: #0f172a;
-  color: #ffffff;
-  padding: 12px 20px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  z-index: 1000;
-  font-size: 13.5px;
-  font-weight: 600;
-}
-
-.toast-warning {
-  background: #d97706;
-}
-</style>
+<style scoped src="@/assets/styles/ProductCreatePage.css"></style>

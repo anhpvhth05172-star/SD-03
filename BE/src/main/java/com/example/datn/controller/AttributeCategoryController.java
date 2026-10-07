@@ -61,6 +61,17 @@ public class AttributeCategoryController {
         };
     }
 
+    @GetMapping("/all-filter-options")
+    public ResponseEntity<java.util.Map<String, Object>> getAllFilterOptions() {
+        java.util.Map<String, Object> map = new java.util.HashMap<>();
+        map.put("thuongHieu", thuongHieuService.getAll(null, true));
+        map.put("loaiGiay", loaiGiayService.getAll(null, true));
+        map.put("chatLieu", chatLieuService.getAll(null, true));
+        map.put("kieuDang", kieuDangService.getAll(null, true));
+        map.put("xuatXu", xuatXuService.getAll(null, true));
+        return ResponseEntity.ok(map);
+    }
+
     @GetMapping("/{category}")
     public ResponseEntity<List<AttributeResponse>> getAll(
             @PathVariable("category") String category,
