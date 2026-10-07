@@ -41,7 +41,10 @@ public class DotGiamGia {
     private LocalDateTime ngayKetThuc;
 
     @Column(name = "trang_thai", nullable = false)
-    private Boolean trangThai = true;
+    private Boolean trangThai;
+
+    @Column(name = "mo_ta")
+    private String moTa;
 
     @Column(name = "ngay_tao", insertable = false, updatable = false)
     private LocalDateTime ngayTao;

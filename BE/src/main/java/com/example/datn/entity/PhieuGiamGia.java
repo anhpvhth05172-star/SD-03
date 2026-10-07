@@ -34,10 +34,10 @@ public class PhieuGiamGia {
     @Column(name = "ten_phieu_giam_gia", nullable = false, length = 200)
     private String tenPhieuGiamGia;
 
-    @Column(name = "loai_giam_gia", nullable = false, length = 30)
+    @Column(name = "loai_giam_gia")
     private String loaiGiamGia;
 
-    @Column(name = "gia_tri_giam", nullable = false)
+    @Column(name = "gia_tri_giam")
     private BigDecimal giaTriGiam;
 
     @Column(name = "giam_toi_da")
@@ -55,8 +55,8 @@ public class PhieuGiamGia {
     @Column(name = "so_luong", nullable = false)
     private Integer soLuong = 0;
 
-    @Column(name = "so_luong_da_su_dung", nullable = false)
-    private Integer soLuongDaSuDung = 0;
+    @Column(name = "so_luong_da_su_dung")
+    private Integer soLuongDaSuDung;
 
     @Column(name = "gioi_han_moi_tai_khoan", nullable = false)
     private Integer gioiHanMoiTaiKhoan = 1;

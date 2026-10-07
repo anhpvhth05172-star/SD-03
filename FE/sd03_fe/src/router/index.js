@@ -17,6 +17,12 @@ import CustomerCreatePage from '../pages/CustomerCreatePage.vue'
 import LoginPage from '../pages/LoginPage.vue'
 import RegisterPage from '../pages/RegisterPage.vue'
 import PlaceholderPage from '../pages/PlaceholderPage.vue'
+import DiscountForm from '@/pages/Discount/DiscountForm.vue'
+import VoucherForm from '@/pages/Discount/VoucherForm.vue'
+import DiscountFormDetail from '@/pages/Discount/DiscountFormDetail.vue'
+import VoucherFormDetail from '@/pages/Discount/VoucherFormDetail.vue'
+import DiscountFormUpdate from '@/pages/Discount/DiscountFormUpdate.vue'
+import VoucherFormUpdate from '@/pages/Discount/VoucherFormUpdate.vue'
 
 const routes = [
   { path: '/', redirect: '/hoa-don' },
@@ -88,6 +94,36 @@ const routes = [
         component: EmployeeCreatePage,
         meta: { title: 'Quản lý nhân viên', requiresAuth: true },
       },
+      {
+        path: 'phieu-giam-gia/add',
+        component: DiscountForm,
+        meta: { title: 'Thêm phiếu giảm giá' },
+      },
+      {
+        path: 'phieu-giam-gia/detail/:id',
+        component: DiscountFormDetail,
+        meta: { title: 'Chi tiết phiếu giảm giá' },
+      },
+      {
+        path: 'phieu-giam-gia/update/:id',
+        component: VoucherFormUpdate,
+        meta: { title: 'Cập nhật phiếu giảm giá' },
+      },
+      {
+        path: 'dot-giam-gia/add',
+        component: VoucherForm,
+        meta: { title: 'Thêm phiếu giảm giá' },
+      },
+      {
+        path: 'dot-giam-gia/detail/:id',
+        component: VoucherFormDetail,
+        meta: { title: 'Chi tiết đợt giảm giá' },
+      },
+      {
+        path: 'dot-giam-gia/update/:id',
+        component: DiscountFormUpdate,
+        meta: { title: 'Cập nhật đợt giảm giá' },
+      },
       { path: ':pathMatch(.*)*', redirect: '/hoa-don' },
     ],
   },
@@ -95,7 +131,8 @@ const routes = [
     path: '/admin/:pathMatch(.*)*',
     redirect: (to) => {
       const sub = to.params.pathMatch
-      return sub ? `/${sub}` : '/san-pham'
+      const path = Array.isArray(sub) ? sub.join('/') : sub
+      return path ? `/${path}` : '/hoa-don'
     },
   },
 ]

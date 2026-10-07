@@ -58,7 +58,7 @@ const goToPage = (p) => {
 };
 
 const formatDiscount = (v) =>
-  v <= 100 ? v + "%" : v.toLocaleString("vi-VN") + "₫";
+  v <= 100 ? v + "%" : v.toLocaleString("vi-VN") + "đ";
 
 const formatDate = (s) => (s ? new Date(s).toLocaleDateString("vi-VN") : "");
 
@@ -95,12 +95,22 @@ onMounted(() => getData(0));
           Tạo, theo dõi và phân phối các mã giảm giá đến khách hàng
         </p>
       </div>
-      <button class="btn-add" type="button">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+      <RouterLink
+        :to="`/admin/phieu-giam-gia/add`"
+        class="btn-add"
+        type="button"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.2"
+          stroke-linecap="round"
+        >
           <path d="M12 6v12M6 12h12" />
         </svg>
         Thêm phiếu giảm giá
-      </button>
+      </RouterLink>
     </div>
 
     <section class="panel">
@@ -192,16 +202,17 @@ onMounted(() => getData(0));
           <thead>
             <tr>
               <th>Phiếu giảm giá</th>
-              <th>Đợt giảm giá</th>
-              <th>Mức giảm</th>
-              <th>Đã dùng</th>
-              <th>Hạn dùng</th>
+              <th>Loại giảm giá</th>
+              <th>Giá trị giảm</th>
+              <th>Giảm tối đa</th>
+              <th>Thời gian áp dụng</th>
+              <th>Số lượng</th>
               <th>Trạng thái</th>
               <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="d in listDiscount" :key="d.id">
+            <tr v-for="(d, i) in listDiscount" :key="i.index">
               <td>
                 <div class="entity">
                   <span class="entity-avatar" :style="{ background: avatarColor(d.id) }">{{ d.maPhieuGiamGia.slice(-2)
@@ -215,10 +226,15 @@ onMounted(() => getData(0));
                   </div>
                 </div>
               </td>
-              <td>—</td>
+              <td>{{ d.loaiGiamGia === "PERCENT" ? "%" : "đ" }}</td>
               <td class="cell-strong">{{ formatDiscount(d.giaTriGiam) }}</td>
-              <td>{{ d.soLuongDaSuDung }}</td>
-              <td>{{ formatDate(d.ngayKetThuc) }}</td>
+              <td>{{ formatDiscount(d.giamToiDa) }}</td>
+              <td>
+                {{ formatDate(d.ngayBatDau) + "-" + formatDate(d.ngayKetThuc) }}
+              </td>
+              <td>
+                {{ d.soLuong + "/" + d.soLuongDaSuDung }}
+              </td>
               <td>
                 <span class="pill" :class="statusPill(getStatus(d))">{{
                   getStatus(d)
@@ -226,25 +242,44 @@ onMounted(() => getData(0));
               </td>
               <td>
                 <div class="act-group">
-                  <button class="act-btn" type="button" aria-label="Xem">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-                      stroke-linejoin="round">
-                      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+                  <RouterLink
+                    :to="`/admin/phieu-giam-gia/detail/${d.id}`"
+                    class="act-btn"
+                    aria-label="Xem"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path
+                        d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"
+                      />
                       <circle cx="12" cy="12" r="3" />
                     </svg>
-                  </button>
-                  <button class="act-btn is-red" type="button" aria-label="Sửa">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
-                      stroke-linejoin="round">
-                      <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3" />
+                  </RouterLink>
+                  <RouterLink
+                    :to="`/admin/phieu-giam-gia/update/${d.id}`"
+                    class="act-btn is-red"
+                    type="button"
+                    aria-label="Sửa"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.9"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path
+                        d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3"
+                      />
                     </svg>
-                  </button>
-                  <button class="act-btn" type="button" aria-label="Thêm">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                      stroke-linecap="round">
-                      <path d="M12 6v12M6 12h12" />
-                    </svg>
-                  </button>
+                  </RouterLink>
                 </div>
               </td>
             </tr>
