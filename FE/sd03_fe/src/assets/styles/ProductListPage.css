@@ -97,6 +97,39 @@
   100% { transform: rotate(360deg); }
 }
 
+.btn-export-excel {
+  background: #ffffff;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(22, 101, 52, 0.05);
+}
+
+.btn-export-excel:hover:not(:disabled) {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #15803d;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(22, 101, 52, 0.12);
+}
+
+.btn-export-excel:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.btn-export-excel svg {
+  color: #16a34a;
+}
+
 .btn-add-new {
   background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
   color: #ffffff;
@@ -532,19 +565,59 @@
   color: #1e293b;
 }
 
-.type-pill {
-  background: #f1f5f9;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
+.code-plain-text {
+  font-size: 13.5px;
+  color: #334155;
+  font-weight: 500;
 }
 
-.attr-text {
-  color: #64748b;
+.name-plain-text {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #0f172a;
+}
+
+.attr-plain-text {
+  font-size: 13.5px;
+  color: #334155;
+}
+
+.qty-plain-text {
+  font-size: 13.5px;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.price-plain-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #dc2626;
+  font-family: inherit;
+}
+
+.simple-status-badge {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 9999px;
   font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.simple-status-badge.status-active {
+  background: #f0fdf4;
+  color: #059669;
+}
+
+.simple-status-badge.status-inactive {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.simple-status-badge:hover {
+  opacity: 0.85;
 }
 
 /* Switch Toggle */
@@ -602,6 +675,7 @@ input:checked + .slider:before {
   font-weight: 600;
   color: #94a3b8;
   margin-top: 2px;
+  white-space: nowrap;
 }
 
 .status-label.active {
@@ -634,10 +708,12 @@ input:checked + .slider:before {
   transform: translateY(-1px);
 }
 
+.act-btn.view-btn:hover,
 .act-btn.variant-btn:hover {
   background: #eff6ff;
-  border-color: #bfdbfe;
+  border-color: #93c5fd;
   color: #2563eb;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.15);
 }
 
 .act-btn.edit-btn:hover {
@@ -760,7 +836,7 @@ input:checked + .slider:before {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 999;
+  z-index: 9999;
   padding: 20px;
 }
 
@@ -773,6 +849,7 @@ input:checked + .slider:before {
   overflow: hidden;
   border: 1px solid #f1f5f9;
   animation: modalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: auto !important;
 }
 
 @keyframes modalPop {

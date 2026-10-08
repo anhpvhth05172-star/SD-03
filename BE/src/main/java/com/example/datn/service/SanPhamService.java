@@ -2,6 +2,8 @@ package com.example.datn.service;
 
 import com.example.datn.dto.SanPhamRequest;
 import com.example.datn.dto.SanPhamResponse;
+import com.example.datn.dto.SmartProductSaveRequest;
+import com.example.datn.dto.SmartProductSaveResponse;
 import org.springframework.data.domain.Page;
 
 public interface SanPhamService {
@@ -11,4 +13,6 @@ public interface SanPhamService {
     SanPhamResponse update(Long id, SanPhamRequest request);
     SanPhamResponse toggleStatus(Long id);
     void delete(Long id);
+    SmartProductSaveResponse smartSave(SmartProductSaveRequest request);
 }
+

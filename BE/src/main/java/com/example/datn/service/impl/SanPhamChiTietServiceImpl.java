@@ -83,13 +83,11 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
                 throw new IllegalArgumentException("Giá bán biến thể phải từ 1,000 VNĐ đến 1,000,000,000 VNĐ");
             }
 
-            // Kiểm tra trùng lặp trong cùng danh sách gửi lên
             String comboKey = req.getIdSanPham() + "_" + req.getIdMauSac() + "_" + req.getIdKichCo();
             if (!batchCombinations.add(comboKey)) {
                 throw new IllegalArgumentException("Có biến thể bị trùng lặp Màu sắc và Kích cỡ trong danh sách thêm!");
             }
 
-            // Kiểm tra trùng lặp đã tồn tại trong CSDL
             if (sanPhamChiTietRepository.existsBySanPhamIdAndMauSacIdAndKichCoId(req.getIdSanPham(), req.getIdMauSac(), req.getIdKichCo())) {
                 MauSac ms = mauSacRepository.findById(req.getIdMauSac()).orElse(null);
                 KichCo kc = kichCoRepository.findById(req.getIdKichCo()).orElse(null);
@@ -152,7 +150,6 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
             spct.setGiaBan(req.getGiaBan());
             spct.setTrangThai(req.getTrangThai() != null ? req.getTrangThai() : true);
 
-            // Lưu hình ảnh nếu có (chỉ lưu 1 lần cho mỗi ảnh/màu sắc)
             if (req.getHinhAnh() != null && !req.getHinhAnh().trim().isEmpty()) {
                 String imgKey = sp.getId() + "_" + ms.getId();
                 if (!savedImages.contains(imgKey)) {
@@ -252,7 +249,6 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
             spct.setMaChiTietSanPham(req.getMaChiTietSanPham().trim());
         }
 
-        // Cập nhật ảnh nếu có
         if (req.getHinhAnh() != null && !req.getHinhAnh().trim().isEmpty() && spct.getSanPham() != null) {
             MauSac currentMs = spct.getMauSac();
             Long colorId = currentMs != null ? currentMs.getId() : null;
@@ -325,7 +321,6 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
             sizeName = spct.getKichCo().getTenKichCo() != null ? spct.getKichCo().getTenKichCo() : "Standard";
         }
 
-        // Lấy ảnh thật từ bảng HinhAnhSanPham theo màu sắc của biến thể
         String imgUrl = null;
         if (spct.getSanPham() != null) {
             List<HinhAnhSanPham> images = hinhAnhSanPhamRepository.findBySanPhamId(spct.getSanPham().getId());
@@ -334,7 +329,6 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
                     Long colorId = spct.getMauSac().getId();
                     String cName = spct.getMauSac().getTenMau();
 
-                    // 1. Ưu tiên khớp theo tag COLOR_{id} hoặc tên màu
                     imgUrl = images.stream()
                             .filter(img -> img.getTenAnh() != null && (
                                     (colorId != null && img.getTenAnh().contains("COLOR_" + colorId)) ||
@@ -345,7 +339,6 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
                             .orElse(null);
                 }
 
-                // 2. Nếu không khớp màu cụ thể thì lấy ảnh đầu tiên
                 if (imgUrl == null) {
                     imgUrl = images.get(0).getDuongDan();
                 }

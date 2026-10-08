@@ -16,6 +16,8 @@ public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, 
 
     List<SanPhamChiTiet> findBySanPhamId(Long idSanPham);
 
+    java.util.Optional<SanPhamChiTiet> findBySanPhamIdAndMauSacIdAndKichCoId(Long idSanPham, Long idMauSac, Long idKichCo);
+
     boolean existsByMaChiTietSanPham(String maChiTietSanPham);
 
     boolean existsBySanPhamIdAndMauSacIdAndKichCoId(Long idSanPham, Long idMauSac, Long idKichCo);
