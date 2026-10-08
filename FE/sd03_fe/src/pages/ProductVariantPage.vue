@@ -201,8 +201,8 @@ const getColorHex = (item) => {
 }
 
 const getVariantStatusLabel = (item) => {
-  if (item.trangThai === false) return 'Ngưng bán'
-  return 'Đang bán'
+  if (item.trangThai === false) return 'Ngưng kinh doanh'
+  return 'Kinh doanh'
 }
 
 const getVariantStatusClass = (item) => {
@@ -226,7 +226,7 @@ const toggleStatus = async (item) => {
   const oldStatus = item.trangThai
   const newStatus = !oldStatus
   item.trangThai = newStatus
-  const statusLabel = newStatus ? 'Đang bán' : 'Ngưng bán'
+  const statusLabel = newStatus ? 'Kinh doanh' : 'Ngưng kinh doanh'
   const itemCode = item.maCtsp || item.maSp || `SKU-${item.id}`
 
   try {
@@ -1159,12 +1159,12 @@ onUnmounted(() => {
                 <td class="text-end price-val">{{ formatPrice(item.price || 0) }}</td>
                 <td class="text-center discount-val">{{ item.discount || '-' }}</td>
                 <td class="text-center">
-                  <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng bán' : 'Click để bật bán'">
+                  <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
                     <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
                     <span class="slider round"></span>
                   </label>
                   <div class="status-label" :class="{ active: item.trangThai }">
-                    {{ item.trangThai ? 'Đang bán' : 'Ngưng bán' }}
+                    {{ item.trangThai ? 'Kinh doanh' : 'Ngưng kinh doanh' }}
                   </div>
                 </td>
                 <td class="text-center">

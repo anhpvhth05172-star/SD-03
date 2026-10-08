@@ -250,7 +250,7 @@ const toggleStatus = async (item) => {
   const oldStatus = item.trangThai
   const newStatus = !oldStatus
   item.trangThai = newStatus
-  const statusLabel = newStatus ? 'Đang bán' : 'Ngưng bán'
+  const statusLabel = newStatus ? 'Kinh doanh' : 'Ngưng kinh doanh'
   const code = item.maSanPham || `SP0${item.id}`
 
   try {
@@ -757,14 +757,13 @@ onUnmounted(() => {
               <td class="text-center qty-plain-text">{{ item.soLuong !== undefined && item.soLuong !== null ? item.soLuong : 0 }}</td>
               <td class="text-end price-plain-text">{{ formatProductPrice(item) }}</td>
               <td class="text-center">
-                <span
-                  class="simple-status-badge"
-                  :class="item.trangThai ? 'status-active' : 'status-inactive'"
-                  @click="toggleStatus(item)"
-                  :title="item.trangThai ? 'Click để ngưng bán' : 'Click để bật bán'"
-                >
-                  {{ item.trangThai ? 'Đang bán' : 'Ngưng bán' }}
-                </span>
+                <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
+                  <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
+                  <span class="slider round"></span>
+                </label>
+                <div class="status-label" :class="{ active: item.trangThai }">
+                  {{ item.trangThai ? 'Kinh doanh' : 'Ngưng kinh doanh' }}
+                </div>
               </td>
               <td class="text-center">
                 <div class="action-btns">

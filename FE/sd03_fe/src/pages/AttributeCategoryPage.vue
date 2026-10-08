@@ -554,7 +554,7 @@ const executeDeleteFast = async (item) => {
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="closeModal">Hủy bỏ</button>
             <button class="btn btn-primary" :disabled="isSubmitting" @click="saveAttributeDirectly">
-              {{ isSubmitting ? 'Đang lưu...' : (isEditing ? 'Lưu thay đổi' : '+ Thêm thuộc tính') }}
+              {{ isSubmitting ? 'Đang lưu...' : 'Lưu' }}
             </button>
           </div>
         </div>

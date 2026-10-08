@@ -118,7 +118,7 @@ const handleSave = () => {
       <div class="modal-footer">
         <button class="btn btn-secondary" @click="handleClose">Hủy bỏ</button>
         <button class="btn btn-primary" :disabled="!itemName.trim()" @click="handleSave">
-          + Thêm thuộc tính
+          Lưu
         </button>
       </div>
     </div>
