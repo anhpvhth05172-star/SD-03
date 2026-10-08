@@ -14,6 +14,7 @@ const emit = defineEmits(['close', 'add'])
 const itemName = ref('')
 const itemCode = ref('#d92d20')
 const itemDescription = ref('')
+const modalError = ref('')
 
 const title = computed(() => {
   return props.type === 'color' ? 'Thêm nhanh Màu sắc' : 'Thêm nhanh Kích cỡ'
@@ -30,14 +31,34 @@ const placeholderName = computed(() => {
 const handleClose = () => {
   itemName.value = ''
   itemDescription.value = ''
+  modalError.value = ''
   emit('close')
 }
 
 const handleSave = () => {
-  if (!itemName.value.trim()) return
+  modalError.value = ''
+  const trimmed = itemName.value.trim()
+  if (!trimmed) {
+    modalError.value = props.type === 'color' ? 'Vui lòng nhập tên màu sắc!' : 'Vui lòng nhập kích cỡ!'
+    return
+  }
+
+  if (props.type === 'size') {
+    const formatted = trimmed.replace(',', '.')
+    if (!/^\d+(\.\d+)?$/.test(formatted)) {
+      modalError.value = 'Kích cỡ giày phải là số (ví dụ: 38, 39, 40, 40.5, 41), không được nhập chữ!'
+      return
+    }
+    const num = Number(formatted)
+    if (isNaN(num) || num <= 0 || num > 100) {
+      modalError.value = 'Kích cỡ giày phải là số hợp lệ từ 10 đến 60!'
+      return
+    }
+  }
+
   emit('add', {
     type: props.type,
-    name: itemName.value.trim(),
+    name: trimmed,
     code: props.type === 'color' ? itemCode.value : null,
     description: itemDescription.value.trim()
   })
@@ -59,6 +80,10 @@ const handleSave = () => {
       </div>
 
       <div class="modal-body">
+        <div v-if="modalError" style="background: #fee2e2; color: #b91c1c; padding: 8px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; margin-bottom: 12px;">
+          ⚠️ {{ modalError }}
+        </div>
+
         <div class="form-group mb-3">
           <label class="form-label">{{ labelName }} <span class="required-star">*</span></label>
           <input

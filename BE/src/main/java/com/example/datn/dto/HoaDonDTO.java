@@ -38,6 +38,10 @@ public class HoaDonDTO {
     private String tenPhuongThucThanhToan;
     private Long idPhieuGiamGia;
     private String tenPhieuGiamGia;
+    private Long idDotGiamGia;
+    private String tenDotGiamGia;
+    private BigDecimal tienGiam;
+    private String tenGiamGiaUngDung;
 
     private List<ChiTietHoaDonDTO> chiTiet;
 }

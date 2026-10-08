@@ -4,6 +4,7 @@ import com.example.datn.dto.FormDataResponse;
 import com.example.datn.dto.HoaDonDTO;
 import com.example.datn.dto.HoaDonRequest;
 import com.example.datn.dto.PageResponse;
+import com.example.datn.dto.TrangThaiHoaDonRequest;
 import com.example.datn.service.HoaDonService;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
@@ -34,10 +35,11 @@ public class HoaDonController {
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate denNgay,
         @RequestParam(required = false) String loaiDon,
         @RequestParam(required = false) String trangThai,
+        @RequestParam(defaultValue = "false") boolean daXoa,
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "10") int size
     ) {
-        return hoaDonService.list(ma, tuNgay, denNgay, loaiDon, trangThai, page, size);
+        return hoaDonService.list(ma, tuNgay, denNgay, loaiDon, trangThai, daXoa, page, size);
     }
 
     @GetMapping("/form-data")
@@ -64,5 +66,15 @@ public class HoaDonController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         hoaDonService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}/khoi-phuc")
+    public HoaDonDTO restore(@PathVariable Long id) {
+        return hoaDonService.restore(id);
+    }
+
+    @PutMapping("/{id}/trang-thai")
+    public HoaDonDTO doiTrangThai(@PathVariable Long id, @RequestBody TrangThaiHoaDonRequest request) {
+        return hoaDonService.doiTrangThai(id, request.getTrangThai());
     }
 }

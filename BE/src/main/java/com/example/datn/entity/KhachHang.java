@@ -52,6 +52,9 @@ public class KhachHang {
     @Column(name = "trang_thai", nullable = false)
     private Boolean trangThai = true;
 
+    @Column(name = "vai_tro", nullable = false, length = 20)
+    private String vaiTro = "USER";
+
     @Column(name = "ngay_tao", insertable = false, updatable = false)
     private LocalDateTime ngayTao;
 

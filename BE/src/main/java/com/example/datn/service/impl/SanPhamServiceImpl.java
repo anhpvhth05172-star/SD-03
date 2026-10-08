@@ -12,8 +12,7 @@ import com.example.datn.repository.ChatLieuRepository;
 import com.example.datn.repository.KieuDangRepository;
 import com.example.datn.repository.LoaiGiayRepository;
 import com.example.datn.repository.SanPhamRepository;
-import com.example.datn.repository.ThuongHieuRepository;
-import com.example.datn.repository.XuatXuRepository;
+import com.example.datn.repository.*;
 import com.example.datn.service.SanPhamService;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -30,11 +29,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class SanPhamServiceImpl implements SanPhamService {
 
     private final SanPhamRepository sanPhamRepository;
+    private final SanPhamChiTietRepository sanPhamChiTietRepository;
+    private final ChiTietHoaDonRepository chiTietHoaDonRepository;
     private final XuatXuRepository xuatXuRepository;
     private final ThuongHieuRepository thuongHieuRepository;
     private final ChatLieuRepository chatLieuRepository;
     private final KieuDangRepository kieuDangRepository;
     private final LoaiGiayRepository loaiGiayRepository;
+    private final HinhAnhSanPhamRepository hinhAnhSanPhamRepository;
 
     @Override
     public Page<SanPhamResponse> getAll(int page, int size, String keyword, Long idThuongHieu, Long idLoaiGiay, Long idChatLieu, Long idKieuDang, Long idXuatXu, String doiTuong, Boolean trangThai) {
@@ -158,10 +160,22 @@ public class SanPhamServiceImpl implements SanPhamService {
     @Override
     @Transactional
     public void delete(Long id) {
-        if (!sanPhamRepository.existsById(id)) {
-            throw new RuntimeException("Không tìm thấy sản phẩm với ID: " + id);
+        SanPham sanPham = sanPhamRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy sản phẩm với ID: " + id));
+
+        // Kiểm tra xem sản phẩm đã phát sinh hóa đơn bán hàng chưa
+        if (chiTietHoaDonRepository.existsBySanPhamChiTiet_SanPham_Id(id)) {
+            throw new IllegalArgumentException("Không thể xóa sản phẩm đã có lịch sử hóa đơn hoặc giao dịch bán hàng!");
         }
-        sanPhamRepository.deleteById(id);
+
+        // Xóa ảnh của sản phẩm
+        hinhAnhSanPhamRepository.deleteBySanPhamId(id);
+
+        // Xóa tất cả biến thể chi tiết của sản phẩm trước
+        sanPhamChiTietRepository.deleteBySanPhamId(id);
+
+        // Xóa sản phẩm
+        sanPhamRepository.delete(sanPham);
     }
 
     private String generateProductCode() {

@@ -1,8 +1,10 @@
 package com.example.datn.config;
 
+import com.example.datn.exception.DangNhapThatBaiException;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -14,6 +16,12 @@ public class ApiExceptionHandler {
     public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
         String message = ex.getMessage() != null ? ex.getMessage() : "Dữ liệu không hợp lệ";
         return ResponseEntity.badRequest().body(message(message));
+    }
+
+    @ExceptionHandler(DangNhapThatBaiException.class)
+    public ResponseEntity<Map<String, String>> handleDangNhapThatBai(DangNhapThatBaiException ex) {
+        String message = ex.getMessage() != null ? ex.getMessage() : "Sai tài khoản hoặc mật khẩu";
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(message(message));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

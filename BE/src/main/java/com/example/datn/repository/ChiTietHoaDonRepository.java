@@ -14,4 +14,9 @@ public interface ChiTietHoaDonRepository extends JpaRepository<ChiTietHoaDon, Lo
     @Modifying
     @Query("DELETE FROM ChiTietHoaDon c WHERE c.hoaDon.id = :idHoaDon")
     void deleteByHoaDonId(@Param("idHoaDon") Long idHoaDon);
+
+    boolean existsBySanPhamChiTietId(Long idSanPhamChiTiet);
+
+    boolean existsBySanPhamChiTiet_SanPham_Id(Long idSanPham);
 }
+

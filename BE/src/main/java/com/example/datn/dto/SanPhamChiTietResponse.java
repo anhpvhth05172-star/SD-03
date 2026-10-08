@@ -29,6 +29,7 @@ public class SanPhamChiTietResponse {
     private BigDecimal price;
     private String discount;
     private Boolean trangThai;
+    private String trangThaiTonKho;
     private String img;
     private LocalDateTime ngayTao;
 }

@@ -72,7 +72,7 @@ onMounted(() => getData(0));
           hệ thống
         </p>
       </div>
-      <button class="btn-add" type="button">
+      <RouterLink to="/admin/dot-giam-gia/add" class="btn-add" type="button">
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -83,7 +83,7 @@ onMounted(() => getData(0));
           <path d="M12 6v12M6 12h12" />
         </svg>
         Thêm đợt giảm giá
-      </button>
+      </RouterLink>
     </div>
 
     <section class="panel">
@@ -125,10 +125,9 @@ onMounted(() => getData(0));
         <div class="f-item">
           <label>Trạng thái</label>
           <select>
-            <option value="">Tất cả</option>
-            <option value="running">Đang diễn ra</option>
-            <option value="upcoming">Sắp diễn ra</option>
-            <option value="finished">Đã kết thúc</option>
+            <option value="" label="Tất cả"></option>
+            <option value="1" label="Đang hoạt động"></option>
+            <option value="0" label="Ngừng hoạt động"></option>
           </select>
         </div>
 
@@ -221,10 +220,9 @@ onMounted(() => getData(0));
           <thead>
             <tr>
               <th>Đợt giảm giá</th>
-              <th>Thời gian</th>
+              <th>Thời gian áp dụng</th>
               <th>Mức giảm</th>
-              <th>Áp dụng</th>
-              <th>Số phiếu</th>
+              <th>Mô tả</th>
               <th>Trạng thái</th>
               <th>Thao tác</th>
             </tr>
@@ -253,8 +251,7 @@ onMounted(() => getData(0));
                 {{ formatDate(d.ngayBatDau) }} - {{ formatDate(d.ngayKetThuc) }}
               </td>
               <td class="cell-strong">{{ d.phanTramGiam }}%</td>
-              <td>—</td>
-              <td>—</td>
+              <td>{{ d.moTa }}</td>
               <td>
                 <span class="pill" :class="statusPill(getStatus(d))">{{
                   getStatus(d)
@@ -262,7 +259,12 @@ onMounted(() => getData(0));
               </td>
               <td>
                 <div class="act-group">
-                  <button class="act-btn" type="button" aria-label="Xem">
+                  <RouterLink
+                    :to="`/admin/dot-giam-gia/detail/${d.id}`"
+                    class="act-btn"
+                    type="button"
+                    aria-label="Chi tiết"
+                  >
                     <svg
                       viewBox="0 0 24 24"
                       fill="none"
@@ -276,8 +278,13 @@ onMounted(() => getData(0));
                       />
                       <circle cx="12" cy="12" r="3" />
                     </svg>
-                  </button>
-                  <button class="act-btn is-red" type="button" aria-label="Sửa">
+                  </RouterLink>
+                  <RouterLink
+                    :to="`/admin/dot-giam-gia/update/${d.id}`"
+                    class="act-btn is-red"
+                    type="button"
+                    aria-label="Sửa"
+                  >
                     <svg
                       viewBox="0 0 24 24"
                       fill="none"
@@ -290,18 +297,7 @@ onMounted(() => getData(0));
                         d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3"
                       />
                     </svg>
-                  </button>
-                  <button class="act-btn" type="button" aria-label="Thêm">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2.2"
-                      stroke-linecap="round"
-                    >
-                      <path d="M12 6v12M6 12h12" />
-                    </svg>
-                  </button>
+                  </RouterLink>
                 </div>
               </td>
             </tr>
