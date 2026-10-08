@@ -2,6 +2,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import QuickAddModal from '../components/QuickAddModal.vue'
+import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 
 const router = useRouter()
 const API_BASE = 'http://localhost:8080/api/v1'
@@ -68,12 +69,14 @@ const colorImages = reactive({})
 const isModalOpen = ref(false)
 const modalType = ref('color')
 
-const toast = reactive({ show: false, message: '', type: 'success' })
 const showToast = (message, type = 'success') => {
-  toast.message = message
-  toast.type = type
-  toast.show = true
-  setTimeout(() => { toast.show = false }, 3500)
+  if (type === 'success') {
+    notifySuccess(message)
+  } else if (type === 'warning') {
+    notifyWarning(message)
+  } else {
+    notifyError(message)
+  }
 }
 
 const fetchOptions = async () => {

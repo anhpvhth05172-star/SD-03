@@ -7,6 +7,7 @@ import 'bootstrap-icons/font/bootstrap-icons.css'
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 import './assets/main.css'
 import './assets/screens.css'
+import './assets/styles/custom-swal.css'
 
 const app = createApp(App)
 

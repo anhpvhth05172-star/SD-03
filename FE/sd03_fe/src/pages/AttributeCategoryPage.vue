@@ -1,18 +1,19 @@
 <script setup>
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 
 const route = useRoute()
 const API_BASE = 'http://localhost:8080/api/v1/attributes'
 
-const toastMessage = ref('')
-const toastType = ref('success')
 const showToast = (msg, type = 'success') => {
-  toastMessage.value = msg
-  toastType.value = type
-  setTimeout(() => {
-    toastMessage.value = ''
-  }, 3500)
+  if (type === 'success') {
+    notifySuccess(msg)
+  } else if (type === 'warning') {
+    notifyWarning(msg)
+  } else {
+    notifyError(msg)
+  }
 }
 
 const slugToIdMap = {
@@ -354,12 +355,6 @@ const executeDeleteFast = async (item) => {
 
 <template>
   <div class="attribute-management-page">
-    <transition name="fade">
-      <div v-if="toastMessage" class="toast-floating" :class="{ 'toast-warning': toastType === 'warning' }">
-        <span>{{ toastMessage }}</span>
-      </div>
-    </transition>
-
     <div class="page-header-row">
       <div class="page-title-box">
         <h1 class="page-title">

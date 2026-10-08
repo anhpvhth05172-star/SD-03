@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 
 const router = useRouter()
 const API_BASE = 'http://localhost:8080/api/v1'
@@ -79,23 +80,16 @@ const editForm = reactive({
   trangThai: true
 })
 
-const toastNotice = reactive({
-  show: false,
-  type: 'success',
-  title: '',
-  message: ''
-})
-let toastTimer = null
-
 const showToastNotice = (title, message, type = 'success') => {
-  toastNotice.title = title
-  toastNotice.message = message
-  toastNotice.type = type
-  toastNotice.show = true
-  if (toastTimer) clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => {
-    toastNotice.show = false
-  }, 3500)
+  const content = message || title
+  const heading = message && title ? title : ''
+  if (type === 'success') {
+    notifySuccess(content, heading)
+  } else if (type === 'warning') {
+    notifyWarning(content, heading)
+  } else {
+    notifyError(content, heading)
+  }
 }
 
 const activeFilterCount = computed(() => {
@@ -269,7 +263,10 @@ const toggleStatus = async (item) => {
 }
 
 const deleteProduct = async (id) => {
-  if (!confirm('Bạn có chắc chắn muốn xóa sản phẩm này? Thao tác này không thể hoàn tác.')) return
+  const target = products.value.find(p => p.id === id)
+  const name = target ? (target.tenSanPham || target.maSanPham) : ''
+  const confirmed = await notifyDeleteConfirm(name)
+  if (!confirmed) return
   const originalList = [...products.value]
   products.value = products.value.filter(p => p.id !== id)
   if (totalElements.value > 0) totalElements.value--
@@ -411,37 +408,11 @@ onUnmounted(() => {
 
 <template>
   <div class="product-management-page">
-    <!-- Floating Toast Notification -->
-    <transition name="toast-fade">
-      <div v-if="toastNotice.show" class="floating-toast" :class="toastNotice.type">
-        <div class="toast-icon-box" :class="toastNotice.type">
-          <svg v-if="toastNotice.type === 'success'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-          <svg v-else-if="toastNotice.type === 'warning'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-            <line x1="12" y1="9" x2="12" y2="13"></line>
-            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-          </svg>
-          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="15" y1="9" x2="9" y2="15"></line>
-            <line x1="9" y1="9" x2="15" y2="15"></line>
-          </svg>
-        </div>
-        <div class="toast-text-body">
-          <div class="toast-title">{{ toastNotice.title }}</div>
-          <div class="toast-msg">{{ toastNotice.message }}</div>
-        </div>
-        <button class="toast-close-btn" @click="toastNotice.show = false">×</button>
-      </div>
-    </transition>
-
     <!-- Header Section -->
     <div class="page-top-row">
       <div class="page-intro">
         <div class="breadcrumbs-tag">
-          <span>Trang chủ</span> / <span>Kho hàng</span> / <span class="active">Quản lý sản phẩm</span>
+          <span>Trang chủ</span> / <span class="active">Quản lý sản phẩm</span>
         </div>
         <h1 class="page-heading">
           Quản lý Sản phẩm
