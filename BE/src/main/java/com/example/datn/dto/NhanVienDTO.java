@@ -1,9 +1,7 @@
 package com.example.datn.dto;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -15,27 +13,26 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class KhachHangDTO {
+public class NhanVienDTO {
 
     private Long id;
-    private String maKhachHang;
+    private String maNhanVien;
     private String tenTaiKhoan;
-    private String tenKhachHang;
     private String email;
     private String soDienThoai;
-    private LocalDate ngaySinh;
+    private String anhNhanVien;
     private String gioiTinh;
+    private String queQuan;
+    private String phuong;
+    private String diaChiCuThe;
+    private LocalDate ngaySinh;
     private Boolean trangThai;
     private String trangThaiLabel;
     private LocalDateTime ngayTao;
     private LocalDateTime ngayCapNhat;
     private String nguoiCapNhat;
 
-    private String maHangThanhVien;
-    private String hangThanhVien;
-    private Long soDon;
-    private BigDecimal tongChiTieu;
-
-    private DiaChiKhachHangDTO diaChiMacDinh;
-    private List<DiaChiKhachHangDTO> danhSachDiaChi;
+    private Long idVaiTro;
+    private String maVaiTro;
+    private String tenVaiTro;
 }

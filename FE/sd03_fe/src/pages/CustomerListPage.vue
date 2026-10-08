@@ -1,77 +1,169 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { listCustomers } from '../api/customer'
-import { avatarColor, formatDate, formatVnd, initialsOf } from '../utils/format'
+import { deleteCustomer, getCustomer, listCustomers } from '../api/customer'
+import { avatarColor, formatDate, formatDateTime, formatVnd, initialsOf } from '../utils/format'
 
 const router = useRouter()
 const showFilter = ref(true)
-const loading = ref(true)
-const error = ref('')
-const customers = ref([])
-const capNhatLuc = ref('')
 
-const loc = ref({ tim: '', trangThai: '' })
-const locDaApDung = ref({ tim: '', trangThai: '' })
+const rows = ref([])
+const loading = ref(false)
+const totalElements = ref(0)
+const totalPages = ref(0)
+const page = ref(0)
+const size = 10
+const updatedAt = ref('')
 
-const TRANG_THAI = ['Đang hoạt động', 'Đã khóa']
+const fKeyword = ref('')
+const fHang = ref('')
+const fTrangThai = ref('')
+const fTuNgay = ref('')
 
-const statusPill = (value) => {
-  if (value === 'Đang hoạt động') return 'pill-green'
-  return 'pill-gray'
+const detailData = ref(null)
+
+const rankOptions = [
+  { value: '', label: 'Tất cả' },
+  { value: 'diamond', label: 'Kim cương' },
+  { value: 'gold', label: 'Vàng' },
+  { value: 'silver', label: 'Bạc' },
+  { value: 'normal', label: 'Thường' },
+]
+
+const statusOptions = [
+  { value: '', label: 'Tất cả' },
+  { value: 'active', label: 'Đang hoạt động' },
+  { value: 'locked', label: 'Đã khóa' },
+]
+
+const parseDate = (value) => {
+  const v = (value || '').trim()
+  if (!v) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v
+  const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`
+  return undefined
 }
 
-const rows = computed(() => {
-  const ap = locDaApDung.value
-  return customers.value
-    .map((c) => ({
-      key: c.id,
-      name: c.tenKhachHang,
-      code: c.ma,
-      initials: initialsOf(c.tenKhachHang),
-      color: avatarColor(c.id),
-      contact: [c.soDienThoai || '—', c.email || '—'].join(' · '),
-      orders: `${c.soDon ?? 0} đơn`,
-      spent: formatVnd(c.tongChiTieu || 0),
-      joined: c.ngayTao ? formatDate(c.ngayTao) : '—',
-      status: c.trangThai ? 'Đang hoạt động' : 'Đã khóa',
-      kho: c.trangThai,
-    }))
-    .filter((r) => {
-      if (!ap.tim) return true
-      const tu = ap.tim.toLowerCase()
-      return (
-        r.name.toLowerCase().includes(tu) ||
-        r.contact.toLowerCase().includes(tu) ||
-        r.code.toLowerCase().includes(tu)
-      )
-    })
-    .filter((r) => !ap.trangThai || r.status === ap.trangThai)
-})
-
-const apDungBoLoc = () => {
-  locDaApDung.value = { ...loc.value }
+const buildParams = () => {
+  const params = { page: page.value, size }
+  if (fKeyword.value.trim()) params.keyword = fKeyword.value.trim()
+  if (fHang.value) params.hangThanhVien = fHang.value
+  if (fTrangThai.value) params.trangThai = fTrangThai.value
+  const tu = parseDate(fTuNgay.value)
+  if (tu === undefined) {
+    alert('Sai định dạng ngày (dd/mm/yyyy)')
+    return null
+  }
+  if (tu) params.tuNgay = tu
+  return params
 }
 
-const datLai = () => {
-  loc.value = { tim: '', trangThai: '' }
-  locDaApDung.value = { ...loc.value }
-}
-
-const tai = async () => {
+const load = async () => {
+  const params = buildParams()
+  if (!params) return
   loading.value = true
-  error.value = ''
   try {
-    customers.value = await listCustomers()
-    capNhatLuc.value = new Date().toLocaleString('vi-VN')
+    const data = await listCustomers(params)
+    const maxPage = data.totalPages > 0 ? data.totalPages - 1 : 0
+    if (page.value > maxPage) {
+      page.value = maxPage
+      loading.value = false
+      return await load()
+    }
+    rows.value = data.content
+    totalElements.value = data.totalElements
+    totalPages.value = data.totalPages
+    const now = new Date()
+    const p = (x) => String(x).padStart(2, '0')
+    updatedAt.value = `${p(now.getHours())}:${p(now.getMinutes())} ${p(now.getDate())}/${p(now.getMonth() + 1)}/${now.getFullYear()}`
   } catch (e) {
-    error.value = e.message || 'Không tải được danh sách khách hàng'
+    alert(e.message)
   } finally {
     loading.value = false
   }
 }
 
-onMounted(tai)
+const applyFilter = () => {
+  page.value = 0
+  load()
+}
+
+const resetFilter = () => {
+  fKeyword.value = ''
+  fHang.value = ''
+  fTrangThai.value = ''
+  fTuNgay.value = ''
+  page.value = 0
+  load()
+}
+
+const goPage = (p) => {
+  if (p < 0 || p >= totalPages.value || p === page.value) return
+  page.value = p
+  load()
+}
+
+const pageList = computed(() => {
+  const total = totalPages.value
+  const cur = page.value + 1
+  let start = Math.max(1, cur - 2)
+  let end = Math.min(total, start + 4)
+  start = Math.max(1, end - 4)
+  const arr = []
+  for (let i = start; i <= end; i++) arr.push(i)
+  return arr
+})
+
+const footFrom = computed(() => (totalElements.value === 0 ? 0 : page.value * size + 1))
+const footTo = computed(() => Math.min((page.value + 1) * size, totalElements.value))
+
+const openDetail = async (row) => {
+  try {
+    detailData.value = await getCustomer(row.id)
+  } catch (e) {
+    alert(e.message)
+  }
+}
+
+const removeRow = async (row) => {
+  if (!confirm(`Xóa khách hàng ${row.maKhachHang} (${row.tenKhachHang})? Bản ghi sẽ chuyển sang trạng thái Đã khóa.`)) return
+  try {
+    await deleteCustomer(row.id)
+    await load()
+  } catch (e) {
+    alert(e.message)
+  }
+}
+
+const gioiTinhLabel = (value) => {
+  if (value === 'NAM') return 'Nam'
+  if (value === 'NU') return 'Nữ'
+  if (value === 'KHAC') return 'Khác'
+  return '—'
+}
+
+const diaChiLine = (d) =>
+  [d.diaChiCuThe, d.phuong, d.thanhPho].filter(Boolean).join(', ') || '—'
+
+const diaChiText = computed(() => {
+  const ds = (detailData.value && detailData.value.danhSachDiaChi) || []
+  if (!ds.length) return ''
+  return ds
+    .map((d) => `${d.maDiaChi} — ${diaChiLine(d)}${d.macDinh ? ' (mặc định)' : ''}`)
+    .join('\n')
+})
+
+const statusPill = (value) => (value ? 'pill-green' : 'pill-gray')
+
+const rankPill = (rank) => {
+  if (rank === 'Kim cương') return 'pill-blue'
+  if (rank === 'Vàng') return 'pill-amber'
+  if (rank === 'Bạc') return 'pill-gray'
+  return 'pill-green'
+}
+
+onMounted(load)
 </script>
 
 <template>
@@ -98,7 +190,7 @@ onMounted(tai)
         </span>
         <h3 class="panel-title">Tìm kiếm &amp; bộ lọc</h3>
         <div class="panel-right">
-          <span class="result-count">{{ rows.length }} kết quả</span>
+          <span class="result-count">{{ totalElements }} kết quả</span>
           <button class="link-red" type="button" @click="showFilter = !showFilter">
             {{ showFilter ? 'Ẩn bớt' : 'Hiện thêm' }}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -111,25 +203,42 @@ onMounted(tai)
       <div v-show="showFilter" class="filter-row">
         <div class="f-item">
           <label>Tìm khách hàng</label>
-          <input v-model="loc.tim" type="text" placeholder="Nhập tên, SĐT hoặc email" />
+          <input v-model="fKeyword" type="text" placeholder="Nhập tên, SĐT hoặc email" @keyup.enter="applyFilter" />
+        </div>
+
+        <div class="f-item">
+          <label>Hạng thành viên</label>
+          <select v-model="fHang">
+            <option v-for="r in rankOptions" :key="r.value" :value="r.value">{{ r.label }}</option>
+          </select>
         </div>
 
         <div class="f-item">
           <label>Trạng thái</label>
-          <select v-model="loc.trangThai">
-            <option value="">Tất cả</option>
-            <option v-for="tt in TRANG_THAI" :key="tt" :value="tt">{{ tt }}</option>
+          <select v-model="fTrangThai">
+            <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
           </select>
         </div>
 
+        <div class="f-item">
+          <label>Ngày đăng ký</label>
+          <div class="date-box">
+            <input v-model="fTuNgay" type="text" placeholder="dd/mm/yyyy" />
+            <svg class="date-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3.8" y="5.5" width="16.4" height="14.5" rx="2" />
+              <path d="M8 3.2v4.2M16 3.2v4.2M3.8 10h16.4" />
+            </svg>
+          </div>
+        </div>
+
         <div class="filter-actions">
-          <button class="btn-reset" type="button" aria-label="Đặt lại" @click="datLai">
+          <button class="btn-reset" type="button" aria-label="Đặt lại" @click="resetFilter">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 11a8 8 0 1 0-.9 4.5" />
               <path d="M20 4.5V11h-6.5" />
             </svg>
           </button>
-          <button class="btn-apply" type="button" @click="apDungBoLoc">
+          <button class="btn-apply" type="button" @click="applyFilter">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
               <path d="M4 6h16M7 12h10M10 18h4" />
             </svg>
@@ -149,9 +258,9 @@ onMounted(tai)
           </svg>
         </span>
         <h3 class="panel-title">Danh sách khách hàng</h3>
-        <span class="count-pill">{{ customers.length }} khách hàng</span>
+        <span class="count-pill">{{ totalElements }} khách hàng</span>
         <div class="panel-right">
-          <span v-if="capNhatLuc" class="panel-meta">Cập nhật lúc {{ capNhatLuc }}</span>
+          <span class="panel-meta">Cập nhật lúc {{ updatedAt }}</span>
         </div>
       </div>
 
@@ -160,64 +269,136 @@ onMounted(tai)
           <thead>
             <tr>
               <th>Khách hàng</th>
+              <th>Hạng thành viên</th>
               <th>Tổng đơn</th>
               <th>Tổng chi tiêu</th>
               <th>Ngày đăng ký</th>
               <th>Trạng thái</th>
+              <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="loading">
-              <td colspan="5" class="state-cell">Đang tải dữ liệu...</td>
+              <td colspan="7" class="empty-cell">Đang tải...</td>
             </tr>
-            <tr v-else-if="error">
-              <td colspan="5" class="state-cell is-error">
-                {{ error }}
-                <button class="link-red" type="button" @click="tai">Thử lại</button>
-              </td>
+            <tr v-else-if="rows.length === 0">
+              <td colspan="7" class="empty-cell">Không có khách hàng nào</td>
             </tr>
-            <tr v-else-if="!rows.length">
-              <td colspan="5" class="state-cell">Chưa có khách hàng nào</td>
-            </tr>
-            <tr v-for="row in rows" :key="row.key">
-              <td>
-                <div class="entity">
-                  <span class="entity-avatar" :style="{ background: row.color }">{{ row.initials }}</span>
-                  <div class="entity-info">
-                    <div class="entity-line">
-                      <span class="entity-name">{{ row.name }}</span>
-                      <span class="entity-code">{{ row.code }}</span>
+            <template v-else>
+              <tr v-for="row in rows" :key="row.id">
+                <td>
+                  <div class="entity">
+                    <span class="entity-avatar" :style="{ background: avatarColor(row.id) }">{{ initialsOf(row.tenKhachHang) }}</span>
+                    <div class="entity-info">
+                      <div class="entity-line">
+                        <span class="entity-name">{{ row.tenKhachHang }}</span>
+                        <span class="entity-code">{{ row.maKhachHang }}</span>
+                      </div>
+                      <div class="entity-sub">
+                        {{ row.soDienThoai || '—' }}<template v-if="row.email"> · {{ row.email }}</template>
+                      </div>
                     </div>
-                    <div class="entity-sub">{{ row.contact }}</div>
                   </div>
-                </div>
-              </td>
-              <td>{{ row.orders }}</td>
-              <td class="cell-strong">{{ row.spent }}</td>
-              <td>{{ row.joined }}</td>
-              <td><span class="pill" :class="statusPill(row.status)">{{ row.status }}</span></td>
-            </tr>
+                </td>
+                <td><span class="pill" :class="rankPill(row.hangThanhVien)">{{ row.hangThanhVien }}</span></td>
+                <td>{{ row.soDon }} đơn</td>
+                <td class="cell-strong">{{ formatVnd(row.tongChiTieu) }}</td>
+                <td>{{ formatDate(row.ngayTao) }}</td>
+                <td><span class="pill" :class="statusPill(row.trangThai)">{{ row.trangThaiLabel }}</span></td>
+                <td>
+                  <div class="act-group">
+                    <button class="act-btn" type="button" aria-label="Xem" @click="openDetail(row)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </button>
+                    <button class="act-btn is-red" type="button" aria-label="Sửa" @click="router.push(`/khach-hang/${row.id}/sua`)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3" />
+                      </svg>
+                    </button>
+                    <button class="act-btn" type="button" aria-label="Xóa" title="Xóa" @click="removeRow(row)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        <path d="M10 11v6M14 11v6" />
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
 
       <div class="panel-foot">
-        <span class="foot-text">Hiển thị {{ rows.length }} trong {{ customers.length }} khách hàng</span>
+        <span class="foot-text">Hiển thị {{ footFrom }}-{{ footTo }} trong {{ totalElements }} khách hàng</span>
+        <div class="pager">
+          <button class="page-btn" type="button" aria-label="Trang trước" :disabled="page === 0" @click="goPage(page - 1)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.5 6l-6 6 6 6" />
+            </svg>
+          </button>
+          <button
+            v-for="p in pageList"
+            :key="p"
+            class="page-btn"
+            :class="{ 'is-active': p === page + 1 }"
+            type="button"
+            @click="goPage(p - 1)"
+          >
+            {{ p }}
+          </button>
+          <button class="page-btn" type="button" aria-label="Trang sau" :disabled="page + 1 >= totalPages" @click="goPage(page + 1)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9.5 6l6 6-6 6" />
+            </svg>
+          </button>
+        </div>
       </div>
     </section>
+
+    <div v-if="detailData" class="modal-mask" @click.self="detailData = null">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>Chi tiết khách hàng <span class="modal-code">{{ detailData.maKhachHang }}</span></h3>
+          <button class="modal-close" type="button" aria-label="Đóng" @click="detailData = null">×</button>
+        </div>
+
+        <div class="modal-grid">
+          <div class="m-item"><label>Họ và tên</label><span>{{ detailData.tenKhachHang }}</span></div>
+          <div class="m-item"><label>Tên đăng nhập</label><span>{{ detailData.tenTaiKhoan }}</span></div>
+          <div class="m-item">
+            <label>Trạng thái</label>
+            <span class="pill" :class="statusPill(detailData.trangThai)">{{ detailData.trangThaiLabel }}</span>
+          </div>
+          <div class="m-item"><label>Email</label><span>{{ detailData.email || '—' }}</span></div>
+          <div class="m-item"><label>Số điện thoại</label><span>{{ detailData.soDienThoai || '—' }}</span></div>
+          <div class="m-item"><label>Giới tính</label><span>{{ gioiTinhLabel(detailData.gioiTinh) }}</span></div>
+          <div class="m-item"><label>Ngày sinh</label><span>{{ formatDate(detailData.ngaySinh) }}</span></div>
+          <div class="m-item">
+            <label>Hạng thành viên</label>
+            <span class="pill" :class="rankPill(detailData.hangThanhVien)">{{ detailData.hangThanhVien }}</span>
+          </div>
+          <div class="m-item"><label>Ngày đăng ký</label><span>{{ formatDate(detailData.ngayTao) }}</span></div>
+          <div class="m-item"><label>Tổng đơn</label><span>{{ detailData.soDon }} đơn</span></div>
+          <div class="m-item"><label>Tổng chi tiêu</label><span class="cell-strong">{{ formatVnd(detailData.tongChiTieu) }}</span></div>
+          <div class="m-item"><label>Cập nhật lúc</label><span>{{ formatDateTime(detailData.ngayCapNhat) }}</span></div>
+          <div class="m-item m-wide">
+            <label>Địa chỉ</label>
+            <span class="m-pre">{{ diaChiText || 'Chưa có địa chỉ' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.state-cell {
-  text-align: center;
-  color: #9a9aa3;
-  padding: 24px 0;
-  font-size: 13.5px;
-}
-
-.state-cell.is-error {
-  color: #dc2626;
-  font-weight: 600;
+.m-pre {
+  white-space: pre-line;
 }
 </style>

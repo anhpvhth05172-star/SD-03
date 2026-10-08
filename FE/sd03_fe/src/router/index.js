@@ -90,6 +90,11 @@ const routes = [
         meta: { title: 'Quản lý nhân viên', requiresAuth: true },
       },
       {
+        path: 'khach-hang/:id/sua',
+        component: CustomerCreatePage,
+        meta: { title: 'Quản lý khách hàng', requiresAuth: true },
+      },
+      {
         path: 'nhan-vien/them',
         component: EmployeeCreatePage,
         meta: { title: 'Quản lý nhân viên', requiresAuth: true },
@@ -123,6 +128,11 @@ const routes = [
         path: 'dot-giam-gia/update/:id',
         component: DiscountFormUpdate,
         meta: { title: 'Cập nhật đợt giảm giá' },
+      },
+      {
+        path: 'nhan-vien/:id/sua',
+        component: EmployeeCreatePage,
+        meta: { title: 'Quản lý nhân viên', requiresAuth: true },
       },
       { path: ':pathMatch(.*)*', redirect: '/hoa-don' },
     ],
