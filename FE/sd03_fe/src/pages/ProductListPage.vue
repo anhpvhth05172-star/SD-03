@@ -468,7 +468,7 @@ const exportToExcel = async () => {
     itemsToExport.forEach((item, index) => {
       const styleId = index % 2 === 0 ? 'RowEven' : 'RowOdd'
       const statusStyle = item.trangThai !== false ? 'ActiveStatus' : 'InactiveStatus'
-      const statusText = item.trangThai !== false ? 'Đang bán' : 'Ngưng bán'
+      const statusText = item.trangThai !== false ? 'Kinh doanh' : 'Ngưng kinh doanh'
       const code = item.maSanPham || `SP0${item.id}`
 
       xml += `
@@ -639,11 +639,11 @@ onUnmounted(() => {
           </button>
           <button class="status-tab" :class="{ active: activeTab === 'ACTIVE' }" @click="selectTab('ACTIVE')">
             <span class="dot green-dot"></span>
-            Đang bán
+            Kinh doanh
           </button>
           <button class="status-tab" :class="{ active: activeTab === 'INACTIVE' }" @click="selectTab('INACTIVE')">
             <span class="dot gray-dot"></span>
-            Ngưng bán
+            Ngưng kinh doanh
           </button>
         </div>
 
@@ -933,7 +933,7 @@ onUnmounted(() => {
               </div>
 
               <div class="form-group span-2 switch-row">
-                <label class="form-label mb-0">Trạng thái (Bật: Đang bán / Tắt: Ngưng bán)</label>
+                <label class="form-label mb-0">Trạng thái (Bật: Kinh doanh / Tắt: Ngưng kinh doanh)</label>
                 <label class="switch-toggle">
                   <input type="checkbox" v-model="editForm.trangThai" />
                   <span class="slider round"></span>

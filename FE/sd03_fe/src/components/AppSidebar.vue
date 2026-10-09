@@ -106,7 +106,6 @@ const toggle = (item) => {
 
 <template>
   <aside class="sidebar-container" :class="{ 'is-collapsed': collapsed }">
-    <!-- Brand Logo Box -->
     <div class="brand-wrapper">
       <router-link to="/san-pham" class="brand-link">
         <div class="brand-logo-card">
@@ -115,34 +114,28 @@ const toggle = (item) => {
       </router-link>
     </div>
 
-    <!-- Navigation Menu -->
     <nav class="sidebar-nav">
       <div class="menu-list">
         <template v-for="item in menu" :key="item.path">
-          <!-- Single Link Item -->
-          <router-link
-            v-if="!item.children"
-            :to="item.path"
-            class="nav-item-btn"
-            :class="{ 'is-active': isParentActive(item) }"
-          >
+          <router-link v-if="!item.children" :to="item.path" class="nav-item-btn"
+            :class="{ 'is-active': isParentActive(item) }">
             <div class="nav-icon-box">
-              <!-- Thống kê -->
-              <svg v-if="item.iconType === 'chart'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-if="item.iconType === 'chart'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="20" x2="18" y2="10" />
                 <line x1="12" y1="20" x2="12" y2="4" />
                 <line x1="6" y1="20" x2="6" y2="14" />
               </svg>
 
-              <!-- Bán hàng tại quầy -->
-              <svg v-else-if="item.iconType === 'pos'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-else-if="item.iconType === 'pos'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="9" cy="21" r="1" />
                 <circle cx="20" cy="21" r="1" />
                 <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
               </svg>
 
-              <!-- Quản lý hóa đơn -->
-              <svg v-else-if="item.iconType === 'invoice'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-else-if="item.iconType === 'invoice'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
                 <line x1="16" y1="13" x2="8" y2="13" />
@@ -150,16 +143,16 @@ const toggle = (item) => {
                 <polyline points="10 9 9 9 8 9" />
               </svg>
 
-              <!-- Quản lý khách hàng -->
-              <svg v-else-if="item.iconType === 'customers'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-else-if="item.iconType === 'customers'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                 <circle cx="9" cy="7" r="4" />
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
 
-              <!-- Quản lý nhân viên -->
-              <svg v-else-if="item.iconType === 'employees'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-else-if="item.iconType === 'employees'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
@@ -167,24 +160,20 @@ const toggle = (item) => {
             <span class="nav-text">{{ item.label }}</span>
           </router-link>
 
-          <!-- Dropdown Group Item -->
           <div v-else class="nav-group-wrapper" :class="{ 'is-expanded': isOpen(item) }">
-            <button
-              type="button"
-              class="nav-item-btn nav-group-header"
-              :class="{ 'is-active': isParentActive(item), 'is-open': isOpen(item) }"
-              @click="toggle(item)"
-            >
+            <button type="button" class="nav-item-btn nav-group-header"
+              :class="{ 'is-active': isParentActive(item), 'is-open': isOpen(item) }" @click="toggle(item)">
               <div class="nav-icon-box">
-                <!-- Quản lý sản phẩm -->
-                <svg v-if="item.iconType === 'product'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                <svg v-if="item.iconType === 'product'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path
+                    d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                   <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
                   <line x1="12" y1="22.08" x2="12" y2="12" />
                 </svg>
 
-                <!-- Danh mục thuộc tính -->
-                <svg v-else-if="item.iconType === 'attributes'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg v-else-if="item.iconType === 'attributes'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="8" y1="6" x2="21" y2="6" />
                   <line x1="8" y1="12" x2="21" y2="12" />
                   <line x1="8" y1="18" x2="21" y2="18" />
@@ -193,40 +182,25 @@ const toggle = (item) => {
                   <line x1="3" y1="18" x2="3.01" y2="18" />
                 </svg>
 
-                <!-- Quản lý giảm giá -->
-                <svg v-else-if="item.iconType === 'discounts'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg v-else-if="item.iconType === 'discounts'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
                   <line x1="7" y1="7" x2="7.01" y2="7" />
                 </svg>
               </div>
               <span class="nav-text">{{ item.label }}</span>
-              <svg
-                class="chevron-arrow"
-                :class="{ 'is-flipped': isOpen(item) }"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
+              <svg class="chevron-arrow" :class="{ 'is-flipped': isOpen(item) }" width="14" height="14"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
                 <polyline points="6 9 12 15 18 9" />
               </svg>
             </button>
 
-            <!-- Submenu Items -->
             <div v-if="isOpen(item)" class="submenu-container">
               <div class="submenu-tree-line"></div>
               <div class="submenu-list">
-                <router-link
-                  v-for="child in item.children"
-                  :key="child.path"
-                  :to="child.path"
-                  class="submenu-item-btn"
-                  :class="{ 'is-active': isChildActive(child) }"
-                >
+                <router-link v-for="child in item.children" :key="child.path" :to="child.path" class="submenu-item-btn"
+                  :class="{ 'is-active': isChildActive(child) }">
                   <span class="submenu-bullet"></span>
                   <span class="submenu-text">{{ child.label }}</span>
                 </router-link>
@@ -237,7 +211,6 @@ const toggle = (item) => {
       </div>
     </nav>
 
-    <!-- Footer System Status Card -->
     <div class="sidebar-footer-card">
       <div class="status-indicator">
         <span class="pulse-dot"></span>

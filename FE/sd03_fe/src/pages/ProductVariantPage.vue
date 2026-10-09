@@ -399,7 +399,7 @@ const exportVariantsToExcel = async () => {
     itemsToExport.forEach((item, index) => {
       const styleId = index % 2 === 0 ? 'RowEven' : 'RowOdd'
       const statusStyle = item.trangThai !== false ? 'ActiveStatus' : 'InactiveStatus'
-      const statusText = item.trangThai !== false ? 'Đang bán' : 'Ngưng bán'
+      const statusText = item.trangThai !== false ? 'Kinh doanh' : 'Ngưng kinh doanh'
 
       xml += `
    <Row ss:Height="22">
@@ -1062,8 +1062,8 @@ onUnmounted(() => {
           <div class="select-wrapper">
             <select v-model="filters.trangThai" class="form-select" @change="onFilterChange">
               <option value="">Tất cả trạng thái</option>
-              <option :value="true">Đang bán</option>
-              <option :value="false">Ngưng bán</option>
+              <option :value="true">Kinh doanh</option>
+              <option :value="false">Ngưng kinh doanh</option>
             </select>
           </div>
         </div>
@@ -1357,8 +1357,8 @@ onUnmounted(() => {
               <div class="form-group span-2">
                 <label class="form-lbl">Trạng thái</label>
                 <select v-model="editForm.trangThai" class="modal-select">
-                  <option :value="true">Đang bán</option>
-                  <option :value="false">Ngưng bán</option>
+                  <option :value="true">Kinh doanh</option>
+                  <option :value="false">Ngưng kinh doanh</option>
                 </select>
               </div>
             </div>
@@ -1439,8 +1439,8 @@ onUnmounted(() => {
               <div class="form-group span-2">
                 <label class="form-lbl">Trạng thái</label>
                 <select v-model="addForm.trangThai" class="modal-select">
-                  <option :value="true">Đang bán</option>
-                  <option :value="false">Ngưng bán</option>
+                  <option :value="true">Kinh doanh</option>
+                  <option :value="false">Ngưng kinh doanh</option>
                 </select>
               </div>
 

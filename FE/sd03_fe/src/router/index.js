@@ -11,6 +11,7 @@ import EmployeeListPage from '../pages/EmployeeListPage.vue'
 import EmployeeCreatePage from '../pages/EmployeeCreatePage.vue'
 import CustomerListPage from '../pages/CustomerListPage.vue'
 import CustomerCreatePage from '../pages/CustomerCreatePage.vue'
+import PosSalesPage from '../pages/PosSalesPage.vue'
 import PlaceholderPage from '../pages/PlaceholderPage.vue'
 
 const routes = [
@@ -32,7 +33,7 @@ const routes = [
       { path: 'dot-giam-gia', component: DiscountEventPage, meta: { title: 'Quản lý đợt giảm giá' } },
       { path: 'giam-gia', redirect: '/phieu-giam-gia' },
       { path: 'thong-ke', component: PlaceholderPage, meta: { title: 'Thống kê' } },
-      { path: 'ban-hang', component: PlaceholderPage, meta: { title: 'Bán hàng tại quầy' } },
+      { path: 'ban-hang', name: 'PosSales', component: PosSalesPage, meta: { title: 'Bán hàng tại quầy' } },
       { path: 'khach-hang', component: CustomerListPage, meta: { title: 'Quản lý khách hàng' } },
       { path: 'khach-hang/them', component: CustomerCreatePage, meta: { title: 'Quản lý khách hàng' } },
       { path: 'nhan-vien', component: EmployeeListPage, meta: { title: 'Quản lý nhân viên' } },
