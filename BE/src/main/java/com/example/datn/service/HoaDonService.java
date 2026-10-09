@@ -102,6 +102,17 @@ public class HoaDonService {
     public PageResponse<HoaDonDTO> list(
         String ma, LocalDate tuNgay, LocalDate denNgay, String loaiDon, String trangThai, boolean daXoa, int page, int size
     ) {
+        BoLoc loc = chuanHoaBoLoc(ma, tuNgay, denNgay, loaiDon, trangThai);
+        var result = hoaDonRepository.findByFilters(
+            loc.ma(), loc.tu(), loc.den(), loc.loaiDon(), loc.trangThai(), daXoa,
+            PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 10))
+        );
+        return PageResponse.from(result.map(this::toDTO));
+    }
+
+    private record BoLoc(String ma, LocalDateTime tu, LocalDateTime den, String loaiDon, String trangThai) {}
+
+    private BoLoc chuanHoaBoLoc(String ma, LocalDate tuNgay, LocalDate denNgay, String loaiDon, String trangThai) {
         if (ma != null && ma.chars().anyMatch(Character::isWhitespace)) {
             throw new IllegalArgumentException("Mã hóa đơn không được chứa dấu cách");
         }
@@ -123,11 +134,133 @@ public class HoaDonService {
                 maTrangThai = trangThai.trim();
             }
         }
-        var result = hoaDonRepository.findByFilters(
-            blankToNull(ma), tu, den, maLoaiDon, maTrangThai, daXoa,
-            PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 10))
-        );
-        return PageResponse.from(result.map(this::toDTO));
+        return new BoLoc(blankToNull(ma), tu, den, maLoaiDon, maTrangThai);
+    }
+
+    private static final String[] COT_EXCEL = {
+        "STT", "Mã hóa đơn", "Tên khách hàng", "Số điện thoại", "Địa chỉ nhận hàng",
+        "Loại hóa đơn", "Ngày tạo", "Tổng số lượng sản phẩm", "Tổng tiền hàng",
+        "Tiền giảm giá", "Phí vận chuyển", "Tổng thanh toán", "Phương thức thanh toán",
+        "Trạng thái thanh toán", "Trạng thái hóa đơn", "Ghi chú"
+    };
+
+    @Transactional(readOnly = true)
+    public byte[] xuatExcel(String ma, LocalDate tuNgay, LocalDate denNgay, String loaiDon, String trangThai) {
+        BoLoc loc = chuanHoaBoLoc(ma, tuNgay, denNgay, loaiDon, trangThai);
+        List<HoaDon> ds = hoaDonRepository.findAllByFilters(
+            loc.ma(), loc.tu(), loc.den(), loc.loaiDon(), loc.trangThai(), false);
+        if (ds.isEmpty()) {
+            throw new IllegalArgumentException("Không có hóa đơn nào khớp với bộ lọc hiện tại");
+        }
+        Map<Long, Long> soLuongTheoHoaDon = new HashMap<>();
+        List<Long> ids = ds.stream().map(HoaDon::getId).toList();
+        for (Object[] row : chiTietHoaDonRepository.tongSoLuongTheoHoaDon(ids)) {
+            soLuongTheoHoaDon.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
+        }
+        try (org.apache.poi.xssf.usermodel.XSSFWorkbook wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+            org.apache.poi.ss.usermodel.Sheet sheet = wb.createSheet("Danh sách hóa đơn");
+
+            org.apache.poi.ss.usermodel.Font fontHeader = wb.createFont();
+            fontHeader.setBold(true);
+            fontHeader.setColor(org.apache.poi.ss.usermodel.IndexedColors.WHITE.getIndex());
+            fontHeader.setFontName("Calibri");
+            fontHeader.setFontHeightInPoints((short) 11);
+
+            org.apache.poi.xssf.usermodel.XSSFCellStyle styleHeader =
+                wb.createCellStyle();
+            styleHeader.setFont(fontHeader);
+            styleHeader.setFillForegroundColor(new org.apache.poi.xssf.usermodel.XSSFColor(
+                new byte[]{0x1F, 0x29, 0x37}, null));
+            styleHeader.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
+            styleHeader.setVerticalAlignment(org.apache.poi.ss.usermodel.VerticalAlignment.CENTER);
+            styleHeader.setWrapText(true);
+
+            org.apache.poi.ss.usermodel.CellStyle styleNgay = wb.createCellStyle();
+            org.apache.poi.ss.usermodel.DataFormat fmtNgay = wb.createDataFormat();
+            styleNgay.setDataFormat(fmtNgay.getFormat("dd/MM/yyyy HH:mm"));
+
+            org.apache.poi.ss.usermodel.CellStyle styleTien = wb.createCellStyle();
+            org.apache.poi.ss.usermodel.DataFormat fmtTien = wb.createDataFormat();
+            styleTien.setDataFormat(fmtTien.getFormat("#,##0"));
+
+            org.apache.poi.ss.usermodel.Row header = sheet.createRow(0);
+            for (int i = 0; i < COT_EXCEL.length; i++) {
+                org.apache.poi.ss.usermodel.Cell cell = header.createCell(i);
+                cell.setCellValue(COT_EXCEL[i]);
+                cell.setCellStyle(styleHeader);
+            }
+
+            int rowNum = 1;
+            for (HoaDon h : ds) {
+                org.apache.poi.ss.usermodel.Row row = sheet.createRow(rowNum);
+                BigDecimal phiVanChuyen = h.getPhiVanChuyen() != null ? h.getPhiVanChuyen() : BigDecimal.ZERO;
+                BigDecimal tongTien = h.getTongTien() != null ? h.getTongTien() : BigDecimal.ZERO;
+                BigDecimal tienGiam = h.getTienGiam() != null ? h.getTienGiam() : BigDecimal.ZERO;
+                BigDecimal tongThanhToan = h.getTienSauGiamGia() != null ? h.getTienSauGiamGia() : BigDecimal.ZERO;
+                BigDecimal tienHang = tongTien.subtract(phiVanChuyen);
+
+                row.createCell(0).setCellValue(rowNum);
+                row.createCell(1).setCellValue(h.getMaHoaDon() != null ? h.getMaHoaDon() : "");
+                row.createCell(2).setCellValue(h.getTenKhachHang() != null ? h.getTenKhachHang() : "");
+                row.createCell(3).setCellValue(h.getSoDienThoaiKhachHang() != null ? h.getSoDienThoaiKhachHang() : "");
+                row.createCell(4).setCellValue(h.getDiaChiNhanHang() != null ? h.getDiaChiNhanHang() : "");
+                row.createCell(5).setCellValue(toTenLoaiDon(h.getLoaiDon()));
+
+                org.apache.poi.ss.usermodel.Cell cellNgay = row.createCell(6);
+                if (h.getNgayTao() != null) {
+                    cellNgay.setCellValue(org.apache.poi.ss.usermodel.DateUtil.getExcelDate(
+                        java.util.Date.from(h.getNgayTao().atZone(java.time.ZoneId.systemDefault()).toInstant())));
+                    cellNgay.setCellStyle(styleNgay);
+                }
+
+                Long tongSl = soLuongTheoHoaDon.getOrDefault(h.getId(), 0L);
+                row.createCell(7).setCellValue(tongSl.doubleValue());
+
+                org.apache.poi.ss.usermodel.Cell cellTienHang = row.createCell(8);
+                cellTienHang.setCellValue(tienHang.doubleValue());
+                cellTienHang.setCellStyle(styleTien);
+                org.apache.poi.ss.usermodel.Cell cellGiam = row.createCell(9);
+                cellGiam.setCellValue(tienGiam.doubleValue());
+                cellGiam.setCellStyle(styleTien);
+                org.apache.poi.ss.usermodel.Cell cellShip = row.createCell(10);
+                cellShip.setCellValue(phiVanChuyen.doubleValue());
+                cellShip.setCellStyle(styleTien);
+                org.apache.poi.ss.usermodel.Cell cellTong = row.createCell(11);
+                cellTong.setCellValue(tongThanhToan.doubleValue());
+                cellTong.setCellStyle(styleTien);
+
+                row.createCell(12).setCellValue(
+                    h.getPhuongThucThanhToan() != null ? h.getPhuongThucThanhToan().getTenPhuongThuc() : "");
+                row.createCell(13).setCellValue(tinhTrangThaiThanhToan(h.getTrangThai()));
+                row.createCell(14).setCellValue(toTenTrangThai(h.getTrangThai()));
+                row.createCell(15).setCellValue(h.getGhiChu() != null ? h.getGhiChu() : "");
+                rowNum++;
+            }
+
+            int[] rong = {6, 16, 26, 14, 40, 12, 17, 13, 15, 13, 14, 15, 20, 17, 17, 30};
+            for (int i = 0; i < rong.length; i++) {
+                sheet.setColumnWidth(i, rong[i] * 256);
+            }
+            sheet.createFreezePane(0, 1);
+            sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(
+                0, 0, 0, COT_EXCEL.length - 1));
+
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            wb.write(out);
+            return out.toByteArray();
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Không tạo được file Excel: " + e.getMessage(), e);
+        }
+    }
+
+    private static String tinhTrangThaiThanhToan(String maTrangThai) {
+        if ("DA_HOAN_THANH".equals(maTrangThai) || "DA_GIAO_HANG".equals(maTrangThai)) {
+            return "Đã thanh toán";
+        }
+        if ("DA_HOAN_TIEN".equals(maTrangThai)) {
+            return "Đã hoàn tiền";
+        }
+        return "Chưa thanh toán";
     }
 
     @Transactional(readOnly = true)
@@ -155,13 +288,16 @@ public class HoaDonService {
 
     @Transactional
     public HoaDonDTO update(Long id, HoaDonRequest req) {
-        HoaDon hoaDon = findOrThrow(id);
+        HoaDon hoaDon = findForUpdateOrThrow(id);
         if (!"CHO_XAC_NHAN".equals(hoaDon.getTrangThai())) {
             throw new IllegalArgumentException(
                 "Chỉ hóa đơn Chờ xác nhận mới được sửa (trạng thái hiện tại: " + toTenTrangThai(hoaDon.getTrangThai()) + ")"
             );
         }
         validateHeader(req, id);
+        if (!req.getMaHoaDon().trim().equals(hoaDon.getMaHoaDon())) {
+            throw new IllegalArgumentException("Không được thay đổi mã hóa đơn");
+        }
         if (!isBlank(req.getTrangThai()) && !hoaDon.getTrangThai().equals(toMaTrangThai(req.getTrangThai()))) {
             throw new IllegalArgumentException(
                 "Hãy sử dụng PUT /api/hoa-don/{id}/trang-thai để đổi trạng thái hóa đơn"
@@ -602,6 +738,15 @@ public class HoaDonService {
 
     private HoaDon findOrThrow(Long id) {
         HoaDon hoaDon = hoaDonRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy hóa đơn #" + id));
+        if (hoaDon.isDaXoa()) {
+            throw new IllegalArgumentException("Không tìm thấy hóa đơn #" + id);
+        }
+        return hoaDon;
+    }
+
+    private HoaDon findForUpdateOrThrow(Long id) {
+        HoaDon hoaDon = hoaDonRepository.findByIdForUpdate(id)
             .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy hóa đơn #" + id));
         if (hoaDon.isDaXoa()) {
             throw new IllegalArgumentException("Không tìm thấy hóa đơn #" + id);

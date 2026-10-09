@@ -47,6 +47,23 @@ public class HoaDonController {
         return hoaDonService.formData();
     }
 
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> export(
+        @RequestParam(required = false) String ma,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate tuNgay,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate denNgay,
+        @RequestParam(required = false) String loaiDon,
+        @RequestParam(required = false) String trangThai
+    ) {
+        byte[] file = hoaDonService.xuatExcel(ma, tuNgay, denNgay, loaiDon, trangThai);
+        String filename = "Danh_sach_hoa_don_" + LocalDate.now() + ".xlsx";
+        return ResponseEntity.ok()
+            .header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+            .header("Content-Length", String.valueOf(file.length))
+            .body(file);
+    }
+
     @GetMapping("/{id}")
     public HoaDonDTO get(@PathVariable Long id) {
         return hoaDonService.get(id);

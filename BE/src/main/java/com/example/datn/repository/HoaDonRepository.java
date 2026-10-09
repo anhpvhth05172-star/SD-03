@@ -1,11 +1,14 @@
 package com.example.datn.repository;
 
 import com.example.datn.entity.HoaDon;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -14,6 +17,33 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
     boolean existsByMaHoaDon(String maHoaDon);
 
     boolean existsByMaHoaDonAndIdNot(String maHoaDon, Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT h FROM HoaDon h WHERE h.id = :id")
+    Optional<HoaDon> findByIdForUpdate(@Param("id") Long id);
+
+    @Query(
+        value = """
+            SELECT * FROM hoa_don h
+            WHERE (:ma IS NULL OR h.ma_hoa_don LIKE CONCAT('%', :ma, '%') COLLATE Latin1_General_CS_AS)
+              AND (:tuNgay IS NULL OR h.ngay_tao >= :tuNgay)
+              AND (:denNgay IS NULL OR h.ngay_tao <= :denNgay)
+              AND (:loaiDon IS NULL OR h.loai_don = :loaiDon)
+              AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
+              AND h.da_xoa = :daXoa
+            ORDER BY CASE WHEN h.trang_thai IN ('DA_HOAN_THANH', 'DA_HOAN_TIEN') THEN 1 ELSE 0 END ASC,
+                     h.ngay_tao ASC, h.id ASC
+            """,
+        nativeQuery = true
+    )
+    List<HoaDon> findAllByFilters(
+        @Param("ma") String ma,
+        @Param("tuNgay") LocalDateTime tuNgay,
+        @Param("denNgay") LocalDateTime denNgay,
+        @Param("loaiDon") String loaiDon,
+        @Param("trangThai") String trangThai,
+        @Param("daXoa") boolean daXoa
+    );
 
     @Query(
         value = """

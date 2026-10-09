@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { listInvoices } from '../api/invoice'
+import { listInvoices, exportInvoices } from '../api/invoice'
 import { avatarColor, formatDateTime, formatVnd, initialsOf, payStatusOf } from '../utils/format'
 
 const router = useRouter()
@@ -123,6 +123,38 @@ const goPage = (p) => {
   load()
 }
 
+const exporting = ref(false)
+
+const xuatExcel = async () => {
+  const params = buildParams()
+  if (!params) {
+    alert('Khoảng ngày không hợp lệ')
+    return
+  }
+  const exportParams = { ...params }
+  delete exportParams.page
+  delete exportParams.size
+  exporting.value = true
+  try {
+    const blob = await exportInvoices(exportParams)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const p = (x) => String(x).padStart(2, '0')
+    const now = new Date()
+    const ngay = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
+    a.href = url
+    a.download = `Danh_sach_hoa_don_${ngay}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    alert(e.message || 'Xuất file Excel thất bại')
+  } finally {
+    exporting.value = false
+  }
+}
+
 const pageList = computed(() => {
   const total = totalPages.value
   const cur = page.value + 1
@@ -237,6 +269,17 @@ onMounted(load)
         <span class="count-pill">{{ totalElements }} hóa đơn</span>
         <div class="panel-right">
           <span class="panel-meta">Cập nhật lúc {{ updatedAt }}</span>
+          <button
+            class="btn-export"
+            type="button"
+            :disabled="exporting"
+            @click="xuatExcel"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v12M7 10l5 5 5-5M4 21h16" />
+            </svg>
+            {{ exporting ? 'Đang xuất...' : 'Xuất Excel' }}
+          </button>
           <button class="btn-create" type="button" @click="router.push('/hoa-don/them')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
               <path d="M12 6v12M6 12h12" />
@@ -402,6 +445,37 @@ onMounted(load)
 
 .btn-create:hover {
   background: #000;
+}
+
+.btn-export {
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid #16a34a;
+  border-radius: 7px;
+  background: #fff;
+  color: #16a34a;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.btn-export:hover:not(:disabled) {
+  background: #16a34a;
+  color: #fff;
+}
+
+.btn-export:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-export svg {
+  width: 15px;
+  height: 15px;
 }
 
 .btn-create svg {

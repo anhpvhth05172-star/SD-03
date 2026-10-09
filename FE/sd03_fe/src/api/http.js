@@ -93,10 +93,15 @@ http.interceptors.response.use(
       }
     }
 
-    const msg =
-      err.response?.data?.message ||
-      err.response?.data?.detail ||
-      'Không kết nối được máy chủ'
+    let data = err.response?.data
+    if (typeof Blob !== 'undefined' && data instanceof Blob) {
+      try {
+        data = JSON.parse(await data.text())
+      } catch {
+        data = null
+      }
+    }
+    const msg = data?.message || data?.detail || 'Không kết nối được máy chủ'
     return Promise.reject(new Error(msg))
   },
 )

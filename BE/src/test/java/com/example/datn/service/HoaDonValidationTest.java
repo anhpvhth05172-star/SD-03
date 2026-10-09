@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -557,11 +558,49 @@ class HoaDonValidationTest {
 
     @Test
     void khongChoSuaHoaDonDaXacNhan() {
-        when(hoaDonRepository.findById(HD_ID)).thenReturn(Optional.of(hoaDon("DA_XAC_NHAN")));
+        when(hoaDonRepository.findByIdForUpdate(HD_ID)).thenReturn(Optional.of(hoaDon("DA_XAC_NHAN")));
 
         assertThatThrownBy(() -> service.update(HD_ID, yeuCau(new BigDecimal("500000"))))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Chỉ hóa đơn Chờ xác nhận mới được sửa");
+    }
+
+    @Test
+    void suaHoaDonChoXacNhan_GiuMaVaTrangThaiCapNhatTruong() {
+        chuanBi(spct(true, true));
+        when(hoaDonRepository.findByIdForUpdate(HD_ID)).thenReturn(Optional.of(hoaDon("CHO_XAC_NHAN")));
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        req.setMaHoaDon("HD001");
+        req.setTenKhachHang("Nguyen Van B");
+        req.setSoDienThoaiKhachHang("0987654321");
+
+        HoaDonDTO dto = service.update(HD_ID, req);
+
+        assertThat(dto.getId()).isEqualTo(HD_ID);
+        assertThat(dto.getMaHoaDon()).isEqualTo("HD001");
+        assertThat(dto.getTrangThai()).isEqualTo("Chờ xác nhận");
+        assertThat(dto.getTenKhachHang()).isEqualTo("Nguyen Van B");
+    }
+
+    @Test
+    void khongChoDoiMaHoaDon_KhiSua() {
+        when(hoaDonRepository.findByIdForUpdate(HD_ID)).thenReturn(Optional.of(hoaDon("CHO_XAC_NHAN")));
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        req.setMaHoaDon("HDKHAC001");
+
+        assertThatThrownBy(() -> service.update(HD_ID, req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Không được thay đổi mã hóa đơn");
+    }
+
+    @Test
+    void khongChoSuaHoaDonDaXacNhan_KhongTaoMoi() {
+        when(hoaDonRepository.findByIdForUpdate(HD_ID)).thenReturn(Optional.of(hoaDon("DA_XAC_NHAN")));
+
+        assertThatThrownBy(() -> service.update(HD_ID, yeuCau(new BigDecimal("500000"))))
+            .isInstanceOf(IllegalArgumentException.class);
+
+        verify(hoaDonRepository, never()).save(any(HoaDon.class));
     }
 
     @Test
