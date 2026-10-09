@@ -2,9 +2,12 @@ package com.example.datn.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -31,10 +34,10 @@ public class PhieuGiamGia {
     @Column(name = "ten_phieu_giam_gia", nullable = false, length = 200)
     private String tenPhieuGiamGia;
 
-    @Column(name = "loai_giam_gia", nullable = false, length = 30)
+    @Column(name = "loai_giam_gia")
     private String loaiGiamGia;
 
-    @Column(name = "gia_tri_giam", nullable = false)
+    @Column(name = "gia_tri_giam")
     private BigDecimal giaTriGiam;
 
     @Column(name = "giam_toi_da")
@@ -52,11 +55,18 @@ public class PhieuGiamGia {
     @Column(name = "so_luong", nullable = false)
     private Integer soLuong = 0;
 
-    @Column(name = "so_luong_da_su_dung", nullable = false)
-    private Integer soLuongDaSuDung = 0;
+    @Column(name = "so_luong_da_su_dung")
+    private Integer soLuongDaSuDung;
 
-    @Column(name = "trang_thai")
-    private Boolean trangThai;
+    @Column(name = "gioi_han_moi_tai_khoan", nullable = false)
+    private Integer gioiHanMoiTaiKhoan = 1;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_dot_giam_gia")
+    private DotGiamGia dotGiamGia;
+
+    @Column(name = "trang_thai", nullable = false)
+    private Boolean trangThai = true;
 
     @Column(name = "ngay_tao", insertable = false, updatable = false)
     private LocalDateTime ngayTao;

@@ -1,7 +1,31 @@
 <script setup>
+import { ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { dangXuat, getRefreshToken, getUser } from '../utils/auth'
+import { huyPhien } from '../api/auth'
+
 defineProps({
   title: { type: String, default: '' },
 })
+
+const route = useRoute()
+const router = useRouter()
+const nguoiDung = ref(getUser())
+
+watch(route, () => {
+  nguoiDung.value = getUser()
+})
+
+const xulyDangXuat = async () => {
+  const refreshToken = getRefreshToken()
+  try {
+    if (refreshToken) await huyPhien(refreshToken)
+  } catch {
+    dangXuat()
+  }
+  dangXuat()
+  router.push('/dang-nhap')
+}
 </script>
 
 <template>
@@ -15,18 +39,13 @@ defineProps({
       <span class="crumb-current">{{ title }}</span>
     </nav>
 
-    <div class="user-box">
-      <span class="notif-dot"></span>
-      <div class="avatar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-          <circle cx="12" cy="7.5" r="4" />
-        </svg>
-      </div>
-      <div class="user-meta">
-        <strong>Phạm Hoàng Anh</strong>
-        <span>Giám đốc</span>
-      </div>
+    <div class="auth-box">
+      <template v-if="nguoiDung">
+        <span class="auth-role" v-if="nguoiDung.vaiTro === 'ADMIN'">Admin</span>
+        <span class="auth-user" :title="nguoiDung.email">{{ nguoiDung.tenTaiKhoan }}</span>
+        <button class="auth-btn" type="button" @click="xulyDangXuat">Đăng xuất</button>
+      </template>
+      <router-link v-else class="auth-btn is-login" to="/dang-nhap">Đăng nhập</router-link>
     </div>
   </header>
 </template>
@@ -70,49 +89,52 @@ defineProps({
   font-weight: 600;
 }
 
-.user-box {
+.auth-box {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.notif-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.auth-role {
+  padding: 3px 9px;
+  border-radius: 999px;
   background: var(--red);
-}
-
-.avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: #f1f2f5;
-  color: #4b4b53;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.avatar svg {
-  width: 17px;
-  height: 17px;
-}
-
-.user-meta {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.25;
-}
-
-.user-meta strong {
-  font-size: 11.5px;
-  color: #23232a;
-  font-weight: 600;
-}
-
-.user-meta span {
+  color: #fff;
   font-size: 10.5px;
-  color: #9a9aa3;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.auth-user {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #61616a;
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.auth-btn {
+  padding: 7px 16px;
+  border: 1px solid #f2c4c9;
+  border-radius: 9px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.auth-btn:hover {
+  background: #fbe7e9;
+}
+
+.auth-btn.is-login {
+  display: inline-block;
+  text-decoration: none;
 }
 </style>

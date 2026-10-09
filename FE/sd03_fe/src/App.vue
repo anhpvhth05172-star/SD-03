@@ -10,4 +10,3 @@ provide('baseAPI', baseAPI)
 </template>
 
 <style scoped></style>
-
