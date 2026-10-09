@@ -15,3 +15,9 @@ export const deleteEmployee = (id) => http.delete(`/nhan-vien/${id}`).then((r) =
 
 export const getEmployeeFormData = () =>
   http.get('/nhan-vien/form-data').then((r) => r.data)
+
+export const suggestEmployeeCode = (ten) =>
+  http.get('/nhan-vien/ma-tu-dong', { params: { ten } }).then((r) => r.data)
+
+export const updateEmployeeStatus = (id, trangThai) =>
+  http.put(`/nhan-vien/${id}/trang-thai`, null, { params: { trangThai } }).then((r) => r.data)

@@ -1,11 +1,16 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { deleteCustomer, getCustomer, listCustomers } from '../api/customer'
+import CustomerAddressModal from '../components/CustomerAddressModal.vue'
+import { getCustomer, listCustomers, updateCustomerStatus } from '../api/customer'
+import { exportCsv, fetchAllPages } from '../utils/export'
+import { takeFlash } from '../utils/flash'
 import { avatarColor, formatDate, formatDateTime, formatVnd, initialsOf } from '../utils/format'
 
 const router = useRouter()
 const showFilter = ref(true)
+const flashMsg = ref('')
+const exporting = ref(false)
 
 const rows = ref([])
 const loading = ref(false)
@@ -104,6 +109,35 @@ const goPage = (p) => {
   load()
 }
 
+const exportFile = async () => {
+  const params = buildParams()
+  if (!params) return
+  exporting.value = true
+  try {
+    const all = await fetchAllPages(listCustomers, params)
+    exportCsv(
+      'khach-hang.csv',
+      ['Mã KH', 'Họ và tên', 'Tên đăng nhập', 'Email', 'Số điện thoại', 'Hạng thành viên', 'Tổng đơn', 'Tổng chi tiêu', 'Ngày đăng ký', 'Trạng thái'],
+      all.map((r) => [
+        r.maKhachHang,
+        r.tenKhachHang,
+        r.tenTaiKhoan || '',
+        r.email || '',
+        r.soDienThoai || '',
+        r.hangThanhVien || '',
+        r.soDon ?? 0,
+        r.tongChiTieu ?? 0,
+        formatDate(r.ngayTao),
+        r.trangThaiLabel || '',
+      ]),
+    )
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    exporting.value = false
+  }
+}
+
 const pageList = computed(() => {
   const total = totalPages.value
   const cur = page.value + 1
@@ -126,14 +160,34 @@ const openDetail = async (row) => {
   }
 }
 
-const removeRow = async (row) => {
-  if (!confirm(`Xóa khách hàng ${row.maKhachHang} (${row.tenKhachHang})? Bản ghi sẽ chuyển sang trạng thái Đã khóa.`)) return
+const toggleStatus = async (row) => {
+  const moi = !row.trangThai
   try {
-    await deleteCustomer(row.id)
+    await updateCustomerStatus(row.id, moi ? 'true' : 'false')
+    row.trangThai = moi
+    row.trangThaiLabel = moi ? 'Đang hoạt động' : 'Đã khóa'
     await load()
   } catch (e) {
     alert(e.message)
   }
+}
+
+const diaChiCustomerId = ref(null)
+const openAddress = (row) => {
+  diaChiCustomerId.value = row.id
+}
+const dongDiaChi = () => {
+  diaChiCustomerId.value = null
+}
+const doiDiaChi = async () => {
+  if (detailData.value) {
+    try {
+      detailData.value = await getCustomer(detailData.value.id)
+    } catch {
+      /* bỏ qua */
+    }
+  }
+  load()
 }
 
 const gioiTinhLabel = (value) => {
@@ -163,7 +217,10 @@ const rankPill = (rank) => {
   return 'pill-green'
 }
 
-onMounted(load)
+onMounted(() => {
+  flashMsg.value = takeFlash()
+  load()
+})
 </script>
 
 <template>
@@ -173,13 +230,23 @@ onMounted(load)
         <h1 class="screen-title">Quản lý khách hàng</h1>
         <p class="screen-sub">Quản lý thông tin khách hàng, tích điểm thành viên và lịch sử mua hàng</p>
       </div>
-      <button class="btn-add" type="button" @click="router.push('/khach-hang/them')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-          <path d="M12 6v12M6 12h12" />
-        </svg>
-        Thêm khách hàng
-      </button>
+      <div class="head-actions">
+        <button class="btn-export" type="button" :disabled="exporting" @click="exportFile">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v12M7 10l5 5 5-5M4 21h16" />
+          </svg>
+          {{ exporting ? 'Đang xuất...' : 'Xuất File' }}
+        </button>
+        <button class="btn-add" type="button" @click="router.push('/khach-hang/them')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <path d="M12 6v12M6 12h12" />
+          </svg>
+          Thêm khách hàng
+        </button>
+      </div>
     </div>
+
+    <p v-if="flashMsg" class="flash-ok">{{ flashMsg }}</p>
 
     <section class="panel">
       <div class="panel-head">
@@ -318,13 +385,23 @@ onMounted(load)
                         <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3" />
                       </svg>
                     </button>
-                    <button class="act-btn" type="button" aria-label="Xóa" title="Xóa" @click="removeRow(row)">
+                    <button class="act-btn" type="button" aria-label="Địa chỉ" title="Quản lý địa chỉ" @click="openAddress(row)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M3 6h18" />
-                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        <path d="M10 11v6M14 11v6" />
+                        <path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z" />
+                        <circle cx="12" cy="10" r="2.6" />
                       </svg>
+                    </button>
+                    <button
+                      class="toggle"
+                      :class="{ 'is-on': row.trangThai }"
+                      type="button"
+                      role="switch"
+                      :aria-checked="row.trangThai ? 'true' : 'false'"
+                      :aria-label="row.trangThai ? 'Tắt tài khoản' : 'Bật tài khoản'"
+                      :title="row.trangThai ? 'Turn off' : 'Turn on'"
+                      @click="toggleStatus(row)"
+                    >
+                      <span class="toggle-dot"></span>
                     </button>
                   </div>
                 </td>
@@ -394,10 +471,27 @@ onMounted(load)
         </div>
       </div>
     </div>
+    <CustomerAddressModal
+      v-if="diaChiCustomerId"
+      :customer-id="diaChiCustomerId"
+      @close="dongDiaChi"
+      @changed="doiDiaChi"
+    />
   </div>
 </template>
 
 <style scoped>
+.flash-ok {
+  background: #e7f7ee;
+  border: 1px solid #bde7cf;
+  color: #137a45;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 4px;
+}
+
 .m-pre {
   white-space: pre-line;
 }

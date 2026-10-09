@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { laAdmin } from '../utils/session'
 import AdminLayout from '../layouts/AdminLayout.vue'
 import InvoiceListPage from '../pages/InvoiceListPage.vue'
 import InvoiceFormPage from '../pages/InvoiceFormPage.vue'
@@ -40,27 +41,27 @@ const routes = [
         component: ProductVariantPage,
         meta: { title: 'Biến thể sản phẩm' },
       },
-      { path: 'khach-hang', component: CustomerListPage, meta: { title: 'Quản lý khách hàng' } },
+      { path: 'khach-hang', component: CustomerListPage, meta: { title: 'Khách hàng' } },
       {
         path: 'khach-hang/them',
         component: CustomerCreatePage,
-        meta: { title: 'Quản lý khách hàng' },
+        meta: { title: 'Thêm khách hàng' },
       },
       {
         path: 'khach-hang/:id/sua',
         component: CustomerCreatePage,
-        meta: { title: 'Quản lý khách hàng' },
+        meta: { title: 'Sửa khách hàng' },
       },
-      { path: 'nhan-vien', component: EmployeeListPage, meta: { title: 'Quản lý nhân viên' } },
+      { path: 'nhan-vien', component: EmployeeListPage, meta: { title: 'Nhân viên' } },
       {
         path: 'nhan-vien/them',
         component: EmployeeCreatePage,
-        meta: { title: 'Quản lý nhân viên' },
+        meta: { title: 'Thêm nhân viên' },
       },
       {
         path: 'nhan-vien/:id/sua',
         component: EmployeeCreatePage,
-        meta: { title: 'Quản lý nhân viên' },
+        meta: { title: 'Sửa nhân viên' },
       },
       { path: ':pathMatch(.*)*', redirect: '/hoa-don' },
     ],
@@ -70,6 +71,13 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
+})
+
+router.beforeEach((to) => {
+  if (to.path.startsWith('/nhan-vien') && !laAdmin()) {
+    return '/khach-hang'
+  }
+  return true
 })
 
 export default router
