@@ -42,15 +42,15 @@ const getTabFromRoute = () => {
 const activeTab = ref(getTabFromRoute())
 
 const tabs = [
-  { id: 'thuong_hieu', label: 'Thương hiệu', icon: '🏷️', codePrefix: 'TH' },
-  { id: 'xuat_xu', label: 'Xuất xứ', icon: '🌐', codePrefix: 'XX' },
-  { id: 'chat_lieu', label: 'Chất liệu', icon: '🧵', codePrefix: 'CL' },
-  { id: 'kieu_dang', label: 'Kiểu dáng', icon: '👟', codePrefix: 'KD' },
-  { id: 'loai_giay', label: 'Loại giày', icon: '📌', codePrefix: 'LG' },
-  { id: 'kich_co', label: 'Kích cỡ', icon: '📐', codePrefix: 'KC' },
-  { id: 'mau_sac', label: 'Màu sắc', icon: '🎨', codePrefix: 'MS' },
-  { id: 'than_giay', label: 'Thân giày', icon: '🥾', codePrefix: 'TG' },
-  { id: 'de_giay', label: 'Đế giày', icon: '👣', codePrefix: 'DG' }
+  { id: 'thuong_hieu', label: 'Thương hiệu', icon: '', codePrefix: 'TH' },
+  { id: 'xuat_xu', label: 'Xuất xứ', icon: '', codePrefix: 'XX' },
+  { id: 'chat_lieu', label: 'Chất liệu', icon: '', codePrefix: 'CL' },
+  { id: 'kieu_dang', label: 'Kiểu dáng', icon: '', codePrefix: 'KD' },
+  { id: 'loai_giay', label: 'Loại giày', icon: '', codePrefix: 'LG' },
+  { id: 'kich_co', label: 'Kích cỡ', icon: '', codePrefix: 'KC' },
+  { id: 'mau_sac', label: 'Màu sắc', icon: '', codePrefix: 'MS' },
+  { id: 'than_giay', label: 'Thân giày', icon: '', codePrefix: 'TG' },
+  { id: 'de_giay', label: 'Đế giày', icon: '', codePrefix: 'DG' }
 ]
 
 const attributesData = reactive({
@@ -358,7 +358,7 @@ const executeDeleteFast = async (item) => {
     <div class="page-header-row">
       <div class="page-title-box">
         <h1 class="page-title">
-          <span style="margin-right: 8px;">{{ activeTabInfo.icon }}</span>
+          <span v-if="activeTabInfo.icon" style="margin-right: 8px;">{{ activeTabInfo.icon }}</span>
           Quản lý {{ activeTabInfo.label }}
         </h1>
         <p class="page-subtitle">
@@ -554,7 +554,7 @@ const executeDeleteFast = async (item) => {
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="closeModal">Hủy bỏ</button>
             <button class="btn btn-primary" :disabled="isSubmitting" @click="saveAttributeDirectly">
-              {{ isSubmitting ? 'Đang lưu...' : (isEditing ? 'Lưu thay đổi' : '+ Thêm thuộc tính') }}
+              {{ isSubmitting ? 'Đang lưu...' : 'Lưu' }}
             </button>
           </div>
         </div>

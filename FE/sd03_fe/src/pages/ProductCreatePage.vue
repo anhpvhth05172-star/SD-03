@@ -175,15 +175,51 @@ const generateVariants = () => {
 }
 
 const applyBulkValues = () => {
+  // 1. Kiểm tra có biến thể nào được tick chọn hay không
+  let selectedCount = 0
+  colorGroups.value.forEach(group => {
+    group.items.forEach(item => {
+      if (item.checked) selectedCount++
+    })
+  })
+
+  if (selectedCount === 0) {
+    showToast('Vui lòng chọn ít nhất 1 biến thể để áp dụng!', 'warning')
+    return
+  }
+
+  // 2. Validate Giá bán mặc định (Bắt buộc)
+  if (defaultPrice.value === null || defaultPrice.value === undefined || defaultPrice.value === '') {
+    showToast('Giá bán mặc định không được để trống!', 'warning')
+    return
+  }
+  const priceNum = Number(defaultPrice.value)
+  if (isNaN(priceNum) || priceNum < 1000 || priceNum > 1000000000) {
+    showToast('Giá bán mặc định phải là số từ 1,000đ đến 1,000,000,000đ!', 'warning')
+    return
+  }
+
+  // 3. Validate Số lượng mặc định
+  let qtyNum = 0
+  if (defaultQty.value !== null && defaultQty.value !== undefined && defaultQty.value !== '') {
+    qtyNum = Number(defaultQty.value)
+    if (isNaN(qtyNum) || qtyNum < 0 || qtyNum > 100000) {
+      showToast('Số lượng mặc định phải là số nguyên từ 0 đến 100,000!', 'warning')
+      return
+    }
+  }
+
+  // 4. Áp dụng giá trị vào các biến thể đã chọn
   colorGroups.value.forEach(group => {
     group.items.forEach(item => {
       if (item.checked) {
-        if (defaultQty.value !== null && defaultQty.value !== undefined) item.qty = defaultQty.value
-        if (defaultPrice.value !== null && defaultPrice.value !== undefined) item.price = defaultPrice.value
+        item.qty = qtyNum
+        item.price = priceNum
       }
     })
   })
-  showToast('Đã áp dụng số lượng và giá bán mặc định cho các biến thể đã chọn!')
+
+  showToast(`Đã áp dụng số lượng (${qtyNum}) và giá bán (${priceNum.toLocaleString('vi-VN')} đ) cho ${selectedCount} biến thể đã chọn!`, 'success')
 }
 
 const toggleCheckAll = (e) => {
@@ -201,25 +237,84 @@ const removeItem = (groupIndex, itemIndex) => {
   }
 }
 
+// Kiểm tra Magic Bytes client-side (JPEG: FF D8 FF, PNG: 89 50 4E 47, WEBP: RIFF...WEBP)
+const checkImageMagicBytes = async (file) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onloadend = (e) => {
+      const arr = new Uint8Array(e.target.result).subarray(0, 12)
+      if (arr.length < 4) return resolve(false)
+      
+      // JPEG: FF D8 FF
+      if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) return resolve(true)
+      // PNG: 89 50 4E 47
+      if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) return resolve(true)
+      // WEBP: 52 49 46 46 (RIFF) ... 57 45 42 50 (WEBP)
+      if (arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 &&
+          arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50) return resolve(true)
+      // GIF: 47 49 46 38
+      if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x38) return resolve(true)
+      
+      resolve(false)
+    }
+    reader.readAsArrayBuffer(file.slice(0, 12))
+  })
+}
+
 const triggerImageUpload = (colorId) => {
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = 'image/*'
+  input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
   input.multiple = true
-  input.onchange = (e) => {
+  input.onchange = async (e) => {
     const files = Array.from(e.target.files)
-    files.forEach(file => {
+    if (!colorImages[colorId]) colorImages[colorId] = []
+    const currentList = colorImages[colorId]
+
+    const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+    const MAX_IMAGES_PER_COLOR = 4
+
+    let addedCount = 0
+    for (const file of files) {
+      if (currentList.length >= MAX_IMAGES_PER_COLOR) {
+        showToast(`Nhóm màu này đã đạt giới hạn tối đa ${MAX_IMAGES_PER_COLOR} ảnh chi tiết!`, 'warning')
+        break
+      }
+
+      // 1. Kiểm tra dung lượng 5MB
+      if (file.size > MAX_SIZE) {
+        showToast(`Ảnh "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) vượt quá dung lượng tối đa 5MB!`, 'warning')
+        continue
+      }
+
+      // 2. Kiểm tra định dạng & Magic Bytes
+      const isValidRealImage = await checkImageMagicBytes(file)
+      if (!isValidRealImage) {
+        showToast(`Tệp "${file.name}" không phải là ảnh hợp lệ (chỉ hỗ trợ JPG, PNG, WEBP)!`, 'error')
+        continue
+      }
+
       const reader = new FileReader()
       reader.onload = (uploadEvent) => {
         const base64Url = uploadEvent.target.result
-        if (!colorImages[colorId]) colorImages[colorId] = []
-        colorImages[colorId].push(base64Url)
+        currentList.push(base64Url)
       }
       reader.readAsDataURL(file)
-    })
-    showToast(`Đã tải lên ${files.length} ảnh sản phẩm!`)
+      addedCount++
+    }
+
+    if (addedCount > 0) {
+      showToast(`Đã tải lên ${addedCount} ảnh hợp lệ!`)
+    }
   }
   input.click()
+}
+
+const removeImage = (colorId, index, event) => {
+  if (event) event.stopPropagation()
+  if (colorImages[colorId]) {
+    colorImages[colorId].splice(index, 1)
+  }
 }
 
 const openQuickAdd = (type) => {
@@ -297,10 +392,55 @@ const validateForm = () => {
   return isValid
 }
 
-const saveProduct = async () => {
+const isSubmitting = ref(false)
+const showMergeModal = ref(false)
+const mergePreviewData = ref(null)
+
+const saveProduct = async (confirmMerge = false) => {
   if (!validateForm()) {
     showToast('Vui lòng điền đầy đủ các thuộc tính bắt buộc (*)!', 'warning')
     return
+  }
+
+  const bienThes = []
+  if (colorGroups.value.length > 0) {
+    let invalidVariantError = null
+
+    for (const group of colorGroups.value) {
+      for (const item of group.items) {
+        if (item.checked) {
+          const qty = Number(item.qty)
+          const price = Number(item.price)
+
+          if (isNaN(qty) || qty < 0 || qty > 100000) {
+            invalidVariantError = `Biến thể (Màu: ${group.colorName}, Size: ${item.sizeName}) có số lượng không hợp lệ (phải từ 0 đến 100,000).`
+            break
+          }
+          if (isNaN(price) || price < 1000 || price > 1000000000) {
+            invalidVariantError = `Biến thể (Màu: ${group.colorName}, Size: ${item.sizeName}) có giá bán không hợp lệ (phải từ 1,000đ đến 1,000,000,000đ).`
+            break
+          }
+
+          const imageList = colorImages[group.colorId] || []
+          const firstImg = imageList.length > 0 ? imageList[0] : null
+
+          bienThes.push({
+            idMauSac: Number(group.colorId),
+            idKichCo: Number(item.sizeId),
+            soLuong: qty,
+            giaBan: price,
+            hinhAnh: firstImg,
+            trangThai: true
+          })
+        }
+      }
+      if (invalidVariantError) break
+    }
+
+    if (invalidVariantError) {
+      showToast(invalidVariantError, 'warning')
+      return
+    }
   }
 
   const payload = {
@@ -313,11 +453,14 @@ const saveProduct = async () => {
     doiTuong: form.gender,
     tinhNang: form.feature ? form.feature.trim() : '',
     moTa: form.description ? form.description.trim() : '',
-    trangThai: true
+    trangThai: true,
+    confirmMerge: Boolean(confirmMerge),
+    bienThes: bienThes
   }
 
   try {
-    const res = await fetch(`${API_BASE}/san-pham`, {
+    isSubmitting.value = true
+    const res = await fetch(`${API_BASE}/san-pham/smart-save`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -334,77 +477,37 @@ const saveProduct = async () => {
           throw new Error('Tên sản phẩm đã tồn tại')
         }
       }
-      throw new Error('Thêm sản phẩm mới thất bại')
+      throw new Error('Thao tác thất bại, vui lòng kiểm tra lại dữ liệu')
     }
 
-    const createdProduct = await res.json()
+    const data = await res.json()
 
-    if (colorGroups.value.length > 0) {
-      const variantRequests = []
-      let invalidVariantError = null
-
-      for (const group of colorGroups.value) {
-        for (const item of group.items) {
-          if (item.checked) {
-            const qty = Number(item.qty)
-            const price = Number(item.price)
-
-            if (isNaN(qty) || qty < 0 || qty > 100000) {
-              invalidVariantError = `Biến thể (Màu: ${group.colorName}, Size: ${item.sizeName}) có số lượng không hợp lệ (phải từ 0 đến 100,000).`
-              break
-            }
-            if (isNaN(price) || price < 1000 || price > 1000000000) {
-              invalidVariantError = `Biến thể (Màu: ${group.colorName}, Size: ${item.sizeName}) có giá bán không hợp lệ (phải từ 1,000đ đến 1,000,000,000đ).`
-              break
-            }
-
-            const imageList = colorImages[group.colorId] || []
-            const firstImg = imageList.length > 0 ? imageList[0] : null
-
-            variantRequests.push({
-              idSanPham: createdProduct.id,
-              idMauSac: Number(group.colorId),
-              idKichCo: Number(item.sizeId),
-              soLuong: qty,
-              giaBan: price,
-              hinhAnh: firstImg,
-              trangThai: true
-            })
-          }
-        }
-        if (invalidVariantError) break
-      }
-
-      if (invalidVariantError) {
-        showToast(invalidVariantError, 'warning')
-        return
-      }
-
-      if (variantRequests.length > 0) {
-        const batchRes = await fetch(`${API_BASE}/san-pham-chi-tiet/batch`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(variantRequests)
-        })
-        if (!batchRes.ok) {
-          const errData = await batchRes.json().catch(() => ({}))
-          console.error('Không thể lưu danh sách biến thể sản phẩm:', errData)
-          showToast(errData.message || 'Lỗi khi lưu danh sách biến thể', 'error')
-        }
-      }
+    // Case trùng lặp -> Cần người dùng xác nhận
+    if (data.status === 'NEED_CONFIRMATION') {
+      mergePreviewData.value = data
+      showMergeModal.value = true
+      return
     }
 
+    // Case thành công
+    showMergeModal.value = false
     localStorage.removeItem('product_initial_list_cache')
     localStorage.removeItem('variant_list_cache')
 
-    showToast(`Đã lưu thành công sản phẩm ${createdProduct.maSanPham || form.code} và các biến thể vào CSDL!`)
+    showToast(data.message || 'Lưu sản phẩm thành công!')
 
     setTimeout(() => {
       router.push('/san-pham')
-    }, 1200)
+    }, 1000)
   } catch (err) {
     showToast(err.message || 'Không thể kết nối đến cơ sở dữ liệu', 'error')
+  } finally {
+    isSubmitting.value = false
   }
+}
+
+const confirmMergeAction = () => {
+  saveProduct(true)
 }
 
 const goBack = () => {
@@ -628,39 +731,133 @@ onMounted(() => {
           <div class="img-card-head">
             <div class="img-head-text">
               <span class="img-card-title">Ảnh sản phẩm màu {{ group.colorName.toLowerCase() }}</span>
-              <span class="img-card-sub">Áp dụng cho {{ group.items.length }} kích cỡ cùng màu • Size {{
-                group.items.map(i => i.sizeName).join(', ')}}</span>
+              <span class="img-card-sub">
+                Đã tải: <strong>{{ colorImages[group.colorId]?.length || 0 }}/4</strong> ảnh chi tiết (tối đa 5MB/ảnh)
+              </span>
             </div>
-            <button class="btn btn-red-solid" @click="triggerImageUpload(group.colorId)">+ Thêm ảnh</button>
+            <button 
+              class="btn btn-red-solid" 
+              @click="triggerImageUpload(group.colorId)"
+              :disabled="(colorImages[group.colorId]?.length || 0) >= 4"
+            >
+              + Thêm ảnh
+            </button>
           </div>
 
           <div class="img-dropzone" @click="triggerImageUpload(group.colorId)">
             <div v-if="colorImages[group.colorId] && colorImages[group.colorId].length > 0" class="preview-thumbs-grid">
-              <img v-for="(src, idx) in colorImages[group.colorId]" :key="idx" :src="src" class="thumb-preview" />
+              <div 
+                v-for="(src, idx) in colorImages[group.colorId]" 
+                :key="idx" 
+                class="thumb-item-wrap"
+                @click.stop
+              >
+                <img :src="src" class="thumb-preview" />
+                <span v-if="idx === 0" class="badge-main-img">Ảnh chính</span>
+                <button 
+                  class="btn-remove-thumb" 
+                  @click="removeImage(group.colorId, idx, $event)" 
+                  title="Xóa ảnh này"
+                >
+                  ×
+                </button>
+              </div>
             </div>
             <div v-else class="empty-dropzone-content">
               <div class="icon-box-placeholder">🖼</div>
-              <p class="placeholder-text-main">Nhóm màu này chưa có ảnh</p>
-              <p class="placeholder-text-sub">Thêm một bộ ảnh để áp dụng cho toàn bộ kích cỡ cùng màu.</p>
+              <p class="placeholder-text-main">Chưa có ảnh cho nhóm màu này</p>
+              <p class="placeholder-text-sub">Nhấn để tải lên từ 1 đến 4 ảnh (JPG, PNG, WEBP • Max 5MB/ảnh).</p>
             </div>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Modal Cảnh báo & Xác nhận Cập nhật / Cộng dồn kho khi trùng sản phẩm -->
+    <div v-if="showMergeModal" class="modal-overlay">
+      <div class="modal-merge-card">
+        <div class="merge-modal-header">
+          <div class="header-icon-wrap">
+            <span class="warning-icon">⚠️</span>
+            <div>
+              <h3 class="merge-modal-title">Phát hiện sản phẩm đã tồn tại</h3>
+              <p class="merge-modal-sub">Hệ thống phát hiện sản phẩm này đã có trong cơ sở dữ liệu</p>
+            </div>
+          </div>
+          <button class="btn-close-modal" @click="showMergeModal = false">×</button>
+        </div>
+
+        <div class="merge-modal-body">
+          <div class="merge-alert-box">
+            <p>
+              Sản phẩm <strong>"{{ mergePreviewData?.tenSanPham }}"</strong> 
+              (Mã: <span class="badge-code">{{ mergePreviewData?.maSanPham }}</span>) 
+              đã có sẵn trong hệ thống.
+            </p>
+            <p class="sub-alert-text">
+              Bạn có muốn <strong>cập nhật thông tin</strong> và <strong>cộng dồn số lượng tồn kho</strong> cho các biến thể dưới đây không?
+            </p>
+          </div>
+
+          <div class="merge-table-container">
+            <table class="merge-table">
+              <thead>
+                <tr>
+                  <th>Biến thể</th>
+                  <th>Trạng thái</th>
+                  <th class="text-right">Tồn hiện tại</th>
+                  <th class="text-right">Nhập thêm</th>
+                  <th class="text-right">Tổng tồn mới</th>
+                  <th class="text-right">Giá bán mới</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(item, idx) in mergePreviewData?.previewItems || []" :key="idx">
+                  <td class="font-semibold">
+                    {{ item.tenMau }} - Size {{ item.tenKichCo }}
+                  </td>
+                  <td>
+                    <span v-if="item.isExisting" class="tag-status tag-existing">🟡 Đã có trong kho</span>
+                    <span v-else class="tag-status tag-new">🟢 Thêm mới</span>
+                  </td>
+                  <td class="text-right text-muted">
+                    {{ item.currentStock?.toLocaleString('vi-VN') || 0 }}
+                  </td>
+                  <td class="text-right text-green-bold">
+                    + {{ item.addedStock?.toLocaleString('vi-VN') || 0 }}
+                  </td>
+                  <td class="text-right text-primary-bold">
+                    {{ item.totalStock?.toLocaleString('vi-VN') || 0 }}
+                  </td>
+                  <td class="text-right font-medium">
+                    {{ item.newPrice ? Number(item.newPrice).toLocaleString('vi-VN') + ' đ' : '-' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="merge-modal-footer">
+          <button class="btn btn-cancel-merge" @click="showMergeModal = false" :disabled="isSubmitting">
+            Hủy / Đổi tên khác
+          </button>
+          <button class="btn btn-confirm-merge" @click="confirmMergeAction" :disabled="isSubmitting">
+            <span v-if="isSubmitting" class="spinner-small"></span>
+            <span v-else>✓ Đồng ý Cập nhật & Cộng dồn kho</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="fixed-bottom-bar">
-      <button class="btn btn-save-fixed" @click="saveProduct">
-        💾 Lưu sản phẩm (F4)
+      <button class="btn btn-save-fixed" @click="() => saveProduct(false)" :disabled="isSubmitting">
+        <span v-if="isSubmitting" class="spinner-small"></span>
+        <span v-else>Lưu sản phẩm</span>
       </button>
     </div>
 
     <QuickAddModal :is-open="isModalOpen" :type="modalType" @close="isModalOpen = false" @add="handleAttributeAdded" />
-
-    <transition name="fade">
-      <div v-if="toast.show" class="toast-floating" :class="'toast-' + toast.type">
-        <span>{{ toast.message }}</span>
-      </div>
-    </transition>
   </div>
 </template>
 

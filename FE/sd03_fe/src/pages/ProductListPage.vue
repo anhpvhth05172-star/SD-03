@@ -94,13 +94,9 @@ const showToastNotice = (title, message, type = 'success') => {
 
 const activeFilterCount = computed(() => {
   let count = 0
-  if (filters.keyword.trim()) count++
+  if (filters.keyword && filters.keyword.trim()) count++
   if (filters.idThuongHieu) count++
   if (filters.idLoaiGiay) count++
-  if (filters.idChatLieu) count++
-  if (filters.idKieuDang) count++
-  if (filters.idXuatXu) count++
-  if (filters.doiTuong) count++
   return count
 })
 
@@ -237,11 +233,24 @@ const changePage = (p) => {
   }
 }
 
+const formatPrice = (val) => {
+  if (val === null || val === undefined || isNaN(val)) return '0 ₫'
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val)
+}
+
+const formatProductPrice = (item) => {
+  if (!item) return '0 ₫'
+  if (item.giaBanMin && item.giaBanMax && item.giaBanMin !== item.giaBanMax) {
+    return `${formatPrice(item.giaBanMin)} - ${formatPrice(item.giaBanMax)}`
+  }
+  return formatPrice(item.giaBan || 0)
+}
+
 const toggleStatus = async (item) => {
   const oldStatus = item.trangThai
   const newStatus = !oldStatus
   item.trangThai = newStatus
-  const statusLabel = newStatus ? 'Đang kinh doanh' : 'Ngừng kinh doanh'
+  const statusLabel = newStatus ? 'Kinh doanh' : 'Ngưng kinh doanh'
   const code = item.maSanPham || `SP0${item.id}`
 
   try {
@@ -295,7 +304,7 @@ const copyToClipboard = (text) => {
   showToastNotice('Đã sao chép', `Đã sao chép mã "${text}" vào clipboard`, 'success')
 }
 
-const viewProductVariants = (item) => {
+const viewProductDetails = (item) => {
   router.push({
     path: '/san-pham/bien-the',
     query: {
@@ -304,6 +313,204 @@ const viewProductVariants = (item) => {
       tenSanPham: item.tenSanPham
     }
   })
+}
+const viewProductVariants = viewProductDetails
+
+const isExporting = ref(false)
+
+const exportToExcel = async () => {
+  if (isExporting.value) return
+  isExporting.value = true
+
+  try {
+    let itemsToExport = []
+
+    if (selectedIds.value.length > 0) {
+      itemsToExport = products.value.filter(p => selectedIds.value.includes(p.id))
+    } else {
+      const params = buildQueryParams(0)
+      params.set('size', '10000')
+      const res = await fetch(`${API_BASE}/san-pham?${params.toString()}`)
+      if (res.ok) {
+        const data = await res.json()
+        itemsToExport = data.content || products.value
+      } else {
+        itemsToExport = products.value
+      }
+    }
+
+    if (!itemsToExport || itemsToExport.length === 0) {
+      showToastNotice('Không có dữ liệu', 'Không có sản phẩm nào để xuất Excel', 'warning')
+      return
+    }
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal">
+   <Alignment ss:Vertical="Center"/>
+   <Borders/>
+   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#1E293B"/>
+   <Interior/>
+   <NumberFormat/>
+   <Protection/>
+  </Style>
+  <Style ss:ID="Header">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+   </Borders>
+   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#FFFFFF" ss:Bold="1"/>
+   <Interior ss:Color="#166534" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="RowEven">
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+   <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="RowOdd">
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+   <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="CenterCell">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="ActiveStatus">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#059669" ss:Bold="1"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="PriceCell">
+    <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+    <Font ss:FontName="Arial" ss:Size="10" ss:Color="#0F172A" ss:Bold="1"/>
+    <NumberFormat ss:Format="#,##0"/>
+    <Borders>
+     <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+     <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+     <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+     <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    </Borders>
+  </Style>
+  <Style ss:ID="InactiveStatus">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#DC2626" ss:Bold="1"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="Danh sách sản phẩm">
+  <Table ss:DefaultRowHeight="24">
+   <Column ss:Width="40"/>
+   <Column ss:Width="110"/>
+   <Column ss:Width="230"/>
+   <Column ss:Width="130"/>
+   <Column ss:Width="130"/>
+   <Column ss:Width="100"/>
+   <Column ss:Width="140"/>
+   <Column ss:Width="90"/>
+   <Column ss:Width="160"/>
+   <Column ss:Width="130"/>
+   <Row ss:Height="28">
+    <Cell ss:StyleID="Header"><Data ss:Type="String">STT</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Mã sản phẩm</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Tên sản phẩm</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Thương hiệu</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Loại giày</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Số lượng</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Giá bán</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Đối tượng</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Tính năng</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Trạng thái</Data></Cell>
+   </Row>`
+
+    const escapeXml = (str) => {
+      if (!str) return ''
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;')
+    }
+
+    itemsToExport.forEach((item, index) => {
+      const styleId = index % 2 === 0 ? 'RowEven' : 'RowOdd'
+      const statusStyle = item.trangThai !== false ? 'ActiveStatus' : 'InactiveStatus'
+      const statusText = item.trangThai !== false ? 'Kinh doanh' : 'Ngưng kinh doanh'
+      const code = item.maSanPham || `SP0${item.id}`
+
+      xml += `
+   <Row ss:Height="22">
+    <Cell ss:StyleID="CenterCell"><Data ss:Type="Number">${index + 1}</Data></Cell>
+    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(code)}</Data></Cell>
+    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tenSanPham)}</Data></Cell>
+    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tenThuongHieu || '---')}</Data></Cell>
+    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tenLoaiGiay || '---')}</Data></Cell>
+    <Cell ss:StyleID="CenterCell"><Data ss:Type="Number">${item.soLuong !== undefined ? item.soLuong : 0}</Data></Cell>
+    <Cell ss:StyleID="PriceCell"><Data ss:Type="Number">${item.giaBan || 0}</Data></Cell>
+    <Cell ss:StyleID="CenterCell"><Data ss:Type="String">${escapeXml(item.doiTuong || 'Unisex')}</Data></Cell>
+    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tinhNang || '')}</Data></Cell>
+    <Cell ss:StyleID="${statusStyle}"><Data ss:Type="String">${statusText}</Data></Cell>
+   </Row>`
+    })
+
+    xml += `
+  </Table>
+ </Worksheet>
+</Workbook>`
+
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const now = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+    link.href = url
+    link.download = `Danh_sach_san_pham_${dateStr}.xls`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    showToastNotice('Thành công', `Đã xuất ${itemsToExport.length} sản phẩm ra file Excel!`, 'success')
+  } catch (err) {
+    console.error('Lỗi xuất Excel:', err)
+    showToastNotice('Lỗi', 'Không thể xuất file Excel', 'danger')
+  } finally {
+    isExporting.value = false
+  }
 }
 
 // Quick edit functions
@@ -416,29 +623,7 @@ onUnmounted(() => {
         </div>
         <h1 class="page-heading">
           Quản lý Sản phẩm
-          <span class="count-badge">{{ totalElements }} sản phẩm</span>
         </h1>
-        <p class="page-subheading">
-          Hệ thống quản trị danh mục giày, đa thuộc tính và đồng bộ biến thể thời gian thực.
-        </p>
-      </div>
-
-      <div class="page-actions">
-        <button class="btn btn-outline-refresh" @click="reloadAllData" :class="{ 'is-loading': isLoading }">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <polyline points="1 20 1 14 7 14"></polyline>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
-          Làm mới
-        </button>
-        <button class="btn btn-add-new" @click="navigateToAdd">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          Thêm sản phẩm mới
-        </button>
       </div>
     </div>
 
@@ -454,34 +639,39 @@ onUnmounted(() => {
           </button>
           <button class="status-tab" :class="{ active: activeTab === 'ACTIVE' }" @click="selectTab('ACTIVE')">
             <span class="dot green-dot"></span>
-            Đang kinh doanh
+            Kinh doanh
           </button>
           <button class="status-tab" :class="{ active: activeTab === 'INACTIVE' }" @click="selectTab('INACTIVE')">
             <span class="dot gray-dot"></span>
-            Ngừng kinh doanh
+            Ngưng kinh doanh
           </button>
         </div>
 
-        <div class="tab-actions-group">
-          <button class="btn-toggle-expand" @click="isFilterExpanded = !isFilterExpanded">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+        <div class="page-actions">
+          <button class="btn btn-outline-refresh" @click="reloadAllData" :class="{ 'is-loading': isLoading }" title="Tải lại dữ liệu">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
             </svg>
-            {{ isFilterExpanded ? 'Thu gọn bộ lọc' : 'Mở rộng bộ lọc' }}
-            <span v-if="activeFilterCount > 0" class="filter-count-badge">{{ activeFilterCount }}</span>
+            Làm mới
           </button>
-
-          <button
-            v-if="activeFilterCount > 0 || activeTab !== 'ALL'"
-            class="btn-reset-filter"
-            @click="resetFilters"
-            title="Đặt lại toàn bộ bộ lọc"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
-              <path d="M3 3v5h5"></path>
+          <button class="btn btn-export-excel" @click="exportToExcel" :disabled="isExporting" title="Xuất danh sách sản phẩm ra file Excel">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="8" y1="13" x2="16" y2="13"></line>
+              <line x1="8" y1="17" x2="16" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
             </svg>
-            Xóa bộ lọc
+            {{ isExporting ? 'Đang xuất...' : 'Xuất Excel' }}
+          </button>
+          <button class="btn btn-add-new" @click="navigateToAdd">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Thêm sản phẩm mới
           </button>
         </div>
       </div>
@@ -522,40 +712,6 @@ onUnmounted(() => {
               <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.ten }}</option>
             </select>
           </div>
-
-          <div class="filter-col">
-            <label class="filter-lbl">Chất liệu</label>
-            <select v-model="filters.idChatLieu" class="form-select" @change="onFilterChange">
-              <option value="">Tất cả chất liệu</option>
-              <option v-for="m in materials" :key="m.id" :value="m.id">{{ m.ten }}</option>
-            </select>
-          </div>
-
-          <div class="filter-col">
-            <label class="filter-lbl">Kiểu dáng</label>
-            <select v-model="filters.idKieuDang" class="form-select" @change="onFilterChange">
-              <option value="">Tất cả kiểu dáng</option>
-              <option v-for="s in styles" :key="s.id" :value="s.id">{{ s.ten }}</option>
-            </select>
-          </div>
-
-          <div class="filter-col">
-            <label class="filter-lbl">Xuất xứ</label>
-            <select v-model="filters.idXuatXu" class="form-select" @change="onFilterChange">
-              <option value="">Tất cả xuất xứ</option>
-              <option v-for="o in origins" :key="o.id" :value="o.id">{{ o.ten }}</option>
-            </select>
-          </div>
-
-          <div class="filter-col">
-            <label class="filter-lbl">Đối tượng</label>
-            <select v-model="filters.doiTuong" class="form-select" @change="onFilterChange">
-              <option value="">Tất cả đối tượng</option>
-              <option value="Nam">Nam</option>
-              <option value="Nữ">Nữ</option>
-              <option value="Unisex">Unisex</option>
-            </select>
-          </div>
         </div>
       </transition>
     </div>
@@ -580,87 +736,41 @@ onUnmounted(() => {
         <table class="data-table">
           <thead>
             <tr>
-              <th width="44" class="text-center">
-                <input type="checkbox" v-model="isAllSelected" class="custom-chk" />
-              </th>
-              <th width="140">Mã sản phẩm</th>
-              <th width="280">Tên sản phẩm</th>
-              <th>Thương hiệu</th>
-              <th>Loại giày</th>
-              <th>Chất liệu</th>
-              <th>Kiểu dáng</th>
-              <th>Xuất xứ</th>
-              <th width="150" class="text-center">Trạng thái</th>
-              <th width="130" class="text-center">Hành động</th>
+              <th width="60" class="text-center">STT</th>
+              <th width="130">MÃ SẢN PHẨM</th>
+              <th width="280">TÊN SẢN PHẨM</th>
+              <th width="150">THƯƠNG HIỆU</th>
+              <th width="150">LOẠI GIÀY</th>
+              <th width="110" class="text-center">SỐ LƯỢNG</th>
+              <th width="160" class="text-end">GIÁ BÁN</th>
+              <th width="140" class="text-center">TRẠNG THÁI</th>
+              <th width="90" class="text-center">HÀNH ĐỘNG</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in products" :key="item.id" :class="{ 'row-selected': selectedIds.includes(item.id) }">
+            <tr v-for="(item, idx) in products" :key="item.id">
+              <td class="text-center text-muted">{{ currentPage * pageSize + idx + 1 }}</td>
+              <td class="code-plain-text">{{ item.maSanPham || `SP0${item.id}` }}</td>
+              <td class="name-plain-text">{{ item.tenSanPham }}</td>
+              <td class="attr-plain-text">{{ item.tenThuongHieu || '---' }}</td>
+              <td class="attr-plain-text">{{ item.tenLoaiGiay || '---' }}</td>
+              <td class="text-center qty-plain-text">{{ item.soLuong !== undefined && item.soLuong !== null ? item.soLuong : 0 }}</td>
+              <td class="text-end price-plain-text">{{ formatProductPrice(item) }}</td>
               <td class="text-center">
-                <input type="checkbox" :value="item.id" v-model="selectedIds" class="custom-chk" />
-              </td>
-              <td>
-                <div class="code-wrapper" @click="copyToClipboard(item.maSanPham || `SP0${item.id}`)" title="Click để sao chép mã">
-                  <span class="code-badge">{{ item.maSanPham || `SP0${item.id}` }}</span>
-                  <svg class="copy-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                  </svg>
-                </div>
-              </td>
-              <td>
-                <div class="product-info-cell">
-                  <div class="prod-thumb">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                      <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                    </svg>
-                  </div>
-                  <div class="prod-text">
-                    <span class="prod-title" :title="item.tenSanPham">{{ item.tenSanPham }}</span>
-                    <span class="prod-target-tag" :class="item.doiTuong ? item.doiTuong.toLowerCase() : 'unisex'">
-                      {{ item.doiTuong || 'Unisex' }}
-                    </span>
-                  </div>
-                </div>
-              </td>
-              <td>
-                <span class="brand-tag">{{ item.tenThuongHieu || '---' }}</span>
-              </td>
-              <td>
-                <span class="type-pill">{{ item.tenLoaiGiay || 'Giày Sneaker' }}</span>
-              </td>
-              <td><span class="attr-text">{{ item.tenChatLieu || '---' }}</span></td>
-              <td><span class="attr-text">{{ item.tenKieuDang || '---' }}</span></td>
-              <td><span class="attr-text">{{ item.tenXuatXu || '---' }}</span></td>
-              <td class="text-center">
-                <label class="switch-toggle" :title="item.trangThai ? 'Click để ngừng kinh doanh' : 'Click để bật kinh doanh'">
+                <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
                   <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
                   <span class="slider round"></span>
                 </label>
                 <div class="status-label" :class="{ active: item.trangThai }">
-                  {{ item.trangThai ? 'Đang bán' : 'Ngừng bán' }}
+                  {{ item.trangThai ? 'Kinh doanh' : 'Ngưng kinh doanh' }}
                 </div>
               </td>
               <td class="text-center">
                 <div class="action-btns">
-                  <button class="act-btn variant-btn" title="Quản lý biến thể sản phẩm" @click="viewProductVariants(item)">
+                  <button class="act-btn view-btn" title="Xem chi tiết sản phẩm" @click="viewProductDetails(item)">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="3" y="3" width="7" height="7"></rect>
-                      <rect x="14" y="3" width="7" height="7"></rect>
-                      <rect x="14" y="14" width="7" height="7"></rect>
-                      <rect x="3" y="14" width="7" height="7"></rect>
-                    </svg>
-                  </button>
-                  <button class="act-btn edit-btn" title="Chỉnh sửa nhanh" @click="openQuickEdit(item)">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                    </svg>
-                  </button>
-                  <button class="act-btn del-btn" title="Xóa sản phẩm" @click="deleteProduct(item.id)">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polyline points="3 6 5 6 21 6"></polyline>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
                     </svg>
                   </button>
                 </div>
@@ -670,14 +780,13 @@ onUnmounted(() => {
             <!-- Skeleton loader -->
             <template v-if="isLoading && products.length === 0">
               <tr v-for="n in 5" :key="`skel-${n}`" class="skel-row">
-                <td class="text-center"><div class="skel-box skel-check"></div></td>
+                <td class="text-center"><div class="skel-box skel-code"></div></td>
                 <td><div class="skel-box skel-code"></div></td>
                 <td><div class="skel-box skel-title"></div></td>
                 <td><div class="skel-box skel-text"></div></td>
                 <td><div class="skel-box skel-text"></div></td>
-                <td><div class="skel-box skel-text"></div></td>
-                <td><div class="skel-box skel-text"></div></td>
-                <td><div class="skel-box skel-text"></div></td>
+                <td class="text-center"><div class="skel-box skel-pill"></div></td>
+                <td class="text-end"><div class="skel-box skel-text"></div></td>
                 <td class="text-center"><div class="skel-box skel-pill"></div></td>
                 <td class="text-center"><div class="skel-box skel-btn"></div></td>
               </tr>
@@ -685,7 +794,7 @@ onUnmounted(() => {
 
             <!-- Empty State -->
             <tr v-else-if="products.length === 0">
-              <td colspan="10" class="empty-state-cell">
+              <td colspan="9" class="empty-state-cell">
                 <div class="empty-state-box">
                   <div class="empty-icon">👟</div>
                   <div class="empty-title">Không tìm thấy sản phẩm nào</div>
@@ -824,7 +933,7 @@ onUnmounted(() => {
               </div>
 
               <div class="form-group span-2 switch-row">
-                <label class="form-label mb-0">Trạng thái kinh doanh</label>
+                <label class="form-label mb-0">Trạng thái (Bật: Kinh doanh / Tắt: Ngưng kinh doanh)</label>
                 <label class="switch-toggle">
                   <input type="checkbox" v-model="editForm.trangThai" />
                   <span class="slider round"></span>

@@ -36,6 +36,10 @@ public class SanPhamResponse {
     private String doiTuong;
     private String tinhNang;
     private String moTa;
+    private Integer soLuong;
+    private java.math.BigDecimal giaBan;
+    private java.math.BigDecimal giaBanMin;
+    private java.math.BigDecimal giaBanMax;
     private Boolean trangThai;
     private LocalDateTime ngayTao;
     private LocalDateTime ngayCapNhat;

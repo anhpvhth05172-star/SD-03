@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import QRCode from 'qrcode'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 
 const router = useRouter()
@@ -14,8 +15,20 @@ const variants = ref([])
 const totalElements = ref(0)
 const totalPages = ref(1)
 const currentPage = ref(0)
-const pageSize = ref(5)
+const pageSize = ref(10)
 const pageSizeOptions = [5, 10, 20, 50]
+
+const selectedIds = ref([])
+const isAllSelected = computed({
+  get: () => variants.value.length > 0 && selectedIds.value.length === variants.value.length,
+  set: (val) => {
+    if (val) {
+      selectedIds.value = variants.value.map(v => v.id)
+    } else {
+      selectedIds.value = []
+    }
+  }
+})
 
 const filters = reactive({
   search: '',
@@ -27,50 +40,44 @@ const filters = reactive({
 const colorsList = ref([])
 const sizesList = ref([])
 
-const selectedProductCode = ref('SD03')
-const selectedProductName = ref('Tất cả biến thể sản phẩm')
+const selectedProductCode = ref('')
+const selectedProductName = ref('')
+const isFilteredByProduct = computed(() => !!route.query.idSanPham)
 
 const initProductHeaderInfo = () => {
-  if (route.query.tenSanPham) {
-    selectedProductName.value = route.query.tenSanPham
+  if (route.query.idSanPham) {
+    selectedProductName.value = route.query.tenSanPham || `Sản phẩm #${route.query.idSanPham}`
+    selectedProductCode.value = route.query.maSanPham || `SP0${route.query.idSanPham}`
   } else {
-    selectedProductName.value = 'Tất cả biến thể sản phẩm'
+    selectedProductName.value = ''
+    selectedProductCode.value = ''
   }
+}
 
-  if (route.query.maSanPham) {
-    selectedProductCode.value = route.query.maSanPham
-  } else if (route.query.idSanPham) {
-    selectedProductCode.value = `SP0${route.query.idSanPham}`
-  } else {
-    selectedProductCode.value = 'SD03'
-  }
+const clearProductFilter = () => {
+  router.push('/san-pham/bien-the')
 }
 
 let debounceTimer = null
 let currentAbortController = null
 
-try {
-  const cached = localStorage.getItem('variant_list_cache')
-  if (cached && !route.query.idSanPham) {
-    const parsed = JSON.parse(cached)
-    if (parsed && Array.isArray(parsed.content)) {
-      variants.value = parsed.content
-      totalElements.value = parsed.totalElements || parsed.content.length
-      totalPages.value = parsed.totalPages || 1
-    }
-  }
-} catch (e) { }
+const productsList = ref([])
 
 const fetchFilterOptions = async () => {
   try {
-    const [resColor, resSize] = await Promise.all([
+    const [resColor, resSize, resProd] = await Promise.all([
       fetch(`${API_BASE}/attributes/mau_sac`),
-      fetch(`${API_BASE}/attributes/kich_co`)
+      fetch(`${API_BASE}/attributes/kich_co`),
+      fetch(`${API_BASE}/san-pham?page=0&size=1000`)
     ])
     if (resColor.ok) colorsList.value = await resColor.json()
     if (resSize.ok) sizesList.value = await resSize.json()
+    if (resProd.ok) {
+      const pData = await resProd.json()
+      productsList.value = pData.content || []
+    }
   } catch (e) {
-    console.error('Lỗi khi tải danh mục màu sắc / kích cỡ:', e)
+    console.error('Lỗi khi tải danh mục màu sắc / kích cỡ / sản phẩm:', e)
   }
 }
 
@@ -100,7 +107,7 @@ const buildParams = (pageIndex) => {
 
 const fetchVariants = async (useCache = true) => {
   isLoading.value = true
-  variants.value = []
+  selectedIds.value = []
 
   if (currentAbortController) {
     currentAbortController.abort()
@@ -122,10 +129,6 @@ const fetchVariants = async (useCache = true) => {
       variants.value = content
       totalElements.value = total
       totalPages.value = pages
-
-      if (currentPage.value === 0 && !filters.search && !filters.idMauSac && !filters.idKichCo && filters.trangThai === '') {
-        localStorage.setItem('variant_list_cache', JSON.stringify({ content, totalElements: total, totalPages: pages }))
-      }
     } else {
       if (variants.value.length === 0 && !route.query.idSanPham) {
         useFallbackData()
@@ -164,7 +167,7 @@ const onSearchInput = () => {
   debounceTimer = setTimeout(() => {
     currentPage.value = 0
     fetchVariants(false)
-  }, 150)
+  }, 200)
 }
 
 const onFilterChange = () => {
@@ -198,18 +201,12 @@ const getColorHex = (item) => {
 }
 
 const getVariantStatusLabel = (item) => {
-  if (item.trangThai === false) return 'Ngừng bán'
-  const stock = item.stock !== undefined ? Number(item.stock) : 0
-  if (stock === 0) return 'Hết hàng'
-  if (stock < 5) return 'Sắp hết hàng'
-  return 'Còn hàng'
+  if (item.trangThai === false) return 'Ngưng kinh doanh'
+  return 'Kinh doanh'
 }
 
 const getVariantStatusClass = (item) => {
   if (item.trangThai === false) return 'is-stopped'
-  const stock = item.stock !== undefined ? Number(item.stock) : 0
-  if (stock === 0) return 'is-out-of-stock'
-  if (stock < 5) return 'is-low-stock'
   return 'is-selling'
 }
 
@@ -229,7 +226,7 @@ const toggleStatus = async (item) => {
   const oldStatus = item.trangThai
   const newStatus = !oldStatus
   item.trangThai = newStatus
-  const statusLabel = newStatus ? 'Đang bán' : 'Ngừng bán'
+  const statusLabel = newStatus ? 'Kinh doanh' : 'Ngưng kinh doanh'
   const itemCode = item.maCtsp || item.maSp || `SKU-${item.id}`
 
   try {
@@ -250,7 +247,484 @@ const toggleStatus = async (item) => {
   }
 }
 
+// ==========================================
+// EXCEL EXPORT
+// ==========================================
+const isExporting = ref(false)
+
+const exportVariantsToExcel = async () => {
+  if (isExporting.value) return
+  isExporting.value = true
+
+  try {
+    let itemsToExport = []
+
+    if (selectedIds.value.length > 0) {
+      itemsToExport = variants.value.filter(v => selectedIds.value.includes(v.id))
+    } else {
+      const params = buildParams(0)
+      params.set('size', '10000')
+      const res = await fetch(`${API_BASE}/san-pham-chi-tiet?${params.toString()}`)
+      if (res.ok) {
+        const data = await res.json()
+        itemsToExport = data.content || variants.value
+      } else {
+        itemsToExport = variants.value
+      }
+    }
+
+    if (!itemsToExport || itemsToExport.length === 0) {
+      showToastNotice('Không có dữ liệu', 'Không có biến thể nào để xuất Excel', 'warning')
+      return
+    }
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal">
+   <Alignment ss:Vertical="Center"/>
+   <Borders/>
+   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#1E293B"/>
+   <Interior/>
+   <NumberFormat/>
+   <Protection/>
+  </Style>
+  <Style ss:ID="Header">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+   </Borders>
+   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#FFFFFF" ss:Bold="1"/>
+   <Interior ss:Color="#166534" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="RowEven">
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+   <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="RowOdd">
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+   <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="CenterCell">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="PriceCell">
+   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
+   <NumberFormat ss:Format="#,##0\ &quot;₫&quot;"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="ActiveStatus">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#059669" ss:Bold="1"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="InactiveStatus">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#DC2626" ss:Bold="1"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="Danh sách biến thể">
+  <Table ss:DefaultRowHeight="24">
+   <Column ss:Width="40"/>
+   <Column ss:Width="110"/>
+   <Column ss:Width="130"/>
+   <Column ss:Width="200"/>
+   <Column ss:Width="110"/>
+   <Column ss:Width="80"/>
+   <Column ss:Width="80"/>
+   <Column ss:Width="130"/>
+   <Column ss:Width="130"/>
+   <Row ss:Height="28">
+    <Cell ss:StyleID="Header"><Data ss:Type="String">STT</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Mã SP</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Mã CTSP</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Tên sản phẩm</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Màu sắc</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Kích cỡ</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Số lượng tồn</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Giá bán</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Trạng thái</Data></Cell>
+   </Row>`
+
+    const escapeXml = (str) => {
+      if (!str) return ''
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;')
+    }
+
+    itemsToExport.forEach((item, index) => {
+      const styleId = index % 2 === 0 ? 'RowEven' : 'RowOdd'
+      const statusStyle = item.trangThai !== false ? 'ActiveStatus' : 'InactiveStatus'
+      const statusText = item.trangThai !== false ? 'Kinh doanh' : 'Ngưng kinh doanh'
+
+      xml += `
+   <Row ss:Height="22">
+    <Cell ss:StyleID="CenterCell"><Data ss:Type="Number">${index + 1}</Data></Cell>
+    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.maSp || '')}</Data></Cell>
+    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.maCtsp || `SPCT0${item.id}`)}</Data></Cell>
+    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tenSp || selectedProductName.value || '')}</Data></Cell>
+    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.color || '')}</Data></Cell>
+    <Cell ss:StyleID="CenterCell"><Data ss:Type="String">${escapeXml(item.size || '')}</Data></Cell>
+    <Cell ss:StyleID="CenterCell"><Data ss:Type="Number">${item.stock !== undefined ? item.stock : 0}</Data></Cell>
+    <Cell ss:StyleID="PriceCell"><Data ss:Type="Number">${item.price || 0}</Data></Cell>
+    <Cell ss:StyleID="${statusStyle}"><Data ss:Type="String">${statusText}</Data></Cell>
+   </Row>`
+    })
+
+    xml += `
+  </Table>
+ </Worksheet>
+</Workbook>`
+
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const now = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+    link.href = url
+    link.download = `Danh_sach_bien_the_${dateStr}.xls`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    showToastNotice('Thành công', `Đã xuất ${itemsToExport.length} biến thể ra file Excel!`, 'success')
+  } catch (err) {
+    console.error('Lỗi xuất Excel:', err)
+    showToastNotice('Lỗi', 'Không thể xuất file Excel', 'danger')
+  } finally {
+    isExporting.value = false
+  }
+}
+
+// ==========================================
+// QR CODE GENERATION & DOWNLOAD
+// ==========================================
+const isGeneratingQr = ref(false)
+const qrModal = reactive({
+  isOpen: false,
+  title: '',
+  subtitle: '',
+  items: []
+})
+
+const generateVariantQrDataUrl = async (item) => {
+  const payload = JSON.stringify({
+    maCtsp: item.maCtsp || `SPCT0${item.id}`,
+    maSp: item.maSp || '',
+    tenSp: item.tenSp || selectedProductName.value || '',
+    color: item.color || '',
+    size: item.size || '',
+    price: item.price || 0,
+    stock: item.stock || 0,
+    id: item.id
+  })
+  return await QRCode.toDataURL(payload, {
+    width: 260,
+    margin: 2,
+    color: {
+      dark: '#0f172a',
+      light: '#ffffff'
+    }
+  })
+}
+
+const openSingleQrModal = async (item) => {
+  isGeneratingQr.value = true
+  try {
+    const dataUrl = await generateVariantQrDataUrl(item)
+    qrModal.title = `Mã QR Biến thể: ${item.maCtsp || `SPCT0${item.id}`}`
+    qrModal.subtitle = `${item.tenSp || selectedProductName.value || ''} (${item.color || ''} - Size ${item.size || ''})`
+    qrModal.items = [
+      {
+        ...item,
+        qrDataUrl: dataUrl
+      }
+    ]
+    qrModal.isOpen = true
+  } catch (err) {
+    console.error('Lỗi tạo QR:', err)
+    showToastNotice('Lỗi', 'Không thể tạo mã QR', 'danger')
+  } finally {
+    isGeneratingQr.value = false
+  }
+}
+
+const openBatchQrModal = async () => {
+  let targetItems = []
+  if (selectedIds.value.length > 0) {
+    targetItems = variants.value.filter(v => selectedIds.value.includes(v.id))
+  } else {
+    targetItems = variants.value
+  }
+
+  if (targetItems.length === 0) {
+    showToastNotice('Thông báo', 'Không có biến thể nào trong danh sách để tạo QR', 'warning')
+    return
+  }
+
+  isGeneratingQr.value = true
+  try {
+    const itemsWithQr = await Promise.all(
+      targetItems.map(async (item) => ({
+        ...item,
+        qrDataUrl: await generateVariantQrDataUrl(item)
+      }))
+    )
+
+    qrModal.title = `Danh sách ${itemsWithQr.length} Mã QR Biến thể`
+    qrModal.subtitle = selectedIds.value.length > 0
+      ? `Đang hiển thị mã QR của các biến thể đã chọn`
+      : `Đang hiển thị mã QR của tất cả biến thể trang hiện tại`
+    qrModal.items = itemsWithQr
+    qrModal.isOpen = true
+  } catch (err) {
+    console.error('Lỗi tạo batch QR:', err)
+    showToastNotice('Lỗi', 'Không thể tạo mã QR hàng loạt', 'danger')
+  } finally {
+    isGeneratingQr.value = false
+  }
+}
+
+const downloadQrImage = (item) => {
+  if (!item.qrDataUrl) return
+  const link = document.createElement('a')
+  link.href = item.qrDataUrl
+  link.download = `QR_${item.maCtsp || item.id}.png`
+  link.click()
+}
+
+const downloadAllQrImages = () => {
+  if (!qrModal.items || qrModal.items.length === 0) return
+  qrModal.items.forEach((item, index) => {
+    setTimeout(() => {
+      downloadQrImage(item)
+    }, index * 200)
+  })
+  showToastNotice('Thành công', `Đang tải xuống ${qrModal.items.length} ảnh mã QR...`, 'success')
+}
+
+const printQrLabels = () => {
+  window.print()
+}
+
+// ==========================================
+// IMAGE VALIDATOR & ADD VARIANT MODAL STATE
+// ==========================================
+const checkImageMagicBytes = async (file) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onloadend = (e) => {
+      const arr = new Uint8Array(e.target.result).subarray(0, 12)
+      if (arr.length < 4) return resolve(false)
+      
+      // JPEG: FF D8 FF
+      if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) return resolve(true)
+      // PNG: 89 50 4E 47
+      if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) return resolve(true)
+      // WEBP: 52 49 46 46 (RIFF) ... 57 45 42 50 (WEBP)
+      if (arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 &&
+          arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50) return resolve(true)
+      // GIF: 47 49 46 38
+      if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x38) return resolve(true)
+      
+      resolve(false)
+    }
+    reader.readAsArrayBuffer(file.slice(0, 12))
+  })
+}
+
+const isAddModalOpen = ref(false)
+const isSubmittingAdd = ref(false)
+const addFormError = ref('')
+const addForm = reactive({
+  idSanPham: '',
+  idMauSac: '',
+  idKichCo: '',
+  stock: 10,
+  price: 1500000,
+  trangThai: true,
+  imagePreview: null,
+  existingColorImage: null
+})
+
+const openAddVariantModal = () => {
+  addFormError.value = ''
+  addForm.idSanPham = route.query.idSanPham ? Number(route.query.idSanPham) : (productsList.value.length > 0 ? productsList.value[0].id : '')
+  addForm.idMauSac = ''
+  addForm.idKichCo = ''
+  addForm.stock = 10
+  addForm.price = (variants.value.length > 0 && variants.value[0].price) ? Number(variants.value[0].price) : 1500000
+  addForm.trangThai = true
+  addForm.imagePreview = null
+  addForm.existingColorImage = null
+  isAddModalOpen.value = true
+}
+
+const onAddColorChange = () => {
+  addForm.existingColorImage = null
+  addForm.imagePreview = null
+  if (!addForm.idMauSac) return
+
+  // Check if any variant in the product already has this color and has an image
+  const match = variants.value.find(v => Number(v.idMauSac) === Number(addForm.idMauSac) && v.img)
+  if (match) {
+    addForm.existingColorImage = match.img
+  }
+}
+
+const triggerAddImageUpload = () => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+  input.onchange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+    if (file.size > MAX_SIZE) {
+      notifyWarning(`Ảnh "${file.name}" vượt quá dung lượng tối đa 5MB!`)
+      return
+    }
+
+    const isValid = await checkImageMagicBytes(file)
+    if (!isValid) {
+      notifyError(`Tệp "${file.name}" không phải là ảnh hợp lệ (chỉ hỗ trợ JPG, PNG, WEBP)!`)
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      addForm.imagePreview = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+  input.click()
+}
+
+const saveAddVariant = async () => {
+  addFormError.value = ''
+  const targetIdSanPham = addForm.idSanPham || route.query.idSanPham
+  if (!targetIdSanPham) {
+    addFormError.value = 'Vui lòng chọn sản phẩm cần thêm biến thể!'
+    return
+  }
+  if (!addForm.idMauSac) {
+    addFormError.value = 'Vui lòng chọn màu sắc cho biến thể!'
+    return
+  }
+  if (!addForm.idKichCo) {
+    addFormError.value = 'Vui lòng chọn kích cỡ cho biến thể!'
+    return
+  }
+  const stockNum = Number(addForm.stock)
+  if (addForm.stock === null || addForm.stock === undefined || isNaN(stockNum) || stockNum < 0 || stockNum > 100000) {
+    addFormError.value = 'Số lượng tồn phải là số nguyên từ 0 đến 100,000!'
+    return
+  }
+  const priceNum = Number(addForm.price)
+  if (!addForm.price || isNaN(priceNum) || priceNum < 1000 || priceNum > 1000000000) {
+    addFormError.value = 'Giá bán phải từ 1,000 VNĐ đến 1,000,000,000 VNĐ!'
+    return
+  }
+
+  // Check duplicate
+  const isDuplicate = variants.value.some(v =>
+    (v.idSanPham === Number(targetIdSanPham) || !v.idSanPham) &&
+    Number(v.idMauSac) === Number(addForm.idMauSac) &&
+    Number(v.idKichCo) === Number(addForm.idKichCo)
+  )
+  if (isDuplicate) {
+    const colorObj = colorsList.value.find(c => c.id === Number(addForm.idMauSac))
+    const sizeObj = sizesList.value.find(s => s.id === Number(addForm.idKichCo))
+    addFormError.value = `Biến thể [Màu: ${colorObj?.ten || colorObj?.tenMau}, Size: ${sizeObj?.ten || sizeObj?.tenKichCo}] đã tồn tại trong sản phẩm này!`
+    return
+  }
+
+  isSubmittingAdd.value = true
+  try {
+    const payload = [{
+      idSanPham: Number(targetIdSanPham),
+      idMauSac: Number(addForm.idMauSac),
+      idKichCo: Number(addForm.idKichCo),
+      soLuong: stockNum,
+      giaBan: priceNum,
+      trangThai: addForm.trangThai,
+      hinhAnh: addForm.imagePreview || null
+    }]
+
+    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    if (res.ok) {
+      isAddModalOpen.value = false
+      notifySuccess('Thêm mới biến thể sản phẩm thành công!')
+      fetchVariants(false)
+    } else {
+      const err = await res.json().catch(() => ({}))
+      addFormError.value = err.message || 'Không thể thêm biến thể mới'
+      notifyError(err.message || 'Thêm biến thể thất bại')
+    }
+  } catch (err) {
+    console.error('Error adding variant:', err)
+    addFormError.value = 'Lỗi kết nối máy chủ'
+    notifyError('Không thể kết nối đến máy chủ')
+  } finally {
+    isSubmittingAdd.value = false
+  }
+}
+
+// ==========================================
 // EDIT MODAL STATE
+// ==========================================
 const isEditModalOpen = ref(false)
 const editingVariantId = ref(null)
 const editForm = reactive({
@@ -304,7 +778,6 @@ const saveEditVariant = async () => {
   const targetIdx = variants.value.findIndex(v => v.id === currentId)
   if (targetIdx === -1) return
 
-  // Kiểm tra trùng lặp biến thể khác trong cùng danh sách
   const currentVariant = variants.value[targetIdx]
   const isDuplicate = variants.value.some(v => 
     v.id !== currentId && 
@@ -321,7 +794,6 @@ const saveEditVariant = async () => {
   const selectedColor = colorsList.value.find(c => c.id === Number(editForm.idMauSac))
   const selectedSize = sizesList.value.find(s => s.id === Number(editForm.idKichCo))
 
-  // 1. Optimistic UI update
   variants.value[targetIdx].stock = Number(editForm.stock)
   variants.value[targetIdx].price = Number(editForm.price)
   variants.value[targetIdx].trangThai = editForm.trangThai
@@ -339,7 +811,6 @@ const saveEditVariant = async () => {
   closeEditModal()
   showToastNotice('Thành công', `Đã cập nhật biến thể "${variants.value[targetIdx].maCtsp}" thành công!`, 'success')
 
-  // 2. Background API Sync
   try {
     const payload = {
       idMauSac: editForm.idMauSac ? Number(editForm.idMauSac) : null,
@@ -370,7 +841,9 @@ const saveEditVariant = async () => {
   }
 }
 
+// ==========================================
 // CONFIRM MODAL STATE
+// ==========================================
 const confirmModal = reactive({
   isOpen: false,
   title: '',
@@ -469,164 +942,202 @@ onUnmounted(() => {
 
 <template>
   <div class="product-variant-page">
-
+    <!-- Top Header -->
     <div class="page-top-bar">
       <div class="title-info">
-        <h1 class="heading-title">
-          Biến thể của: <span class="highlight-product">{{ selectedProductName }}</span>
-        </h1>
-        <p class="product-code-sub">Mã sản phẩm: {{ selectedProductCode }}</p>
+        <template v-if="isFilteredByProduct">
+          <div class="filter-origin-tag">
+            <span class="origin-label">Đang lọc theo sản phẩm:</span>
+            <span class="product-code-tag">{{ selectedProductCode }}</span>
+            <button class="clear-product-filter-btn" @click="clearProductFilter" title="Xem tất cả biến thể">
+              ✕ Xem tất cả biến thể
+            </button>
+          </div>
+          <h1 class="heading-title">
+            Biến thể của: <span class="highlight-product">{{ selectedProductName }}</span>
+          </h1>
+        </template>
+        <template v-else>
+          <h1 class="heading-title">Biến thể sản phẩm</h1>
+        </template>
+      </div>
+
+      <div class="top-actions-group">
+        <button class="btn btn-primary-add" @click="openAddVariantModal" title="Thêm biến thể mới cho sản phẩm này">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Thêm biến thể
+        </button>
+
+        <button class="btn btn-outline-refresh" @click="fetchVariants(false)" :class="{ 'is-loading': isLoading }" title="Tải lại danh sách">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          Làm mới
+        </button>
       </div>
     </div>
 
-
+    <!-- Redesigned Filter Card as requested -->
     <div class="filter-card">
+      <!-- Row 1: Search on Left + Action Buttons on Right -->
       <div class="filter-row-top">
-
-        <div class="filter-search-box">
+        <div class="search-col">
           <label class="filter-lbl">Tìm kiếm theo tên hoặc mã phân loại</label>
           <div class="search-input-wrap">
-            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <input v-model="filters.search" type="text" class="form-control"
-              placeholder="Nhập mã sản phẩm, phân loại, màu sắc..." @input="onSearchInput" />
+            <input
+              v-model="filters.search"
+              type="text"
+              class="form-control"
+              placeholder="Nhập mã sản phẩm, phân loại, màu sắc..."
+              @input="onSearchInput"
+            />
+            <button v-if="filters.search" class="clear-search-btn" @click="filters.search = ''; onFilterChange()" title="Xóa tìm kiếm">×</button>
           </div>
         </div>
 
-        <div class="filter-action-btns">
-          <button class="btn-action-outline" @click="resetFilters">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="filter-actions-group">
+          <button class="btn-card-action" @click="resetFilters" title="Đặt lại bộ lọc về mặc định">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M23 4v6h-6"></path>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
             </svg>
             Đặt lại bộ lọc
           </button>
-          <button class="btn-action-outline">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7"></rect>
-              <rect x="14" y="3" width="7" height="7"></rect>
-              <rect x="14" y="14" width="7" height="7"></rect>
-              <rect x="3" y="14" width="7" height="7"></rect>
+
+          <button class="btn-card-action" @click="openBatchQrModal" :disabled="isGeneratingQr" title="Tải hoặc xem mã QR của biến thể">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
-            Tải QR
+            {{ isGeneratingQr ? 'Đang tạo...' : (selectedIds.length > 0 ? `Tải QR (${selectedIds.length})` : 'Tải QR') }}
           </button>
-          <button class="btn-action-outline">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+
+          <button class="btn-card-action" @click="exportVariantsToExcel" :disabled="isExporting" title="Xuất danh sách biến thể ra file Excel">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <line x1="8" y1="13" x2="16" y2="13"></line>
+              <line x1="8" y1="17" x2="16" y2="17"></line>
               <polyline points="10 9 9 9 8 9"></polyline>
             </svg>
-            Xuất Excel
+            {{ isExporting ? 'Đang xuất...' : (selectedIds.length > 0 ? `Xuất Excel (${selectedIds.length})` : 'Xuất Excel') }}
           </button>
         </div>
       </div>
 
-
-      <div class="filter-dropdowns-grid">
+      <!-- Row 2: 3 Filter Select Columns -->
+      <div class="filter-row-bottom">
         <div class="filter-col">
           <label class="filter-lbl">Màu sắc</label>
-          <select v-model="filters.idMauSac" class="form-select" @change="onFilterChange">
-            <option value="">Tất cả màu sắc</option>
-            <option v-for="c in colorsList" :key="c.id" :value="c.id">{{ c.ten || c.tenMau }}</option>
-          </select>
+          <div class="select-wrapper">
+            <select v-model="filters.idMauSac" class="form-select" @change="onFilterChange">
+              <option value="">Tất cả màu sắc</option>
+              <option v-for="c in colorsList" :key="c.id" :value="c.id">{{ c.ten || c.tenMau }}</option>
+            </select>
+          </div>
         </div>
 
         <div class="filter-col">
           <label class="filter-lbl">Kích cỡ</label>
-          <select v-model="filters.idKichCo" class="form-select" @change="onFilterChange">
-            <option value="">Tất cả kích cỡ</option>
-            <option v-for="s in sizesList" :key="s.id" :value="s.id">{{ s.ten || s.tenKichCo }}</option>
-          </select>
+          <div class="select-wrapper">
+            <select v-model="filters.idKichCo" class="form-select" @change="onFilterChange">
+              <option value="">Tất cả kích cỡ</option>
+              <option v-for="s in sizesList" :key="s.id" :value="s.id">{{ s.ten || s.tenKichCo }}</option>
+            </select>
+          </div>
         </div>
 
         <div class="filter-col">
           <label class="filter-lbl">Trạng thái</label>
-          <select v-model="filters.trangThai" class="form-select" @change="onFilterChange">
-            <option value="">Tất cả trạng thái</option>
-            <option :value="true">Đang bán</option>
-            <option :value="false">Ngừng bán</option>
-          </select>
+          <div class="select-wrapper">
+            <select v-model="filters.trangThai" class="form-select" @change="onFilterChange">
+              <option value="">Tất cả trạng thái</option>
+              <option :value="true">Kinh doanh</option>
+              <option :value="false">Ngưng kinh doanh</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>
 
-
+    <!-- Table Card -->
     <div class="table-card">
+      <div class="table-card-head">
+        <div class="head-left">
+          <h2 class="card-title">Danh sách biến thể chi tiết</h2>
+          <span class="items-count-pill">{{ variants.length }}/{{ totalElements }} biến thể</span>
+          <span v-if="selectedIds.length > 0" class="selected-badge">Đã chọn: {{ selectedIds.length }}</span>
+        </div>
+        <div class="head-right">
+          <span class="page-size-label">Hiển thị:</span>
+          <select v-model="pageSize" class="page-size-select" @change="fetchVariants(false)">
+            <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }} bản ghi/trang</option>
+          </select>
+        </div>
+      </div>
+
       <div class="table-responsive">
         <table class="variant-data-table">
           <thead>
             <tr>
-              <th width="40" class="text-center"><input type="checkbox" /></th>
+              <th width="44" class="text-center">
+                <input type="checkbox" v-model="isAllSelected" class="custom-chk" />
+              </th>
               <th width="50" class="text-center">STT</th>
               <th width="110">Mã SP</th>
-              <th width="120">Mã CTSP</th>
+              <th width="130">Mã CTSP</th>
               <th width="80" class="text-center">Ảnh</th>
-              <th width="140">Màu sắc</th>
-              <th width="90">Kích cỡ</th>
-              <th width="90">Số lượng</th>
-              <th width="140">Giá bán</th>
-              <th width="90">Giảm</th>
-              <th width="130">Trạng thái</th>
-              <th width="120" class="text-center">Hành động</th>
+              <th width="150">Màu sắc</th>
+              <th width="80" class="text-center">Kích cỡ</th>
+              <th width="100" class="text-center">Số lượng</th>
+              <th width="130" class="text-end">Giá bán</th>
+              <th width="80" class="text-center">Giảm</th>
+              <th width="150" class="text-center">Trạng thái</th>
+              <th width="140" class="text-center">Hành động</th>
             </tr>
           </thead>
           <tbody>
             <template v-if="isLoading && variants.length === 0">
               <tr v-for="n in 5" :key="`skel-${n}`" class="skel-row">
-                <td class="text-center">
-                  <div class="skel-box skel-check"></div>
-                </td>
-                <td class="text-center">
-                  <div class="skel-box skel-num"></div>
-                </td>
-                <td>
-                  <div class="skel-box skel-text"></div>
-                </td>
-                <td>
-                  <div class="skel-box skel-text"></div>
-                </td>
-                <td class="text-center">
-                  <div class="skel-box skel-img"></div>
-                </td>
-                <td>
-                  <div class="skel-box skel-text"></div>
-                </td>
-                <td>
-                  <div class="skel-box skel-num"></div>
-                </td>
-                <td>
-                  <div class="skel-box skel-num"></div>
-                </td>
-                <td>
-                  <div class="skel-box skel-text"></div>
-                </td>
-                <td>
-                  <div class="skel-box skel-num"></div>
-                </td>
-                <td>
-                  <div class="skel-box skel-pill"></div>
-                </td>
-                <td class="text-center">
-                  <div class="skel-box skel-actions"></div>
-                </td>
+                <td class="text-center"><div class="skel-box skel-check"></div></td>
+                <td class="text-center"><div class="skel-box skel-num"></div></td>
+                <td><div class="skel-box skel-text"></div></td>
+                <td><div class="skel-box skel-text"></div></td>
+                <td class="text-center"><div class="skel-box skel-img"></div></td>
+                <td><div class="skel-box skel-text"></div></td>
+                <td class="text-center"><div class="skel-box skel-num"></div></td>
+                <td class="text-center"><div class="skel-box skel-num"></div></td>
+                <td><div class="skel-box skel-text"></div></td>
+                <td class="text-center"><div class="skel-box skel-num"></div></td>
+                <td class="text-center"><div class="skel-box skel-pill"></div></td>
+                <td class="text-center"><div class="skel-box skel-actions"></div></td>
               </tr>
             </template>
 
-            <template v-else>
-              <tr v-for="(item, idx) in variants" :key="item.id">
-                <td class="text-center"><input type="checkbox" /></td>
+            <template v-else-if="variants.length > 0">
+              <tr v-for="(item, idx) in variants" :key="item.id" :class="{ 'row-selected': selectedIds.includes(item.id) }">
+                <td class="text-center">
+                  <input type="checkbox" :value="item.id" v-model="selectedIds" class="custom-chk" />
+                </td>
                 <td class="text-center index-col">{{ currentPage * pageSize + idx + 1 }}</td>
-                <td class="code-col">{{ item.maSp || 'SP020' }}</td>
-                <td class="code-ctsp-col">{{ item.maCtsp || `SPCT0${item.id}` }}</td>
+                <td class="code-col">{{ item.maSp || '---' }}</td>
+                <td class="code-ctsp-col">
+                  <span class="sku-badge">{{ item.maCtsp || `SPCT0${item.id}` }}</span>
+                </td>
                 <td class="text-center">
                   <img v-if="item.img" :src="item.img" alt="Thumbnail" class="variant-thumb" @error="item.img = null" />
                   <div v-else class="variant-thumb-placeholder" :style="{ backgroundColor: getColorHex(item) + '22', color: getColorHex(item) }">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                       <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                     </svg>
                   </div>
@@ -634,47 +1145,51 @@ onUnmounted(() => {
                 <td>
                   <div class="color-cell">
                     <span class="color-dot" :style="{ backgroundColor: getColorHex(item) }"></span>
-                    <span class="color-name">{{ item.color || 'Đen trắng' }}</span>
+                    <span class="color-name">{{ item.color || 'Mặc định' }}</span>
                   </div>
                 </td>
-                <td class="size-col">{{ item.size || '44.5' }}</td>
-                <td class="stock-col">
+                <td class="text-center size-col">
+                  <span class="size-pill">{{ item.size || '-' }}</span>
+                </td>
+                <td class="text-center stock-col">
                   <span class="stock-badge" :class="getVariantStatusClass(item)">
                     {{ item.stock !== undefined ? item.stock : 0 }}
                   </span>
                 </td>
-                <td class="price-val">{{ formatPrice(item.price || 0) }}</td>
-                <td class="discount-val">{{ item.discount || '-' }}</td>
-                <td>
-                  <span class="status-pill-badge" :class="getVariantStatusClass(item)">
-                    <span class="status-indicator-dot"></span>
-                    {{ getVariantStatusLabel(item) }}
-                  </span>
+                <td class="text-end price-val">{{ formatPrice(item.price || 0) }}</td>
+                <td class="text-center discount-val">{{ item.discount || '-' }}</td>
+                <td class="text-center">
+                  <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
+                    <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
+                    <span class="slider round"></span>
+                  </label>
+                  <div class="status-label" :class="{ active: item.trangThai }">
+                    {{ item.trangThai ? 'Kinh doanh' : 'Ngưng kinh doanh' }}
+                  </div>
                 </td>
                 <td class="text-center">
                   <div class="action-icon-group">
-
-                    <button class="act-circle-btn power-btn" :class="{ active: item.trangThai !== false }"
-                      :title="item.trangThai !== false ? 'Ngừng kinh doanh' : 'Kích hoạt kinh doanh'"
-                      @click="toggleStatus(item)">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2.2">
-                        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-                        <line x1="12" y1="2" x2="12" y2="12"></line>
+                    <!-- QR Button -->
+                    <button class="act-circle-btn qr-btn" title="Xem & tải mã QR" @click="openSingleQrModal(item)">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
                       </svg>
                     </button>
 
+                    <!-- Edit Button -->
                     <button class="act-circle-btn edit-btn" title="Chỉnh sửa biến thể" @click="openEditModal(item)">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2.2">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                       </svg>
                     </button>
 
+                    <!-- Delete Button -->
                     <button class="act-circle-btn del-btn" title="Xóa biến thể" @click="confirmDeleteVariant(item)">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2.2">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                       </svg>
@@ -682,74 +1197,136 @@ onUnmounted(() => {
                   </div>
                 </td>
               </tr>
-
-              <tr v-if="variants.length === 0">
-                <td colspan="12" style="text-align: center; padding: 40px; color: #64748b;">
-                  Không tìm thấy biến thể sản phẩm nào phù hợp.
-                </td>
-              </tr>
             </template>
+
+            <!-- Empty State -->
+            <tr v-else>
+              <td colspan="12" class="empty-state-cell">
+                <div class="empty-state-box">
+                  <div class="empty-icon">👟</div>
+                  <div class="empty-title">Không tìm thấy biến thể nào</div>
+                  <p class="empty-desc">Thử tìm kiếm với từ khóa khác hoặc bấm đặt lại bộ lọc.</p>
+                  <button class="btn-action-outline" @click="resetFilters">Đặt lại bộ lọc</button>
+                </div>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
 
-      <div class="table-footer-pagination">
-        <div class="foot-info">
-          Hiển thị {{ variants.length ? currentPage * pageSize + 1 : 0 }} - {{ currentPage * pageSize + variants.length
-          }}
-          trong {{ totalElements }} biến thể chi tiết
-          <span class="page-badge-pill">Trang {{ currentPage + 1 }}/{{ totalPages }}</span>
-        </div>
-
-        <div class="foot-controls">
-          <span class="page-size-lbl">Kích thước trang:</span>
-          <select v-model="pageSize" class="page-size-select" @change="fetchVariants(false)">
-            <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}/trang</option>
-          </select>
-
-          <div class="pager-btns-group">
-            <button class="pager-nav-btn" :disabled="currentPage === 0" @click="changePage(0)"
-              title="Trang đầu">«</button>
-            <button class="pager-nav-btn" :disabled="currentPage === 0" @click="changePage(currentPage - 1)"
-              title="Trang trước">‹</button>
-
-            <button v-for="p in totalPages" :key="p" class="pager-num-btn" :class="{ active: p - 1 === currentPage }"
-              @click="changePage(p - 1)">
-              {{ p }}
-            </button>
-
-            <button class="pager-nav-btn" :disabled="currentPage >= totalPages - 1" @click="changePage(currentPage + 1)"
-              title="Trang sau">›</button>
-            <button class="pager-nav-btn" :disabled="currentPage >= totalPages - 1" @click="changePage(totalPages - 1)"
-              title="Trang cuối">»</button>
-          </div>
+      <!-- Pagination -->
+      <div v-if="totalPages > 1" class="table-card-foot">
+        <span class="foot-info">
+          Hiển thị <strong>{{ variants.length ? currentPage * pageSize + 1 : 0 }} - {{ currentPage * pageSize + variants.length }}</strong> trong tổng số <strong>{{ totalElements }}</strong> biến thể
+        </span>
+        <div class="foot-pager">
+          <button class="pager-btn" :disabled="currentPage === 0" @click="changePage(currentPage - 1)">
+            ‹ Trước
+          </button>
+          <button
+            v-for="p in totalPages"
+            :key="p"
+            class="pager-btn num-btn"
+            :class="{ active: p - 1 === currentPage }"
+            @click="changePage(p - 1)"
+          >
+            {{ p }}
+          </button>
+          <button class="pager-btn" :disabled="currentPage >= totalPages - 1" @click="changePage(currentPage + 1)">
+            Sau ›
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- Modal Chỉnh Sửa Biến Thể -->
-    <transition name="fade">
-      <div v-if="isEditModalOpen" class="modal-backdrop" @click.self="closeEditModal">
-        <div class="modal-box">
+    <!-- QR CODE MODAL (Single or Batch) -->
+    <transition name="modal-fade">
+      <div v-if="qrModal.isOpen" class="modal-overlay" @click.self="qrModal.isOpen = false">
+        <div class="modal-dialog qr-dialog">
           <div class="modal-header">
-            <h3>Chỉnh sửa biến thể sản phẩm</h3>
-            <button class="btn-close" @click="closeEditModal">✕</button>
+            <div class="modal-title-group">
+              <h3 class="modal-title">{{ qrModal.title }}</h3>
+              <p v-if="qrModal.subtitle" class="modal-subtitle">{{ qrModal.subtitle }}</p>
+            </div>
+            <button class="modal-close" @click="qrModal.isOpen = false">×</button>
+          </div>
+
+          <div class="modal-body qr-modal-body">
+            <div class="qr-gallery-grid" :class="{ 'single-view': qrModal.items.length === 1 }">
+              <div v-for="qrItem in qrModal.items" :key="qrItem.id" class="qr-card-item">
+                <div class="qr-image-wrapper">
+                  <img :src="qrItem.qrDataUrl" alt="QR Code" class="qr-img-tag" />
+                </div>
+                <div class="qr-info-box">
+                  <div class="qr-sku-tag">{{ qrItem.maCtsp || `SPCT0${qrItem.id}` }}</div>
+                  <div class="qr-prod-title">{{ qrItem.tenSp || selectedProductName || 'Sản phẩm' }}</div>
+                  <div class="qr-attr-pills">
+                    <span class="qr-pill color">{{ qrItem.color || 'Màu mặc định' }}</span>
+                    <span class="qr-pill size">Size {{ qrItem.size || '-' }}</span>
+                  </div>
+                  <div class="qr-price">{{ formatPrice(qrItem.price) }}</div>
+                </div>
+                <button class="btn-download-single-qr" @click="downloadQrImage(qrItem)" title="Tải ảnh PNG">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  Tải ảnh QR
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="qrModal.isOpen = false">Đóng</button>
+            <button class="btn btn-outline" @click="printQrLabels">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+              </svg>
+              In tem QR
+            </button>
+            <button v-if="qrModal.items.length > 1" class="btn btn-primary" @click="downloadAllQrImages">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              Tải tất cả ảnh QR ({{ qrModal.items.length }})
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Quick Edit Variant Modal -->
+    <transition name="modal-fade">
+      <div v-if="isEditModalOpen" class="modal-overlay">
+        <div class="modal-dialog" @click.stop>
+          <div class="modal-header">
+            <div class="modal-title-group">
+              <h3 class="modal-title">Chỉnh sửa biến thể sản phẩm</h3>
+              <span class="modal-code-tag">{{ editForm.maCtsp }}</span>
+            </div>
+            <button class="modal-close" @click="closeEditModal">×</button>
           </div>
 
           <div class="modal-body">
-            <div v-if="formError" class="form-error-alert">
-              <span>⚠️ {{ formError }}</span>
+            <div v-if="formError" class="modal-alert-error">
+              {{ formError }}
             </div>
 
-            <div class="form-group margin-bottom">
-              <label class="form-lbl">Mã chi tiết sản phẩm (Mã CTSP)</label>
-              <input v-model="editForm.maCtsp" type="text" class="form-inp disabled" readonly />
-            </div>
+            <div class="edit-grid">
+              <div class="form-group span-2">
+                <label class="form-lbl">Mã CTSP (SKU)</label>
+                <input v-model="editForm.maCtsp" type="text" class="modal-input input-readonly" readonly disabled />
+              </div>
 
-            <div class="form-row-2col margin-bottom">
               <div class="form-group">
-                <label class="form-lbl">Màu sắc <span class="required">*</span></label>
-                <select v-model="editForm.idMauSac" class="form-inp">
+                <label class="form-lbl">Màu sắc</label>
+                <select v-model="editForm.idMauSac" class="modal-select select-disabled" disabled>
                   <option value="" disabled>-- Chọn màu sắc --</option>
                   <option v-for="c in colorsList" :key="c.id" :value="c.id">
                     {{ c.ten || c.tenMau }}
@@ -758,36 +1335,32 @@ onUnmounted(() => {
               </div>
 
               <div class="form-group">
-                <label class="form-lbl">Kích cỡ <span class="required">*</span></label>
-                <select v-model="editForm.idKichCo" class="form-inp">
+                <label class="form-lbl">Kích cỡ</label>
+                <select v-model="editForm.idKichCo" class="modal-select select-disabled" disabled>
                   <option value="" disabled>-- Chọn kích cỡ --</option>
                   <option v-for="s in sizesList" :key="s.id" :value="s.id">
                     {{ s.ten || s.tenKichCo }}
                   </option>
                 </select>
               </div>
-            </div>
 
-            <div class="form-row-2col margin-bottom">
               <div class="form-group">
                 <label class="form-lbl">Số lượng tồn kho <span class="required">*</span></label>
-                <input v-model.number="editForm.stock" type="number" min="0" class="form-inp"
-                  placeholder="Nhập số lượng tồn..." />
+                <input v-model.number="editForm.stock" type="number" min="0" class="modal-input" placeholder="Nhập số lượng tồn..." />
               </div>
 
               <div class="form-group">
                 <label class="form-lbl">Giá bán (VNĐ) <span class="required">*</span></label>
-                <input v-model.number="editForm.price" type="number" min="0" step="10000" class="form-inp"
-                  placeholder="Nhập giá bán..." />
+                <input v-model.number="editForm.price" type="number" min="0" step="10000" class="modal-input" placeholder="Nhập giá bán..." />
               </div>
-            </div>
 
-            <div class="form-group">
-              <label class="form-lbl">Trạng thái kinh doanh</label>
-              <select v-model="editForm.trangThai" class="form-inp">
-                <option :value="true">Đang bán</option>
-                <option :value="false">Ngừng bán</option>
-              </select>
+              <div class="form-group span-2">
+                <label class="form-lbl">Trạng thái</label>
+                <select v-model="editForm.trangThai" class="modal-select">
+                  <option :value="true">Kinh doanh</option>
+                  <option :value="false">Ngưng kinh doanh</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -795,6 +1368,121 @@ onUnmounted(() => {
             <button class="btn btn-secondary" @click="closeEditModal">Hủy bỏ</button>
             <button class="btn btn-primary" @click="saveEditVariant">
               Lưu thay đổi
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Add Variant Modal -->
+    <transition name="modal-fade">
+      <div v-if="isAddModalOpen" class="modal-overlay">
+        <div class="modal-dialog" @click.stop>
+          <div class="modal-header">
+            <div class="modal-title-group">
+              <h3 class="modal-title">Thêm biến thể mới</h3>
+              <p class="modal-subtitle">
+                Sản phẩm: <strong>{{ selectedProductName || 'Chọn sản phẩm' }}</strong> 
+                <span v-if="selectedProductCode" class="modal-code-tag">{{ selectedProductCode }}</span>
+              </p>
+            </div>
+            <button class="modal-close" @click="isAddModalOpen = false">×</button>
+          </div>
+
+          <div class="modal-body">
+            <div v-if="addFormError" class="modal-alert-error">
+              {{ addFormError }}
+            </div>
+
+            <div class="edit-grid">
+              <!-- Nếu chưa lọc theo sản phẩm thì cho chọn sản phẩm -->
+              <div v-if="!isFilteredByProduct" class="form-group span-2">
+                <label class="form-lbl">Chọn sản phẩm <span class="required">*</span></label>
+                <select v-model="addForm.idSanPham" class="modal-select">
+                  <option value="" disabled selected>-- Chọn sản phẩm --</option>
+                  <option v-for="p in productsList" :key="p.id" :value="p.id">
+                    {{ p.tenSanPham }} ({{ p.maSanPham }})
+                  </option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-lbl">Màu sắc <span class="required">*</span></label>
+                <select v-model="addForm.idMauSac" class="modal-select" @change="onAddColorChange">
+                  <option value="" disabled selected>-- Chọn màu sắc --</option>
+                  <option v-for="c in colorsList" :key="c.id" :value="c.id">
+                    {{ c.ten || c.tenMau }}
+                  </option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-lbl">Kích cỡ <span class="required">*</span></label>
+                <select v-model="addForm.idKichCo" class="modal-select">
+                  <option value="" disabled selected>-- Chọn kích cỡ --</option>
+                  <option v-for="s in sizesList" :key="s.id" :value="s.id">
+                    {{ s.ten || s.tenKichCo }}
+                  </option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-lbl">Số lượng tồn kho <span class="required">*</span></label>
+                <input v-model.number="addForm.stock" type="number" min="0" class="modal-input" placeholder="Nhập số lượng..." />
+              </div>
+
+              <div class="form-group">
+                <label class="form-lbl">Giá bán (VNĐ) <span class="required">*</span></label>
+                <input v-model.number="addForm.price" type="number" min="1000" step="10000" class="modal-input" placeholder="Nhập giá bán..." />
+              </div>
+
+              <div class="form-group span-2">
+                <label class="form-lbl">Trạng thái</label>
+                <select v-model="addForm.trangThai" class="modal-select">
+                  <option :value="true">Kinh doanh</option>
+                  <option :value="false">Ngưng kinh doanh</option>
+                </select>
+              </div>
+
+              <!-- PHẦN HÌNH ẢNH BIẾN THỂ -->
+              <div class="form-group span-2 image-section-box">
+                <label class="form-lbl">Hình ảnh đại diện cho màu sắc</label>
+                
+                <!-- Case 1: Đã có ảnh cho màu này từ các biến thể trước -->
+                <div v-if="addForm.existingColorImage && !addForm.imagePreview" class="existing-image-box">
+                  <img :src="addForm.existingColorImage" class="existing-img-thumb" />
+                  <div class="existing-img-info">
+                    <span class="badge-auto-img">✓ Tự động dùng lại ảnh của màu này</span>
+                    <p class="img-hint">Màu này đã có ảnh đại diện trong sản phẩm. Bạn có thể tải ảnh mới nếu muốn thay đổi.</p>
+                  </div>
+                  <button type="button" class="btn-change-img" @click="triggerAddImageUpload">Tải ảnh khác</button>
+                </div>
+
+                <!-- Case 2: Đã chọn ảnh mới -->
+                <div v-else-if="addForm.imagePreview" class="new-image-preview-box">
+                  <img :src="addForm.imagePreview" class="existing-img-thumb" />
+                  <div class="existing-img-info">
+                    <span class="badge-new-img">📷 Ảnh mới đã chọn</span>
+                    <p class="img-hint">Ảnh này sẽ được lưu cho phân loại màu này.</p>
+                  </div>
+                  <button type="button" class="btn-remove-img" @click="addForm.imagePreview = null">Xóa ảnh này</button>
+                </div>
+
+                <!-- Case 3: Màu chưa có ảnh và chưa upload -->
+                <div v-else class="upload-image-box" @click="triggerAddImageUpload">
+                  <div class="upload-icon">🖼</div>
+                  <p class="upload-text">Nhấn để tải lên ảnh cho màu này (Tùy chọn)</p>
+                  <p class="upload-sub">Hỗ trợ JPG, PNG, WEBP (Tối đa 5MB)</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="isAddModalOpen = false" :disabled="isSubmittingAdd">Hủy bỏ</button>
+            <button class="btn btn-primary" @click="saveAddVariant" :disabled="isSubmittingAdd">
+              <span v-if="isSubmittingAdd">Đang lưu...</span>
+              <span v-else>+ Thêm biến thể</span>
             </button>
           </div>
         </div>
@@ -809,12 +1497,8 @@ onUnmounted(() => {
 
           <div class="confirm-hero-badge badge-danger">
             <div class="confirm-icon-glow">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                <line x1="10" y1="11" x2="10" y2="17"></line>
-                <line x1="14" y1="11" x2="14" y2="17"></line>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
               </svg>
             </div>
           </div>
@@ -837,4 +1521,3 @@ onUnmounted(() => {
 </template>
 
 <style scoped src="@/assets/styles/ProductVariantPage.css"></style>
-
