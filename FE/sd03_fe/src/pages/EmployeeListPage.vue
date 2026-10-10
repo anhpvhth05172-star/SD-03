@@ -1,11 +1,16 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { deleteEmployee, getEmployee, getEmployeeFormData, listEmployees } from '../api/employee'
+import { getEmployee, getEmployeeFormData, listEmployees, updateEmployeeStatus } from '../api/employee'
+import { exportCsv, fetchAllPages } from '../utils/export'
+import { takeFlash } from '../utils/flash'
 import { avatarColor, formatDate, formatDateTime, initialsOf } from '../utils/format'
+import { laAdmin } from '../utils/session'
 
 const router = useRouter()
 const showFilter = ref(true)
+const flashMsg = ref('')
+const exporting = ref(false)
 
 const vaiTros = ref([])
 const rows = ref([])
@@ -97,6 +102,32 @@ const goPage = (p) => {
   load()
 }
 
+const exportFile = async () => {
+  const params = buildParams()
+  if (!params) return
+  exporting.value = true
+  try {
+    const all = await fetchAllPages(listEmployees, params)
+    exportCsv(
+      'nhan-vien.csv',
+      ['Mã nhân viên', 'Tên đăng nhập', 'Email', 'Số điện thoại', 'Vai trò', 'Ngày bắt đầu', 'Trạng thái'],
+      all.map((r) => [
+        r.maNhanVien,
+        r.tenTaiKhoan,
+        r.email || '',
+        r.soDienThoai || '',
+        r.tenVaiTro || '',
+        formatDate(r.ngayTao),
+        r.trangThaiLabel || '',
+      ]),
+    )
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    exporting.value = false
+  }
+}
+
 const pageList = computed(() => {
   const total = totalPages.value
   const cur = page.value + 1
@@ -119,10 +150,12 @@ const openDetail = async (row) => {
   }
 }
 
-const removeRow = async (row) => {
-  if (!confirm(`Xóa nhân viên ${row.maNhanVien} (${row.tenTaiKhoan})? Bản ghi sẽ chuyển sang trạng thái Đã khóa.`)) return
+const toggleStatus = async (row) => {
+  const moi = !row.trangThai
   try {
-    await deleteEmployee(row.id)
+    await updateEmployeeStatus(row.id, moi ? 'true' : 'false')
+    row.trangThai = moi
+    row.trangThaiLabel = moi ? 'Đang hoạt động' : 'Đã khóa'
     await load()
   } catch (e) {
     alert(e.message)
@@ -139,6 +172,7 @@ const gioiTinhLabel = (value) => {
 const statusPill = (value) => (value ? 'pill-green' : 'pill-gray')
 
 onMounted(async () => {
+  flashMsg.value = takeFlash()
   try {
     const form = await getEmployeeFormData()
     vaiTros.value = form.vaiTros || []
@@ -156,13 +190,23 @@ onMounted(async () => {
         <h1 class="screen-title">Quản lý nhân viên</h1>
         <p class="screen-sub">Quản lý hồ sơ nhân sự, phân quyền và hợp đồng lao động tại Poly Shoe</p>
       </div>
-      <button class="btn-add" type="button" @click="router.push('/nhan-vien/them')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-          <path d="M12 6v12M6 12h12" />
-        </svg>
-        Thêm nhân viên
-      </button>
+      <div class="head-actions">
+        <button class="btn-export" type="button" :disabled="exporting" @click="exportFile">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v12M7 10l5 5 5-5M4 21h16" />
+          </svg>
+          {{ exporting ? 'Đang xuất...' : 'Xuất File' }}
+        </button>
+        <button v-if="laAdmin()" class="btn-add" type="button" @click="router.push('/nhan-vien/them')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <path d="M12 6v12M6 12h12" />
+          </svg>
+          Thêm nhân viên
+        </button>
+      </div>
     </div>
+
+    <p v-if="flashMsg" class="flash-ok">{{ flashMsg }}</p>
 
     <section class="panel">
       <div class="panel-head">
@@ -296,13 +340,17 @@ onMounted(async () => {
                         <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3" />
                       </svg>
                     </button>
-                    <button class="act-btn" type="button" aria-label="Xóa" title="Xóa" @click="removeRow(row)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M3 6h18" />
-                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        <path d="M10 11v6M14 11v6" />
-                      </svg>
+                    <button
+                      class="toggle"
+                      :class="{ 'is-on': row.trangThai }"
+                      type="button"
+                      role="switch"
+                      :aria-checked="row.trangThai ? 'true' : 'false'"
+                      :aria-label="row.trangThai ? 'Tắt tài khoản' : 'Bật tài khoản'"
+                      :title="row.trangThai ? 'Turn off' : 'Turn on'"
+                      @click="toggleStatus(row)"
+                    >
+                      <span class="toggle-dot"></span>
                     </button>
                   </div>
                 </td>
@@ -369,4 +417,15 @@ onMounted(async () => {
   </div>
 </template>
 
-<style scoped></style>
+<style scoped>
+.flash-ok {
+  background: #e7f7ee;
+  border: 1px solid #bde7cf;
+  color: #137a45;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 4px;
+}
+</style>

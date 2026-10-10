@@ -1,11 +1,13 @@
 package com.example.datn.config;
 
 import com.example.datn.exception.DangNhapThatBaiException;
+import com.example.datn.exception.KhongCoQuyenException;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -22,6 +24,17 @@ public class ApiExceptionHandler {
     public ResponseEntity<Map<String, String>> handleDangNhapThatBai(DangNhapThatBaiException ex) {
         String message = ex.getMessage() != null ? ex.getMessage() : "Sai tài khoản hoặc mật khẩu";
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(message(message));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, String>> handleNotReadable(HttpMessageNotReadableException ex) {
+        return ResponseEntity.badRequest()
+            .body(message("Dữ liệu gửi lên không hợp lệ (JSON không đúng định dạng)"));
+    }
+
+    @ExceptionHandler(KhongCoQuyenException.class)
+    public ResponseEntity<Map<String, String>> handleKhongCoQuyen(KhongCoQuyenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(message(ex.getMessage()));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

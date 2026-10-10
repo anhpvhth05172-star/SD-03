@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { getToken, getRefreshToken, isTokenExpired, luuPhien, dangXuat } from '../utils/auth'
+import { vaiTroHienTai } from '../utils/session'
 
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api'
 
@@ -38,6 +39,7 @@ const chuyenVeDangNhap = () => {
 }
 
 http.interceptors.request.use(async (config) => {
+  config.headers['X-Vai-Tro'] = vaiTroHienTai.value || 'ADMIN'
   if (String(config.url || '').includes('/auth/refresh')) {
     return config
   }

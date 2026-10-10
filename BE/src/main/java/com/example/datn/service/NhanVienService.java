@@ -8,36 +8,61 @@ import com.example.datn.entity.NhanVien;
 import com.example.datn.entity.VaiTro;
 import com.example.datn.repository.NhanVienRepository;
 import com.example.datn.repository.VaiTroRepository;
+import com.example.datn.util.DoTuoi;
+import com.example.datn.util.MaNhanVien;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Pattern;
-import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
-@RequiredArgsConstructor
 public class NhanVienService {
 
     private static final int MAX_PAGE_SIZE = 50;
     private static final String MAT_KHAU_MAC_DINH = "123456";
     private static final String TRANG_THAI_DANG_HOAT_DONG = "Đang hoạt động";
     private static final String TRANG_THAI_KHOA = "Đã khóa";
+    public static final int TUOI_TOI_THIEU = 18;
+    public static final String THONG_BAO_TUOI =
+        "Nhân viên phải đủ 18 tuổi.";
+    /** Số lần thử lại khi hai yêu cầu tạo cùng lúc giành cùng một mã. */
+    private static final int SO_LAN_TAO = 5;
+    private static final int SO_MA_TOI_DA = 1_000_000;
     private static final String[][] GIOI_TINH_MAP = {
         {"NAM", "Nam"},
         {"NU", "Nữ"},
         {"KHAC", "Khác"}
     };
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+$");
-    private static final Pattern SO_DIEN_THAI_PATTERN = Pattern.compile("^(0|\\+84)\\d{8,10}$");
-    private static final Pattern MA_NHAN_VIEN_PATTERN = Pattern.compile("^NV\\d{3,}$");
+    private static final Pattern SO_DIEN_THAI_PATTERN = Pattern.compile("^0\\d{8,9}$");
+    private static final Pattern MA_NHAN_VIEN_PATTERN = Pattern.compile("^[A-Za-z][A-Za-z0-9]{0,24}$");
+    private static final String[] MA_VAI_TRO_HOP_LE = {"ADMIN", "STAFF"};
 
     private final NhanVienRepository nhanVienRepository;
     private final VaiTroRepository vaiTroRepository;
+    private final TransactionTemplate transactionTemplate;
+
+    public NhanVienService(
+        NhanVienRepository nhanVienRepository,
+        VaiTroRepository vaiTroRepository,
+        PlatformTransactionManager transactionManager
+    ) {
+        this.nhanVienRepository = nhanVienRepository;
+        this.vaiTroRepository = vaiTroRepository;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        // Mỗi lần thử là một transaction riêng để có thể thử lại sau khi rollback.
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
 
     @Transactional(readOnly = true)
     public PageResponse<NhanVienDTO> list(
@@ -64,12 +89,30 @@ public class NhanVienService {
         return toDTO(findOrThrow(id));
     }
 
-    @Transactional
+    /**
+     * Tạo nhân viên. Nếu hai yêu cầu đồng thời giành cùng một mã, ràng buộc duy nhất
+     * của database sẽ chặn bản ghi trùng và toàn bộ thao tác được thử lại với mã kế tiếp.
+     */
     public NhanVienDTO create(NhanVienRequest req) {
-        validate(req, null);
-        NhanVien nhanVien = new NhanVien();
-        fill(nhanVien, req, true);
-        return toDTO(nhanVienRepository.save(nhanVien));
+        if (req == null) {
+            throw new IllegalArgumentException("Dữ liệu không hợp lệ");
+        }
+        for (int lan = 1; lan <= SO_LAN_TAO; lan++) {
+            try {
+                NhanVienDTO dto = transactionTemplate.execute(status -> {
+                    validate(req, null);
+                    NhanVien nhanVien = new NhanVien();
+                    fill(nhanVien, req, true);
+                    return toDTO(nhanVienRepository.saveAndFlush(nhanVien));
+                });
+                if (dto != null) {
+                    return dto;
+                }
+            } catch (DataIntegrityViolationException ex) {
+                // Trùng mã/duy nhất ở lần trước -> vòng lặp tiếp theo sẽ chọn mã khác.
+            }
+        }
+        throw new IllegalArgumentException("Không tạo được mã nhân viên duy nhất, vui lòng thử lại");
     }
 
     @Transactional
@@ -89,33 +132,59 @@ public class NhanVienService {
         nhanVienRepository.save(nhanVien);
     }
 
+    @Transactional
+    public NhanVienDTO capNhatTrangThai(Long id, String trangThaiMoi) {
+        NhanVien nhanVien = findOrThrow(id);
+        boolean moi = toTrangThai(trangThaiMoi);
+        nhanVien.setTrangThai(moi);
+        nhanVien.setNgayCapNhat(LocalDateTime.now());
+        nhanVien.setNguoiCapNhat("admin");
+        return toDTO(nhanVienRepository.save(nhanVien));
+    }
+
     @Transactional(readOnly = true)
     public NhanVienFormDataResponse formData() {
         List<NhanVienFormDataResponse.VaiTroOption> vaiTros = vaiTroRepository
-            .findByTrangThaiTrueOrderByTenVaiTroAsc().stream()
+            .findByMaVaiTroIn(List.of(MA_VAI_TRO_HOP_LE)).stream()
+            .sorted(Comparator.<VaiTro>comparingInt(v -> indexOfMa(v.getMaVaiTro())))
             .map(v -> new NhanVienFormDataResponse.VaiTroOption(v.getId(), v.getMaVaiTro(), v.getTenVaiTro()))
             .toList();
         return new NhanVienFormDataResponse(vaiTros);
     }
 
+    private static int indexOfMa(String ma) {
+        for (int i = 0; i < MA_VAI_TRO_HOP_LE.length; i++) {
+            if (MA_VAI_TRO_HOP_LE[i].equalsIgnoreCase(ma)) {
+                return i;
+            }
+        }
+        return MA_VAI_TRO_HOP_LE.length;
+    }
+
+    @Transactional(readOnly = true)
+    public String maNhanVienTuDong(String ten) {
+        return sinhMaNhanVien(ten);
+    }
+
     // ===== private =====
 
     private void validate(NhanVienRequest req, Long excludeId) {
+        boolean taoMoi = excludeId == null;
         if (req == null || isBlank(req.getTenTaiKhoan())) {
             throw new IllegalArgumentException("Tên nhân viên không được để trống");
         }
         checkLength(req.getTenTaiKhoan(), 100, "Tên nhân viên");
-        checkLength(req.getMaNhanVien(), 50, "Mã nhân viên");
-        checkLength(req.getMatKhau(), 255, "Mật khẩu");
+        checkLength(req.getMaNhanVien(), MaNhanVien.TOI_DA, "Mã nhân viên");
+        checkLength(req.getMatKhau(), 127, "Mật khẩu");
         checkLength(req.getEmail(), 150, "Email");
-        checkLength(req.getSoDienThoai(), 20, "Số điện thoại");
-        checkLength(req.getQueQuan(), 300, "Quê quán");
-        checkLength(req.getPhuong(), 200, "Phường");
-        checkLength(req.getDiaChiCuThe(), 510, "Địa chỉ cụ thể");
-        checkLength(req.getAnhNhanVien(), 2000, "Ảnh nhân viên");
-        checkLength(req.getNguoiCapNhat(), 200, "Người cập nhật");
+        checkLength(req.getSoDienThoai(), 10, "Số điện thoại");
+        checkLength(req.getQueQuan(), 150, "Quê quán");
+        checkLength(req.getPhuong(), 100, "Phường");
+        checkLength(req.getDiaChiCuThe(), 255, "Địa chỉ cụ thể");
+        checkLength(req.getAnhNhanVien(), 1000, "Ảnh nhân viên");
+        checkLength(req.getNguoiCapNhat(), 100, "Người cập nhật");
         String ten = req.getTenTaiKhoan().trim();
-        boolean trungTen = excludeId == null
+        boolean trungTen = taoMoi
             ? nhanVienRepository.existsByTenTaiKhoan(ten)
             : nhanVienRepository.existsByTenTaiKhoanAndIdNot(ten, excludeId);
         if (trungTen) {
@@ -123,36 +192,66 @@ public class NhanVienService {
         }
         if (!isBlank(req.getMaNhanVien())) {
             String ma = req.getMaNhanVien().trim();
-            if (!MA_NHAN_VIEN_PATTERN.matcher(ma).matches()) {
-                throw new IllegalArgumentException("Mã nhân viên không hợp lệ (định dạng NV001, NV002, ...)");
+            if (!MaNhanVien.hopLe(ma)) {
+                throw new IllegalArgumentException(
+                    "Mã nhân viên không hợp lệ (bắt đầu bằng chữ cái, chỉ chữ và số, tối đa "
+                        + MaNhanVien.TOI_DA + " ký tự)");
             }
-            boolean trungMa = excludeId == null
-                ? nhanVienRepository.existsByMaNhanVien(ma)
-                : nhanVienRepository.existsByMaNhanVienAndIdNot(ma, excludeId);
-            if (trungMa) {
+            // Khi tạo: mã trùng sẽ được sinh lại ở fill() (FE gửi lên chỉ là mã đề xuất).
+            // Khi sửa: không được đổi sang mã của nhân viên khác.
+            if (!taoMoi && nhanVienRepository.existsByMaNhanVienAndIdNot(ma, excludeId)) {
                 throw new IllegalArgumentException("Mã nhân viên đã tồn tại");
             }
         }
-        if (excludeId == null && req.getIdVaiTro() == null) {
+        if (taoMoi && req.getIdVaiTro() == null) {
             throw new IllegalArgumentException("Vai trò không được để trống");
+        }
+        if (req.getIdVaiTro() != null) {
+            VaiTro vaiTro = vaiTroRepository.findById(req.getIdVaiTro())
+                .orElseThrow(() -> new IllegalArgumentException("Vai trò không tồn tại"));
+            if (!isAllowedRole(vaiTro.getMaVaiTro())) {
+                throw new IllegalArgumentException(
+                    "Hệ thống chỉ hỗ trợ 2 vai trò: Admin (ADMIN) và Nhân viên (STAFF)");
+            }
+        }
+        if (taoMoi && isBlank(req.getEmail())) {
+            throw new IllegalArgumentException("Email không được để trống");
         }
         if (!isBlank(req.getEmail())) {
             String email = req.getEmail().trim();
             if (!EMAIL_PATTERN.matcher(email).matches()) {
                 throw new IllegalArgumentException("Email không hợp lệ");
             }
-            boolean trungEmail = excludeId == null
+            boolean trungEmail = taoMoi
                 ? nhanVienRepository.existsByEmail(email)
                 : nhanVienRepository.existsByEmailAndIdNot(email, excludeId);
             if (trungEmail) {
                 throw new IllegalArgumentException("Email đã được sử dụng bởi nhân viên khác");
             }
         }
-        if (!isBlank(req.getSoDienThoai()) && !SO_DIEN_THAI_PATTERN.matcher(req.getSoDienThoai().trim()).matches()) {
-            throw new IllegalArgumentException("Số điện thoại chỉ gồm 9-11 chữ số và bắt đầu bằng 0 hoặc +84");
+        if (taoMoi && isBlank(req.getSoDienThoai())) {
+            throw new IllegalArgumentException("Số điện thoại không được để trống");
+        }
+        if (!isBlank(req.getSoDienThoai())) {
+            String sdt = req.getSoDienThoai().trim();
+            if (!SO_DIEN_THAI_PATTERN.matcher(sdt).matches()) {
+                throw new IllegalArgumentException(
+                    "Số điện thoại không hợp lệ (bắt đầu bằng 0, gồm 9-10 chữ số, không chứa chữ cái)");
+            }
+        }
+        if (taoMoi && req.getNgaySinh() == null) {
+            throw new IllegalArgumentException("Ngày sinh không được để trống");
         }
         if (req.getNgaySinh() != null && req.getNgaySinh().isAfter(LocalDate.now())) {
             throw new IllegalArgumentException("Ngày sinh không được ở tương lai");
+        }
+        // Không chỉ khi tạo: chặn gọi API trực tiếp để sửa ngày sinh thành chưa đủ tuổi.
+        String loiTuoi = DoTuoi.kiemTra(req.getNgaySinh(), TUOI_TOI_THIEU, THONG_BAO_TUOI);
+        if (loiTuoi != null) {
+            throw new IllegalArgumentException(loiTuoi);
+        }
+        if (taoMoi && isBlank(req.getGioiTinh())) {
+            throw new IllegalArgumentException("Giới tính không được để trống");
         }
         if (!isBlank(req.getGioiTinh())) {
             toMaGioiTinh(req.getGioiTinh());
@@ -162,19 +261,38 @@ public class NhanVienService {
         }
     }
 
+    private static boolean isAllowedRole(String maVaiTro) {
+        for (String ma : MA_VAI_TRO_HOP_LE) {
+            if (ma.equalsIgnoreCase(maVaiTro)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void fill(NhanVien nhanVien, NhanVienRequest req, boolean taoMoi) {
-        if (taoMoi || !isBlank(req.getMaNhanVien())) {
-            nhanVien.setMaNhanVien(isBlank(req.getMaNhanVien()) ? sinhMaNhanVien() : req.getMaNhanVien().trim());
+        if (taoMoi) {
+            nhanVien.setMaNhanVien(chonMaNhanVien(req.getMaNhanVien(), req.getTenTaiKhoan()));
+        } else if (!isBlank(req.getMaNhanVien())) {
+            nhanVien.setMaNhanVien(req.getMaNhanVien().trim());
         }
         nhanVien.setTenTaiKhoan(req.getTenTaiKhoan().trim());
         if (taoMoi || !isBlank(req.getMatKhau())) {
             nhanVien.setMatKhau(isBlank(req.getMatKhau()) ? MAT_KHAU_MAC_DINH : req.getMatKhau().trim());
         }
-        nhanVien.setEmail(trimToNull(req.getEmail()));
-        nhanVien.setSoDienThoai(trimToNull(req.getSoDienThoai()));
+        if (taoMoi || !isBlank(req.getEmail())) {
+            nhanVien.setEmail(trimToNull(req.getEmail()));
+        }
+        if (taoMoi || !isBlank(req.getSoDienThoai())) {
+            nhanVien.setSoDienThoai(trimToNull(req.getSoDienThoai()));
+        }
         nhanVien.setAnhNhanVien(trimToNull(req.getAnhNhanVien()));
-        nhanVien.setGioiTinh(toMaGioiTinh(req.getGioiTinh()));
-        nhanVien.setNgaySinh(req.getNgaySinh());
+        if (taoMoi || !isBlank(req.getGioiTinh())) {
+            nhanVien.setGioiTinh(toMaGioiTinh(req.getGioiTinh()));
+        }
+        if (taoMoi || req.getNgaySinh() != null) {
+            nhanVien.setNgaySinh(req.getNgaySinh());
+        }
         nhanVien.setQueQuan(trimToNull(req.getQueQuan()));
         nhanVien.setPhuong(trimToNull(req.getPhuong()));
         nhanVien.setDiaChiCuThe(trimToNull(req.getDiaChiCuThe()));
@@ -195,12 +313,30 @@ public class NhanVienService {
         }
     }
 
-    private String sinhMaNhanVien() {
-        long next = nhanVienRepository.findMaxId() + 1;
-        String ma;
-        do {
-            ma = String.format("NV%03d", next++);
-        } while (nhanVienRepository.existsByMaNhanVien(ma));
+    /**
+     * Chọn mã khi tạo: dùng mã FE gửi lên nếu còn trống, ngược lại sinh mã mới
+     * từ họ tên với số thứ tự kế tiếp chưa tồn tại.
+     */
+    private String chonMaNhanVien(String maGui, String tenNhanVien) {
+        if (!isBlank(maGui)) {
+            String ma = maGui.trim();
+            if (MaNhanVien.hopLe(ma) && !nhanVienRepository.existsByMaNhanVien(ma)) {
+                return ma;
+            }
+        }
+        return sinhMaNhanVien(tenNhanVien);
+    }
+
+    private String sinhMaNhanVien(String tenNhanVien) {
+        String goc = MaNhanVien.sinh(tenNhanVien);
+        int so = 1;
+        String ma = MaNhanVien.congSo(goc, so);
+        while (nhanVienRepository.existsByMaNhanVien(ma)) {
+            if (++so > SO_MA_TOI_DA) {
+                throw new IllegalArgumentException("Không tìm được mã nhân viên còn trống");
+            }
+            ma = MaNhanVien.congSo(goc, so);
+        }
         return ma;
     }
 

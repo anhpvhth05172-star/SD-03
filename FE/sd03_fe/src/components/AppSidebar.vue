@@ -1,6 +1,7 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { laAdmin } from '../utils/session'
 
 defineProps({
   collapsed: { type: Boolean, default: false },
@@ -58,6 +59,7 @@ const menu = [
     label: 'Quản lý nhân viên',
     path: '/nhan-vien',
     iconType: 'employees',
+    adminOnly: true,
   },
   {
     label: 'Quản lý giảm giá',
@@ -102,6 +104,8 @@ const toggle = (item) => {
   const auto = item.children.some((child) => isChildActive(child))
   openState.value = { ...openState.value, [item.path]: !(openState.value[item.path] ?? auto) }
 }
+
+const visibleMenu = computed(() => menu.filter((item) => !item.adminOnly || laAdmin()))
 </script>
 
 <template>
@@ -116,7 +120,7 @@ const toggle = (item) => {
 
     <nav class="sidebar-nav">
       <div class="menu-list">
-        <template v-for="item in menu" :key="item.path">
+        <template v-for="item in visibleMenu" :key="item.path">
           <router-link v-if="!item.children" :to="item.path" class="nav-item-btn"
             :class="{ 'is-active': isParentActive(item) }">
             <div class="nav-icon-box">

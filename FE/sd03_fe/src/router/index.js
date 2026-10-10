@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { getToken, getRefreshToken, isTokenExpired, dangXuat } from '../utils/auth'
 import { refreshSession } from '../api/http'
+import { laAdmin } from '../utils/session'
 import AdminLayout from '../layouts/AdminLayout.vue'
 import ProductListPage from '../pages/ProductListPage.vue'
 import ProductCreatePage from '../pages/ProductCreatePage.vue'
@@ -102,6 +103,13 @@ router.beforeEach(async (to) => {
     dangXuat()
     return '/dang-nhap'
   }
+})
+
+router.beforeEach((to) => {
+  if (to.path.startsWith('/nhan-vien') && !laAdmin()) {
+    return '/khach-hang'
+  }
+  return true
 })
 
 export default router

@@ -1,6 +1,7 @@
 package com.example.datn.service;
 
 import com.example.datn.dto.DiaChiKhachHangDTO;
+import com.example.datn.dto.DiaChiKhachHangRequest;
 import com.example.datn.dto.KhachHangDTO;
 import com.example.datn.dto.KhachHangRequest;
 import com.example.datn.dto.KhachHangThongKeDTO;
@@ -9,6 +10,8 @@ import com.example.datn.entity.DiaChiKhachHang;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.repository.DiaChiKhachHangRepository;
 import com.example.datn.repository.KhachHangRepository;
+import com.example.datn.util.DoTuoi;
+import com.example.datn.util.MaNhanVien;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -18,20 +21,28 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
-@RequiredArgsConstructor
 public class KhachHangService {
 
     private static final int MAX_PAGE_SIZE = 50;
     private static final String MAT_KHAU_MAC_DINH = "123456";
     private static final String TRANG_THAI_DANG_HOAT_DONG = "Đang hoạt động";
     private static final String TRANG_THAI_KHOA = "Đã khóa";
+    public static final int TUOI_TOI_THIEU = 16;
+    public static final String THONG_BAO_TUOI =
+        "Khách hàng phải đủ 16 tuổi.";
+    /** Số lần thử lại khi hai yêu cầu tạo cùng lúc giành cùng một mã. */
+    private static final int SO_LAN_TAO = 5;
+    private static final int SO_MA_TOI_DA = 1_000_000;
     private static final BigDecimal BAC_MIN = new BigDecimal("5000000");
     private static final BigDecimal VANG_MIN = new BigDecimal("10000000");
     private static final BigDecimal KIM_CUONG_MIN = new BigDecimal("20000000");
@@ -47,11 +58,24 @@ public class KhachHangService {
         {"KHAC", "Khác"}
     };
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+$");
-    private static final Pattern SO_DIEN_THAI_PATTERN = Pattern.compile("^(0|\\+84)\\d{8,10}$");
-    private static final Pattern MA_KHACH_HANG_PATTERN = Pattern.compile("^KH\\d{3,}$");
+    private static final Pattern SO_DIEN_THAI_PATTERN = Pattern.compile("^0\\d{8,9}$");
+    private static final Pattern MA_KHACH_HANG_PATTERN = Pattern.compile("^[A-Za-z][A-Za-z0-9]{0,24}$");
 
     private final KhachHangRepository khachHangRepository;
     private final DiaChiKhachHangRepository diaChiKhachHangRepository;
+    private final TransactionTemplate transactionTemplate;
+
+    public KhachHangService(
+        KhachHangRepository khachHangRepository,
+        DiaChiKhachHangRepository diaChiKhachHangRepository,
+        PlatformTransactionManager transactionManager
+    ) {
+        this.khachHangRepository = khachHangRepository;
+        this.diaChiKhachHangRepository = diaChiKhachHangRepository;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        // Mỗi lần thử là một transaction riêng để có thể thử lại sau khi rollback.
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
 
     @Transactional(readOnly = true)
     public PageResponse<KhachHangDTO> list(
@@ -79,14 +103,32 @@ public class KhachHangService {
         return toFullDTO(findOrThrow(id));
     }
 
-    @Transactional
+    /**
+     * Tạo khách hàng. Nếu hai yêu cầu đồng thời giành cùng một mã, ràng buộc duy nhất
+     * của database sẽ chặn bản ghi trùng và toàn bộ thao tác được thử lại với mã kế tiếp.
+     */
     public KhachHangDTO create(KhachHangRequest req) {
-        validate(req, null);
-        KhachHang khachHang = new KhachHang();
-        fill(khachHang, req, true);
-        khachHang = khachHangRepository.save(khachHang);
-        luuDiaChiMacDinh(khachHang, req);
-        return toFullDTO(khachHang);
+        if (req == null) {
+            throw new IllegalArgumentException("Dữ liệu không hợp lệ");
+        }
+        for (int lan = 1; lan <= SO_LAN_TAO; lan++) {
+            try {
+                KhachHangDTO dto = transactionTemplate.execute(status -> {
+                    validate(req, null);
+                    KhachHang khachHang = new KhachHang();
+                    fill(khachHang, req, true);
+                    khachHang = khachHangRepository.saveAndFlush(khachHang);
+                    luuDiaChiMacDinh(khachHang, req);
+                    return toFullDTO(khachHang);
+                });
+                if (dto != null) {
+                    return dto;
+                }
+            } catch (DataIntegrityViolationException ex) {
+                // Trùng mã/duy nhất ở lần trước -> vòng lặp tiếp theo sẽ chọn mã khác.
+            }
+        }
+        throw new IllegalArgumentException("Không tạo được mã khách hàng duy nhất, vui lòng thử lại");
     }
 
     @Transactional
@@ -108,22 +150,140 @@ public class KhachHangService {
         khachHangRepository.save(khachHang);
     }
 
+    @Transactional(readOnly = true)
+    public KhachHangDTO capNhatTrangThai(Long id, String trangThaiMoi) {
+        KhachHang khachHang = findOrThrow(id);
+        khachHang.setTrangThai(toTrangThai(trangThaiMoi));
+        khachHang.setNgayCapNhat(LocalDateTime.now());
+        khachHang.setNguoiCapNhat("admin");
+        return toFullDTO(khachHangRepository.save(khachHang));
+    }
+
+    /** Mã khách hàng đề xuất theo họ tên (chưa tính các mã đã tồn tại trên FE). */
+    @Transactional(readOnly = true)
+    public String maKhachHangTuDong(String ten) {
+        return sinhMaKhachHang(ten);
+    }
+
+    // ===== địa chỉ của khách hàng =====
+
+    @Transactional(readOnly = true)
+    public List<DiaChiKhachHangDTO> dsDiaChi(Long idKhachHang) {
+        findOrThrow(idKhachHang);
+        return diaChiKhachHangRepository.findByKhachHangIdOrderByMacDinhDescIdDesc(idKhachHang).stream()
+            .map(KhachHangService::toDiaChiDTO)
+            .toList();
+    }
+
+    @Transactional
+    public DiaChiKhachHangDTO themDiaChi(Long idKhachHang, DiaChiKhachHangRequest req) {
+        KhachHang khachHang = findOrThrow(idKhachHang);
+        validateDiaChi(req, null);
+        boolean macDinh = Boolean.TRUE.equals(req.getMacDinh())
+            || diaChiKhachHangRepository.countByKhachHangId(idKhachHang) == 0;
+        DiaChiKhachHang diaChi = new DiaChiKhachHang();
+        diaChi.setKhachHang(khachHang);
+        diaChi.setMaDiaChi(sinhMaDiaChi(idKhachHang));
+        fillDiaChi(diaChi, req, macDinh);
+        if (macDinh) {
+            boMacDinhKhac(idKhachHang, diaChi.getId());
+        }
+        return toDiaChiDTO(diaChiKhachHangRepository.save(diaChi));
+    }
+
+    @Transactional
+    public DiaChiKhachHangDTO capNhatDiaChi(Long idKhachHang, Long idDiaChi, DiaChiKhachHangRequest req) {
+        findOrThrow(idKhachHang);
+        DiaChiKhachHang diaChi = timDiaChi(idKhachHang, idDiaChi);
+        validateDiaChi(req, idDiaChi);
+        fillDiaChi(diaChi, req, Boolean.TRUE.equals(req.getMacDinh()));
+        if (Boolean.TRUE.equals(req.getMacDinh())) {
+            boMacDinhKhac(idKhachHang, diaChi.getId());
+        }
+        return toDiaChiDTO(diaChiKhachHangRepository.save(diaChi));
+    }
+
+    @Transactional
+    public void xoaDiaChi(Long idKhachHang, Long idDiaChi) {
+        findOrThrow(idKhachHang);
+        DiaChiKhachHang diaChi = timDiaChi(idKhachHang, idDiaChi);
+        boolean laMacDinh = Boolean.TRUE.equals(diaChi.getMacDinh());
+        diaChiKhachHangRepository.delete(diaChi);
+        if (laMacDinh) {
+            diaChiKhachHangRepository.findByKhachHangIdOrderByMacDinhDescIdDesc(idKhachHang).stream()
+                .findFirst()
+                .ifPresent(d -> {
+                    d.setMacDinh(true);
+                    diaChiKhachHangRepository.save(d);
+                });
+        }
+    }
+
+    @Transactional
+    public DiaChiKhachHangDTO datMacDinh(Long idKhachHang, Long idDiaChi) {
+        findOrThrow(idKhachHang);
+        DiaChiKhachHang diaChi = timDiaChi(idKhachHang, idDiaChi);
+        boMacDinhKhac(idKhachHang, idDiaChi);
+        diaChi.setMacDinh(true);
+        diaChi.setTrangThai(true);
+        return toDiaChiDTO(diaChiKhachHangRepository.save(diaChi));
+    }
+
+    private DiaChiKhachHang timDiaChi(Long idKhachHang, Long idDiaChi) {
+        return diaChiKhachHangRepository.findById(idDiaChi)
+            .filter(d -> d.getKhachHang() != null && idKhachHang.equals(d.getKhachHang().getId()))
+            .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy địa chỉ #" + idDiaChi));
+    }
+
+    private void boMacDinhKhac(Long idKhachHang, Long idDiaChiGiuLai) {
+        for (DiaChiKhachHang d : diaChiKhachHangRepository.findByKhachHangIdOrderByMacDinhDescIdDesc(idKhachHang)) {
+            if (Boolean.TRUE.equals(d.getMacDinh()) && !d.getId().equals(idDiaChiGiuLai)) {
+                d.setMacDinh(false);
+                diaChiKhachHangRepository.save(d);
+            }
+        }
+    }
+
+    private void validateDiaChi(DiaChiKhachHangRequest req, Long excludeId) {
+        if (req == null || isBlank(req.getDiaChiCuThe())) {
+            throw new IllegalArgumentException("Địa chỉ cụ thể không được để trống");
+        }
+        checkLength(req.getTenDiaChi(), 100, "Tên địa chỉ");
+        checkLength(req.getTinhThanhPho(), 100, "Tỉnh/Thành phố");
+        checkLength(req.getPhuong(), 100, "Phường/Xã");
+        checkLength(req.getDiaChiCuThe(), 255, "Địa chỉ cụ thể");
+    }
+
+    private void fillDiaChi(DiaChiKhachHang diaChi, DiaChiKhachHangRequest req, boolean macDinh) {
+        diaChi.setTenChiChi(blankToNull(req.getTenDiaChi()));
+        diaChi.setThanhPho(blankToNull(req.getTinhThanhPho()));
+        diaChi.setPhuong(blankToNull(req.getPhuong()));
+        diaChi.setDiaChiCuThe(req.getDiaChiCuThe().trim());
+        diaChi.setMacDinh(macDinh);
+        if (req.getTrangThai() != null) {
+            diaChi.setTrangThai(req.getTrangThai());
+        } else if (diaChi.getTrangThai() == null) {
+            diaChi.setTrangThai(true);
+        }
+    }
+
     // ===== private =====
 
     private void validate(KhachHangRequest req, Long excludeId) {
+        boolean taoMoi = excludeId == null;
         if (req == null || isBlank(req.getTenKhachHang())) {
             throw new IllegalArgumentException("Họ và tên không được để trống");
         }
         checkLength(req.getTenKhachHang(), 200, "Họ và tên");
         checkLength(req.getMaKhachHang(), 50, "Mã khách hàng");
         checkLength(req.getTenTaiKhoan(), 100, "Tên đăng nhập");
-        checkLength(req.getMatKhau(), 255, "Mật khẩu");
+        checkLength(req.getMatKhau(), 127, "Mật khẩu");
         checkLength(req.getEmail(), 150, "Email");
-        checkLength(req.getSoDienThoai(), 20, "Số điện thoại");
-        checkLength(req.getTinhThanhPho(), 200, "Tỉnh thành phố");
-        checkLength(req.getPhuong(), 200, "Phường");
-        checkLength(req.getDiaChiCuThe(), 510, "Địa chỉ cụ thể");
-        checkLength(req.getNguoiCapNhat(), 200, "Người cập nhật");
+        checkLength(req.getSoDienThoai(), 10, "Số điện thoại");
+        checkLength(req.getTinhThanhPho(), 100, "Tỉnh thành phố");
+        checkLength(req.getPhuong(), 100, "Phường");
+        checkLength(req.getDiaChiCuThe(), 255, "Địa chỉ cụ thể");
+        checkLength(req.getNguoiCapNhat(), 100, "Người cập nhật");
         if (!isBlank(req.getTenTaiKhoan())) {
             String tk = req.getTenTaiKhoan().trim();
             boolean trung = excludeId == null
@@ -136,21 +296,25 @@ public class KhachHangService {
         if (!isBlank(req.getMaKhachHang())) {
             String ma = req.getMaKhachHang().trim();
             if (!MA_KHACH_HANG_PATTERN.matcher(ma).matches()) {
-                throw new IllegalArgumentException("Mã khách hàng không hợp lệ (định dạng KH001, KH002, ...)");
+                throw new IllegalArgumentException(
+                    "Mã khách hàng không hợp lệ (bắt đầu bằng chữ cái, chỉ chữ và số, tối đa "
+                        + MaNhanVien.TOI_DA + " ký tự)");
             }
-            boolean trungMa = excludeId == null
-                ? khachHangRepository.existsByMaKhachHang(ma)
-                : khachHangRepository.existsByMaKhachHangAndIdNot(ma, excludeId);
-            if (trungMa) {
+            // Khi tạo: mã trùng sẽ được sinh lại ở fill() (FE gửi lên chỉ là mã đề xuất).
+            // Khi sửa: không được đổi sang mã của khách hàng khác.
+            if (!taoMoi && khachHangRepository.existsByMaKhachHangAndIdNot(ma, excludeId)) {
                 throw new IllegalArgumentException("Mã khách hàng đã tồn tại");
             }
+        }
+        if (taoMoi && isBlank(req.getEmail())) {
+            throw new IllegalArgumentException("Email không được để trống");
         }
         if (!isBlank(req.getEmail())) {
             String email = req.getEmail().trim();
             if (!EMAIL_PATTERN.matcher(email).matches()) {
                 throw new IllegalArgumentException("Email không hợp lệ");
             }
-            boolean trungEmail = excludeId == null
+            boolean trungEmail = taoMoi
                 ? khachHangRepository.existsByEmail(email)
                 : khachHangRepository.existsByEmailAndIdNot(email, excludeId);
             if (trungEmail) {
@@ -158,10 +322,16 @@ public class KhachHangService {
             }
         }
         if (!isBlank(req.getSoDienThoai()) && !SO_DIEN_THAI_PATTERN.matcher(req.getSoDienThoai().trim()).matches()) {
-            throw new IllegalArgumentException("Số điện thoại chỉ gồm 9-11 chữ số và bắt đầu bằng 0 hoặc +84");
+            throw new IllegalArgumentException(
+                "Số điện thoại không hợp lệ (bắt đầu bằng 0, gồm 9-10 chữ số, không chứa chữ cái)");
         }
         if (req.getNgaySinh() != null && req.getNgaySinh().isAfter(LocalDate.now())) {
             throw new IllegalArgumentException("Ngày sinh không được ở tương lai");
+        }
+        // Không chỉ khi tạo: chặn gọi API trực tiếp để sửa ngày sinh thành chưa đủ tuổi.
+        String loiTuoi = DoTuoi.kiemTra(req.getNgaySinh(), TUOI_TOI_THIEU, THONG_BAO_TUOI);
+        if (loiTuoi != null) {
+            throw new IllegalArgumentException(loiTuoi);
         }
         if (!isBlank(req.getGioiTinh())) {
             toMaGioiTinh(req.getGioiTinh());
@@ -172,10 +342,10 @@ public class KhachHangService {
     }
 
     private void fill(KhachHang khachHang, KhachHangRequest req, boolean taoMoi) {
-        if (taoMoi || !isBlank(req.getMaKhachHang())) {
-            khachHang.setMaKhachHang(
-                isBlank(req.getMaKhachHang()) ? sinhMaKhachHang() : req.getMaKhachHang().trim()
-            );
+        if (taoMoi) {
+            khachHang.setMaKhachHang(chonMaKhachHang(req.getMaKhachHang(), req.getTenKhachHang()));
+        } else if (!isBlank(req.getMaKhachHang())) {
+            khachHang.setMaKhachHang(req.getMaKhachHang().trim());
         }
         if (taoMoi || !isBlank(req.getTenTaiKhoan())) {
             khachHang.setTenTaiKhoan(
@@ -186,10 +356,18 @@ public class KhachHangService {
             khachHang.setMatKhau(isBlank(req.getMatKhau()) ? MAT_KHAU_MAC_DINH : req.getMatKhau().trim());
         }
         khachHang.setTenKhachHang(req.getTenKhachHang().trim());
-        khachHang.setEmail(trimToNull(req.getEmail()));
-        khachHang.setSoDienThoai(trimToNull(req.getSoDienThoai()));
-        khachHang.setNgaySinh(req.getNgaySinh());
-        khachHang.setGioiTinh(toMaGioiTinh(req.getGioiTinh()));
+        if (taoMoi || !isBlank(req.getEmail())) {
+            khachHang.setEmail(trimToNull(req.getEmail()));
+        }
+        if (taoMoi || !isBlank(req.getSoDienThoai())) {
+            khachHang.setSoDienThoai(trimToNull(req.getSoDienThoai()));
+        }
+        if (taoMoi || req.getNgaySinh() != null) {
+            khachHang.setNgaySinh(req.getNgaySinh());
+        }
+        if (taoMoi || !isBlank(req.getGioiTinh())) {
+            khachHang.setGioiTinh(toMaGioiTinh(req.getGioiTinh()));
+        }
         if (req.getTrangThai() != null) {
             khachHang.setTrangThai(req.getTrangThai());
         } else if (taoMoi) {
@@ -224,12 +402,30 @@ public class KhachHangService {
         diaChiKhachHangRepository.save(diaChi);
     }
 
-    private String sinhMaKhachHang() {
-        long next = khachHangRepository.findMaxId() + 1;
-        String ma;
-        do {
-            ma = String.format("KH%03d", next++);
-        } while (khachHangRepository.existsByMaKhachHang(ma));
+    /**
+     * Chọn mã khi tạo: dùng mã FE gửi lên nếu còn trống, ngược lại sinh mã mới
+     * từ họ tên với số thứ tự kế tiếp chưa tồn tại.
+     */
+    private String chonMaKhachHang(String maGui, String tenKhachHang) {
+        if (!isBlank(maGui)) {
+            String ma = maGui.trim();
+            if (MA_KHACH_HANG_PATTERN.matcher(ma).matches() && !khachHangRepository.existsByMaKhachHang(ma)) {
+                return ma;
+            }
+        }
+        return sinhMaKhachHang(tenKhachHang);
+    }
+
+    private String sinhMaKhachHang(String tenKhachHang) {
+        String goc = MaNhanVien.sinh(tenKhachHang);
+        int so = 1;
+        String ma = MaNhanVien.congSo(goc, so);
+        while (khachHangRepository.existsByMaKhachHang(ma)) {
+            if (++so > SO_MA_TOI_DA) {
+                throw new IllegalArgumentException("Không tìm được mã khách hàng còn trống");
+            }
+            ma = MaNhanVien.congSo(goc, so);
+        }
         return ma;
     }
 
