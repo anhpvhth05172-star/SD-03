@@ -1,137 +1,213 @@
-/* Custom styling for SweetAlert2 matching modern UI */
-.custom-swal-popup {
-  padding: 32px 28px !important;
-  border-radius: 16px !important;
-  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08) !important;
-  max-width: 440px !important;
-  width: 90% !important;
-  font-family: inherit !important;
-}
+/* ==========================================================================
+   POLY SHOES MINIMAL SUCCESS POPUP (XANH LÁ NHẠT THANH LỊCH)
+   ========================================================================== */
 
-.custom-swal-container {
+/* Container Backdrop */
+.custom-swal-container,
+.swal2-container {
   backdrop-filter: blur(2px) !important;
+  -webkit-backdrop-filter: blur(2px) !important;
+  background-color: rgba(15, 23, 42, 0.25) !important;
+  z-index: 100000 !important;
 }
 
-/* Success Icon styling */
-.custom-swal-icon-success {
-  border-color: #86efac !important;
-  color: #22c55e !important;
-  background-color: #f0fdf4 !important;
-  width: 72px !important;
-  height: 72px !important;
-  margin: 0 auto 18px auto !important;
+/* Modal Popup Window - Gọn gàng, thanh nhã */
+.custom-swal-popup {
+  padding: 26px 22px 22px !important;
+  border-radius: 16px !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.08), 0 4px 10px rgba(0, 0, 0, 0.03) !important;
+  max-width: 360px !important;
+  width: 88% !important;
+  font-family: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  text-align: center !important;
 }
 
-.custom-swal-icon-success .swal2-success-ring {
-  border-color: rgba(34, 197, 94, 0.3) !important;
+.custom-swal-popup.swal2-show {
+  animation: swalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
-.custom-swal-icon-success [class^='swal2-success-line'] {
-  background-color: #22c55e !important;
+.custom-swal-popup.swal2-hide {
+  animation: swalFadeOut 0.15s ease-out forwards !important;
 }
 
-/* Error Icon styling */
-.custom-swal-icon-error {
-  border-color: #fca5a5 !important;
-  color: #ef4444 !important;
+@keyframes swalFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95) translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes swalFadeOut {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+}
+
+/* Hide default SweetAlert2 icons */
+.custom-swal-popup .swal2-icon {
+  display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   ICON DẤU TÍCH XANH LÁ NHẠT
+   -------------------------------------------------------------------------- */
+.minimal-icon-box {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  margin: 0 auto 14px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+/* Success: Nền xanh lá nhạt, viền xanh nhạt, dấu tích xanh lá tươi */
+.minimal-icon-box.is-success {
+  background-color: #ecfdf5 !important;
+  border: 1.5px solid #a7f3d0 !important;
+  color: #10b981 !important;
+}
+
+.minimal-icon-box.is-success svg {
+  width: 26px !important;
+  height: 26px !important;
+  stroke: #10b981 !important;
+  stroke-width: 2.8 !important;
+  fill: none !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+}
+
+/* Error */
+.minimal-icon-box.is-error {
   background-color: #fef2f2 !important;
-  width: 72px !important;
-  height: 72px !important;
-  margin: 0 auto 18px auto !important;
+  border: 1.5px solid #fecaca !important;
+  color: #ef4444 !important;
 }
 
-.custom-swal-icon-error [class^='swal2-x-mark-line'] {
-  background-color: #ef4444 !important;
+.minimal-icon-box.is-error svg {
+  width: 24px !important;
+  height: 24px !important;
+  stroke: #ef4444 !important;
+  stroke-width: 2.5 !important;
+  fill: none !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
 }
 
-/* Warning Icon styling */
-.custom-swal-icon-warning {
-  border-color: #fcd34d !important;
-  color: #f59e0b !important;
+/* Warning */
+.minimal-icon-box.is-warning {
   background-color: #fffbeb !important;
-  width: 72px !important;
-  height: 72px !important;
-  margin: 0 auto 18px auto !important;
+  border: 1.5px solid #fde68a !important;
+  color: #f59e0b !important;
 }
 
-/* Info Icon styling */
-.custom-swal-icon-info {
-  border-color: #93c5fd !important;
-  color: #3b82f6 !important;
+.minimal-icon-box.is-warning svg {
+  width: 24px !important;
+  height: 24px !important;
+  stroke: #f59e0b !important;
+  stroke-width: 2.5 !important;
+  fill: none !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+}
+
+/* Info */
+.minimal-icon-box.is-info {
   background-color: #eff6ff !important;
-  width: 72px !important;
-  height: 72px !important;
-  margin: 0 auto 18px auto !important;
+  border: 1.5px solid #bfdbfe !important;
+  color: #3b82f6 !important;
 }
 
-/* Question Icon styling */
-.custom-swal-icon-question {
-  border-color: #c4b5fd !important;
-  color: #8b5cf6 !important;
-  background-color: #f5f3ff !important;
-  width: 72px !important;
-  height: 72px !important;
-  margin: 0 auto 18px auto !important;
+.minimal-icon-box.is-info svg {
+  width: 24px !important;
+  height: 24px !important;
+  stroke: #3b82f6 !important;
+  stroke-width: 2.5 !important;
+  fill: none !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
 }
 
-/* Title styling */
-.custom-swal-title {
-  font-size: 1.15rem !important;
-  font-weight: 600 !important;
-  color: #1e293b !important;
-  line-height: 1.5 !important;
-  margin: 0 !important;
-  padding: 0 10px !important;
-  text-align: center !important;
+/* Typography */
+.minimal-title {
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  margin: 0;
+  padding: 0 4px;
 }
 
-/* HTML / Text content */
-.custom-swal-html {
-  font-size: 0.95rem !important;
-  color: #475569 !important;
-  line-height: 1.5 !important;
-  margin-top: 8px !important;
-  text-align: center !important;
+.minimal-title strong {
+  font-weight: 700;
+  color: #0f172a;
 }
 
-/* Action Buttons */
-.custom-swal-actions {
-  margin-top: 24px !important;
-  gap: 12px !important;
+.minimal-desc {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: #64748b;
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+/* Confirm Dialog Buttons */
+.custom-swal-actions,
+.swal2-actions {
+  margin-top: 18px !important;
+  gap: 10px !important;
   display: flex !important;
   justify-content: center !important;
+  width: 100% !important;
 }
 
-.custom-swal-confirm-btn {
-  background-color: #d92d20 !important;
+.custom-swal-confirm-btn,
+.swal2-confirm {
+  background: #d92d20 !important;
   color: #ffffff !important;
   border-radius: 8px !important;
   font-weight: 600 !important;
-  font-size: 0.9rem !important;
-  padding: 9px 22px !important;
-  box-shadow: 0 2px 6px rgba(217, 45, 32, 0.3) !important;
+  font-size: 0.88rem !important;
+  padding: 8px 18px !important;
   border: none !important;
   cursor: pointer !important;
-  transition: all 0.2s ease !important;
+  transition: background 0.15s ease !important;
 }
 
-.custom-swal-confirm-btn:hover {
-  background-color: #b42318 !important;
+.custom-swal-confirm-btn:hover,
+.swal2-confirm:hover {
+  background: #b42318 !important;
 }
 
-.custom-swal-cancel-btn {
-  background-color: #f1f5f9 !important;
+.custom-swal-cancel-btn,
+.swal2-cancel {
+  background: #f8fafc !important;
   color: #475569 !important;
   border-radius: 8px !important;
   font-weight: 600 !important;
-  font-size: 0.9rem !important;
-  padding: 9px 22px !important;
-  border: 1px solid #cbd5e1 !important;
+  font-size: 0.88rem !important;
+  padding: 8px 18px !important;
+  border: 1px solid #e2e8f0 !important;
   cursor: pointer !important;
-  transition: all 0.2s ease !important;
+  transition: all 0.15s ease !important;
 }
 
-.custom-swal-cancel-btn:hover {
-  background-color: #e2e8f0 !important;
-  color: #1e293b !important;
+.custom-swal-cancel-btn:hover,
+.swal2-cancel:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
 }

@@ -210,14 +210,6 @@ const toggle = (item) => {
         </template>
       </div>
     </nav>
-
-    <div class="sidebar-footer-card">
-      <div class="status-indicator">
-        <span class="pulse-dot"></span>
-        <span class="status-title">PolyShoes Online</span>
-      </div>
-      <span class="status-sub">Hệ thống đang hoạt động</span>
-    </div>
   </aside>
 </template>
 
@@ -226,13 +218,20 @@ const toggle = (item) => {
   width: 260px;
   flex-shrink: 0;
   background: #ffffff;
-  border-radius: 16px;
-  border: 1px solid #f1f5f9;
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
-  padding: 16px 12px 18px;
+  border-radius: 0;
+  border-right: 1px solid #e2e8f0;
+  border-top: none;
+  border-bottom: none;
+  border-left: none;
+  box-shadow: none;
+  padding: 16px 14px 18px;
   display: flex;
   flex-direction: column;
   user-select: none;
+  min-height: 100vh;
+  height: 100vh;
+  position: sticky;
+  top: 0;
 }
 
 .sidebar-container.is-collapsed {
@@ -454,45 +453,5 @@ const toggle = (item) => {
 .submenu-item-btn.is-active .submenu-bullet {
   background: #dc2626;
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
-}
-
-/* --------------------------------------------------------------------------
-   Sidebar Footer Status Card
-   -------------------------------------------------------------------------- */
-.sidebar-footer-card {
-  margin-top: 14px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.pulse-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
-}
-
-.status-title {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: #334155;
-}
-
-.status-sub {
-  font-size: 10.5px;
-  color: #94a3b8;
-  margin-left: 14px;
 }
 </style>

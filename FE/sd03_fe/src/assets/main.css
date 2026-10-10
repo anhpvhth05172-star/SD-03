@@ -75,9 +75,34 @@
   --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.03);
   --shadow-primary: 0 4px 14px rgba(217, 45, 32, 0.35);
 
-  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-family: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s ease;
+}
+
+*,
+*::before,
+*::after,
+html,
+body,
+#app,
+button,
+input,
+optgroup,
+select,
+textarea,
+table,
+th,
+td,
+h1, h2, h3, h4, h5, h6,
+p, span, a, label, div, small, strong, em, b, i, code, pre, kbd,
+.form-control,
+.form-select,
+.btn,
+.swal2-popup,
+.custom-swal-popup {
+  font-family: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
 
 html,
@@ -87,11 +112,25 @@ body,
 }
 
 body {
-  font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  font-size: 14px;
-  color: var(--text);
+  font-family: var(--font-family);
+  font-size: 13.5px;
+  font-weight: 450;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  color: var(--text-secondary);
   background: var(--app-bg);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6,
+.screen-title,
+.panel-title,
+.brand-name {
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+  font-weight: 700;
 }
 
 a {
@@ -105,8 +144,10 @@ a, a:hover, a:focus {
 
 button,
 input,
-select {
-  font-family: inherit;
+select,
+textarea {
+  font-family: var(--font-family) !important;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
 /* Custom Scrollbar */

@@ -12,25 +12,7 @@ const pageSize = 8;
 const totalPages = ref(0);
 const totalElements = ref(0);
 
-const isLoading = ref(false);
-
-try {
-  const cachedVouchers = localStorage.getItem("voucher_initial_list_cache");
-  if (cachedVouchers) {
-    const parsed = JSON.parse(cachedVouchers);
-    if (parsed && Array.isArray(parsed.content)) {
-      listDiscount.value = parsed.content;
-      page.value = parsed.number || 0;
-      totalPages.value = parsed.totalPages || 1;
-      totalElements.value = parsed.totalElements || parsed.content.length;
-    }
-  }
-} catch (e) { }
-
 const getData = async (p = 0) => {
-  if (listDiscount.value.length === 0) {
-    isLoading.value = true;
-  }
   try {
     const res = await axios.get(apiDiscount + "admin/phieu-giam-gia", {
       params: { page: p, size: pageSize },
@@ -40,15 +22,9 @@ const getData = async (p = 0) => {
       page.value = res.data.number;
       totalPages.value = res.data.totalPages;
       totalElements.value = res.data.totalElements;
-
-      if (p === 0) {
-        localStorage.setItem("voucher_initial_list_cache", JSON.stringify(res.data));
-      }
     }
   } catch (error) {
     console.error(error);
-  } finally {
-    isLoading.value = false;
   }
 };
 
@@ -123,10 +99,20 @@ onMounted(() => getData(0));
         <h3 class="panel-title">Tìm kiếm &amp; bộ lọc</h3>
         <div class="panel-right">
           <span class="result-count">{{ totalElements }} kết quả</span>
-          <button class="link-red" type="button" @click="showFilter = !showFilter">
+          <button
+            class="link-red"
+            type="button"
+            @click="showFilter = !showFilter"
+          >
             {{ showFilter ? "Ẩn bớt" : "Hiện thêm" }}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
-              stroke-linejoin="round">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <path :d="showFilter ? 'M6 14.5l6-6 6 6' : 'M6 9.5l6 6 6-6'" />
             </svg>
           </button>
@@ -166,14 +152,26 @@ onMounted(() => getData(0));
 
         <div class="filter-actions">
           <button class="btn-reset" type="button" aria-label="Đặt lại">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-              stroke-linejoin="round">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <path d="M20 11a8 8 0 1 0-.9 4.5" />
               <path d="M20 4.5V11h-6.5" />
             </svg>
           </button>
           <button class="btn-apply" type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+            >
               <path d="M4 6h16M7 12h10M10 18h4" />
             </svg>
             Áp dụng
@@ -187,7 +185,8 @@ onMounted(() => getData(0));
         <span class="panel-icon is-red">
           <svg viewBox="0 0 24 24" fill="currentColor">
             <path
-              d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58s1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41s-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z" />
+              d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58s1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41s-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"
+            />
           </svg>
         </span>
         <h3 class="panel-title">Danh sách phiếu giảm giá</h3>
@@ -215,8 +214,11 @@ onMounted(() => getData(0));
             <tr v-for="(d, i) in listDiscount" :key="i.index">
               <td>
                 <div class="entity">
-                  <span class="entity-avatar" :style="{ background: avatarColor(d.id) }">{{ d.maPhieuGiamGia.slice(-2)
-                    }}</span>
+                  <span
+                    class="entity-avatar"
+                    :style="{ background: avatarColor(i + 1) }"
+                    >{{ d.maPhieuGiamGia.slice(-2) }}</span
+                  >
                   <div class="entity-info">
                     <div class="entity-line">
                       <span class="entity-name">{{ d.tenPhieuGiamGia }}</span>
@@ -298,21 +300,49 @@ onMounted(() => getData(0));
           trong {{ totalElements }} phiếu giảm giá
         </span>
         <div class="pager">
-          <button class="page-btn" type="button" aria-label="Trang trước" :disabled="page === 0"
-            @click="goToPage(page - 1)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-              stroke-linejoin="round">
+          <button
+            class="page-btn"
+            type="button"
+            aria-label="Trang trước"
+            :disabled="page === 0"
+            @click="goToPage(page - 1)"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <path d="M14.5 6l-6 6 6 6" />
             </svg>
           </button>
-          <button v-for="p in totalPages" :key="p" class="page-btn" :class="{ 'is-active': p - 1 === page }"
-            type="button" @click="goToPage(p - 1)">
+          <button
+            v-for="p in totalPages"
+            :key="p"
+            class="page-btn"
+            :class="{ 'is-active': p - 1 === page }"
+            type="button"
+            @click="goToPage(p - 1)"
+          >
             {{ p }}
           </button>
-          <button class="page-btn" type="button" aria-label="Trang sau" :disabled="page >= totalPages - 1"
-            @click="goToPage(page + 1)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-              stroke-linejoin="round">
+          <button
+            class="page-btn"
+            type="button"
+            aria-label="Trang sau"
+            :disabled="page >= totalPages - 1"
+            @click="goToPage(page + 1)"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <path d="M9.5 6l6 6-6 6" />
             </svg>
           </button>

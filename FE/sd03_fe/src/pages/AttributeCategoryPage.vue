@@ -419,7 +419,7 @@ const executeDeleteFast = async (item) => {
           </thead>
           <tbody>
             <tr v-for="(item, index) in paginatedItems" :key="item.id">
-              <td class="text-center font-bold text-slate">{{ getIndex(index) }}</td>
+              <td class="text-center text-slate">{{ getIndex(index) }}</td>
               <td>
                 <span class="code-pill">{{ item.ma || (activeTabInfo.codePrefix + String(item.id).padStart(2, '0'))
                   }}</span>

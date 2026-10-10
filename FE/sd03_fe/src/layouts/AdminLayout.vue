@@ -17,7 +17,7 @@ const pageTitle = computed(() => route.meta.title || '')
         <AppHeader :title="pageTitle" />
 
         <div class="page-body">
-          <router-view />
+          <router-view :key="$route.fullPath" />
         </div>
       </div>
     </div>
@@ -29,15 +29,16 @@ const pageTitle = computed(() => route.meta.title || '')
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--app-bg);
+  background: #f8fafc;
 }
 
 .shell {
   flex: 1;
   display: flex;
   align-items: stretch;
-  gap: 8px;
-  padding: 10px 14px 14px;
+  gap: 0;
+  padding: 0;
+  min-height: 100vh;
 }
 
 .main-area {
@@ -45,14 +46,13 @@ const pageTitle = computed(() => route.meta.title || '')
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: var(--white);
-  border-radius: 12px;
-  overflow: hidden;
+  background: #f8fafc;
+  border-radius: 0;
 }
 
 .page-body {
   flex: 1;
-  padding: 16px 18px 20px;
-  background: var(--app-bg);
+  padding: 20px 24px;
+  background: #f8fafc;
 }
 </style>

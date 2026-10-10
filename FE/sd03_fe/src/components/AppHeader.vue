@@ -31,7 +31,8 @@ const xulyDangXuat = async () => {
 <template>
   <header class="app-header">
     <nav class="breadcrumb">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round">
         <path d="M3.5 10.5L12 3.5l8.5 7v9a1.5 1.5 0 0 1-1.5 1.5h-4.5v-6h-5v6H5a1.5 1.5 0 0 1-1.5-1.5v-9z" />
       </svg>
       <span class="crumb">Trang chủ</span>
@@ -40,25 +41,33 @@ const xulyDangXuat = async () => {
     </nav>
 
     <div class="auth-box">
-      <template v-if="nguoiDung">
-        <span class="auth-role" v-if="nguoiDung.vaiTro === 'ADMIN'">Admin</span>
-        <span class="auth-user" :title="nguoiDung.email">{{ nguoiDung.tenTaiKhoan }}</span>
-        <button class="auth-btn" type="button" @click="xulyDangXuat">Đăng xuất</button>
-      </template>
-      <router-link v-else class="auth-btn is-login" to="/dang-nhap">Đăng nhập</router-link>
+      <div class="user-profile-badge">
+        <div class="avatar-circle">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </div>
+        <div class="user-meta">
+          <span class="user-name">Admin</span>
+          <span class="user-role-text">Duc</span>
+        </div>
+      </div>
     </div>
   </header>
 </template>
 
 <style scoped>
 .app-header {
-  height: 56px;
-  background: var(--white);
+  height: 60px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 0 22px;
+  padding: 0 24px;
 }
 
 .breadcrumb {
@@ -95,46 +104,42 @@ const xulyDangXuat = async () => {
   gap: 10px;
 }
 
-.auth-role {
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: var(--red);
-  color: #fff;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
+.user-profile-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px 5px 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 30px;
 }
 
-.auth-user {
+.avatar-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #fee2e2;
+  color: #dc2626;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-name {
   font-size: 12.5px;
-  font-weight: 600;
-  color: #61616a;
-  max-width: 160px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.auth-btn {
-  padding: 7px 16px;
-  border: 1px solid #f2c4c9;
-  border-radius: 9px;
-  background: var(--red-soft);
-  color: var(--red);
-  font-size: 13px;
   font-weight: 700;
-  text-align: center;
-  cursor: pointer;
-  transition: background 0.15s ease;
+  color: #1e293b;
+  line-height: 1.2;
 }
 
-.auth-btn:hover {
-  background: #fbe7e9;
-}
-
-.auth-btn.is-login {
-  display: inline-block;
-  text-decoration: none;
+.user-role-text {
+  font-size: 10.5px;
+  color: #64748b;
+  line-height: 1.2;
 }
 </style>
