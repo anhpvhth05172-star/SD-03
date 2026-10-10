@@ -52,6 +52,14 @@ public class KhachHangController {
         return Map.of("ma", khachHangService.maKhachHangTuDong(ten));
     }
 
+    @GetMapping("/check-email")
+    public Map<String, Boolean> checkEmail(
+        @RequestParam String email,
+        @RequestParam(required = false) Long excludeId
+    ) {
+        return Map.of("exists", khachHangService.checkTrungEmail(email, excludeId));
+    }
+
     @GetMapping("/{id}")
     public KhachHangDTO get(@PathVariable Long id) {
         return khachHangService.get(id);
@@ -91,7 +99,7 @@ public class KhachHangController {
         @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
         @PathVariable Long id
     ) {
-        quyenGuard.canAdmin(vaiTro);
+        quyenGuard.canQuanLyKhachHang(vaiTro);
         khachHangService.delete(id);
         return ResponseEntity.noContent().build();
     }

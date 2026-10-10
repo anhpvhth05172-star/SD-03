@@ -63,6 +63,7 @@ public class KhachHangService {
 
     private final KhachHangRepository khachHangRepository;
     private final DiaChiKhachHangRepository diaChiKhachHangRepository;
+    private final EmailService emailService;
     private final TransactionTemplate transactionTemplate;
 
     public KhachHangService(
@@ -70,8 +71,19 @@ public class KhachHangService {
         DiaChiKhachHangRepository diaChiKhachHangRepository,
         PlatformTransactionManager transactionManager
     ) {
+        this(khachHangRepository, diaChiKhachHangRepository, null, transactionManager);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public KhachHangService(
+        KhachHangRepository khachHangRepository,
+        DiaChiKhachHangRepository diaChiKhachHangRepository,
+        EmailService emailService,
+        PlatformTransactionManager transactionManager
+    ) {
         this.khachHangRepository = khachHangRepository;
         this.diaChiKhachHangRepository = diaChiKhachHangRepository;
+        this.emailService = emailService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         // Mỗi lần thử là một transaction riêng để có thể thử lại sau khi rollback.
         this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -122,6 +134,15 @@ public class KhachHangService {
                     return toFullDTO(khachHang);
                 });
                 if (dto != null) {
+                    if (emailService != null && dto.getEmail() != null && !dto.getEmail().isBlank()) {
+                        emailService.guiMailDangKyThanhCong(
+                            dto.getEmail(),
+                            dto.getTenKhachHang(),
+                            dto.getMaKhachHang(),
+                            dto.getTenTaiKhoan(),
+                            MAT_KHAU_MAC_DINH
+                        );
+                    }
                     return dto;
                 }
             } catch (DataIntegrityViolationException ex) {
@@ -129,6 +150,17 @@ public class KhachHangService {
             }
         }
         throw new IllegalArgumentException("Không tạo được mã khách hàng duy nhất, vui lòng thử lại");
+    }
+
+    @Transactional(readOnly = true)
+    public boolean checkTrungEmail(String email, Long excludeId) {
+        if (isBlank(email)) {
+            return false;
+        }
+        String trimmed = email.trim();
+        return excludeId != null
+            ? khachHangRepository.existsByEmailAndIdNot(trimmed, excludeId)
+            : khachHangRepository.existsByEmail(trimmed);
     }
 
     @Transactional
@@ -382,9 +414,23 @@ public class KhachHangService {
     }
 
     private void luuDiaChiMacDinh(KhachHang khachHang, KhachHangRequest req) {
-        if (isBlank(req.getDiaChiCuThe())) {
+        boolean coDiaChiCuThe = !isBlank(req.getDiaChiCuThe());
+        boolean coTinh = !isBlank(req.getTinhThanhPho());
+        boolean coPhuong = !isBlank(req.getPhuong());
+        if (!coDiaChiCuThe && !coTinh && !coPhuong) {
             return;
         }
+
+        String diaChiCuThe = coDiaChiCuThe
+            ? req.getDiaChiCuThe().trim()
+            : java.util.stream.Stream.of(req.getPhuong(), req.getTinhThanhPho())
+                .filter(s -> !isBlank(s))
+                .map(String::trim)
+                .collect(java.util.stream.Collectors.joining(", "));
+        if (isBlank(diaChiCuThe)) {
+            diaChiCuThe = "—";
+        }
+
         DiaChiKhachHang diaChi = diaChiKhachHangRepository
             .findFirstByKhachHangIdAndMacDinhTrue(khachHang.getId())
             .orElseGet(() -> {
@@ -398,7 +444,7 @@ public class KhachHangService {
         diaChi.setTenChiChi(khachHang.getTenKhachHang());
         diaChi.setThanhPho(trimToNull(req.getTinhThanhPho()));
         diaChi.setPhuong(trimToNull(req.getPhuong()));
-        diaChi.setDiaChiCuThe(req.getDiaChiCuThe().trim());
+        diaChi.setDiaChiCuThe(diaChiCuThe);
         diaChiKhachHangRepository.save(diaChi);
     }
 
@@ -482,7 +528,7 @@ public class KhachHangService {
         KhachHangThongKeDTO tk = thongKe.get(k.getId());
         BigDecimal tongChiTieu = tk != null && tk.tongChiTieu() != null ? tk.tongChiTieu() : BigDecimal.ZERO;
         String maHang = toMaHangTheoTongChiTieu(tongChiTieu);
-        return KhachHangDTO.builder()
+        KhachHangDTO dto = KhachHangDTO.builder()
             .id(k.getId())
             .maKhachHang(k.getMaKhachHang())
             .tenTaiKhoan(k.getTenTaiKhoan())
@@ -501,6 +547,11 @@ public class KhachHangService {
             .soDon(tk != null && tk.soDon() != null ? tk.soDon() : 0L)
             .tongChiTieu(tongChiTieu)
             .build();
+        diaChiKhachHangRepository.findFirstByKhachHangIdAndMacDinhTrue(k.getId())
+            .or(() -> diaChiKhachHangRepository.findByKhachHangIdOrderByMacDinhDescIdDesc(k.getId()).stream().findFirst())
+            .map(KhachHangService::toDiaChiDTO)
+            .ifPresent(dto::setDiaChiMacDinh);
+        return dto;
     }
 
     private static DiaChiKhachHangDTO toDiaChiDTO(DiaChiKhachHang d) {

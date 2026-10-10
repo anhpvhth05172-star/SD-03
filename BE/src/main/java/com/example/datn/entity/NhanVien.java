@@ -35,31 +35,31 @@ public class NhanVien {
     @Column(name = "ma_nhan_vien", nullable = false, unique = true, length = 50)
     private String maNhanVien;
 
-    @Column(name = "ten_tai_khoan", nullable = false, unique = true, length = 100)
+    @Column(name = "ten_tai_khoan", nullable = false, unique = true, length = 100, columnDefinition = "NVARCHAR(100)")
     private String tenTaiKhoan;
 
     @Column(name = "mat_khau", nullable = false, length = 255)
     private String matKhau;
 
-    @Column(name = "email", length = 150)
+    @Column(name = "email", length = 150, columnDefinition = "NVARCHAR(150)")
     private String email;
 
     @Column(name = "so_dien_thoai", length = 20)
     private String soDienThoai;
 
-    @Column(name = "anh_nhan_vien", length = 1000)
+    @Column(name = "anh_nhan_vien", columnDefinition = "NVARCHAR(MAX)")
     private String anhNhanVien;
 
-    @Column(name = "gioi_tinh", length = 20)
+    @Column(name = "gioi_tinh", length = 20, columnDefinition = "NVARCHAR(20)")
     private String gioiTinh;
 
-    @Column(name = "que_quan", length = 150)
+    @Column(name = "que_quan", length = 150, columnDefinition = "NVARCHAR(150)")
     private String queQuan;
 
-    @Column(name = "phuong", length = 100)
+    @Column(name = "phuong", length = 100, columnDefinition = "NVARCHAR(100)")
     private String phuong;
 
-    @Column(name = "dia_chi_cu_the", length = 255)
+    @Column(name = "dia_chi_cu_the", length = 255, columnDefinition = "NVARCHAR(255)")
     private String diaChiCuThe;
 
     @Column(name = "ngay_sinh")

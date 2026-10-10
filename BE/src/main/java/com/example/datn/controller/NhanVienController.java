@@ -63,6 +63,14 @@ public class NhanVienController {
         return Map.of("ma", nhanVienService.maNhanVienTuDong(ten));
     }
 
+    @GetMapping("/check-email")
+    public Map<String, Boolean> checkEmail(
+        @RequestParam String email,
+        @RequestParam(required = false) Long excludeId
+    ) {
+        return Map.of("exists", nhanVienService.checkTrungEmail(email, excludeId));
+    }
+
     @GetMapping("/{id}")
     public NhanVienDTO get(
         @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,

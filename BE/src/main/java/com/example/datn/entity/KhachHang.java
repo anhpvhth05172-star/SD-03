@@ -28,13 +28,13 @@ public class KhachHang {
     @Column(name = "ma_khach_hang", nullable = false, unique = true, length = 50)
     private String maKhachHang;
 
-    @Column(name = "ten_tai_khoan", nullable = false, unique = true, length = 100)
+    @Column(name = "ten_tai_khoan", nullable = false, unique = true, length = 100, columnDefinition = "NVARCHAR(100)")
     private String tenTaiKhoan;
 
-    @Column(name = "ten_khach_hang", nullable = false, length = 150)
+    @Column(name = "ten_khach_hang", nullable = false, length = 150, columnDefinition = "NVARCHAR(150)")
     private String tenKhachHang;
 
-    @Column(name = "email", length = 150)
+    @Column(name = "email", length = 150, columnDefinition = "NVARCHAR(150)")
     private String email;
 
     @Column(name = "mat_khau", nullable = false, length = 255)

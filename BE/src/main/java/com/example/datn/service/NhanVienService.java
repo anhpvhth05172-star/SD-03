@@ -33,9 +33,7 @@ public class NhanVienService {
     private static final String TRANG_THAI_DANG_HOAT_DONG = "Đang hoạt động";
     private static final String TRANG_THAI_KHOA = "Đã khóa";
     public static final int TUOI_TOI_THIEU = 18;
-    public static final String THONG_BAO_TUOI =
-        "Nhân viên phải đủ 18 tuổi.";
-    /** Số lần thử lại khi hai yêu cầu tạo cùng lúc giành cùng một mã. */
+    public static final String THONG_BAO_TUOI ="Nhân viên phải đủ 18 tuổi.";
     private static final int SO_LAN_TAO = 5;
     private static final int SO_MA_TOI_DA = 1_000_000;
     private static final String[][] GIOI_TINH_MAP = {
@@ -51,16 +49,18 @@ public class NhanVienService {
     private final NhanVienRepository nhanVienRepository;
     private final VaiTroRepository vaiTroRepository;
     private final TransactionTemplate transactionTemplate;
+    private final EmailService emailService;
 
     public NhanVienService(
         NhanVienRepository nhanVienRepository,
         VaiTroRepository vaiTroRepository,
-        PlatformTransactionManager transactionManager
+        PlatformTransactionManager transactionManager,
+        EmailService emailService
     ) {
         this.nhanVienRepository = nhanVienRepository;
         this.vaiTroRepository = vaiTroRepository;
+        this.emailService = emailService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
-        // Mỗi lần thử là một transaction riêng để có thể thử lại sau khi rollback.
         this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
@@ -89,10 +89,6 @@ public class NhanVienService {
         return toDTO(findOrThrow(id));
     }
 
-    /**
-     * Tạo nhân viên. Nếu hai yêu cầu đồng thời giành cùng một mã, ràng buộc duy nhất
-     * của database sẽ chặn bản ghi trùng và toàn bộ thao tác được thử lại với mã kế tiếp.
-     */
     public NhanVienDTO create(NhanVienRequest req) {
         if (req == null) {
             throw new IllegalArgumentException("Dữ liệu không hợp lệ");
@@ -106,13 +102,33 @@ public class NhanVienService {
                     return toDTO(nhanVienRepository.saveAndFlush(nhanVien));
                 });
                 if (dto != null) {
+                    if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
+                        emailService.guiMailNhanVienMoi(
+                            dto.getEmail().trim(),
+                            dto.getTenTaiKhoan(),
+                            dto.getMaNhanVien(),
+                            dto.getEmail().trim(),
+                            isBlank(req.getMatKhau()) ? MAT_KHAU_MAC_DINH : req.getMatKhau().trim(),
+                            dto.getTenVaiTro() != null ? dto.getTenVaiTro() : "Nhân viên"
+                        );
+                    }
                     return dto;
                 }
             } catch (DataIntegrityViolationException ex) {
-                // Trùng mã/duy nhất ở lần trước -> vòng lặp tiếp theo sẽ chọn mã khác.
             }
         }
         throw new IllegalArgumentException("Không tạo được mã nhân viên duy nhất, vui lòng thử lại");
+    }
+
+    @Transactional(readOnly = true)
+    public boolean checkTrungEmail(String email, Long excludeId) {
+        if (email == null || email.trim().isEmpty()) {
+            return false;
+        }
+        String cleanEmail = email.trim();
+        return excludeId == null
+            ? nhanVienRepository.existsByEmail(cleanEmail)
+            : nhanVienRepository.existsByEmailAndIdNot(cleanEmail, excludeId);
     }
 
     @Transactional
@@ -126,6 +142,9 @@ public class NhanVienService {
     @Transactional
     public void delete(Long id) {
         NhanVien nhanVien = findOrThrow(id);
+        if (nhanVien.getVaiTro() != null && "ADMIN".equalsIgnoreCase(nhanVien.getVaiTro().getMaVaiTro())) {
+            throw new IllegalArgumentException("Không được phép xóa tài khoản Quản trị viên");
+        }
         nhanVien.setTrangThai(false);
         nhanVien.setNgayCapNhat(LocalDateTime.now());
         nhanVien.setNguoiCapNhat("admin");
@@ -135,6 +154,9 @@ public class NhanVienService {
     @Transactional
     public NhanVienDTO capNhatTrangThai(Long id, String trangThaiMoi) {
         NhanVien nhanVien = findOrThrow(id);
+        if (nhanVien.getVaiTro() != null && "ADMIN".equalsIgnoreCase(nhanVien.getVaiTro().getMaVaiTro())) {
+            throw new IllegalArgumentException("Không được phép thay đổi trạng thái của tài khoản Quản trị viên");
+        }
         boolean moi = toTrangThai(trangThaiMoi);
         nhanVien.setTrangThai(moi);
         nhanVien.setNgayCapNhat(LocalDateTime.now());
@@ -166,8 +188,6 @@ public class NhanVienService {
         return sinhMaNhanVien(ten);
     }
 
-    // ===== private =====
-
     private void validate(NhanVienRequest req, Long excludeId) {
         boolean taoMoi = excludeId == null;
         if (req == null || isBlank(req.getTenTaiKhoan())) {
@@ -197,8 +217,7 @@ public class NhanVienService {
                     "Mã nhân viên không hợp lệ (bắt đầu bằng chữ cái, chỉ chữ và số, tối đa "
                         + MaNhanVien.TOI_DA + " ký tự)");
             }
-            // Khi tạo: mã trùng sẽ được sinh lại ở fill() (FE gửi lên chỉ là mã đề xuất).
-            // Khi sửa: không được đổi sang mã của nhân viên khác.
+
             if (!taoMoi && nhanVienRepository.existsByMaNhanVienAndIdNot(ma, excludeId)) {
                 throw new IllegalArgumentException("Mã nhân viên đã tồn tại");
             }
@@ -245,7 +264,6 @@ public class NhanVienService {
         if (req.getNgaySinh() != null && req.getNgaySinh().isAfter(LocalDate.now())) {
             throw new IllegalArgumentException("Ngày sinh không được ở tương lai");
         }
-        // Không chỉ khi tạo: chặn gọi API trực tiếp để sửa ngày sinh thành chưa đủ tuổi.
         String loiTuoi = DoTuoi.kiemTra(req.getNgaySinh(), TUOI_TOI_THIEU, THONG_BAO_TUOI);
         if (loiTuoi != null) {
             throw new IllegalArgumentException(loiTuoi);
@@ -313,10 +331,6 @@ public class NhanVienService {
         }
     }
 
-    /**
-     * Chọn mã khi tạo: dùng mã FE gửi lên nếu còn trống, ngược lại sinh mã mới
-     * từ họ tên với số thứ tự kế tiếp chưa tồn tại.
-     */
     private String chonMaNhanVien(String maGui, String tenNhanVien) {
         if (!isBlank(maGui)) {
             String ma = maGui.trim();
