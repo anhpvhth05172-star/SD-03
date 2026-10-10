@@ -7,4 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface VaiTroRepository extends JpaRepository<VaiTro, Long> {
 
     List<VaiTro> findByTrangThaiTrueOrderByTenVaiTroAsc();
+
+    List<VaiTro> findByMaVaiTroIn(List<String> maVaiTros);
+
+    VaiTro findByMaVaiTro(String maVaiTro);
 }

@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { getToken, getRefreshToken, isTokenExpired, dangXuat } from '../utils/auth'
+import { refreshSession } from '../api/http'
 import AdminLayout from '../layouts/AdminLayout.vue'
 import ProductListPage from '../pages/ProductListPage.vue'
 import ProductCreatePage from '../pages/ProductCreatePage.vue'
@@ -80,6 +82,30 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes
+})
+
+router.beforeEach(async (to) => {
+  if (!to.meta.requiresAuth) return true
+
+  const token = getToken()
+  const refreshToken = getRefreshToken()
+
+  if (!token && !refreshToken) return '/dang-nhap'
+
+  if (token && !isTokenExpired(token)) return true
+
+  if (!refreshToken) {
+    dangXuat()
+    return '/dang-nhap'
+  }
+
+  try {
+    await refreshSession()
+    return true
+  } catch {
+    dangXuat()
+    return '/dang-nhap'
+  }
 })
 
 export default router

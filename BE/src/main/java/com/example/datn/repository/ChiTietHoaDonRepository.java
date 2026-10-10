@@ -18,5 +18,13 @@ public interface ChiTietHoaDonRepository extends JpaRepository<ChiTietHoaDon, Lo
     boolean existsBySanPhamChiTietId(Long idSanPhamChiTiet);
 
     boolean existsBySanPhamChiTiet_SanPham_Id(Long idSanPham);
+
+    @Query(value = """
+        SELECT id_hoa_don, SUM(so_luong)
+        FROM chi_tiet_hoa_don
+        WHERE id_hoa_don IN (:ids)
+        GROUP BY id_hoa_don
+        """, nativeQuery = true)
+    List<Object[]> tongSoLuongTheoHoaDon(@Param("ids") List<Long> ids);
 }
 
