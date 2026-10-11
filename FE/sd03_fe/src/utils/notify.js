@@ -140,8 +140,8 @@ export const notifyWarning = (title, text = '') => {
 export const notifyConfirm = async (
   title = 'Bạn có chắc chắn?',
   text = 'Thao tác này sẽ không thể hoàn tác!',
-  confirmText = 'Đồng ý',
-  cancelText = 'Hủy bỏ'
+  confirmButtonText = 'Đồng ý',
+  cancelButtonText = 'Hủy bỏ'
 ) => {
   const contentHtml = `
     ${MINIMAL_ICONS.warning}

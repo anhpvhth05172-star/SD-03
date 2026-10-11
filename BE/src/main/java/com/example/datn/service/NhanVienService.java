@@ -1,9 +1,9 @@
 package com.example.datn.service;
 
-import com.example.datn.dto.NhanVienDTO;
-import com.example.datn.dto.NhanVienFormDataResponse;
-import com.example.datn.dto.NhanVienRequest;
-import com.example.datn.dto.PageResponse;
+import com.example.datn.dto.NhanVien.NhanVienDTO;
+import com.example.datn.dto.NhanVien.NhanVienFormDataResponse;
+import com.example.datn.dto.NhanVien.NhanVienRequest;
+import com.example.datn.dto.Common.PageResponse;
 import com.example.datn.entity.NhanVien;
 import com.example.datn.entity.VaiTro;
 import com.example.datn.repository.NhanVienRepository;
@@ -201,7 +201,7 @@ public class NhanVienService {
         checkLength(req.getQueQuan(), 150, "Quê quán");
         checkLength(req.getPhuong(), 100, "Phường");
         checkLength(req.getDiaChiCuThe(), 255, "Địa chỉ cụ thể");
-        checkLength(req.getAnhNhanVien(), 1000, "Ảnh nhân viên");
+        // anhNhanVien lưu chuỗi Base64 hoặc URL nên không giới hạn 1000 ký tự
         checkLength(req.getNguoiCapNhat(), 100, "Người cập nhật");
         String ten = req.getTenTaiKhoan().trim();
         boolean trungTen = taoMoi

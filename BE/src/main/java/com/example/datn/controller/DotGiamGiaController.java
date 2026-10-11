@@ -1,6 +1,6 @@
 package com.example.datn.controller;
 
-import com.example.datn.dto.DotGiamGiaDTO;
+import com.example.datn.dto.DotGiamGia.DotGiamGiaDTO;
 import com.example.datn.entity.DotGiamGia;
 import com.example.datn.repository.DotGiamGiaRepository;
 import com.example.datn.repository.PhieuGiamGiaRepository;

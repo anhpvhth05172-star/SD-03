@@ -1,9 +1,9 @@
 package com.example.datn.controller;
 
 import com.example.datn.config.QuyenGuard;
-import com.example.datn.dto.KhachHangDTO;
-import com.example.datn.dto.KhachHangRequest;
-import com.example.datn.dto.PageResponse;
+import com.example.datn.dto.KhachHang.KhachHangDTO;
+import com.example.datn.dto.KhachHang.KhachHangRequest;
+import com.example.datn.dto.Common.PageResponse;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.repository.KhachHangRepository;
 import com.example.datn.service.KhachHangService;

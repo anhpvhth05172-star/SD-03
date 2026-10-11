@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { createAddress, deleteAddress, listAddresses, setDefaultAddress, updateAddress } from '../api/customer'
 import { layDiaGioi, layPhuongXa, timTinh } from '../api/diaGioi'
 import { batBuoc, isBlank, kiemTra, toiDa } from '../utils/validate'
+import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 
 const props = defineProps({
   customerId: { type: [Number, String], required: true },
@@ -57,7 +58,7 @@ const napDiaGioi = async (tenTinh, tenPhuong) => {
     if (myToken !== yeuCauHienTai) return
     tinhThanhs.value = ds
     const tinh = timTinh(ds, tenTinh)
-    phuongXas.value = layPhuongXa(ds, tinh)
+    phuongXas.value = await layPhuongXa(ds, tinh)
     if (tenPhuong && !phuongXas.value.some((p) => p.ten === tenPhuong)) {
       phuongXas.value = [{ code: 'khac', ten: tenPhuong }, ...phuongXas.value]
     }
@@ -74,7 +75,12 @@ const chonTinh = async (tenTinh) => {
   const myToken = ++yeuCauHienTai
   const ds = tinhThanhs.value.length ? tinhThanhs.value : await layDiaGioi().catch(() => null)
   if (myToken !== yeuCauHienTai || !ds) return
-  phuongXas.value = layPhuongXa(ds, timTinh(ds, tenTinh))
+  diaGioiLoading.value = true
+  try {
+    phuongXas.value = await layPhuongXa(ds, timTinh(ds, tenTinh))
+  } finally {
+    diaGioiLoading.value = false
+  }
 }
 
 const moForm = (d = null) => {
@@ -112,10 +118,12 @@ const luu = async () => {
   const loi = validate()
   if (loi) {
     errorMsg.value = loi
+    notifyWarning('Thông tin chưa hợp lệ', loi)
     return
   }
   errorMsg.value = ''
   saving.value = true
+  const isEditing = !!editingId.value
   const payload = {
     tenDiaChi: form.value.tenDiaChi.trim() || null,
     tinhThanhPho: form.value.tinhThanhPho || null,
@@ -134,22 +142,27 @@ const luu = async () => {
     editingId.value = null
     await napDanhSach()
     emit('changed')
+    notifySuccess(isEditing ? 'Đã cập nhật địa chỉ thành công!' : 'Đã thêm mới địa chỉ thành công!')
   } catch (e) {
     errorMsg.value = e.message
+    notifyError('Lỗi lưu địa chỉ', e.message)
   } finally {
     saving.value = false
   }
 }
 
 const xoa = async (d) => {
-  if (!confirm(`Xóa địa chỉ ${d.maDiaChi}?`)) return
+  const ok = await notifyDeleteConfirm(`địa chỉ ${d.maDiaChi || ''}`)
+  if (!ok) return
   try {
     await deleteAddress(props.customerId, d.id)
     if (editingId.value === d.id) huyForm()
     await napDanhSach()
     emit('changed')
+    notifySuccess('Đã xóa địa chỉ thành công!')
   } catch (e) {
     errorMsg.value = e.message
+    notifyError('Không thể xóa địa chỉ', e.message)
   }
 }
 
@@ -158,8 +171,10 @@ const datMacDinh = async (d) => {
     await setDefaultAddress(props.customerId, d.id)
     await napDanhSach()
     emit('changed')
+    notifySuccess('Đã đổi địa chỉ mặc định!')
   } catch (e) {
     errorMsg.value = e.message
+    notifyError('Lỗi thiết lập địa chỉ', e.message)
   }
 }
 

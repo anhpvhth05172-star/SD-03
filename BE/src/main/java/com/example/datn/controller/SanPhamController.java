@@ -1,10 +1,10 @@
 package com.example.datn.controller;
 
-import com.example.datn.dto.PageResponse;
-import com.example.datn.dto.SanPhamRequest;
-import com.example.datn.dto.SanPhamResponse;
-import com.example.datn.dto.SmartProductSaveRequest;
-import com.example.datn.dto.SmartProductSaveResponse;
+import com.example.datn.dto.Common.PageResponse;
+import com.example.datn.dto.SanPham.SanPhamRequest;
+import com.example.datn.dto.SanPham.SanPhamResponse;
+import com.example.datn.dto.SanPham.SmartProductSaveRequest;
+import com.example.datn.dto.SanPham.SmartProductSaveResponse;
 import com.example.datn.service.SanPhamService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -70,6 +70,23 @@ public class SanPhamController {
     public ResponseEntity<SanPhamResponse> toggleStatus(@PathVariable Long id) {
         SanPhamResponse response = sanPhamService.toggleStatus(id);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/excel/template")
+    public ResponseEntity<byte[]> downloadTemplate() {
+        byte[] bytes = sanPhamService.downloadExcelTemplate();
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"Mau_Import_San_Pham.xlsx\"")
+                .contentType(org.springframework.http.MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(bytes);
+    }
+
+    @PostMapping(value = "/excel/import", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<com.example.datn.dto.SanPham.ProductExcelImportResult> importExcel(
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+    ) {
+        com.example.datn.dto.SanPham.ProductExcelImportResult result = sanPhamService.importFromExcel(file);
+        return ResponseEntity.ok(result);
     }
 
     @DeleteMapping("/{id}")

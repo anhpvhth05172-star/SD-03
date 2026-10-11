@@ -1,7 +1,7 @@
 package com.example.datn.controller;
 
-import com.example.datn.dto.SanPhamChiTietRequest;
-import com.example.datn.dto.SanPhamChiTietResponse;
+import com.example.datn.dto.SanPham.SanPhamChiTietRequest;
+import com.example.datn.dto.SanPham.SanPhamChiTietResponse;
 import com.example.datn.service.SanPhamChiTietService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +22,7 @@ public class SanPhamChiTietController {
     private final SanPhamChiTietService sanPhamChiTietService;
 
     @GetMapping
-    public ResponseEntity<com.example.datn.dto.PageResponse<SanPhamChiTietResponse>> getAll(
+    public ResponseEntity<com.example.datn.dto.Common.PageResponse<SanPhamChiTietResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search,
@@ -32,7 +32,7 @@ public class SanPhamChiTietController {
             @RequestParam(required = false) Boolean trangThai
     ) {
         Page<SanPhamChiTietResponse> result = sanPhamChiTietService.getAll(page, size, search, idSanPham, idMauSac, idKichCo, trangThai);
-        return ResponseEntity.ok(com.example.datn.dto.PageResponse.from(result));
+        return ResponseEntity.ok(com.example.datn.dto.Common.PageResponse.from(result));
     }
 
     @GetMapping("/by-san-pham/{idSanPham}")

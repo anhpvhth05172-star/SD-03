@@ -1,17 +1,19 @@
 package com.example.datn.service.impl;
 
-import com.example.datn.dto.SanPhamRequest;
-import com.example.datn.dto.SanPhamResponse;
-import com.example.datn.dto.SmartProductSaveRequest;
-import com.example.datn.dto.SmartProductSaveResponse;
-import com.example.datn.dto.SmartProductSaveRequest.BienTheItem;
-import com.example.datn.dto.SmartProductSaveResponse.MergePreviewItem;
+import com.example.datn.dto.SanPham.SanPhamRequest;
+import com.example.datn.dto.SanPham.SanPhamResponse;
+import com.example.datn.dto.SanPham.SmartProductSaveRequest;
+import com.example.datn.dto.SanPham.SmartProductSaveResponse;
+import com.example.datn.dto.SanPham.SmartProductSaveRequest.BienTheItem;
+import com.example.datn.dto.SanPham.SmartProductSaveResponse.MergePreviewItem;
 import com.example.datn.entity.ChatLieu;
 import com.example.datn.entity.KieuDang;
 import com.example.datn.entity.LoaiGiay;
 import com.example.datn.entity.SanPham;
 import com.example.datn.entity.ThuongHieu;
 import com.example.datn.entity.XuatXu;
+import com.example.datn.entity.MauSac;
+import com.example.datn.entity.KichCo;
 import com.example.datn.repository.ChatLieuRepository;
 import com.example.datn.repository.KieuDangRepository;
 import com.example.datn.repository.LoaiGiayRepository;
@@ -462,5 +464,439 @@ public class SanPhamServiceImpl implements SanPhamService {
                 }
             }
         }
+    }
+
+    @Override
+    public byte[] downloadExcelTemplate() {
+        try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
+             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+
+            org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("ImportSanPham");
+
+            // Header Style
+            org.apache.poi.ss.usermodel.CellStyle headerStyle = workbook.createCellStyle();
+            org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerFont.setColor(org.apache.poi.ss.usermodel.IndexedColors.WHITE.getIndex());
+            headerFont.setFontHeightInPoints((short) 11);
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(org.apache.poi.ss.usermodel.IndexedColors.SEA_GREEN.getIndex());
+            headerStyle.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
+            headerStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
+            headerStyle.setVerticalAlignment(org.apache.poi.ss.usermodel.VerticalAlignment.CENTER);
+            headerStyle.setBorderBottom(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            headerStyle.setBorderTop(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            headerStyle.setBorderLeft(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            headerStyle.setBorderRight(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+
+            // Data Style
+            org.apache.poi.ss.usermodel.CellStyle dataStyle = workbook.createCellStyle();
+            dataStyle.setBorderBottom(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            dataStyle.setBorderTop(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            dataStyle.setBorderLeft(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            dataStyle.setBorderRight(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+
+            String[] headers = {
+                "STT", "Tên sản phẩm (*)", "Thương hiệu (*)", "Loại giày (*)",
+                "Chất liệu (*)", "Kiểu dáng (*)", "Xuất xứ (*)", "Đối tượng",
+                "Màu sắc (*)", "Kích cỡ (*)", "Số lượng (*)", "Giá bán (VNĐ) (*)",
+                "Tính năng", "Mô tả"
+            };
+
+            org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
+            headerRow.setHeightInPoints(28);
+            for (int i = 0; i < headers.length; i++) {
+                org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+
+            // Dữ liệu mẫu
+            String[][] sampleData = {
+                {"1", "Giày Nike Air Force 1 07", "Nike", "Sneaker", "Da", "Cổ thấp", "Việt Nam", "Nam", "Trắng", "40", "50", "2600000", "Đệm Air êm ái", "Giày thể thao kinh điển phù hợp mọi phong cách"},
+                {"2", "Giày Nike Air Force 1 07", "Nike", "Sneaker", "Da", "Cổ thấp", "Việt Nam", "Nam", "Trắng", "41", "40", "2600000", "Đệm Air êm ái", "Giày thể thao kinh điển phù hợp mọi phong cách"},
+                {"3", "Giày Nike Air Force 1 07", "Nike", "Sneaker", "Da", "Cổ thấp", "Việt Nam", "Nam", "Đen", "40", "30", "2600000", "Đệm Air êm ái", "Giày thể thao kinh điển màu đen mạnh mẽ"},
+                {"4", "Giày Adidas Ultraboost Light", "Adidas", "Giày chạy bộ", "Vải dệt", "Cổ thấp", "Việt Nam", "Unisex", "Trắng", "42", "25", "3500000", "Đế đệm Boost siêu nhẹ", "Giày chạy bộ chuyên nghiệp siêu êm ái"},
+                {"5", "Giày Puma Suede Classic", "Puma", "Giày thời trang", "Da lộn", "Cổ thấp", "Việt Nam", "Nam", "Đỏ", "41", "20", "1900000", "Phong cách retro", "Chất liệu da lộn cao cấp"}
+            };
+
+            for (int r = 0; r < sampleData.length; r++) {
+                org.apache.poi.ss.usermodel.Row row = sheet.createRow(r + 1);
+                row.setHeightInPoints(22);
+                for (int c = 0; c < sampleData[r].length; c++) {
+                    org.apache.poi.ss.usermodel.Cell cell = row.createCell(c);
+                    cell.setCellValue(sampleData[r][c]);
+                    cell.setCellStyle(dataStyle);
+                }
+            }
+
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+                sheet.setColumnWidth(i, Math.max(sheet.getColumnWidth(i) + 1200, 3500));
+            }
+
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new RuntimeException("Không thể tạo file mẫu Excel: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    @Transactional
+    public com.example.datn.dto.SanPham.ProductExcelImportResult importFromExcel(org.springframework.web.multipart.MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng tải lên tệp Excel hợp lệ");
+        }
+        String fileName = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+        if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls")) {
+            throw new IllegalArgumentException("Hệ thống chỉ chấp nhận định dạng Excel (.xlsx, .xls)");
+        }
+
+        com.example.datn.dto.SanPham.ProductExcelImportResult result = com.example.datn.dto.SanPham.ProductExcelImportResult.builder().build();
+
+        try (org.apache.poi.ss.usermodel.Workbook workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(file.getInputStream())) {
+            org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(0);
+            int lastRowNum = sheet.getLastRowNum();
+            if (lastRowNum < 1) {
+                throw new IllegalArgumentException("File Excel không có dữ liệu để import");
+            }
+
+            // Group rows by Normalized Product Name
+            java.util.Map<String, List<ExcelRowData>> groupedProducts = new java.util.LinkedHashMap<>();
+
+            for (int r = 1; r <= lastRowNum; r++) {
+                org.apache.poi.ss.usermodel.Row row = sheet.getRow(r);
+                if (row == null) continue;
+
+                result.setTongSoDong(result.getTongSoDong() + 1);
+
+                String tenSp = getCellValueAsString(row.getCell(1));
+                if (tenSp.isEmpty()) {
+                    // Dòng trống bỏ qua
+                    result.setTongSoDong(result.getTongSoDong() - 1);
+                    continue;
+                }
+
+                String thuongHieu = getCellValueAsString(row.getCell(2));
+                String loaiGiay = getCellValueAsString(row.getCell(3));
+                String chatLieu = getCellValueAsString(row.getCell(4));
+                String kieuDang = getCellValueAsString(row.getCell(5));
+                String xuatXu = getCellValueAsString(row.getCell(6));
+                String doiTuong = getCellValueAsString(row.getCell(7));
+                String mauSac = getCellValueAsString(row.getCell(8));
+                String kichCo = getCellValueAsString(row.getCell(9));
+                String soLuongStr = getCellValueAsString(row.getCell(10));
+                String giaBanStr = getCellValueAsString(row.getCell(11));
+                String tinhNang = getCellValueAsString(row.getCell(12));
+                String moTa = getCellValueAsString(row.getCell(13));
+
+                // Validate dòng
+                int rowNumber = r + 1;
+                if (mauSac.isEmpty()) {
+                    result.setSoDongThatBai(result.getSoDongThatBai() + 1);
+                    result.getDanhSachLoi().add("Dòng " + rowNumber + ": Màu sắc không được để trống");
+                    continue;
+                }
+                if (kichCo.isEmpty()) {
+                    result.setSoDongThatBai(result.getSoDongThatBai() + 1);
+                    result.getDanhSachLoi().add("Dòng " + rowNumber + ": Kích cỡ không được để trống");
+                    continue;
+                }
+
+                int soLuong = 0;
+                try {
+                    soLuong = Integer.parseInt(soLuongStr.replaceAll("[^0-9]", ""));
+                    if (soLuong < 0) throw new NumberFormatException();
+                } catch (Exception ex) {
+                    result.setSoDongThatBai(result.getSoDongThatBai() + 1);
+                    result.getDanhSachLoi().add("Dòng " + rowNumber + ": Số lượng '" + soLuongStr + "' không hợp lệ (phải là số nguyên >= 0)");
+                    continue;
+                }
+
+                java.math.BigDecimal giaBan;
+                try {
+                    String cleanPrice = giaBanStr.replaceAll("[^0-9.]", "");
+                    giaBan = new java.math.BigDecimal(cleanPrice);
+                    if (giaBan.compareTo(java.math.BigDecimal.ZERO) <= 0) throw new NumberFormatException();
+                } catch (Exception ex) {
+                    result.setSoDongThatBai(result.getSoDongThatBai() + 1);
+                    result.getDanhSachLoi().add("Dòng " + rowNumber + ": Giá bán '" + giaBanStr + "' không hợp lệ (phải > 0 VNĐ)");
+                    continue;
+                }
+
+                ExcelRowData rowData = new ExcelRowData();
+                rowData.rowNumber = rowNumber;
+                rowData.tenSp = tenSp;
+                rowData.thuongHieu = thuongHieu;
+                rowData.loaiGiay = loaiGiay;
+                rowData.chatLieu = chatLieu;
+                rowData.kieuDang = kieuDang;
+                rowData.xuatXu = xuatXu;
+                rowData.doiTuong = doiTuong.isEmpty() ? "Nam" : doiTuong;
+                rowData.mauSac = mauSac;
+                rowData.kichCo = kichCo;
+                rowData.soLuong = soLuong;
+                rowData.giaBan = giaBan;
+                rowData.tinhNang = tinhNang;
+                rowData.moTa = moTa;
+
+                String groupKey = tenSp.trim().toLowerCase();
+                groupedProducts.computeIfAbsent(groupKey, k -> new java.util.ArrayList<>()).add(rowData);
+            }
+
+            // Xử lý lưu từng nhóm sản phẩm
+            for (List<ExcelRowData> rows : groupedProducts.values()) {
+                if (rows.isEmpty()) continue;
+                ExcelRowData firstRow = rows.get(0);
+
+                ThuongHieu th = findOrCreateThuongHieu(firstRow.thuongHieu);
+                LoaiGiay lg = findOrCreateLoaiGiay(firstRow.loaiGiay);
+                ChatLieu cl = findOrCreateChatLieu(firstRow.chatLieu);
+                KieuDang kd = findOrCreateKieuDang(firstRow.kieuDang);
+                XuatXu xx = findOrCreateXuatXu(firstRow.xuatXu);
+
+                Optional<SanPham> existingSpOpt = sanPhamRepository.findByTenSanPhamIgnoreCase(firstRow.tenSp.trim());
+                SanPham sp;
+                if (existingSpOpt.isPresent()) {
+                    sp = existingSpOpt.get();
+                    sp.setThuongHieu(th);
+                    sp.setLoaiGiay(lg);
+                    sp.setChatLieu(cl);
+                    sp.setKieuDang(kd);
+                    sp.setXuatXu(xx);
+                    if (firstRow.doiTuong != null) sp.setDoiTuong(firstRow.doiTuong);
+                    if (firstRow.tinhNang != null && !firstRow.tinhNang.isEmpty()) sp.setTinhNang(firstRow.tinhNang);
+                    if (firstRow.moTa != null && !firstRow.moTa.isEmpty()) sp.setMoTa(firstRow.moTa);
+                    sp.setNgayCapNhat(LocalDateTime.now());
+                    sanPhamRepository.save(sp);
+                } else {
+                    sp = new SanPham();
+                    sp.setTenSanPham(firstRow.tenSp.trim());
+                    sp.setMaSanPham(generateProductCode());
+                    sp.setThuongHieu(th);
+                    sp.setLoaiGiay(lg);
+                    sp.setChatLieu(cl);
+                    sp.setKieuDang(kd);
+                    sp.setXuatXu(xx);
+                    sp.setDoiTuong(firstRow.doiTuong);
+                    sp.setTinhNang(firstRow.tinhNang);
+                    sp.setMoTa(firstRow.moTa);
+                    sp.setTrangThai(true);
+                    sp.setNgayTao(LocalDateTime.now());
+                    sp.setNgayCapNhat(LocalDateTime.now());
+                    sp = sanPhamRepository.save(sp);
+                    result.setSoSanPhamMoi(result.getSoSanPhamMoi() + 1);
+                }
+
+                // Lưu các biến thể
+                com.example.datn.entity.ThanGiay defaultTg = thanGiayRepository.findAll().stream().findFirst().orElseGet(() -> {
+                    com.example.datn.entity.ThanGiay tg = new com.example.datn.entity.ThanGiay();
+                    tg.setTenThanGiay("Thân giày tiêu chuẩn");
+                    tg.setMaThanGiay("TG-DEFAULT");
+                    tg.setTrangThai(true);
+                    return thanGiayRepository.save(tg);
+                });
+
+                com.example.datn.entity.DeGiay defaultDg = deGiayRepository.findAll().stream().findFirst().orElseGet(() -> {
+                    com.example.datn.entity.DeGiay dg = new com.example.datn.entity.DeGiay();
+                    dg.setTenDeGiay("Đế giày cao su");
+                    dg.setMaDeGiay("DG-DEFAULT");
+                    dg.setTrangThai(true);
+                    return deGiayRepository.save(dg);
+                });
+
+                for (ExcelRowData rData : rows) {
+                    MauSac ms = findOrCreateMauSac(rData.mauSac);
+                    KichCo kc = findOrCreateKichCo(rData.kichCo);
+
+                    Optional<com.example.datn.entity.SanPhamChiTiet> spctOpt =
+                            sanPhamChiTietRepository.findBySanPhamIdAndMauSacIdAndKichCoId(sp.getId(), ms.getId(), kc.getId());
+
+                    if (spctOpt.isPresent()) {
+                        com.example.datn.entity.SanPhamChiTiet spct = spctOpt.get();
+                        int curQty = spct.getSoLuong() != null ? spct.getSoLuong() : 0;
+                        int newQty = curQty + rData.soLuong;
+                        spct.setSoLuong(newQty);
+                        spct.setGiaBan(rData.giaBan);
+                        if (newQty > 0) spct.setTrangThai(true);
+                        sanPhamChiTietRepository.save(spct);
+                        result.setSoBienTheCapNhat(result.getSoBienTheCapNhat() + 1);
+                    } else {
+                        com.example.datn.entity.SanPhamChiTiet spct = new com.example.datn.entity.SanPhamChiTiet();
+                        spct.setSanPham(sp);
+                        spct.setMauSac(ms);
+                        spct.setKichCo(kc);
+                        spct.setThanGiay(defaultTg);
+                        spct.setDeGiay(defaultDg);
+
+                        String colorCode = ms.getMaMau() != null && !ms.getMaMau().trim().isEmpty() ? ms.getMaMau() : ("MS" + ms.getId());
+                        String sizeCode = kc.getTenKichCo() != null && !kc.getTenKichCo().trim().isEmpty() ? kc.getTenKichCo() : ("KC" + kc.getId());
+                        String maCode = sp.getMaSanPham() + "-" + colorCode + "-" + sizeCode;
+                        String finalMaCode = maCode;
+                        int counter = 1;
+                        while (sanPhamChiTietRepository.existsByMaChiTietSanPham(finalMaCode)) {
+                            finalMaCode = maCode + "-" + counter++;
+                        }
+                        spct.setMaChiTietSanPham(finalMaCode);
+                        spct.setSoLuong(rData.soLuong);
+                        spct.setGiaBan(rData.giaBan);
+                        spct.setTrangThai(true);
+
+                        sanPhamChiTietRepository.save(spct);
+                        result.setSoBienTheMoi(result.getSoBienTheMoi() + 1);
+                    }
+
+                    result.setSoDongThanhCong(result.getSoDongThanhCong() + 1);
+                }
+            }
+
+            return result;
+        } catch (Exception e) {
+            throw new RuntimeException("Lỗi xử lý file Excel: " + e.getMessage(), e);
+        }
+    }
+
+    private static class ExcelRowData {
+        int rowNumber;
+        String tenSp;
+        String thuongHieu;
+        String loaiGiay;
+        String chatLieu;
+        String kieuDang;
+        String xuatXu;
+        String doiTuong;
+        String mauSac;
+        String kichCo;
+        int soLuong;
+        java.math.BigDecimal giaBan;
+        String tinhNang;
+        String moTa;
+    }
+
+    private String getCellValueAsString(org.apache.poi.ss.usermodel.Cell cell) {
+        if (cell == null) return "";
+        return switch (cell.getCellType()) {
+            case STRING -> cell.getStringCellValue().trim();
+            case NUMERIC -> {
+                double val = cell.getNumericCellValue();
+                if (val == Math.floor(val)) {
+                    yield String.valueOf((long) val);
+                } else {
+                    yield String.valueOf(val);
+                }
+            }
+            case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+            case FORMULA -> {
+                try {
+                    yield cell.getStringCellValue().trim();
+                } catch (Exception ex) {
+                    try {
+                        yield String.valueOf((long) cell.getNumericCellValue());
+                    } catch (Exception e2) {
+                        yield "";
+                    }
+                }
+            }
+            default -> "";
+        };
+    }
+
+    private ThuongHieu findOrCreateThuongHieu(String name) {
+        String clean = (name != null && !name.trim().isEmpty()) ? name.trim() : "Khác";
+        return thuongHieuRepository.findAll().stream()
+                .filter(t -> clean.equalsIgnoreCase(t.getTenThuongHieu()))
+                .findFirst()
+                .orElseGet(() -> {
+                    ThuongHieu th = new ThuongHieu();
+                    th.setTenThuongHieu(clean);
+                    th.setMaThuongHieu("TH" + (System.currentTimeMillis() % 1000000));
+                    th.setTrangThai(true);
+                    return thuongHieuRepository.save(th);
+                });
+    }
+
+    private LoaiGiay findOrCreateLoaiGiay(String name) {
+        String clean = (name != null && !name.trim().isEmpty()) ? name.trim() : "Giày thể thao";
+        return loaiGiayRepository.findAll().stream()
+                .filter(l -> clean.equalsIgnoreCase(l.getTenLoaiGiay()))
+                .findFirst()
+                .orElseGet(() -> {
+                    LoaiGiay lg = new LoaiGiay();
+                    lg.setTenLoaiGiay(clean);
+                    lg.setMaLoaiGiay("LG" + (System.currentTimeMillis() % 1000000));
+                    lg.setTrangThai(true);
+                    return loaiGiayRepository.save(lg);
+                });
+    }
+
+    private ChatLieu findOrCreateChatLieu(String name) {
+        String clean = (name != null && !name.trim().isEmpty()) ? name.trim() : "Vải dệt";
+        return chatLieuRepository.findAll().stream()
+                .filter(c -> clean.equalsIgnoreCase(c.getTenChatLieu()))
+                .findFirst()
+                .orElseGet(() -> {
+                    ChatLieu cl = new ChatLieu();
+                    cl.setTenChatLieu(clean);
+                    cl.setMaChatLieu("CL" + (System.currentTimeMillis() % 1000000));
+                    cl.setTrangThai(true);
+                    return chatLieuRepository.save(cl);
+                });
+    }
+
+    private KieuDang findOrCreateKieuDang(String name) {
+        String clean = (name != null && !name.trim().isEmpty()) ? name.trim() : "Cổ thấp";
+        return kieuDangRepository.findAll().stream()
+                .filter(k -> clean.equalsIgnoreCase(k.getTenKieuDang()))
+                .findFirst()
+                .orElseGet(() -> {
+                    KieuDang kd = new KieuDang();
+                    kd.setTenKieuDang(clean);
+                    kd.setMaKieuDang("KD" + (System.currentTimeMillis() % 1000000));
+                    kd.setTrangThai(true);
+                    return kieuDangRepository.save(kd);
+                });
+    }
+
+    private XuatXu findOrCreateXuatXu(String name) {
+        String clean = (name != null && !name.trim().isEmpty()) ? name.trim() : "Việt Nam";
+        return xuatXuRepository.findAll().stream()
+                .filter(x -> clean.equalsIgnoreCase(x.getTenXuatXu()))
+                .findFirst()
+                .orElseGet(() -> {
+                    XuatXu xx = new XuatXu();
+                    xx.setTenXuatXu(clean);
+                    xx.setMaXuatXu("XX" + (System.currentTimeMillis() % 1000000));
+                    xx.setTrangThai(true);
+                    return xuatXuRepository.save(xx);
+                });
+    }
+
+    private MauSac findOrCreateMauSac(String name) {
+        String clean = (name != null && !name.trim().isEmpty()) ? name.trim() : "Trắng";
+        return mauSacRepository.findAll().stream()
+                .filter(m -> clean.equalsIgnoreCase(m.getTenMau()))
+                .findFirst()
+                .orElseGet(() -> {
+                    MauSac ms = new MauSac();
+                    ms.setTenMau(clean);
+                    ms.setMaMau("MS" + (System.currentTimeMillis() % 1000000));
+                    ms.setTrangThai(true);
+                    return mauSacRepository.save(ms);
+                });
+    }
+
+    private KichCo findOrCreateKichCo(String name) {
+        String clean = (name != null && !name.trim().isEmpty()) ? name.trim() : "40";
+        return kichCoRepository.findAll().stream()
+                .filter(k -> clean.equalsIgnoreCase(k.getTenKichCo()))
+                .findFirst()
+                .orElseGet(() -> {
+                    KichCo kc = new KichCo();
+                    kc.setTenKichCo(clean);
+                    kc.setMaKichCo("KC" + (System.currentTimeMillis() % 1000000));
+                    kc.setTrangThai(true);
+                    return kichCoRepository.save(kc);
+                });
     }
 }

@@ -1,6 +1,6 @@
 package com.example.datn.repository;
 
-import com.example.datn.dto.KhachHangThongKeDTO;
+import com.example.datn.dto.KhachHang.KhachHangThongKeDTO;
 import com.example.datn.entity.KhachHang;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -64,7 +64,7 @@ public interface KhachHangRepository extends JpaRepository<KhachHang, Long> {
 
     @Query(
         """
-        SELECT new com.example.datn.dto.KhachHangThongKeDTO(
+        SELECT new com.example.datn.dto.KhachHang.KhachHangThongKeDTO(
             h.khachHang.id, COUNT(h.id), SUM(h.tienSauGiamGia)
         )
         FROM HoaDon h

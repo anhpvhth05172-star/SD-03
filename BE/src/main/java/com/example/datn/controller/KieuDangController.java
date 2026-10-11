@@ -1,7 +1,7 @@
 package com.example.datn.controller;
 
-import com.example.datn.dto.AttributeRequest;
-import com.example.datn.dto.AttributeResponse;
+import com.example.datn.dto.ThuocTinh.AttributeRequest;
+import com.example.datn.dto.ThuocTinh.AttributeResponse;
 import com.example.datn.service.KieuDangService;
 import jakarta.validation.Valid;
 import java.util.List;

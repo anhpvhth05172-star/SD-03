@@ -1,6 +1,6 @@
 package com.example.datn.service;
 
-import com.example.datn.dto.PhieuGiamGiaDTO;
+import com.example.datn.dto.PhieuGiamGia.PhieuGiamGiaDTO;
 import com.example.datn.entity.DotGiamGia;
 import com.example.datn.entity.PhieuGiamGia;
 import org.springframework.data.domain.Page;

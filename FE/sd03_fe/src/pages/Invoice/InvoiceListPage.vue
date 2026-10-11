@@ -1,0 +1,588 @@
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { listInvoices, exportInvoices } from '@/api/invoice'
+import { avatarColor, formatDateTime, formatVnd, initialsOf, payStatusOf } from '@/utils/format'
+
+const router = useRouter()
+const showFilter = ref(true)
+
+const tabs = [
+  'Tất cả',
+  'Chờ xác nhận',
+  'Đã xác nhận',
+  'Chờ giao hàng',
+  'Đang giao hàng',
+  'Đã giao hàng',
+  'Đã hoàn thành',
+  'Đã hủy',
+  'Đã hoàn tiền',
+]
+const activeTab = ref(0)
+
+const invoices = ref([])
+const loading = ref(false)
+const totalElements = ref(0)
+const totalPages = ref(0)
+const page = ref(0)
+const size = 10
+const updatedAt = ref('')
+
+const fMa = ref('')
+const fTuNgay = ref('')
+const fDenNgay = ref('')
+const fLoaiDon = ref('')
+
+const parseDate = (value) => {
+  const v = (value || '').trim()
+  if (!v) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v
+  const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`
+  return undefined
+}
+
+const buildParams = () => {
+  const params = { page: page.value, size }
+  if (fMa.value) params.ma = fMa.value
+  const tu = parseDate(fTuNgay.value)
+  const den = parseDate(fDenNgay.value)
+  if (tu === undefined || den === undefined) return null
+  if (tu) params.tuNgay = tu
+  if (den) params.denNgay = den
+  if (fLoaiDon.value) params.loaiDon = fLoaiDon.value
+  if (activeTab.value > 0) {
+    params.trangThai = tabs[activeTab.value]
+  }
+  return params
+}
+
+const showNotFound = () => {
+  invoices.value = []
+  totalElements.value = 0
+  totalPages.value = 0
+}
+
+const fmtNgay = (iso) => {
+  const [y, m, d] = String(iso).split('-')
+  return `${d}/${m}/${y}`
+}
+
+const appliedRange = ref('')
+
+const load = async () => {
+  const params = buildParams()
+  if (!params) {
+    showNotFound()
+    return
+  }
+  const parts = []
+  if (params.tuNgay) parts.push(`Từ ${fmtNgay(params.tuNgay)}`)
+  if (params.denNgay) parts.push(`đến ${fmtNgay(params.denNgay)}`)
+  appliedRange.value = parts.join(' ')
+  loading.value = true
+  try {
+    const data = await listInvoices(params)
+    invoices.value = data.content
+    totalElements.value = data.totalElements
+    totalPages.value = data.totalPages
+    const now = new Date()
+    const p = (x) => String(x).padStart(2, '0')
+    updatedAt.value = `${p(now.getHours())}:${p(now.getMinutes())} ${p(now.getDate())}/${p(now.getMonth() + 1)}/${now.getFullYear()}`
+  } catch {
+    showNotFound()
+  } finally {
+    loading.value = false
+  }
+}
+
+const applyFilter = () => {
+  page.value = 0
+  load()
+}
+
+const resetFilter = () => {
+  fMa.value = ''
+  fTuNgay.value = ''
+  fDenNgay.value = ''
+  fLoaiDon.value = ''
+  activeTab.value = 0
+  page.value = 0
+  load()
+}
+
+const selectTab = (index) => {
+  activeTab.value = index
+  page.value = 0
+  load()
+}
+
+const goPage = (p) => {
+  if (p < 0 || p >= totalPages.value || p === page.value) return
+  page.value = p
+  load()
+}
+
+const exporting = ref(false)
+
+const xuatExcel = async () => {
+  const params = buildParams()
+  if (!params) {
+    alert('Khoảng ngày không hợp lệ')
+    return
+  }
+  const exportParams = { ...params }
+  delete exportParams.page
+  delete exportParams.size
+  exporting.value = true
+  try {
+    const blob = await exportInvoices(exportParams)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const p = (x) => String(x).padStart(2, '0')
+    const now = new Date()
+    const ngay = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
+    a.href = url
+    a.download = `Danh_sach_hoa_don_${ngay}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    alert(e.message || 'Xuất file Excel thất bại')
+  } finally {
+    exporting.value = false
+  }
+}
+
+const pageList = computed(() => {
+  const total = totalPages.value
+  const cur = page.value + 1
+  let start = Math.max(1, cur - 2)
+  let end = Math.min(total, start + 4)
+  start = Math.max(1, end - 4)
+  const arr = []
+  for (let i = start; i <= end; i++) arr.push(i)
+  return arr
+})
+
+const footFrom = computed(() => (totalElements.value === 0 ? 0 : page.value * size + 1))
+const footTo = computed(() => Math.min((page.value + 1) * size, totalElements.value))
+
+const statusPill = (value) => {
+  if (['Đã hoàn thành', 'Đã thanh toán', 'Đã xác nhận', 'Đã giao hàng'].includes(value)) return 'pill-green'
+  if (['Đã hủy', 'Đã hoàn tiền'].includes(value)) return 'pill-red'
+  if (['Chờ xác nhận', 'Chờ giao hàng'].includes(value)) return 'pill-amber'
+  return 'pill-gray'
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div class="screen">
+    <section class="panel">
+      <h2 class="page-title">Quản lý hóa đơn</h2>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <span class="panel-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 4.6h18l-7.1 8.5v5.9l-3.8 2v-7.9L3 4.6z" />
+          </svg>
+        </span>
+        <h3 class="panel-title">Bộ lọc tìm kiếm</h3>
+        <div class="panel-right">
+          <span class="result-count">{{ totalElements }} kết quả<template v-if="appliedRange"> • {{ appliedRange }}</template></span>
+          <button class="link-red" type="button" @click="showFilter = !showFilter">
+            {{ showFilter ? 'Ẩn bớt' : 'Hiện thêm' }}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path :d="showFilter ? 'M6 14.5l6-6 6 6' : 'M6 9.5l6 6 6-6'" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div v-show="showFilter">
+        <div class="filter-row">
+          <div class="f-item">
+            <label>Mã hóa đơn</label>
+            <input
+              v-model="fMa"
+              type="text"
+              placeholder="Nhập mã hóa đơn"
+              @keyup.enter="applyFilter"
+            />
+          </div>
+
+          <div class="f-item">
+            <label>Loại đơn</label>
+            <select v-model="fLoaiDon">
+              <option value="">Tất cả</option>
+              <option value="Tại quầy">Tại quầy</option>
+              <option value="Online">Online</option>
+            </select>
+          </div>
+
+          <div class="f-item">
+            <label>Từ ngày</label>
+            <div class="date-box">
+              <input v-model="fTuNgay" type="date" @keyup.enter="applyFilter" />
+            </div>
+          </div>
+
+          <div class="f-item">
+            <label>Đến ngày</label>
+            <div class="date-box">
+              <input v-model="fDenNgay" type="date" @keyup.enter="applyFilter" />
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-actions">
+          <button class="btn-apply" type="button" @click="applyFilter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <path d="M4 6h16M7 12h10M10 18h4" />
+            </svg>
+            Áp dụng
+          </button>
+          <button class="btn-reset" type="button" @click="resetFilter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 11a8 8 0 1 0-.9 4.5" />
+              <path d="M20 4.5V11h-6.5" />
+            </svg>
+            Đặt lại
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <span class="panel-icon is-red">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2.5h12v19l-3-1.8-3 1.8-3-1.8-3 1.8v-19zM9.5 7.5h5M9.5 11.5h5M9.5 15.5h3.5" />
+          </svg>
+        </span>
+        <h3 class="panel-title">Danh sách hóa đơn</h3>
+        <span class="count-pill">{{ totalElements }} hóa đơn</span>
+        <div class="panel-right">
+          <span class="panel-meta">Cập nhật lúc {{ updatedAt }}</span>
+          <button
+            class="btn-export"
+            type="button"
+            :disabled="exporting"
+            @click="xuatExcel"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v12M7 10l5 5 5-5M4 21h16" />
+            </svg>
+            {{ exporting ? 'Đang xuất...' : 'Xuất Excel' }}
+          </button>
+          <button class="btn-create" type="button" @click="router.push('/hoa-don/them')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <path d="M12 6v12M6 12h12" />
+            </svg>
+            Tạo hóa đơn
+          </button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button
+          v-for="(tab, index) in tabs"
+          :key="tab"
+          type="button"
+          class="tab"
+          :class="{ 'is-active': activeTab === index }"
+          @click="selectTab(index)"
+        >
+          {{ tab }}
+        </button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Hóa đơn</th>
+              <th>Nhân viên</th>
+              <th>Loại đơn</th>
+              <th>Tổng tiền</th>
+              <th>Ngày tạo</th>
+              <th>Trạng thái hóa đơn</th>
+              <th>Trạng thái thanh toán</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="loading">
+              <td colspan="8" class="empty-cell">Đang tải...</td>
+            </tr>
+            <tr v-else-if="invoices.length === 0">
+              <td colspan="8" class="empty-cell">Không tìm được thông tin</td>
+            </tr>
+            <template v-else>
+            <tr v-for="row in invoices" :key="row.id">
+              <td>
+                <div class="entity">
+                  <span class="entity-avatar" :style="{ background: avatarColor(row.id) }">{{ initialsOf(row.tenKhachHang) }}</span>
+                  <div class="entity-info">
+                    <div class="entity-line">
+                      <span class="entity-name">{{ row.maHoaDon }}</span>
+                    </div>
+                    <div class="entity-sub">{{ row.tenKhachHang || 'Khách lẻ' }}<template v-if="row.soDienThoaiKhachHang"> • {{ row.soDienThoaiKhachHang }}</template></div>
+                  </div>
+                </div>
+              </td>
+              <td>{{ row.tenNhanVien || '—' }}</td>
+              <td>{{ row.loaiDon }}</td>
+              <td class="cell-strong">{{ formatVnd(row.tongTien) }}</td>
+              <td>{{ formatDateTime(row.ngayTao) }}</td>
+              <td><span class="pill" :class="statusPill(row.trangThai)">{{ row.trangThai }}</span></td>
+              <td><span class="pill" :class="statusPill(payStatusOf(row.trangThai))">{{ payStatusOf(row.trangThai) }}</span></td>
+              <td>
+                <div class="act-group">
+                  <button class="act-btn" type="button" aria-label="Xem" @click="router.push(`/hoa-don/${row.id}`)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel-foot">
+        <span class="foot-text">Hiển thị {{ footFrom }}-{{ footTo }} trong {{ totalElements }} hóa đơn</span>
+        <div class="pager">
+          <button class="page-btn" type="button" aria-label="Trang trước" :disabled="page === 0" @click="goPage(page - 1)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.5 6l-6 6 6 6" />
+            </svg>
+          </button>
+          <button
+            v-for="p in pageList"
+            :key="p"
+            class="page-btn"
+            :class="{ 'is-active': p === page + 1 }"
+            type="button"
+            @click="goPage(p - 1)"
+          >
+            {{ p }}
+          </button>
+          <button class="page-btn" type="button" aria-label="Trang sau" :disabled="page + 1 >= totalPages" @click="goPage(page + 1)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9.5 6l6 6-6 6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</template>
+
+<style scoped>
+.page-title {
+  color: var(--red);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.screen > .panel:first-child {
+  padding: 17px 20px;
+  border-radius: 12px;
+}
+
+.screen > .panel:not(:first-child) {
+  border-color: #e7ebf0;
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.035);
+  padding: 18px 20px;
+}
+
+.screen > .panel:nth-child(2) {
+  background: #fff;
+}
+
+.screen > .panel:nth-child(3) {
+  padding-bottom: 12px;
+}
+
+.screen > .panel:nth-child(3) .panel-head {
+  margin-bottom: 16px;
+}
+
+.screen > .panel:nth-child(3) .table-wrap {
+  border: 1px solid #e9edf2;
+  border-radius: 11px;
+  overflow: auto;
+}
+
+.screen > .panel:nth-child(3) .data-table {
+  min-width: 980px;
+}
+
+.screen > .panel:nth-child(3) .data-table thead th {
+  background: #f4f6f8;
+  color: #475467;
+  border-color: #e9edf2;
+  padding: 12px 13px;
+  font-size: 11.5px;
+}
+
+.screen > .panel:nth-child(3) .data-table tbody td {
+  padding: 13px;
+  color: #344054;
+  border-bottom-color: #edf0f3;
+}
+
+.screen > .panel:nth-child(3) .data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.screen > .panel:nth-child(3) .data-table tbody tr:hover td {
+  background: #fff8f8;
+}
+
+.entity-avatar {
+  width: 36px;
+  height: 36px;
+}
+
+.entity-name {
+  color: #b42318;
+  font-weight: 700;
+}
+
+.count-pill {
+  padding: 5px 10px;
+  font-size: 11px;
+}
+
+.tabs {
+  gap: 7px;
+  padding-bottom: 12px;
+  overflow-x: auto;
+}
+
+.tab {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 7px 12px;
+}
+
+.tab.is-active {
+  box-shadow: 0 2px 5px rgba(204, 0, 0, 0.12);
+}
+
+.panel-foot {
+  padding-top: 13px;
+}
+
+.filter-row {
+  grid-template-columns: 1.6fr 1fr 1fr 1fr;
+}
+
+.filter-actions {
+  margin-top: 14px;
+}
+
+.date-box input[type="date"] {
+  padding-right: 8px;
+}
+
+.btn-reset {
+  width: auto;
+  padding: 0 14px;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .filter-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .filter-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.btn-create {
+  height: 34px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 7px;
+  background: #1d1d23;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-create:hover {
+  background: #000;
+}
+
+.btn-export {
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid #16a34a;
+  border-radius: 7px;
+  background: #fff;
+  color: #16a34a;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.btn-export:hover:not(:disabled) {
+  background: #16a34a;
+  color: #fff;
+}
+
+.btn-export:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-export svg {
+  width: 15px;
+  height: 15px;
+}
+
+.btn-create svg {
+  width: 15px;
+  height: 15px;
+}
+
+.empty-cell {
+  text-align: center;
+  color: #9a9aa3;
+  padding: 26px 0;
+}
+
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+</style>
