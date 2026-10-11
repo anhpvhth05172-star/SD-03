@@ -63,4 +63,14 @@ public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, 
             @Param("trangThai") Boolean trangThai,
             Pageable pageable
     );
+
+    @Query("""
+        select s from SanPhamChiTiet s
+        join fetch s.sanPham sp
+        join fetch s.kichCo
+        join fetch s.mauSac
+        where s.trangThai = true and sp.trangThai = true
+        order by sp.tenSanPham asc, s.maChiTietSanPham asc
+        """)
+    List<SanPhamChiTiet> findAllActiveForDiscount();
 }

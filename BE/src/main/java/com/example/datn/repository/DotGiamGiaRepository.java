@@ -24,4 +24,6 @@ public interface DotGiamGiaRepository extends JpaRepository<DotGiamGia, Long> {
                             @Param("from") LocalDateTime from,
                             @Param("to") LocalDateTime to,
                             Pageable pageable);
+
+    boolean existsByMaDotGiamGia(String maDotGiamGia);
 }

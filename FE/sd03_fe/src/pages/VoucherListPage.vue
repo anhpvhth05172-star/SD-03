@@ -12,6 +12,21 @@ const pageSize = 8;
 const totalPages = ref(0);
 const totalElements = ref(0);
 
+const isLoading = ref(false);
+
+try {
+  const cachedVouchers = localStorage.getItem("voucher_initial_list_cache");
+  if (cachedVouchers) {
+    const parsed = JSON.parse(cachedVouchers);
+    if (parsed && Array.isArray(parsed.content)) {
+      listDiscount.value = parsed.content;
+      page.value = parsed.number || 0;
+      totalPages.value = parsed.totalPages || 1;
+      totalElements.value = parsed.totalElements || parsed.content.length;
+    }
+  }
+} catch (e) {}
+
 const getData = async (p = 0) => {
   try {
     const res = await axios.get(apiDiscount + "admin/phieu-giam-gia", {
@@ -22,6 +37,13 @@ const getData = async (p = 0) => {
       page.value = res.data.number;
       totalPages.value = res.data.totalPages;
       totalElements.value = res.data.totalElements;
+
+      if (p === 0) {
+        localStorage.setItem(
+          "voucher_initial_list_cache",
+          JSON.stringify(res.data),
+        );
+      }
     }
   } catch (error) {
     console.error(error);
@@ -216,7 +238,7 @@ onMounted(() => getData(0));
                 <div class="entity">
                   <span
                     class="entity-avatar"
-                    :style="{ background: avatarColor(i + 1) }"
+                    :style="{ background: avatarColor(d.id) }"
                     >{{ d.maPhieuGiamGia.slice(-2) }}</span
                   >
                   <div class="entity-info">

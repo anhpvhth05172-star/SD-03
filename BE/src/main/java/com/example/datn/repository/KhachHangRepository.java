@@ -74,4 +74,6 @@ public interface KhachHangRepository extends JpaRepository<KhachHang, Long> {
         """
     )
     List<KhachHangThongKeDTO> thongKeTheoKhachHang(@Param("ids") List<Long> ids);
+
+    List<KhachHang> findByVaiTroAndTrangThaiOrderByTenKhachHangAsc(String vaiTro, Boolean trangThai);
 }
