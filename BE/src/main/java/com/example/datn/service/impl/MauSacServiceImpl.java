@@ -1,7 +1,7 @@
 package com.example.datn.service.impl;
 
-import com.example.datn.dto.AttributeRequest;
-import com.example.datn.dto.AttributeResponse;
+import com.example.datn.dto.ThuocTinh.AttributeRequest;
+import com.example.datn.dto.ThuocTinh.AttributeResponse;
 import com.example.datn.entity.MauSac;
 import com.example.datn.exception.DuplicateRecordException;
 import com.example.datn.exception.ResourceNotFoundException;

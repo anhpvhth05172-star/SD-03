@@ -1,10 +1,10 @@
 package com.example.datn.controller;
 
-import com.example.datn.dto.FormDataResponse;
-import com.example.datn.dto.HoaDonDTO;
-import com.example.datn.dto.HoaDonRequest;
-import com.example.datn.dto.PageResponse;
-import com.example.datn.dto.TrangThaiHoaDonRequest;
+import com.example.datn.dto.SanPham.FormDataResponse;
+import com.example.datn.dto.HoaDon.HoaDonDTO;
+import com.example.datn.dto.HoaDon.HoaDonRequest;
+import com.example.datn.dto.Common.PageResponse;
+import com.example.datn.dto.HoaDon.TrangThaiHoaDonRequest;
 import com.example.datn.service.HoaDonService;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;

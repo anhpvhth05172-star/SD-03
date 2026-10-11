@@ -1,9 +1,9 @@
 package com.example.datn.service;
 
-import com.example.datn.dto.SanPhamRequest;
-import com.example.datn.dto.SanPhamResponse;
-import com.example.datn.dto.SmartProductSaveRequest;
-import com.example.datn.dto.SmartProductSaveResponse;
+import com.example.datn.dto.SanPham.SanPhamRequest;
+import com.example.datn.dto.SanPham.SanPhamResponse;
+import com.example.datn.dto.SanPham.SmartProductSaveRequest;
+import com.example.datn.dto.SanPham.SmartProductSaveResponse;
 import org.springframework.data.domain.Page;
 
 public interface SanPhamService {
@@ -15,6 +15,6 @@ public interface SanPhamService {
     void delete(Long id);
     SmartProductSaveResponse smartSave(SmartProductSaveRequest request);
     byte[] downloadExcelTemplate();
-    com.example.datn.dto.ProductExcelImportResult importFromExcel(org.springframework.web.multipart.MultipartFile file);
+    com.example.datn.dto.SanPham.ProductExcelImportResult importFromExcel(org.springframework.web.multipart.MultipartFile file);
 }
 

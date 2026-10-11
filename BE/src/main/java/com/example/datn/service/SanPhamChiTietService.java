@@ -1,7 +1,7 @@
 package com.example.datn.service;
 
-import com.example.datn.dto.SanPhamChiTietRequest;
-import com.example.datn.dto.SanPhamChiTietResponse;
+import com.example.datn.dto.SanPham.SanPhamChiTietRequest;
+import com.example.datn.dto.SanPham.SanPhamChiTietResponse;
 import org.springframework.data.domain.Page;
 
 import java.util.List;

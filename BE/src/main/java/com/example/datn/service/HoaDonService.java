@@ -1,11 +1,11 @@
 package com.example.datn.service;
 
-import com.example.datn.dto.ChiTietHoaDonDTO;
-import com.example.datn.dto.ChiTietHoaDonRequest;
-import com.example.datn.dto.FormDataResponse;
-import com.example.datn.dto.HoaDonDTO;
-import com.example.datn.dto.HoaDonRequest;
-import com.example.datn.dto.PageResponse;
+import com.example.datn.dto.HoaDon.ChiTietHoaDonDTO;
+import com.example.datn.dto.HoaDon.ChiTietHoaDonRequest;
+import com.example.datn.dto.SanPham.FormDataResponse;
+import com.example.datn.dto.HoaDon.HoaDonDTO;
+import com.example.datn.dto.HoaDon.HoaDonRequest;
+import com.example.datn.dto.Common.PageResponse;
 import com.example.datn.entity.ChiTietHoaDon;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.KhachHang;

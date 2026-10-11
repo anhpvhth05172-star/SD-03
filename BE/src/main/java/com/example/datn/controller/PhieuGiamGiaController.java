@@ -1,7 +1,7 @@
 package com.example.datn.controller;
 
-import com.example.datn.dto.PhieuGiamGiaDTO;
-import com.example.datn.dto.PhieuSuDungCuaToiDTO;
+import com.example.datn.dto.PhieuGiamGia.PhieuGiamGiaDTO;
+import com.example.datn.dto.PhieuGiamGia.PhieuSuDungCuaToiDTO;
 import com.example.datn.entity.PhieuGiamGia;
 import com.example.datn.repository.LichSuSuDungPhieuGiamGiaRepository;
 import com.example.datn.repository.PhieuGiamGiaRepository;

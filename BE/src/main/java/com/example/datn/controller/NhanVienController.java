@@ -1,10 +1,10 @@
 package com.example.datn.controller;
 
 import com.example.datn.config.QuyenGuard;
-import com.example.datn.dto.NhanVienDTO;
-import com.example.datn.dto.NhanVienFormDataResponse;
-import com.example.datn.dto.NhanVienRequest;
-import com.example.datn.dto.PageResponse;
+import com.example.datn.dto.NhanVien.NhanVienDTO;
+import com.example.datn.dto.NhanVien.NhanVienFormDataResponse;
+import com.example.datn.dto.NhanVien.NhanVienRequest;
+import com.example.datn.dto.Common.PageResponse;
 import com.example.datn.service.NhanVienService;
 import java.time.LocalDate;
 import java.util.Map;

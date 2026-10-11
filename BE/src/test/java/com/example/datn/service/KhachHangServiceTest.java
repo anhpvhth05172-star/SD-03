@@ -8,8 +8,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.example.datn.dto.KhachHangDTO;
-import com.example.datn.dto.KhachHangRequest;
+import com.example.datn.dto.KhachHang.KhachHangDTO;
+import com.example.datn.dto.KhachHang.KhachHangRequest;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.repository.DiaChiKhachHangRepository;
 import com.example.datn.repository.KhachHangRepository;

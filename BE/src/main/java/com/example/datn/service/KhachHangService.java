@@ -1,11 +1,11 @@
 package com.example.datn.service;
 
-import com.example.datn.dto.DiaChiKhachHangDTO;
-import com.example.datn.dto.DiaChiKhachHangRequest;
-import com.example.datn.dto.KhachHangDTO;
-import com.example.datn.dto.KhachHangRequest;
-import com.example.datn.dto.KhachHangThongKeDTO;
-import com.example.datn.dto.PageResponse;
+import com.example.datn.dto.KhachHang.DiaChiKhachHangDTO;
+import com.example.datn.dto.KhachHang.DiaChiKhachHangRequest;
+import com.example.datn.dto.KhachHang.KhachHangDTO;
+import com.example.datn.dto.KhachHang.KhachHangRequest;
+import com.example.datn.dto.KhachHang.KhachHangThongKeDTO;
+import com.example.datn.dto.Common.PageResponse;
 import com.example.datn.entity.DiaChiKhachHang;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.repository.DiaChiKhachHangRepository;

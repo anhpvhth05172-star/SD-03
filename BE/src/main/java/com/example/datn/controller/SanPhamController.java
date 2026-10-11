@@ -1,10 +1,10 @@
 package com.example.datn.controller;
 
-import com.example.datn.dto.PageResponse;
-import com.example.datn.dto.SanPhamRequest;
-import com.example.datn.dto.SanPhamResponse;
-import com.example.datn.dto.SmartProductSaveRequest;
-import com.example.datn.dto.SmartProductSaveResponse;
+import com.example.datn.dto.Common.PageResponse;
+import com.example.datn.dto.SanPham.SanPhamRequest;
+import com.example.datn.dto.SanPham.SanPhamResponse;
+import com.example.datn.dto.SanPham.SmartProductSaveRequest;
+import com.example.datn.dto.SanPham.SmartProductSaveResponse;
 import com.example.datn.service.SanPhamService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -82,10 +82,10 @@ public class SanPhamController {
     }
 
     @PostMapping(value = "/excel/import", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<com.example.datn.dto.ProductExcelImportResult> importExcel(
+    public ResponseEntity<com.example.datn.dto.SanPham.ProductExcelImportResult> importExcel(
             @RequestParam("file") org.springframework.web.multipart.MultipartFile file
     ) {
-        com.example.datn.dto.ProductExcelImportResult result = sanPhamService.importFromExcel(file);
+        com.example.datn.dto.SanPham.ProductExcelImportResult result = sanPhamService.importFromExcel(file);
         return ResponseEntity.ok(result);
     }
 

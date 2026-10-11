@@ -9,8 +9,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.example.datn.dto.NhanVienDTO;
-import com.example.datn.dto.NhanVienRequest;
+import com.example.datn.dto.NhanVien.NhanVienDTO;
+import com.example.datn.dto.NhanVien.NhanVienRequest;
 import com.example.datn.entity.NhanVien;
 import com.example.datn.entity.VaiTro;
 import com.example.datn.repository.NhanVienRepository;

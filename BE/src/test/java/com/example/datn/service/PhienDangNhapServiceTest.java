@@ -10,8 +10,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.datn.config.JwtService;
-import com.example.datn.dto.AuthResponse;
-import com.example.datn.dto.DangNhapRequest;
+import com.example.datn.dto.Auth.AuthResponse;
+import com.example.datn.dto.Auth.DangNhapRequest;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.entity.PhienDangNhap;
 import com.example.datn.exception.DangNhapThatBaiException;

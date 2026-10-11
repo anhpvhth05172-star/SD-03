@@ -1,7 +1,7 @@
 package com.example.datn.service.impl;
 
-import com.example.datn.dto.SanPhamChiTietRequest;
-import com.example.datn.dto.SanPhamChiTietResponse;
+import com.example.datn.dto.SanPham.SanPhamChiTietRequest;
+import com.example.datn.dto.SanPham.SanPhamChiTietResponse;
 import com.example.datn.entity.*;
 import com.example.datn.repository.*;
 import com.example.datn.service.SanPhamChiTietService;

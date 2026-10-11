@@ -1,11 +1,11 @@
 package com.example.datn.service.impl;
 
-import com.example.datn.dto.SanPhamRequest;
-import com.example.datn.dto.SanPhamResponse;
-import com.example.datn.dto.SmartProductSaveRequest;
-import com.example.datn.dto.SmartProductSaveResponse;
-import com.example.datn.dto.SmartProductSaveRequest.BienTheItem;
-import com.example.datn.dto.SmartProductSaveResponse.MergePreviewItem;
+import com.example.datn.dto.SanPham.SanPhamRequest;
+import com.example.datn.dto.SanPham.SanPhamResponse;
+import com.example.datn.dto.SanPham.SmartProductSaveRequest;
+import com.example.datn.dto.SanPham.SmartProductSaveResponse;
+import com.example.datn.dto.SanPham.SmartProductSaveRequest.BienTheItem;
+import com.example.datn.dto.SanPham.SmartProductSaveResponse.MergePreviewItem;
 import com.example.datn.entity.ChatLieu;
 import com.example.datn.entity.KieuDang;
 import com.example.datn.entity.LoaiGiay;
@@ -548,7 +548,7 @@ public class SanPhamServiceImpl implements SanPhamService {
 
     @Override
     @Transactional
-    public com.example.datn.dto.ProductExcelImportResult importFromExcel(org.springframework.web.multipart.MultipartFile file) {
+    public com.example.datn.dto.SanPham.ProductExcelImportResult importFromExcel(org.springframework.web.multipart.MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Vui lòng tải lên tệp Excel hợp lệ");
         }
@@ -557,7 +557,7 @@ public class SanPhamServiceImpl implements SanPhamService {
             throw new IllegalArgumentException("Hệ thống chỉ chấp nhận định dạng Excel (.xlsx, .xls)");
         }
 
-        com.example.datn.dto.ProductExcelImportResult result = com.example.datn.dto.ProductExcelImportResult.builder().build();
+        com.example.datn.dto.SanPham.ProductExcelImportResult result = com.example.datn.dto.SanPham.ProductExcelImportResult.builder().build();
 
         try (org.apache.poi.ss.usermodel.Workbook workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(file.getInputStream())) {
             org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(0);

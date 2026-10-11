@@ -1,8 +1,8 @@
 package com.example.datn.controller;
 
 import com.example.datn.config.QuyenGuard;
-import com.example.datn.dto.DiaChiKhachHangDTO;
-import com.example.datn.dto.DiaChiKhachHangRequest;
+import com.example.datn.dto.KhachHang.DiaChiKhachHangDTO;
+import com.example.datn.dto.KhachHang.DiaChiKhachHangRequest;
 import com.example.datn.service.KhachHangService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
