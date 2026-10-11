@@ -1,10 +1,12 @@
 package com.example.datn.service.impl;
 
+import com.example.datn.dto.DotGiamGia.GiaKhuyenMai;
 import com.example.datn.dto.SanPham.SanPhamChiTietRequest;
 import com.example.datn.dto.SanPham.SanPhamChiTietResponse;
 import com.example.datn.entity.*;
 import com.example.datn.repository.*;
 import com.example.datn.service.SanPhamChiTietService;
+import com.example.datn.service.impls.GiaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -17,6 +19,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,20 +34,23 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
     private final DeGiayRepository deGiayRepository;
     private final ChiTietHoaDonRepository chiTietHoaDonRepository;
     private final HinhAnhSanPhamRepository hinhAnhSanPhamRepository;
+    private final GiaService giaService;
 
     @Override
     public Page<SanPhamChiTietResponse> getAll(int page, int size, String search, Long idSanPham, Long idMauSac, Long idKichCo, Boolean trangThai) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id"));
         String keyword = search != null && !search.trim().isEmpty() ? search.trim() : null;
         Page<SanPhamChiTiet> result = sanPhamChiTietRepository.filterChiTiet(keyword, idSanPham, idMauSac, idKichCo, trangThai, pageable);
-        return result.map(spct -> mapToResponse(spct));
+        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(result.getContent());
+        return result.map(spct -> mapToResponse(spct, giaMap.get(spct.getId())));
     }
 
     @Override
     public List<SanPhamChiTietResponse> getBySanPhamId(Long idSanPham) {
-        return sanPhamChiTietRepository.findBySanPhamId(idSanPham)
-                .stream()
-                .map(spct -> mapToResponse(spct))
+        List<SanPhamChiTiet> list = sanPhamChiTietRepository.findBySanPhamId(idSanPham);
+        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(list);
+        return list.stream()
+                .map(spct -> mapToResponse(spct, giaMap.get(spct.getId())))
                 .collect(Collectors.toList());
     }
 
@@ -307,6 +313,11 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
     }
 
     private SanPhamChiTietResponse mapToResponse(SanPhamChiTiet spct) {
+        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(List.of(spct));
+        return mapToResponse(spct, giaMap.get(spct.getId()));
+    }
+
+    private SanPhamChiTietResponse mapToResponse(SanPhamChiTiet spct, GiaKhuyenMai gkm) {
         String colorHex = "#64748b";
         String colorName = "Mặc định";
         if (spct.getMauSac() != null) {
@@ -357,6 +368,15 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
             trangThaiTonKho = "Đang bán";
         }
 
+        String discountStr = "-";
+        BigDecimal giaSauGiam = spct.getGiaBan();
+        BigDecimal phanTram = null;
+        if (gkm != null && gkm.phanTramGiam() != null && gkm.phanTramGiam().compareTo(BigDecimal.ZERO) > 0) {
+            phanTram = gkm.phanTramGiam();
+            discountStr = "-" + phanTram.stripTrailingZeros().toPlainString() + "%";
+            giaSauGiam = gkm.giaSauGiam();
+        }
+
         return SanPhamChiTietResponse.builder()
                 .id(spct.getId())
                 .idSanPham(spct.getSanPham() != null ? spct.getSanPham().getId() : null)
@@ -370,7 +390,9 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
                 .size(sizeName)
                 .stock(stockVal)
                 .price(spct.getGiaBan())
-                .discount("-")
+                .discount(discountStr)
+                .giaSauGiam(giaSauGiam)
+                .phanTramGiam(phanTram)
                 .trangThai(spct.getTrangThai() != null ? spct.getTrangThai() : true)
                 .trangThaiTonKho(trangThaiTonKho)
                 .img(imgUrl)

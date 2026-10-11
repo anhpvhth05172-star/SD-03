@@ -28,6 +28,8 @@ public class SanPhamChiTietResponse {
     private Integer stock;
     private BigDecimal price;
     private String discount;
+    private BigDecimal giaSauGiam;
+    private BigDecimal phanTramGiam;
     private Boolean trangThai;
     private String trangThaiTonKho;
     private String img;

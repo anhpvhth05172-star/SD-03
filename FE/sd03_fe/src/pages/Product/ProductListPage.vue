@@ -246,6 +246,18 @@ const formatProductPrice = (item) => {
   return formatPrice(item.giaBan || 0)
 }
 
+const hasProductDiscount = (item) => {
+  return item && item.discount && item.discount !== '-' && item.discount !== '0%'
+}
+
+const formatProductDiscountedPrice = (item) => {
+  if (!item) return '0 ₫'
+  if (item.giaSauGiamMin && item.giaSauGiamMax && item.giaSauGiamMin !== item.giaSauGiamMax) {
+    return `${formatPrice(item.giaSauGiamMin)} - ${formatPrice(item.giaSauGiamMax)}`
+  }
+  return formatPrice(item.giaSauGiamMin || item.giaBan || 0)
+}
+
 const toggleStatus = async (item) => {
   const oldStatus = item.trangThai
   const newStatus = !oldStatus
@@ -863,7 +875,16 @@ onUnmounted(() => {
               <td class="attr-plain-text">{{ item.tenThuongHieu || '---' }}</td>
               <td class="attr-plain-text">{{ item.tenLoaiGiay || '---' }}</td>
               <td class="text-center qty-plain-text">{{ item.soLuong !== undefined && item.soLuong !== null ? item.soLuong : 0 }}</td>
-              <td class="text-end price-plain-text">{{ formatProductPrice(item) }}</td>
+              <td class="text-end price-plain-text">
+                <div v-if="hasProductDiscount(item)" class="product-price-discount-box">
+                  <div class="product-sale-price-row">
+                    <span class="product-sale-price">{{ formatProductDiscountedPrice(item) }}</span>
+                    <span class="badge-discount-pill">{{ item.discount }}</span>
+                  </div>
+                  <span class="product-original-price">{{ formatProductPrice(item) }}</span>
+                </div>
+                <span v-else>{{ formatProductPrice(item) }}</span>
+              </td>
               <td class="text-center">
                 <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
                   <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />

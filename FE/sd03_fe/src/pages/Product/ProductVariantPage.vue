@@ -187,6 +187,10 @@ const formatPrice = (val) => {
   return new Intl.NumberFormat('vi-VN').format(val) + ' đ'
 }
 
+const hasDiscount = (item) => {
+  return item && item.discount && item.discount !== '-' && item.discount !== '0%'
+}
+
 const getColorHex = (item) => {
   if (item.colorHex && item.colorHex.startsWith('#')) return item.colorHex
   const name = (item.color || '').toLowerCase()
@@ -1156,8 +1160,17 @@ onUnmounted(() => {
                     {{ item.stock !== undefined ? item.stock : 0 }}
                   </span>
                 </td>
-                <td class="text-end price-val">{{ formatPrice(item.price || 0) }}</td>
-                <td class="text-center discount-val">{{ item.discount || '-' }}</td>
+                <td class="text-end price-val">
+                  <div v-if="hasDiscount(item)" class="price-discount-box">
+                    <span class="sale-price">{{ formatPrice(item.giaSauGiam || item.price) }}</span>
+                    <span class="original-price">{{ formatPrice(item.price || 0) }}</span>
+                  </div>
+                  <span v-else>{{ formatPrice(item.price || 0) }}</span>
+                </td>
+                <td class="text-center discount-val">
+                  <span v-if="hasDiscount(item)" class="badge-discount-pill">{{ item.discount }}</span>
+                  <span v-else class="text-muted">-</span>
+                </td>
                 <td class="text-center">
                   <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
                     <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />

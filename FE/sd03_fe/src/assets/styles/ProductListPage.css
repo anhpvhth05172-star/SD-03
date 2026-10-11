@@ -595,6 +595,48 @@
   font-family: inherit;
 }
 
+.product-price-discount-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.product-sale-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.product-sale-price {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #dc2626;
+}
+
+.badge-discount-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.06);
+}
+
+.product-original-price {
+  text-decoration: line-through;
+  color: #94a3b8;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
 .simple-status-badge {
   display: inline-block;
   padding: 4px 14px;
