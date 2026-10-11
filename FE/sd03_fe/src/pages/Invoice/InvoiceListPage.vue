@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { listInvoices, exportInvoices } from '../api/invoice'
-import { avatarColor, formatDateTime, formatVnd, initialsOf, payStatusOf } from '../utils/format'
+import { listInvoices, exportInvoices } from '@/api/invoice'
+import { avatarColor, formatDateTime, formatVnd, initialsOf, payStatusOf } from '@/utils/format'
 
 const router = useRouter()
 const showFilter = ref(true)

@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { createInvoice, getInvoiceFormData, listInvoices } from '../api/invoice'
-import { formatVnd } from '../utils/format'
+import { createInvoice, getInvoiceFormData, listInvoices } from '@/api/invoice'
+import { formatVnd } from '@/utils/format'
 
 const router = useRouter()
 const saving = ref(false)

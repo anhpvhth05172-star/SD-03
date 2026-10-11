@@ -2,12 +2,12 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { Html5Qrcode } from 'html5-qrcode'
 import { useRoute, useRouter } from 'vue-router'
-import { checkCustomerEmail, createCustomer, getCustomer, suggestCustomerCode, updateCustomer } from '../api/customer'
-import { layDiaGioi, layPhuongXa, phanTichDiaChiCccd, timTinh } from '../api/diaGioi'
-import AvatarCard from '../components/AvatarCard.vue'
-import { setFlash } from '../utils/flash'
-import { hopLeMa, maDeXuat } from '../utils/maNhanVien'
-import { datVaiTro, layNguoiDung, vaiTroHienTai } from '../utils/session'
+import { checkCustomerEmail, createCustomer, getCustomer, suggestCustomerCode, updateCustomer } from '@/api/customer'
+import { layDiaGioi, layPhuongXa, phanTichDiaChiCccd, timTinh } from '@/api/diaGioi'
+import AvatarCard from '@/components/AvatarCard.vue'
+import { setFlash } from '@/utils/flash'
+import { hopLeMa, maDeXuat } from '@/utils/maNhanVien'
+import { datVaiTro, layNguoiDung, vaiTroHienTai } from '@/utils/session'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import {
   batBuoc,
@@ -18,7 +18,7 @@ import {
   khongDuocTuongLai,
   soDienThoaiHopLe,
   toiDa,
-} from '../utils/validate'
+} from '@/utils/validate'
 
 const TUOI_TOI_THIEU = 16
 const THONG_BAO_TUOI = 'Khách hàng phải đủ 16 tuổi.'

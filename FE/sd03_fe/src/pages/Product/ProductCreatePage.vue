@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import QuickAddModal from '../components/QuickAddModal.vue'
+import QuickAddModal from '@/components/QuickAddModal.vue'
 import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 
 const router = useRouter()

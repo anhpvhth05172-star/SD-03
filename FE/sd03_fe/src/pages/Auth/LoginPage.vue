@@ -1,8 +1,8 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { dangNhap } from '../api/auth'
-import { luuPhien } from '../utils/auth'
+import { dangNhap } from '@/api/auth'
+import { luuPhien } from '@/utils/auth'
 
 const router = useRouter()
 

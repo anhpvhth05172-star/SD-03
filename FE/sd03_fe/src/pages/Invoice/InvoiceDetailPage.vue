@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getInvoice } from '../api/invoice'
-import { formatDateTime, formatVnd } from '../utils/format'
+import { getInvoice } from '@/api/invoice'
+import { formatDateTime, formatVnd } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()

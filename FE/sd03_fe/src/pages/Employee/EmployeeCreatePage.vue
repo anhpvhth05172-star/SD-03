@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { Html5Qrcode } from 'html5-qrcode'
 import { useRoute, useRouter } from 'vue-router'
-import { layDiaGioi, layPhuongXa, phanTichDiaChiCccd, timTinh } from '../api/diaGioi'
+import { layDiaGioi, layPhuongXa, phanTichDiaChiCccd, timTinh } from '@/api/diaGioi'
 import {
   checkEmployeeEmail,
   createEmployee,
@@ -10,9 +10,9 @@ import {
   getEmployeeFormData,
   suggestEmployeeCode,
   updateEmployee,
-} from '../api/employee'
-import { setFlash } from '../utils/flash'
-import { datVaiTro, layNguoiDung, vaiTroHienTai } from '../utils/session'
+} from '@/api/employee'
+import { setFlash } from '@/utils/flash'
+import { datVaiTro, layNguoiDung, vaiTroHienTai } from '@/utils/session'
 import { notifyConfirm, notifyError, notifySuccess, notifyWarning } from '@/utils/notify'
 import {
   batBuoc,
@@ -24,7 +24,7 @@ import {
   khongDuocTuongLai,
   soDienThoaiHopLe,
   toiDa,
-} from '../utils/validate'
+} from '@/utils/validate'
 
 const TUOI_TOI_THIEU = 18
 const THONG_BAO_TUOI = 'Nhân viên phải đủ 18 tuổi.'
