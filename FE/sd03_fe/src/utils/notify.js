@@ -75,13 +75,13 @@ export const notifySuccess = (title, text = '', timer = 1500) => {
       popup: 'custom-swal-popup',
       container: 'custom-swal-container'
     },
-    didOpen: () => {
-      // Đảm bảo đóng popup tự động sau đúng thời gian timer (1.5s)
-      setTimeout(() => {
-        if (Swal.isVisible()) {
+    didOpen: (popup) => {
+      if (popup) {
+        popup.style.cursor = 'pointer'
+        popup.addEventListener('click', () => {
           Swal.close()
-        }
-      }, timer)
+        })
+      }
     }
   })
 }

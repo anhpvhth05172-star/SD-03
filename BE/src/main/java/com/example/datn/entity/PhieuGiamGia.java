@@ -77,5 +77,6 @@ public class PhieuGiamGia {
     @Column(name = "mo_ta", length = 500)
     private String moTa;
 
-    private String phamVi;
+    @Column(name = "pham_vi", length = 50)
+    private String phamVi = "CONG_KHAI";
 }
