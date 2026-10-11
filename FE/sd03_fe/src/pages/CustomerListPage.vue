@@ -2,10 +2,22 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CustomerAddressModal from '../components/CustomerAddressModal.vue'
-import { getCustomer, listCustomers, updateCustomerStatus } from '../api/customer'
+import { getCustomer, listCustomers, updateCustomer, updateCustomerStatus } from '../api/customer'
 import { exportCsv, fetchAllPages } from '../utils/export'
 import { takeFlash } from '../utils/flash'
 import { avatarColor, formatDate, formatDateTime, formatVnd, initialsOf } from '../utils/format'
+import { layNguoiDung } from '../utils/session'
+import {
+  batBuoc,
+  duTuoiToiThieu,
+  emailHopLe,
+  isBlank,
+  kiemTra,
+  khongDuocTuongLai,
+  matKhauHopLe,
+  soDienThoaiHopLe,
+  toiDa,
+} from '../utils/validate'
 
 const router = useRouter()
 const showFilter = ref(true)
@@ -26,6 +38,39 @@ const fTrangThai = ref('')
 const fTuNgay = ref('')
 
 const detailData = ref(null)
+
+const TUOI_TOI_THIEU = 16
+const THONG_BAO_TUOI = 'Khách hàng phải đủ 16 tuổi.'
+
+/** Chỉ Nam/Nữ; value giữ nguyên NAM/NU để khớp payload API. */
+const gioiTinhOptions = [
+  { value: 'NAM', label: 'Nam' },
+  { value: 'NU', label: 'Nữ' },
+]
+const trangThais = [
+  { value: 'true', label: 'Đang hoạt động' },
+  { value: 'false', label: 'Đã khóa' },
+]
+
+/** Chế độ xem/sửa trong form chi tiết. */
+const dangSua = ref(false)
+const saving = ref(false)
+const errorMsg = ref('')
+const daNopSua = ref(false)
+const ngaySinhDaCham = ref(false)
+const formSua = ref(khongSua())
+
+function khongSua() {
+  return {
+    tenKhachHang: '',
+    email: '',
+    soDienThoai: '',
+    ngaySinh: '',
+    gioiTinh: '',
+    trangThai: 'true',
+    matKhau: '',
+  }
+}
 
 const rankOptions = [
   { value: '', label: 'Tất cả' },
@@ -153,10 +198,115 @@ const footFrom = computed(() => (totalElements.value === 0 ? 0 : page.value * si
 const footTo = computed(() => Math.min((page.value + 1) * size, totalElements.value))
 
 const openDetail = async (row) => {
+  huySua()
   try {
     detailData.value = await getCustomer(row.id)
   } catch (e) {
     alert(e.message)
+  }
+}
+
+const dongChiTiet = () => {
+  huySua()
+  detailData.value = null
+}
+
+const batDauSua = () => {
+  const d = detailData.value
+  if (!d) return
+  formSua.value = {
+    tenKhachHang: d.tenKhachHang || '',
+    email: d.email || '',
+    soDienThoai: d.soDienThoai || '',
+    ngaySinh: d.ngaySinh || '',
+    gioiTinh: d.gioiTinh || '',
+    trangThai: d.trangThai ? 'true' : 'false',
+    matKhau: '',
+  }
+  daNopSua.value = false
+  ngaySinhDaCham.value = false
+  errorMsg.value = ''
+  dangSua.value = true
+}
+
+/** Thoát chế độ sửa mà không lưu dữ liệu. */
+const huySua = () => {
+  dangSua.value = false
+  daNopSua.value = false
+  ngaySinhDaCham.value = false
+  errorMsg.value = ''
+  formSua.value = khongSua()
+}
+
+const loiNgaySinhSua = computed(() =>
+  kiemTra([
+    khongDuocTuongLai(formSua.value.ngaySinh, 'Ngày sinh'),
+    duTuoiToiThieu(formSua.value.ngaySinh, TUOI_TOI_THIEU, THONG_BAO_TUOI),
+  ]),
+)
+
+const hienThiLoiNgaySinhSua = computed(() =>
+  !isBlank(formSua.value.ngaySinh) || daNopSua.value || ngaySinhDaCham.value
+    ? loiNgaySinhSua.value
+    : '',
+)
+
+const loiGioiTinhSua = computed(() =>
+  isBlank(formSua.value.gioiTinh) ? 'Vui lòng chọn giới tính' : '',
+)
+
+const validateSua = () =>
+  kiemTra([
+    batBuoc(formSua.value.tenKhachHang, 'Họ và tên'),
+    toiDa(formSua.value.tenKhachHang, 200, 'Họ và tên'),
+    batBuoc(formSua.value.email, 'Email'),
+    toiDa(formSua.value.email, 150, 'Email'),
+    emailHopLe(formSua.value.email),
+    batBuoc(formSua.value.soDienThoai, 'Số điện thoại'),
+    toiDa(formSua.value.soDienThoai, 10, 'Số điện thoại'),
+    soDienThoaiHopLe(formSua.value.soDienThoai),
+    loiNgaySinhSua.value,
+    loiGioiTinhSua.value,
+    matKhauHopLe(formSua.value.matKhau, false),
+    toiDa(formSua.value.matKhau, 127, 'Mật khẩu'),
+  ])
+
+const luuSua = async () => {
+  daNopSua.value = true
+  const loi = validateSua()
+  if (loi) {
+    errorMsg.value = loi
+    return
+  }
+  errorMsg.value = ''
+  saving.value = true
+  try {
+    const d = detailData.value
+    // Chỉ cập nhật khách hàng đang xem; không gửi địa chỉ để BE giữ nguyên danh sách địa chỉ.
+    await updateCustomer(d.id, {
+      maKhachHang: d.maKhachHang,
+      tenKhachHang: formSua.value.tenKhachHang.trim(),
+      matKhau: formSua.value.matKhau ? formSua.value.matKhau : null,
+      email: formSua.value.email.trim(),
+      soDienThoai: formSua.value.soDienThoai.trim() || null,
+      ngaySinh: formSua.value.ngaySinh || null,
+      gioiTinh: formSua.value.gioiTinh || null,
+      trangThai: formSua.value.trangThai === 'true',
+      tinhThanhPho: null,
+      phuong: null,
+      diaChiCuThe: null,
+      nguoiCapNhat: layNguoiDung(),
+    })
+    flashMsg.value = 'Đã cập nhật thông tin khách hàng'
+    dangSua.value = false
+    daNopSua.value = false
+    formSua.value = khongSua()
+    detailData.value = await getCustomer(d.id)
+    await load()
+  } catch (e) {
+    errorMsg.value = e.message
+  } finally {
+    saving.value = false
   }
 }
 
@@ -166,6 +316,10 @@ const toggleStatus = async (row) => {
     await updateCustomerStatus(row.id, moi ? 'true' : 'false')
     row.trangThai = moi
     row.trangThaiLabel = moi ? 'Đang hoạt động' : 'Đã khóa'
+    if (detailData.value && detailData.value.id === row.id) {
+      detailData.value.trangThai = moi
+      detailData.value.trangThaiLabel = row.trangThaiLabel
+    }
     await load()
   } catch (e) {
     alert(e.message)
@@ -197,16 +351,9 @@ const gioiTinhLabel = (value) => {
   return '—'
 }
 
-const diaChiLine = (d) =>
-  [d.diaChiCuThe, d.phuong, d.thanhPho].filter(Boolean).join(', ') || '—'
+const diaChiDay = (d) => [d.diaChiCuThe, d.phuong, d.thanhPho].filter(Boolean).join(', ') || '—'
 
-const diaChiText = computed(() => {
-  const ds = (detailData.value && detailData.value.danhSachDiaChi) || []
-  if (!ds.length) return ''
-  return ds
-    .map((d) => `${d.maDiaChi} — ${diaChiLine(d)}${d.macDinh ? ' (mặc định)' : ''}`)
-    .join('\n')
-})
+const dsDiaChi = computed(() => (detailData.value && detailData.value.danhSachDiaChi) || [])
 
 const statusPill = (value) => (value ? 'pill-green' : 'pill-gray')
 
@@ -374,15 +521,10 @@ onMounted(() => {
                 <td><span class="pill" :class="statusPill(row.trangThai)">{{ row.trangThaiLabel }}</span></td>
                 <td>
                   <div class="act-group">
-                    <button class="act-btn" type="button" aria-label="Xem" @click="openDetail(row)">
+                    <button class="act-btn" type="button" aria-label="Xem" title="Xem chi tiết" @click="openDetail(row)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
                         <circle cx="12" cy="12" r="3" />
-                      </svg>
-                    </button>
-                    <button class="act-btn is-red" type="button" aria-label="Sửa" @click="router.push(`/khach-hang/${row.id}/sua`)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3" />
                       </svg>
                     </button>
                     <button class="act-btn" type="button" aria-label="Địa chỉ" title="Quản lý địa chỉ" @click="openAddress(row)">
@@ -438,36 +580,145 @@ onMounted(() => {
       </div>
     </section>
 
-    <div v-if="detailData" class="modal-mask" @click.self="detailData = null">
+    <div v-if="detailData" class="modal-mask" @click.self="dongChiTiet">
       <div class="modal-card">
         <div class="modal-head">
           <h3>Chi tiết khách hàng <span class="modal-code">{{ detailData.maKhachHang }}</span></h3>
-          <button class="modal-close" type="button" aria-label="Đóng" @click="detailData = null">×</button>
+          <button class="modal-close" type="button" aria-label="Đóng" @click="dongChiTiet">×</button>
         </div>
 
+        <p v-if="errorMsg" class="form-error">{{ errorMsg }}</p>
+
         <div class="modal-grid">
-          <div class="m-item"><label>Họ và tên</label><span>{{ detailData.tenKhachHang }}</span></div>
-          <div class="m-item"><label>Tên đăng nhập</label><span>{{ detailData.tenTaiKhoan }}</span></div>
+          <div class="m-item">
+            <label>Họ và tên <b v-if="dangSua" class="req">*</b></label>
+            <input
+              v-if="dangSua"
+              v-model="formSua.tenKhachHang"
+              class="m-input"
+              type="text"
+              maxlength="200"
+            />
+            <span v-else>{{ detailData.tenKhachHang }}</span>
+          </div>
+
+          <div class="m-item">
+            <label>Tên đăng nhập</label>
+            <span>{{ detailData.tenTaiKhoan || '—' }}</span>
+          </div>
+
           <div class="m-item">
             <label>Trạng thái</label>
-            <span class="pill" :class="statusPill(detailData.trangThai)">{{ detailData.trangThaiLabel }}</span>
+            <select v-if="dangSua" v-model="formSua.trangThai" class="m-select">
+              <option v-for="t in trangThais" :key="t.value" :value="t.value">{{ t.label }}</option>
+            </select>
+            <span v-else class="pill" :class="statusPill(detailData.trangThai)">{{ detailData.trangThaiLabel }}</span>
           </div>
-          <div class="m-item"><label>Email</label><span>{{ detailData.email || '—' }}</span></div>
-          <div class="m-item"><label>Số điện thoại</label><span>{{ detailData.soDienThoai || '—' }}</span></div>
-          <div class="m-item"><label>Giới tính</label><span>{{ gioiTinhLabel(detailData.gioiTinh) }}</span></div>
-          <div class="m-item"><label>Ngày sinh</label><span>{{ formatDate(detailData.ngaySinh) }}</span></div>
+
+          <div class="m-item">
+            <label>Email <b v-if="dangSua" class="req">*</b></label>
+            <input v-if="dangSua" v-model="formSua.email" class="m-input" type="email" maxlength="150" />
+            <span v-else>{{ detailData.email || '—' }}</span>
+          </div>
+
+          <div class="m-item">
+            <label>Số điện thoại <b v-if="dangSua" class="req">*</b></label>
+            <input v-if="dangSua" v-model="formSua.soDienThoai" class="m-input" type="tel" maxlength="10" />
+            <span v-else>{{ detailData.soDienThoai || '—' }}</span>
+          </div>
+
+          <div class="m-item">
+            <label>Giới tính <b v-if="dangSua" class="req">*</b></label>
+            <div v-if="dangSua" class="m-radio-row" role="radiogroup" aria-label="Giới tính">
+              <label v-for="g in gioiTinhOptions" :key="g.value" class="m-radio">
+                <input v-model="formSua.gioiTinh" type="radio" name="gtChiTiet" :value="g.value" />
+                <span>{{ g.label }}</span>
+              </label>
+            </div>
+            <span v-else>{{ gioiTinhLabel(detailData.gioiTinh) }}</span>
+            <p v-if="dangSua && daNopSua && loiGioiTinhSua" class="m-hint">{{ loiGioiTinhSua }}</p>
+          </div>
+
+          <div class="m-item">
+            <label>Ngày sinh</label>
+            <input
+              v-if="dangSua"
+              v-model="formSua.ngaySinh"
+              class="m-input"
+              type="date"
+              @blur="ngaySinhDaCham = true"
+            />
+            <span v-else>{{ formatDate(detailData.ngaySinh) }}</span>
+            <p v-if="dangSua && hienThiLoiNgaySinhSua" class="m-hint">{{ hienThiLoiNgaySinhSua }}</p>
+          </div>
+
+          <div v-if="dangSua" class="m-item">
+            <label>Mật khẩu mới</label>
+            <input
+              v-model="formSua.matKhau"
+              class="m-input"
+              type="password"
+              maxlength="127"
+              placeholder="Bỏ trống để giữ nguyên"
+            />
+          </div>
+
           <div class="m-item">
             <label>Hạng thành viên</label>
             <span class="pill" :class="rankPill(detailData.hangThanhVien)">{{ detailData.hangThanhVien }}</span>
           </div>
-          <div class="m-item"><label>Ngày đăng ký</label><span>{{ formatDate(detailData.ngayTao) }}</span></div>
-          <div class="m-item"><label>Tổng đơn</label><span>{{ detailData.soDon }} đơn</span></div>
-          <div class="m-item"><label>Tổng chi tiêu</label><span class="cell-strong">{{ formatVnd(detailData.tongChiTieu) }}</span></div>
-          <div class="m-item"><label>Cập nhật lúc</label><span>{{ formatDateTime(detailData.ngayCapNhat) }}</span></div>
-          <div class="m-item m-wide">
-            <label>Địa chỉ</label>
-            <span class="m-pre">{{ diaChiText || 'Chưa có địa chỉ' }}</span>
+
+          <div class="m-item">
+            <label>Ngày đăng ký</label>
+            <span>{{ formatDate(detailData.ngayTao) }}</span>
           </div>
+
+          <div class="m-item">
+            <label>Tổng đơn</label>
+            <span>{{ detailData.soDon }} đơn</span>
+          </div>
+
+          <div class="m-item">
+            <label>Tổng chi tiêu</label>
+            <span class="cell-strong">{{ formatVnd(detailData.tongChiTieu) }}</span>
+          </div>
+
+          <div class="m-item">
+            <label>Cập nhật lúc</label>
+            <span>{{ formatDateTime(detailData.ngayCapNhat) }}</span>
+          </div>
+        </div>
+
+        <div class="m-section">
+          <div class="m-section-head">
+            <label>Địa chỉ ({{ dsDiaChi.length }})</label>
+          </div>
+          <p v-if="dsDiaChi.length === 0" class="m-empty">Chưa có địa chỉ nào</p>
+          <ul v-else class="addr-view">
+            <li v-for="d in dsDiaChi" :key="d.id" :title="diaChiDay(d)">
+              <div class="addr-head">
+                <span>{{ d.tenChiChi || d.maDiaChi }}</span>
+                <span v-if="d.macDinh" class="pill pill-green">Mặc định</span>
+              </div>
+              <div class="addr-line"><b>Số nhà, đường:</b> {{ d.diaChiCuThe || '—' }}</div>
+              <div class="addr-line"><b>Phường/Xã:</b> {{ d.phuong || '—' }}</div>
+              <div class="addr-line"><b>Tỉnh/Thành phố:</b> {{ d.thanhPho || '—' }}</div>
+              <div class="addr-line addr-meta">Mã địa chỉ: {{ d.maDiaChi }}</div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="m-actions">
+          <template v-if="dangSua">
+            <button class="m-btn is-red" type="button" :disabled="saving" @click="luuSua">
+              {{ saving ? 'Đang lưu...' : 'Lưu' }}
+            </button>
+            <button class="m-btn is-ghost" type="button" :disabled="saving" @click="huySua">Hủy</button>
+          </template>
+          <template v-else>
+            <button class="m-btn is-red" type="button" @click="batDauSua">Sửa</button>
+            <button class="m-btn is-ghost" type="button" @click="dongChiTiet">Đóng</button>
+          </template>
         </div>
       </div>
     </div>
@@ -492,7 +743,165 @@ onMounted(() => {
   margin-bottom: 4px;
 }
 
-.m-pre {
-  white-space: pre-line;
+.form-error {
+  background: #fdecec;
+  border: 1px solid #f6c8c8;
+  color: #dc2626;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 7px;
+  padding: 9px 12px;
+  margin-bottom: 12px;
 }
+
+.req {
+  color: var(--red);
+}
+
+.m-input,
+.m-select {
+  width: 100%;
+  border: 1px solid #e3e3e8;
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: #2c2c33;
+  background: #fff;
+  outline: none;
+  font-family: inherit;
+}
+
+.m-input:focus,
+.m-select:focus {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
+}
+
+.m-radio-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 26px;
+}
+
+.m-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #2c2c33;
+  cursor: pointer;
+}
+
+.m-radio input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--red);
+}
+
+.m-hint {
+  font-size: 12px;
+  color: #dc2626;
+  margin-top: 4px;
+}
+
+.m-section {
+  border-top: 1px solid #ececef;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.m-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.m-section-head label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #3d3d45;
+}
+
+.m-empty {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.addr-view {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.addr-view li {
+  border: 1px solid #ececef;
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: #fbfbfc;
+}
+
+.addr-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1d1d23;
+  margin-bottom: 4px;
+}
+
+.addr-line {
+  font-size: 12.5px;
+  color: #4a4a52;
+  line-height: 1.6;
+}
+
+.addr-line b {
+  color: #9a9aa3;
+  font-weight: 600;
+}
+
+.addr-meta {
+  font-size: 11.5px;
+  color: #9a9aa3;
+}
+
+.m-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.m-btn {
+  height: 34px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.m-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.m-btn.is-red {
+  background: var(--red);
+  color: #fff;
+}
+
+.m-btn.is-ghost {
+  background: #6b7280;
+  color: #fff;
+}
+
 </style>
