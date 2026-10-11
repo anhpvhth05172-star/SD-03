@@ -76,4 +76,6 @@ public class PhieuGiamGia {
 
     @Column(name = "mo_ta", length = 500)
     private String moTa;
+
+    private String phamVi;
 }

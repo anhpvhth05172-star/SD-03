@@ -10,6 +10,7 @@
 
       <form @submit.prevent="submit()" novalidate>
         <div class="row g-4">
+          <!-- Mã phiếu -->
           <div class="col-md-6">
             <label class="form-label">
               Mã phiếu <span class="text-danger">*</span>
@@ -35,6 +36,7 @@
             </div>
           </div>
 
+          <!-- Tên phiếu -->
           <div class="col-md-6">
             <label class="form-label">
               Tên phiếu <span class="text-danger">*</span>
@@ -50,6 +52,7 @@
             <div class="invalid-feedback">{{ errors.name }}</div>
           </div>
 
+          <!-- Loại giảm -->
           <div class="col-md-6">
             <label class="form-label d-block">
               Loại giảm <span class="text-danger">*</span>
@@ -80,6 +83,7 @@
             </div>
           </div>
 
+          <!-- Giá trị giảm -->
           <div class="col-md-6">
             <label class="form-label">
               Giá trị giảm ({{ isPercent ? "%" : "VNĐ" }})
@@ -99,6 +103,7 @@
             </div>
           </div>
 
+          <!-- Đơn tối thiểu -->
           <div class="col-md-6">
             <label class="form-label">Giá trị đơn tối thiểu (VNĐ)</label>
             <input
@@ -109,6 +114,7 @@
             />
           </div>
 
+          <!-- Giảm tối đa -->
           <div class="col-md-6">
             <template v-if="isPercent">
               <label class="form-label">Giảm tối đa (VNĐ)</label>
@@ -128,10 +134,24 @@
             </template>
           </div>
 
+          <!-- Số lượng -->
           <div class="col-md-6">
-            <label class="form-label">
-              Số lượng còn lại <span class="text-danger">*</span>
-            </label>
+            <div class="d-flex justify-content-between align-items-center">
+              <label class="form-label">
+                Số lượng còn lại <span class="text-danger">*</span>
+              </label>
+              <div class="form-check mb-2">
+                <input
+                  id="unlimited"
+                  v-model="form.unlimited"
+                  class="form-check-input"
+                  type="checkbox"
+                />
+                <label class="form-check-label small" for="unlimited"
+                  >Vô hạn</label
+                >
+              </div>
+            </div>
             <input
               v-model.number="form.quantity"
               type="number"
@@ -144,6 +164,116 @@
             <div class="invalid-feedback">{{ errors.quantity }}</div>
           </div>
 
+          <!-- Phạm vi -->
+          <div class="col-md-6">
+            <label class="form-label d-block">
+              Phạm vi <span class="text-danger">*</span>
+            </label>
+            <div class="form-check form-check-inline">
+              <input
+                id="scope-public"
+                v-model="form.scope"
+                class="form-check-input"
+                type="radio"
+                value="public"
+              />
+              <label class="form-check-label" for="scope-public"
+                >Công khai</label
+              >
+            </div>
+            <div class="form-check form-check-inline">
+              <input
+                id="scope-private"
+                v-model="form.scope"
+                class="form-check-input"
+                type="radio"
+                value="private"
+              />
+              <label class="form-check-label" for="scope-private"
+                >Cá nhân</label
+              >
+            </div>
+            <div class="form-text small">
+              {{
+                isPrivate
+                  ? "Chỉ những khách hàng được chọn mới dùng được phiếu."
+                  : "Tất cả khách hàng đều dùng được phiếu."
+              }}
+            </div>
+          </div>
+
+          <!-- Chọn khách hàng (chỉ khi phạm vi = cá nhân) -->
+          <div v-if="isPrivate" class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <label class="form-label mb-0">
+                Chọn khách hàng <span class="text-danger">*</span>
+                <span class="badge bg-voucher-soft ms-2">
+                  Đã chọn: {{ form.customerIds.length }}
+                </span>
+              </label>
+              <div class="form-check mb-0">
+                <input
+                  id="select-all"
+                  class="form-check-input"
+                  type="checkbox"
+                  :checked="allFilteredSelected"
+                  :disabled="!filteredCustomers.length"
+                  @change="toggleAll($event.target.checked)"
+                />
+                <label class="form-check-label small" for="select-all">
+                  Chọn tất cả (kết quả đang lọc)
+                </label>
+              </div>
+            </div>
+
+            <input
+              v-model.trim="customerKeyword"
+              type="text"
+              class="form-control mb-2"
+              :class="{ 'is-invalid': errors.customerIds }"
+              placeholder="Tìm theo tên, email hoặc số điện thoại..."
+            />
+            <div class="invalid-feedback d-block" v-if="errors.customerIds">
+              {{ errors.customerIds }}
+            </div>
+
+            <div class="customer-list border rounded-3">
+              <div v-if="loadingCustomers" class="text-center text-muted py-4">
+                <span class="spinner-border spinner-border-sm me-2"></span>
+                Đang tải khách hàng...
+              </div>
+              <div
+                v-else-if="!filteredCustomers.length"
+                class="text-center text-muted py-4"
+              >
+                Không có khách hàng phù hợp
+              </div>
+              <template v-else>
+                <label
+                  v-for="c in filteredCustomers"
+                  :key="c.id"
+                  class="customer-item d-flex align-items-center gap-3"
+                  :for="'cus-' + c.id"
+                >
+                  <input
+                    :id="'cus-' + c.id"
+                    v-model="form.customerIds"
+                    :value="c.id"
+                    type="checkbox"
+                    class="form-check-input mt-0"
+                  />
+                  <div class="flex-grow-1">
+                    <div class="fw-semibold">{{ c.name }}</div>
+                    <div class="small text-muted">
+                      {{ c.email || "—" }} · {{ c.phone || "—" }}
+                    </div>
+                  </div>
+                </label>
+              </template>
+            </div>
+          </div>
+
+          <!-- Ngày bắt đầu -->
           <div class="col-md-6">
             <label class="form-label">
               Ngày bắt đầu <span class="text-danger">*</span>
@@ -157,6 +287,7 @@
             <div class="invalid-feedback">{{ errors.startDate }}</div>
           </div>
 
+          <!-- Ngày kết thúc -->
           <div class="col-md-6">
             <label class="form-label">
               Ngày kết thúc <span class="text-danger">*</span>
@@ -171,6 +302,7 @@
             <div class="invalid-feedback">{{ errors.endDate }}</div>
           </div>
 
+          <!-- Mô tả -->
           <div class="col-12">
             <label class="form-label">Mô tả</label>
             <textarea
@@ -219,6 +351,7 @@ const baseAPI = inject("baseAPI");
 const saving = ref(false);
 
 const LOAI_GIAM = { percent: "PERCENT", cash: "AMOUNT" };
+const PHAM_VI = { public: "CONG_KHAI", private: "CA_NHAN" };
 const UNLIMITED_QTY = 2147483647;
 
 const randomCode = () => {
@@ -233,7 +366,7 @@ const randomCode = () => {
 const form = reactive({
   code: randomCode(),
   name: "",
-  discountType: "PERCENT",
+  discountType: "percent",
   discountValue: null,
   minOrder: 0,
   maxDiscount: 0,
@@ -242,15 +375,76 @@ const form = reactive({
   startDate: "",
   endDate: "",
   description: "",
+  scope: "public",
+  customerIds: [],
 });
 
 const errors = reactive({});
 const isPercent = computed(() => form.discountType === "percent");
+const isPrivate = computed(() => form.scope === "private");
 
 const generateCode = () => {
   form.code = randomCode();
 };
 
+/* ---------------- Khách hàng ---------------- */
+const customers = ref([]);
+const loadingCustomers = ref(false);
+const customerKeyword = ref("");
+let customersLoaded = false;
+
+const loadCustomers = async () => {
+  if (customersLoaded) return; // chỉ tải 1 lần
+  loadingCustomers.value = true;
+  try {
+    // ⚠️ Đổi endpoint + tên field cho khớp backend của bạn
+    const res = await axios.get(baseAPI + "api/khach-hang/all");
+    const list = res.data?.data ?? res.data ?? [];
+    customers.value = list.map((k) => ({
+      id: k.id,
+      name: k.tenKhachHang,
+      email: k.email,
+      phone: k.soDienThoai,
+    }));
+    customersLoaded = true;
+  } catch (e) {
+    Swal.fire({
+      icon: "error",
+      title: "Không tải được danh sách khách hàng",
+      text: e.response?.data?.message || "Không kết nối được máy chủ",
+      confirmButtonColor: "#e8284a",
+    });
+  } finally {
+    loadingCustomers.value = false;
+  }
+};
+
+const filteredCustomers = computed(() => {
+  const kw = customerKeyword.value.toLowerCase();
+  if (!kw) return customers.value;
+  return customers.value.filter((c) =>
+    [c.name, c.email, c.phone].some((v) =>
+      (v || "").toLowerCase().includes(kw),
+    ),
+  );
+});
+
+const allFilteredSelected = computed(
+  () =>
+    filteredCustomers.value.length > 0 &&
+    filteredCustomers.value.every((c) => form.customerIds.includes(c.id)),
+);
+
+const toggleAll = (checked) => {
+  const ids = filteredCustomers.value.map((c) => c.id);
+  if (checked) {
+    form.customerIds = [...new Set([...form.customerIds, ...ids])];
+  } else {
+    form.customerIds = form.customerIds.filter((id) => !ids.includes(id));
+  }
+};
+
+/* ---------------- Watchers ---------------- */
 watch(
   () => form.discountType,
   () => {
@@ -270,6 +464,20 @@ watch(
   },
 );
 
+watch(
+  () => form.scope,
+  (value) => {
+    if (value === "private") {
+      loadCustomers();
+    } else {
+      form.customerIds = [];
+      customerKeyword.value = "";
+      delete errors.customerIds;
+    }
+  },
+);
+
+/* ---------------- Validate + Submit ---------------- */
 const validate = () => {
   Object.keys(errors).forEach((key) => delete errors[key]);
 
@@ -288,6 +496,10 @@ const validate = () => {
 
   if (!form.unlimited && (!form.quantity || form.quantity < 1)) {
     errors.quantity = "Vui lòng nhập số lượng hoặc chọn vô hạn";
+  }
+
+  if (isPrivate.value && form.customerIds.length === 0) {
+    errors.customerIds = "Vui lòng chọn ít nhất 1 khách hàng";
   }
 
   if (!form.startDate) errors.startDate = "Vui lòng chọn ngày bắt đầu";
@@ -309,7 +521,7 @@ const submit = async () => {
   const data = {
     maPhieuGiamGia: form.code,
     tenPhieuGiamGia: form.name,
-    loaiGiamGia: LOAI_GIAM[form.discountType], // giờ đã ra "PHAN_TRAM" / "TIEN_MAT"
+    loaiGiamGia: LOAI_GIAM[form.discountType],
     giaTriGiam: form.discountValue,
     giamToiDa:
       isPercent.value && form.maxDiscount > 0 ? form.maxDiscount : null,
@@ -317,7 +529,9 @@ const submit = async () => {
     ngayBatDau: toLocalDateTime(form.startDate),
     ngayKetThuc: toLocalDateTime(form.endDate),
     soLuong: form.unlimited ? UNLIMITED_QTY : form.quantity,
-    trangThai: true, // ✅ THÊM: phiếu mới tạo mặc định là đang bật
+    trangThai: true, // phiếu mới tạo mặc định là đang bật
+    phamVi: PHAM_VI[form.scope],
+    danhSachKhachHangId: isPrivate.value ? form.customerIds : [],
     moTa: form.description || null,
   };
 
@@ -394,5 +608,28 @@ const submit = async () => {
   background-color: #cf1f3f;
   border-color: #cf1f3f;
   color: #fff;
+}
+
+/* Danh sách khách hàng */
+.customer-list {
+  max-height: 280px;
+  overflow-y: auto;
+  background: #fff;
+}
+.customer-item {
+  padding: 0.65rem 1rem;
+  margin: 0;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f1f4;
+}
+.customer-item:last-child {
+  border-bottom: 0;
+}
+.customer-item:hover {
+  background: #fff5f7;
+}
+.bg-voucher-soft {
+  background: #fde8ec;
+  color: #e8284a;
 }
 </style>
