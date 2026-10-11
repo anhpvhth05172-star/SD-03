@@ -483,6 +483,9 @@ const validate = () => {
 
   if (!form.code) errors.code = "Vui lòng nhập mã phiếu";
   if (!form.name) errors.name = "Vui lòng nhập tên phiếu";
+  if (form.code.length > 50) errors.code = "Mã phiếu tối đa 50 ký tự";
+  if (form.name.trim().length > 200) errors.name = "Tên phiếu tối đa 200 ký tự";
+  if ((form.description || "").length > 500) errors.description = "Mô tả tối đa 500 ký tự";
 
   if (
     form.discountValue === null ||
@@ -496,6 +499,13 @@ const validate = () => {
 
   if (!form.unlimited && (!form.quantity || form.quantity < 1)) {
     errors.quantity = "Vui lòng nhập số lượng hoặc chọn vô hạn";
+  } else if (!form.unlimited && !Number.isInteger(Number(form.quantity))) {
+    errors.quantity = "Số lượng phải là số nguyên";
+  }
+  for (const [value, key, label] of [[form.maxDiscount, "maxDiscount", "Mức giảm tối đa"], [form.minOrder, "minOrder", "Hóa đơn tối thiểu"]]) {
+    if (value != null && value !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0)) {
+      errors[key] = `${label} phải là số không âm`;
+    }
   }
 
   if (isPrivate.value && form.customerIds.length === 0) {

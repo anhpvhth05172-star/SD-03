@@ -4,6 +4,9 @@ import QRCode from 'qrcode'
 import http from '@/api/http'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import { formatVnd } from '@/utils/format'
+import { emailHopLe, toiDa } from '@/utils/validate'
+import { createCustomer } from '@/api/customer'
+import { getProvinces, getDistricts, getWards, tinhPhi } from '@/api/shipping'
 
 const API_BASE = 'http://localhost:8080/api/v1'
 
@@ -19,6 +22,7 @@ const allCustomers = ref([])
 const allVouchers = ref([])
 const allEmployees = ref([])
 const allPaymentMethods = ref([])
+const shippingProvinces = ref([])
 const isLoadingData = ref(false)
 
 // Attributes for modal filters
@@ -58,12 +62,16 @@ const createNewOrder = () => {
       recipientName: '',
       recipientPhone: '',
       recipientAddress: '',
-      shippingFee: 0
+      shippingFee: 0,
+      provinceId: '',
+      districtId: '',
+      wardCode: '',
+      districts: [],
+      wards: []
     },
     paymentMethod: 'TIEN_MAT',
     selectedVoucher: null,
     cashGiven: 0,
-    transferGiven: 0,
     note: ''
   }
 
@@ -147,12 +155,8 @@ const changeDue = computed(() => {
   if (!currentOrder.value) return 0
   if (currentOrder.value.paymentMethod === 'TIEN_MAT') {
     return (currentOrder.value.cashGiven || 0) - finalTotal.value
-  } else if (currentOrder.value.paymentMethod === 'CHUYEN_KHOAN') {
-    return 0
-  } else {
-    const totalPaid = Number(currentOrder.value.cashGiven || 0) + Number(currentOrder.value.transferGiven || 0)
-    return totalPaid - finalTotal.value
   }
+  return 0
 })
 
 // ==========================================
@@ -324,40 +328,113 @@ const selectCustomer = (cust) => {
   }
 }
 
+const onDeliveryProvinceChange = async (order) => {
+  const address = order.deliveryInfo
+  address.districtId = ''
+  address.wardCode = ''
+  address.districts = []
+  address.wards = []
+  address.shippingFee = 0
+  if (!address.provinceId) return
+  try {
+    address.districts = await getDistricts(Number(address.provinceId))
+  } catch (err) {
+    notifyError('Không tải được quận/huyện', err.message || 'Vui lòng thử lại.')
+  }
+}
+
+const onDeliveryToggle = (order) => {
+  if (!order.isDelivery || !order.customer) return
+  order.deliveryInfo.recipientName = order.customer.ten || order.customer.tenKhachHang || ''
+  order.deliveryInfo.recipientPhone = order.customer.soDienThoai || ''
+}
+
+const onDeliveryDistrictChange = async (order) => {
+  const address = order.deliveryInfo
+  address.wardCode = ''
+  address.wards = []
+  address.shippingFee = 0
+  if (!address.districtId) return
+  try {
+    address.wards = await getWards(Number(address.districtId))
+  } catch (err) {
+    notifyError('Không tải được phường/xã', err.message || 'Vui lòng thử lại.')
+  }
+}
+
+const onDeliveryWardChange = (order) => {
+  order.deliveryInfo.shippingFee = 0
+}
+
 const removeSelectedCustomer = () => {
   if (currentOrder.value) {
     currentOrder.value.customer = null
   }
 }
 
-const saveQuickCustomer = () => {
-  if (!newCustomerForm.tenKhachHang.trim()) {
+const isSavingQuickCustomer = ref(false)
+const saveQuickCustomer = async () => {
+  const ten = newCustomerForm.tenKhachHang.trim()
+  const soDienThoai = newCustomerForm.soDienThoai.trim()
+  const email = newCustomerForm.email.trim()
+  if (!ten) {
     notifyWarning('Thiếu thông tin', 'Vui lòng nhập tên khách hàng!')
     return
   }
-  if (!newCustomerForm.soDienThoai.trim()) {
+  if (ten.length > 150 || !/^[\p{L}\s.'-]+$/u.test(ten)) {
+    notifyWarning('Thông tin không hợp lệ', 'Tên khách hàng tối đa 150 ký tự và chỉ gồm chữ, khoảng trắng, dấu chấm, nháy đơn hoặc gạch ngang.')
+    return
+  }
+  if (!soDienThoai) {
     notifyWarning('Thiếu thông tin', 'Vui lòng nhập số điện thoại khách hàng!')
     return
   }
-
-  const createdCust = {
-    id: Date.now(),
-    ten: newCustomerForm.tenKhachHang.trim(),
-    soDienThoai: newCustomerForm.soDienThoai.trim(),
-    email: newCustomerForm.email.trim(),
-    diaChi: newCustomerForm.diaChi.trim()
+  if (!/^0\d{8,9}$/.test(soDienThoai)) {
+    notifyWarning('Thông tin không hợp lệ', 'Số điện thoại phải gồm 9 hoặc 10 chữ số và bắt đầu bằng 0.')
+    return
+  }
+  if (!email) {
+    notifyWarning('Thiếu thông tin', 'Vui lòng nhập email khách hàng.')
+    return
+  }
+  const loiEmail = emailHopLe(email) || toiDa(email, 150, 'Email')
+  if (loiEmail) {
+    notifyWarning('Thông tin không hợp lệ', loiEmail)
+    return
+  }
+  if (newCustomerForm.diaChi.trim().length > 500) {
+    notifyWarning('Thông tin không hợp lệ', 'Địa chỉ không được vượt quá 500 ký tự.')
+    return
   }
 
-  allCustomers.value.unshift(createdCust)
-  selectCustomer(createdCust)
-  isAddCustomerModalOpen.value = false
-
-  newCustomerForm.tenKhachHang = ''
-  newCustomerForm.soDienThoai = ''
-  newCustomerForm.email = ''
-  newCustomerForm.diaChi = ''
-
-  notifySuccess('Thành công', 'Đã thêm và chọn khách hàng mới!')
+  isSavingQuickCustomer.value = true
+  try {
+    const created = await createCustomer({
+      tenKhachHang: ten,
+      email,
+      soDienThoai,
+      diaChiCuThe: newCustomerForm.diaChi.trim() || null,
+      trangThai: true,
+      nguoiCapNhat: 'POS'
+    })
+    const createdCust = {
+      ...created,
+      ten: created.tenKhachHang,
+      diaChi: newCustomerForm.diaChi.trim()
+    }
+    allCustomers.value.unshift(createdCust)
+    selectCustomer(createdCust)
+    isAddCustomerModalOpen.value = false
+    newCustomerForm.tenKhachHang = ''
+    newCustomerForm.soDienThoai = ''
+    newCustomerForm.email = ''
+    newCustomerForm.diaChi = ''
+    notifySuccess('Thành công', 'Đã thêm và chọn khách hàng mới!')
+  } catch (err) {
+    notifyError('Không thể thêm khách hàng', err.message || 'Vui lòng kiểm tra lại thông tin.')
+  } finally {
+    isSavingQuickCustomer.value = false
+  }
 }
 
 // ==========================================
@@ -551,7 +628,6 @@ const handleCancelOrder = async () => {
     currentOrder.value.cart = []
     currentOrder.value.customer = null
     currentOrder.value.cashGiven = 0
-    currentOrder.value.transferGiven = 0
     currentOrder.value.note = ''
     notifySuccess('Đã làm mới giỏ hàng và hoàn trả tồn kho')
   }
@@ -561,6 +637,77 @@ const handleCheckout = async () => {
   if (!currentOrder.value) return
   if (currentOrder.value.cart.length === 0) {
     notifyWarning('Giỏ hàng trống', 'Vui lòng chọn ít nhất 1 sản phẩm vào giỏ hàng trước khi thanh toán!')
+    return
+  }
+
+  if (!currentOrder.value.customer?.id) {
+    notifyWarning('Chưa chọn khách hàng', 'Vui lòng chọn khách hàng hoặc thêm khách hàng trước khi thanh toán.')
+    return
+  }
+  if (currentOrder.value.isDelivery) {
+    const address = currentOrder.value.deliveryInfo
+    if (!address.recipientName.trim() || address.recipientName.trim().length > 150) {
+      notifyWarning('Thông tin người nhận không hợp lệ', 'Vui lòng nhập tên người nhận, tối đa 150 ký tự.')
+      return
+    }
+    if (!/^0\d{9,10}$/.test(address.recipientPhone.trim())) {
+      notifyWarning('Thông tin người nhận không hợp lệ', 'Số điện thoại người nhận phải gồm 10 hoặc 11 chữ số và bắt đầu bằng 0.')
+      return
+    }
+    if (!address.recipientAddress.trim() || address.recipientAddress.trim().length > 300) {
+      notifyWarning('Thiếu địa chỉ giao hàng', 'Vui lòng nhập địa chỉ cụ thể, tối đa 300 ký tự.')
+      return
+    }
+    if (!address.provinceId || !address.districtId || !address.wardCode) {
+      notifyWarning('Thiếu địa chỉ giao hàng', 'Vui lòng chọn tỉnh/thành phố, quận/huyện và phường/xã.')
+      return
+    }
+    try {
+      const shipping = await tinhPhi({
+        toDistrictId: Number(address.districtId),
+        toWardCode: String(address.wardCode),
+        items: currentOrder.value.cart.map((item) => ({
+          idSanPhamChiTiet: Number(item.idCtsp),
+          soLuong: Number(item.quantity)
+        }))
+      })
+      address.shippingFee = Number(shipping.shippingFee) || 0
+      if (address.shippingFee <= 1000) throw new Error('Phí GHN trả về không hợp lệ.')
+    } catch (err) {
+      address.shippingFee = 0
+      notifyError('Không tính được phí vận chuyển', err.message || 'Vui lòng kiểm tra địa chỉ và sản phẩm.')
+      return
+    }
+  }
+  const tuKhoaThanhToan = currentOrder.value.paymentMethod === 'TIEN_MAT'
+    ? ['tiền mặt', 'cash']
+    : currentOrder.value.paymentMethod === 'CHUYEN_KHOAN'
+      ? ['chuyển khoản', 'transfer']
+      : []
+  const phuongThuc = allPaymentMethods.value.find((p) =>
+    tuKhoaThanhToan.some((tuKhoa) => String(p.ten || '').toLowerCase().includes(tuKhoa))
+  )
+  if (!phuongThuc?.id) {
+    notifyWarning('Chưa cấu hình phương thức thanh toán', 'Không tìm thấy phương thức tương ứng trong dữ liệu hóa đơn.')
+    return
+  }
+  if (!allEmployees.value[0]?.id) {
+    notifyWarning('Thiếu nhân viên xử lý', 'Không có nhân viên hợp lệ trong dữ liệu hóa đơn.')
+    return
+  }
+  const ghiChu = String(currentOrder.value.note || '').trim()
+  if (ghiChu.length > 1000 || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(ghiChu)) {
+    notifyWarning('Ghi chú không hợp lệ', 'Ghi chú tối đa 1.000 ký tự và không được chứa ký tự điều khiển.')
+    return
+  }
+  const diaChiNhanHang = currentOrder.value.isDelivery ? [
+    currentOrder.value.deliveryInfo.recipientAddress.trim(),
+    currentOrder.value.deliveryInfo.wards.find((w) => String(w.code) === String(currentOrder.value.deliveryInfo.wardCode))?.name,
+    currentOrder.value.deliveryInfo.districts.find((d) => Number(d.id) === Number(currentOrder.value.deliveryInfo.districtId))?.name,
+    shippingProvinces.value.find((p) => Number(p.id) === Number(currentOrder.value.deliveryInfo.provinceId))?.name
+  ].filter(Boolean).join(', ') : ''
+  if (diaChiNhanHang.length > 500 || (diaChiNhanHang && !/^[\p{L}\p{N}\s.,\/-]+$/u.test(diaChiNhanHang))) {
+    notifyWarning('Địa chỉ giao hàng không hợp lệ', 'Địa chỉ tối đa 500 ký tự và chỉ được chứa chữ, số, khoảng trắng, dấu chấm, phẩy, gạch chéo hoặc gạch ngang.')
     return
   }
 
@@ -586,13 +733,21 @@ const handleCheckout = async () => {
       maHoaDon: currentOrder.value.code,
       loaiDon: currentOrder.value.isDelivery ? 'Online' : 'Tại quầy',
       phiVanChuyen: currentOrder.value.isDelivery ? Number(currentOrder.value.deliveryInfo.shippingFee || 0) : 0,
-      tenKhachHang: currentOrder.value.customer ? currentOrder.value.customer.ten : 'Khách lẻ',
-      soDienThoaiKhachHang: currentOrder.value.customer ? currentOrder.value.customer.soDienThoai : '',
-      diaChiNhanHang: currentOrder.value.isDelivery ? currentOrder.value.deliveryInfo.recipientAddress : '',
+      tenKhachHang: currentOrder.value.isDelivery
+        ? currentOrder.value.deliveryInfo.recipientName.trim()
+        : (currentOrder.value.customer.ten || currentOrder.value.customer.tenKhachHang),
+      soDienThoaiKhachHang: currentOrder.value.isDelivery
+        ? currentOrder.value.deliveryInfo.recipientPhone.trim()
+        : currentOrder.value.customer.soDienThoai,
+      diaChiNhanHang,
       trangThai: 'Đã hoàn thành',
-      ghiChu: currentOrder.value.note || 'Bán hàng tại quầy POS',
+      ghiChu: ghiChu || 'Bán hàng tại quầy POS',
       idKhachHang: currentOrder.value.customer ? currentOrder.value.customer.id : null,
       idNhanVien: allEmployees.value.length > 0 ? allEmployees.value[0].id : null,
+      idPhuongThucThanhToan: phuongThuc.id,
+      toProvinceId: currentOrder.value.isDelivery ? Number(currentOrder.value.deliveryInfo.provinceId) : null,
+      toDistrictId: currentOrder.value.isDelivery ? Number(currentOrder.value.deliveryInfo.districtId) : null,
+      toWardCode: currentOrder.value.isDelivery ? String(currentOrder.value.deliveryInfo.wardCode) : null,
       idPhieuGiamGia: currentOrder.value.selectedVoucher ? currentOrder.value.selectedVoucher.id : null,
       chiTiet: currentOrder.value.cart.map(item => ({
         idSanPhamChiTiet: item.idCtsp,
@@ -648,6 +803,9 @@ const printReceipt = () => {
 const loadInitialData = async () => {
   isLoadingData.value = true
   try {
+    getProvinces().then((rows) => { shippingProvinces.value = rows || [] }).catch((err) => {
+      notifyError('Không tải được danh sách tỉnh/thành phố', err.message || 'Vui lòng tải lại trang.')
+    })
     const [formRes, prodRes, brandRes, catRes, colorRes, sizeRes] = await Promise.allSettled([
       http.get('/hoa-don/form-data'),
       fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&trangThai=true`).then(r => r.json()),
@@ -662,7 +820,7 @@ const loadInitialData = async () => {
       allCustomers.value = d.khachHangs || []
       allVouchers.value = d.phieuGiamGias || []
       allEmployees.value = d.nhanViens || []
-      allPaymentMethods.value = d.phuongThucs || []
+      allPaymentMethods.value = d.phuongThucThanhToans || []
     }
 
     if (brandRes.status === 'fulfilled' && Array.isArray(brandRes.value)) brandsList.value = brandRes.value
@@ -931,7 +1089,7 @@ onMounted(() => {
             <div class="delivery-toggle-wrap">
               <span>Giao hàng</span>
               <label class="switch-ui">
-                <input type="checkbox" v-if="currentOrder" v-model="currentOrder.isDelivery" />
+              <input type="checkbox" v-if="currentOrder" v-model="currentOrder.isDelivery" @change="onDeliveryToggle(currentOrder)" />
                 <span class="slider-round"></span>
               </label>
             </div>
@@ -944,8 +1102,19 @@ onMounted(() => {
               v-model="currentOrder.deliveryInfo.recipientPhone" />
             <input type="text" class="del-input" placeholder="Địa chỉ giao hàng chi tiết..."
               v-model="currentOrder.deliveryInfo.recipientAddress" />
-            <input type="number" class="del-input" placeholder="Phí vận chuyển (VNĐ)..."
-              v-model.number="currentOrder.deliveryInfo.shippingFee" />
+            <select class="del-input" v-model="currentOrder.deliveryInfo.provinceId" @change="onDeliveryProvinceChange(currentOrder)">
+              <option value="">— Chọn tỉnh/thành phố —</option>
+              <option v-for="province in shippingProvinces" :key="province.id" :value="province.id">{{ province.name }}</option>
+            </select>
+            <select class="del-input" v-model="currentOrder.deliveryInfo.districtId" :disabled="!currentOrder.deliveryInfo.provinceId" @change="onDeliveryDistrictChange(currentOrder)">
+              <option value="">— Chọn quận/huyện —</option>
+              <option v-for="district in currentOrder.deliveryInfo.districts" :key="district.id" :value="district.id">{{ district.name }}</option>
+            </select>
+            <select class="del-input" v-model="currentOrder.deliveryInfo.wardCode" :disabled="!currentOrder.deliveryInfo.districtId" @change="onDeliveryWardChange(currentOrder)">
+              <option value="">— Chọn phường/xã —</option>
+              <option v-for="ward in currentOrder.deliveryInfo.wards" :key="ward.code" :value="ward.code">{{ ward.name }}</option>
+            </select>
+            <div class="del-input">Phí vận chuyển GHN: {{ currentOrder.deliveryInfo.shippingFee > 0 ? formatVnd(currentOrder.deliveryInfo.shippingFee) : 'Sẽ tính khi thanh toán' }}</div>
           </div>
 
           <div class="summary-row">
@@ -975,10 +1144,6 @@ onMounted(() => {
                 <input type="radio" value="CHUYEN_KHOAN" v-model="currentOrder.paymentMethod" />
                 Chuyển khoản
               </label>
-              <label class="radio-pay-label">
-                <input type="radio" value="KET_HOP" v-model="currentOrder.paymentMethod" />
-                Kết hợp
-              </label>
             </div>
           </div>
 
@@ -993,12 +1158,6 @@ onMounted(() => {
               <button class="cash-chip" @click="setQuickCash(200000)">200k</button>
               <button class="cash-chip" @click="setQuickCash(500000)">500k</button>
             </div>
-          </div>
-
-          <div class="pay-amount-box" v-if="currentOrder && currentOrder.paymentMethod === 'KET_HOP'">
-            <div class="section-subtitle">Chuyển khoản thêm</div>
-            <input type="number" class="input-money-paid" placeholder="Nhập số tiền chuyển khoản"
-              v-model.number="currentOrder.transferGiven" />
           </div>
 
           <div class="summary-row" v-if="currentOrder && currentOrder.paymentMethod !== 'CHUYEN_KHOAN'">
@@ -1260,7 +1419,7 @@ onMounted(() => {
                 <input type="text" placeholder="Nhập số điện thoại..." v-model="newCustomerForm.soDienThoai" />
               </div>
               <div class="form-group-modal">
-                <label>Email</label>
+                <label>Email <span style="color: #dc2626;">*</span></label>
                 <input type="email" placeholder="Nhập địa chỉ email..." v-model="newCustomerForm.email" />
               </div>
               <div class="form-group-modal">
@@ -1273,8 +1432,9 @@ onMounted(() => {
           <div class="pos-modal-foot">
             <button class="btn-pos-cancel" style="height: 36px; padding: 0 16px;"
               @click="isAddCustomerModalOpen = false">Hủy</button>
-            <button class="btn-pos-checkout ready" style="height: 36px; padding: 0 16px;" @click="saveQuickCustomer">Lưu
-              khách hàng</button>
+            <button class="btn-pos-checkout ready" style="height: 36px; padding: 0 16px;" @click="saveQuickCustomer" :disabled="isSavingQuickCustomer">
+              {{ isSavingQuickCustomer ? 'Đang lưu...' : 'Lưu khách hàng' }}
+            </button>
           </div>
         </div>
       </div>

@@ -28,5 +28,9 @@ public class HoaDonRequest {
     private Long idPhuongThucThanhToan;
     private Long idPhieuGiamGia;
 
+    private Integer toProvinceId;
+    private Integer toDistrictId;
+    private String toWardCode;
+
     private List<ChiTietHoaDonRequest> chiTiet;
 }

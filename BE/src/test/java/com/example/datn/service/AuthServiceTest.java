@@ -104,7 +104,7 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> service.dangKy(req))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("ít nhất 6 ký tự");
+            .hasMessageContaining("Mật khẩu phải có từ 6 đến 127 ký tự");
     }
 
     @Test

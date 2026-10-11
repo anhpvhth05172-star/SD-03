@@ -1,8 +1,9 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getInvoice } from '../api/invoice'
-import { formatDateTime, formatVnd } from '../utils/format'
+import { getCustomer } from '../api/customer'
+import { formatDateTime, formatVnd, payStatusOf } from '../utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -10,20 +11,75 @@ const router = useRouter()
 const loading = ref(true)
 const error = ref('')
 const data = ref(null)
+const khInfo = ref(null)
 
-const statusPill = (value) => {
-  if (['Đã hoàn thành', 'Đã thanh toán', 'Đã xác nhận', 'Đã giao hàng'].includes(value)) return 'pill-green'
+const STEPS = [
+  'Chờ xác nhận',
+  'Đã xác nhận',
+  'Chờ giao hàng',
+  'Đang giao hàng',
+  'Đã giao hàng',
+  'Đã hoàn thành',
+]
+
+const TERMINAL = ['Đã hủy', 'Đã hoàn tiền']
+
+const isTerminal = computed(
+  () => !!data.value && TERMINAL.includes(data.value.trangThai),
+)
+
+const stepIndex = computed(() =>
+  data.value ? STEPS.indexOf(data.value.trangThai) : -1,
+)
+
+const isChoXacNhan = computed(
+  () => !!data.value && data.value.trangThai === 'Chờ xác nhận',
+)
+
+const stepClass = (i) => {
+  if (i < stepIndex.value) return 'is-done'
+  if (i === stepIndex.value) return 'is-active'
+  return 'is-pending'
+}
+
+const pillClass = (value) => {
+  if (['Đã hoàn thành', 'Đã xác nhận', 'Đã giao hàng'].includes(value))
+    return 'pill-green'
   if (['Đã hủy', 'Đã hoàn tiền'].includes(value)) return 'pill-red'
-  if (['Chờ xác nhận', 'Chờ giao hàng'].includes(value)) return 'pill-amber'
+  if (['Chờ xác nhận', 'Chờ giao hàng', 'Đang giao hàng'].includes(value))
+    return 'pill-amber'
   return 'pill-gray'
 }
 
-const giamGia = computed(() => {
-  if (!data.value) return 0
-  const tong = Number(data.value.tongTien) || 0
-  const sau = Number(data.value.tienSauGiamGia) || 0
-  return Math.max(0, tong - sau)
+const tienHang = computed(() =>
+  (data.value?.chiTiet || []).reduce(
+    (sum, l) => sum + (Number(l.thanhTien) || 0),
+    0,
+  ),
+)
+
+const printZoom = computed(() => {
+  const lines = data.value?.chiTiet || []
+  const estimatedHeight = 500 + lines.reduce((height, line) => {
+    const descriptionLength = `${line.tenSanPham || ''} ${line.maSanPhamChiTiet || ''}`.length
+    return height + 38 + (descriptionLength > 48 ? 15 : 0)
+  }, 0)
+  return Math.min(1, Math.max(0.5, 1050 / estimatedHeight))
 })
+
+const coGiamGia = computed(() => {
+  const d = data.value
+  if (!d) return false
+  return (Number(d.tienGiam) || 0) > 0 || !!d.tenGiamGiaUngDung || !!d.tenPhieuGiamGia
+})
+
+const tenGiamGia = computed(() => {
+  const d = data.value
+  if (!d) return ''
+  return d.tenGiamGiaUngDung || d.tenPhieuGiamGia || 'Không áp dụng'
+})
+
+const chot = (v) => v !== null && v !== undefined && v !== ''
 
 const load = async () => {
   const id = route.params.id
@@ -35,164 +91,907 @@ const load = async () => {
   loading.value = true
   error.value = ''
   data.value = null
+  khInfo.value = null
   try {
     data.value = await getInvoice(id)
   } catch (e) {
     error.value = e.message || 'Không tải được chi tiết hóa đơn'
-  } finally {
     loading.value = false
+    return
   }
+  if (data.value?.idKhachHang) {
+    try {
+      khInfo.value = await getCustomer(data.value.idKhachHang)
+    } catch {
+      khInfo.value = null
+    }
+  }
+  loading.value = false
 }
 
+const inHoaDon = () => window.print()
+
+const suaDon = () => router.push(`/hoa-don/${route.params.id}/sua`)
+
+watch(() => route.params.id, load)
 onMounted(load)
 </script>
 
 <template>
-  <div class="screen">
-    <div class="detail-top">
-      <button class="btn-back" type="button" @click="router.push('/hoa-don')">← Quay lại danh sách</button>
-    </div>
+  <div class="inv-detail">
+    <nav class="inv-crumb no-print" aria-label="Breadcrumb">
+      <router-link class="crumb-link" to="/hoa-don">Hóa đơn</router-link>
+      <span class="crumb-sep">/</span>
+      <span class="crumb-current">Chi tiết hóa đơn</span>
+    </nav>
 
-    <section v-if="loading" class="panel">
+    <section v-if="loading" class="card state-card">
       <div class="state-box">Đang tải dữ liệu...</div>
     </section>
 
-    <section v-else-if="error" class="panel">
+    <section v-else-if="error" class="card state-card">
       <div class="state-box is-error">
         <p class="state-msg">{{ error }}</p>
-        <button class="btn-back" type="button" @click="router.push('/hoa-don')">← Quay lại danh sách</button>
+        <button class="btn btn-ghost" type="button" @click="router.push('/hoa-don')">
+          ← Quay lại danh sách
+        </button>
       </div>
     </section>
 
-    <template v-else-if="data">
-      <section class="panel">
-        <div class="panel-head">
-          <span class="panel-icon is-red">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M6 2.5h12v19l-3-1.8-3 1.8-3-1.8-3 1.8v-19zM9.5 7.5h5M9.5 11.5h5M9.5 15.5h3.5" />
-            </svg>
-          </span>
-          <h3 class="panel-title">Thông tin hóa đơn</h3>
-        </div>
-        <div class="detail-grid">
-          <div class="d-item"><label>Mã hóa đơn</label><span class="detail-code">{{ data.maHoaDon }}</span></div>
-          <div class="d-item"><label>Trạng thái</label><span class="pill" :class="statusPill(data.trangThai)">{{ data.trangThai }}</span></div>
-          <div class="d-item"><label>Loại đơn</label><span>{{ data.loaiDon }}</span></div>
-          <div class="d-item"><label>Ngày tạo</label><span>{{ formatDateTime(data.ngayTao) }}</span></div>
-          <div class="d-item"><label>Nhân viên</label><span>{{ data.tenNhanVien || '—' }}</span></div>
-          <div class="d-item"><label>Phương thức thanh toán</label><span>{{ data.tenPhuongThucThanhToan || '—' }}</span></div>
-          <div class="d-item d-wide"><label>Phiếu giảm giá</label><span>{{ data.tenPhieuGiamGia || 'Không dùng' }}</span></div>
-          <div class="d-item"><label>Đợt giảm giá</label><span>{{ data.tenDotGiamGia || '—' }}</span></div>
-          <div class="d-item"><label>Tiền giảm (lúc lập)</label><span>{{ data.tienGiam != null ? formatVnd(data.tienGiam) : '—' }}</span></div>
-        </div>
-      </section>
+    <div v-else-if="data" class="inv-layout">
+      <div class="inv-print-area">
+        <article class="invoice-print-sheet print-only" :style="{ '--receipt-zoom': printZoom }">
+          <header class="receipt-header">
+            <div class="receipt-brand">POLY<span>SHOES</span></div>
+            <p class="receipt-tagline">Thời trang & phong cách</p>
+            <h1>HÓA ĐƠN BÁN HÀNG</h1>
+            <p class="receipt-code">Mã hóa đơn <strong>{{ data.maHoaDon }}</strong></p>
+          </header>
 
-      <section class="panel">
-        <div class="panel-head">
-          <span class="panel-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
-            </svg>
-          </span>
-          <h3 class="panel-title">Thông tin khách hàng</h3>
-        </div>
-        <div class="detail-grid">
-          <div class="d-item"><label>Khách hàng</label><span>{{ data.tenKhachHang || 'Khách lẻ' }}</span></div>
-          <div class="d-item"><label>Số điện thoại</label><span>{{ data.soDienThoaiKhachHang || '—' }}</span></div>
-          <div class="d-item d-wide"><label>Địa chỉ nhận hàng</label><span>{{ data.diaChiNhanHang || '—' }}</span></div>
-        </div>
-      </section>
+          <section class="receipt-meta">
+            <div><span>Ngày tạo</span><strong>{{ formatDateTime(data.ngayTao) }}</strong></div>
+            <div><span>Loại đơn</span><strong>{{ data.loaiDon || '—' }}</strong></div>
+            <div><span>Trạng thái</span><strong>{{ data.trangThai || '—' }}</strong></div>
+            <div><span>Nhân viên</span><strong>{{ data.tenNhanVien || '—' }}</strong></div>
+          </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <span class="panel-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z" />
-            </svg>
-          </span>
-          <h3 class="panel-title">Chi tiết sản phẩm</h3>
-          <span class="count-pill">{{ data.chiTiet.length }} dòng</span>
-        </div>
-        <div class="table-wrap">
-          <table class="data-table">
+          <section class="receipt-customer">
+            <h2>Thông tin khách hàng</h2>
+            <p><span>Khách hàng</span><strong>{{ data.tenKhachHang || 'Khách lẻ' }}</strong></p>
+            <p><span>Điện thoại</span><strong>{{ data.soDienThoaiKhachHang || '—' }}</strong></p>
+            <p><span>Địa chỉ</span><strong>{{ data.diaChiNhanHang || '—' }}</strong></p>
+            <p v-if="data.ghiChu"><span>Ghi chú</span><strong>{{ data.ghiChu }}</strong></p>
+          </section>
+
+          <table class="receipt-table">
             <thead>
               <tr>
-                <th>#</th>
+                <th class="receipt-index">#</th>
                 <th>Sản phẩm</th>
-                <th>SL</th>
-                <th>Đơn giá</th>
-                <th>Thành tiền</th>
+                <th class="receipt-number">Đơn giá</th>
+                <th class="receipt-number">SL</th>
+                <th class="receipt-number">Thành tiền</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-if="!data.chiTiet.length">
-                <td colspan="5" class="detail-empty">Không có dòng sản phẩm nào</td>
-              </tr>
-              <tr v-for="(line, i) in data.chiTiet" :key="line.id">
-                <td>{{ i + 1 }}</td>
+              <tr v-for="(line, i) in data.chiTiet || []" :key="line.id || i">
+                <td class="receipt-index">{{ i + 1 }}</td>
                 <td>
-                  <div class="entity-name">{{ line.tenSanPham }}</div>
-                  <div class="entity-sub">{{ line.maSanPhamChiTiet }} • {{ line.tenKichCo }} • {{ line.tenMau }}</div>
+                  <strong>{{ line.tenSanPham || 'Sản phẩm' }}</strong>
+                  <small>{{ line.maSanPhamChiTiet || '—' }}<template v-if="line.tenMau || line.tenKichCo"> · {{ [line.tenMau, line.tenKichCo].filter(Boolean).join(' / ') }}</template></small>
                 </td>
-                <td>{{ line.soLuong }}</td>
-                <td>{{ formatVnd(line.donGia) }}</td>
-                <td class="cell-strong">{{ formatVnd(line.thanhTien) }}</td>
+                <td class="receipt-number">{{ formatVnd(line.donGia) }}</td>
+                <td class="receipt-number">{{ line.soLuong }}</td>
+                <td class="receipt-number">{{ formatVnd(line.thanhTien) }}</td>
               </tr>
+              <tr v-if="!(data.chiTiet || []).length"><td colspan="5" class="receipt-empty">Không có sản phẩm</td></tr>
             </tbody>
           </table>
-        </div>
-      </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <span class="panel-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1H6.32c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z" />
-            </svg>
-          </span>
-          <h3 class="panel-title">Thanh toán</h3>
-        </div>
-        <div class="detail-totals">
-          <div class="t-row"><span>Tổng tiền</span><span>{{ formatVnd(data.tongTien) }}</span></div>
-          <div class="t-row"><span>Phí vận chuyển</span><span>{{ formatVnd(data.phiVanChuyen) }}</span></div>
-          <div class="t-row"><span>Giảm giá</span><span class="t-discount">- {{ formatVnd(data.tienGiam != null ? data.tienGiam : giamGia) }}</span></div>
-          <div v-if="data.tenGiamGiaUngDung" class="t-row"><span>Áp dụng</span><span>{{ data.tenGiamGiaUngDung }}</span></div>
-          <div class="t-row t-final"><span>Tiền sau giảm giá</span><span>{{ formatVnd(data.tienSauGiamGia) }}</span></div>
-        </div>
-      </section>
+          <section class="receipt-totals">
+            <p><span>Tiền hàng</span><strong>{{ formatVnd(tienHang) }}</strong></p>
+            <p v-if="coGiamGia"><span>Giảm giá <small>({{ tenGiamGia }})</small></span><strong>− {{ formatVnd(data.tienGiam) }}</strong></p>
+            <p><span>Phí vận chuyển</span><strong>{{ formatVnd(data.phiVanChuyen) }}</strong></p>
+            <p class="receipt-grand-total"><span>Tổng thanh toán</span><strong>{{ formatVnd(data.tienSauGiamGia) }}</strong></p>
+            <p><span>Thanh toán</span><strong>{{ data.tenPhuongThucThanhToan || '—' }}</strong></p>
+          </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <span class="panel-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3" />
-            </svg>
-          </span>
-          <h3 class="panel-title">Ghi chú</h3>
+          <footer class="receipt-footer">
+            <div class="receipt-signatures"><span>Khách hàng<br><small>(Ký, ghi rõ họ tên)</small></span><span>Người bán hàng<br><small>(Ký, ghi rõ họ tên)</small></span></div>
+            <strong>Cảm ơn quý khách và hẹn gặp lại!</strong>
+            <small>Hóa đơn được in từ hệ thống quản lý PolyShoes.</small>
+          </footer>
+        </article>
+        <div class="print-head print-only">
+          <h2>PolyShoes — Hóa đơn {{ data.maHoaDon }}</h2>
+          <p>Ngày tạo: {{ formatDateTime(data.ngayTao) }}</p>
         </div>
-        <p class="note-box">{{ data.ghiChu || '—' }}</p>
-      </section>
-    </template>
+
+        <section class="card status-card">
+          <div class="card-head">
+            <span class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="3" width="16" height="18" rx="2" />
+                <path d="M8 8h8M8 12h8M8 16h5" />
+              </svg>
+            </span>
+            <h3 class="card-title">Trạng thái đơn hàng</h3>
+            <span class="pill" :class="pillClass(data.trangThai)">{{ data.trangThai }}</span>
+          </div>
+
+          <div v-if="isTerminal" class="terminal-box">
+            <span class="terminal-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v6M12 16.5v.5" />
+              </svg>
+            </span>
+            <div class="terminal-text">
+              <strong>{{ data.trangThai }}</strong>
+              <span>
+                {{ formatDateTime(data.ngayCapNhat) }}
+                <template v-if="chot(data.nguoiCapNhat)"> • {{ data.nguoiCapNhat }}</template>
+              </span>
+            </div>
+          </div>
+
+          <div v-else class="steps">
+            <div v-for="(s, i) in STEPS" :key="s" class="step" :class="stepClass(i)">
+              <span class="step-node">
+                <svg v-if="i === 0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+                <svg v-else-if="i === 1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 11l2.5 2.5L16 8" />
+                  <rect x="4" y="4" width="16" height="16" rx="3" />
+                </svg>
+                <svg v-else-if="i === 2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 8l9-4 9 4v8l-9 4-9-4V8z" />
+                  <path d="M3 8l9 4 9-4M12 12v8" />
+                </svg>
+                <svg v-else-if="i === 3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" />
+                  <circle cx="7" cy="18" r="2" />
+                  <circle cx="17" cy="18" r="2" />
+                </svg>
+                <svg v-else-if="i === 4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 16.5 7.1 18.2l.9-5.5-4-3.9L9.5 8z" />
+                </svg>
+              </span>
+              <span class="step-label">{{ s }}</span>
+              <span v-if="i === 0" class="step-meta">{{ formatDateTime(data.ngayTao) }}</span>
+              <span
+                v-else-if="i === stepIndex && stepIndex > 0"
+                class="step-meta"
+              >
+                {{ formatDateTime(data.ngayCapNhat) }}
+                <template v-if="chot(data.nguoiCapNhat)"> • {{ data.nguoiCapNhat }}</template>
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <span class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 20c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5" />
+              </svg>
+            </span>
+            <h3 class="card-title">Thông tin khách hàng</h3>
+          </div>
+          <div class="kv">
+            <div class="kv-row">
+              <span class="kv-label">Tên khách hàng</span>
+              <span class="kv-value">{{ data.tenKhachHang || '—' }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-label">Số điện thoại</span>
+              <span class="kv-value">{{ data.soDienThoaiKhachHang || '—' }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-label">Email</span>
+              <span class="kv-value">{{ khInfo?.email || '—' }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-label">Mã khách hàng</span>
+              <span class="kv-value">{{ khInfo?.maKhachHang || '—' }}</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <span class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z" />
+                <circle cx="12" cy="10" r="2.5" />
+              </svg>
+            </span>
+            <h3 class="card-title">Thông tin giao hàng</h3>
+          </div>
+          <div class="kv">
+            <div class="kv-row">
+              <span class="kv-label">Địa chỉ nhận hàng</span>
+              <span class="kv-value">{{ data.diaChiNhanHang || '—' }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-label">Loại đơn</span>
+              <span class="kv-value">{{ data.loaiDon || '—' }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-label">Ghi chú</span>
+              <span class="kv-value">{{ data.ghiChu || '—' }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-label">Nhân viên phụ trách</span>
+              <span class="kv-value">{{ data.tenNhanVien || '—' }}</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card totals-card">
+          <div class="card-head">
+            <span class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="3" width="16" height="18" rx="2" />
+                <path d="M8 8h8M8 12h8M8 16h4" />
+              </svg>
+            </span>
+            <h3 class="card-title">Tổng kết thanh toán</h3>
+          </div>
+          <div class="sum-rows">
+            <div class="sum-row">
+              <span>Tổng tiền hàng</span>
+              <span>{{ formatVnd(tienHang) }}</span>
+            </div>
+            <div class="sum-row">
+              <span>Phiếu giảm giá</span>
+              <span v-if="coGiamGia" class="sum-discount">
+                {{ tenGiamGia }}
+                <template v-if="(Number(data.tienGiam) || 0) > 0">
+                  (-{{ formatVnd(data.tienGiam) }})
+                </template>
+              </span>
+              <span v-else>—</span>
+            </div>
+            <div class="sum-row">
+              <span>Phí vận chuyển</span>
+              <span>+ {{ formatVnd(data.phiVanChuyen) }}</span>
+            </div>
+            <div class="sum-row sum-final">
+              <span>Tổng tiền</span>
+              <span>{{ formatVnd(data.tienSauGiamGia) }}</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card pay-card">
+          <div class="card-head">
+            <span class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="6" width="18" height="12" rx="2" />
+                <path d="M3 10h18" />
+              </svg>
+            </span>
+            <h3 class="card-title">Lịch sử thanh toán</h3>
+          </div>
+          <div class="pay-row">
+            <div class="pay-main">
+              <strong>{{ data.tenPhuongThucThanhToan || '—' }}</strong>
+              <span class="pay-sub">Lập đơn: {{ formatDateTime(data.ngayTao) }}</span>
+            </div>
+            <span class="pill" :class="pillClass(payStatusOf(data.trangThai))">
+              {{ payStatusOf(data.trangThai) }}
+            </span>
+          </div>
+          <div class="pay-amount">{{ formatVnd(data.tienSauGiamGia) }}</div>
+          <p class="pay-note">Thông tin lấy từ hóa đơn, chưa bao gồm lịch sử giao dịch chi tiết.</p>
+        </section>
+
+        <section class="card products-card">
+          <div class="card-head">
+            <span class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 8l9-4 9 4v8l-9 4-9-4V8z" />
+                <path d="M3 8l9 4 9-4M12 12v8" />
+              </svg>
+            </span>
+            <h3 class="card-title">Danh sách sản phẩm</h3>
+            <span class="count-pill">({{ (data.chiTiet || []).length }})</span>
+          </div>
+          <div class="table-wrap">
+            <table class="prod-table">
+              <thead>
+                <tr>
+                  <th class="th-img"></th>
+                  <th>Sản phẩm</th>
+                  <th>Phân loại</th>
+                  <th class="num">Đơn giá</th>
+                  <th class="num">Số lượng</th>
+                  <th class="num">Thành tiền</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="!(data.chiTiet || []).length">
+                  <td colspan="6" class="empty">Không có dòng sản phẩm nào</td>
+                </tr>
+                <tr v-for="(line, i) in data.chiTiet" :key="line.id || i">
+                  <td class="td-img">
+                    <div class="ph-img">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="16" rx="2" />
+                        <circle cx="9" cy="10" r="2" />
+                        <path d="M3 17l5-4 4 3 3-2 6 5" />
+                      </svg>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="p-name">{{ line.tenSanPham || '—' }}</div>
+                    <div class="p-sku">SKU: {{ line.maSanPhamChiTiet || '—' }}</div>
+                  </td>
+                  <td>
+                    <div class="p-variant">
+                      {{ [line.tenMau, line.tenKichCo].filter(Boolean).join(' • ') || '—' }}
+                    </div>
+                  </td>
+                  <td class="num">{{ formatVnd(line.donGia) }}</td>
+                  <td class="num">{{ line.soLuong }}</td>
+                  <td class="num strong">{{ formatVnd(line.thanhTien) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <button class="btn btn-print" type="button" @click="inHoaDon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
+            <rect x="6" y="14" width="12" height="7" />
+          </svg>
+          In hóa đơn
+        </button>
+        <button
+          class="btn btn-edit"
+          type="button"
+          :disabled="!isChoXacNhan"
+          :title="isChoXacNhan ? 'Chỉnh sửa thông tin và sản phẩm của hóa đơn' : 'Chỉ hóa đơn Chờ xác nhận mới được sửa'"
+          @click="suaDon"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 6.5l3 3L8 19H5v-3L14.5 6.5z" />
+            <path d="M4 21h16" />
+          </svg>
+          Chỉnh sửa đơn hàng
+        </button>
+        <span v-if="!isChoXacNhan" class="edit-hint">
+          Chỉ hóa đơn Chờ xác nhận mới được sửa (trạng thái hiện tại: {{ data.trangThai }})
+        </span>
+        <button class="btn btn-ghost" type="button" @click="router.push('/hoa-don')">
+          Quay lại danh sách
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.detail-top {
-  margin-bottom: 2px;
+.inv-crumb {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #1d1d23;
+  margin-bottom: 14px;
 }
 
-.btn-back {
-  border: none;
-  background: transparent;
+.crumb-link {
   color: var(--red);
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 6px 0;
+  text-decoration: none;
 }
 
-.btn-back:hover {
+.crumb-link:hover {
   text-decoration: underline;
+}
+
+.crumb-sep {
+  color: #c5c5cc;
+  font-weight: 500;
+}
+
+.crumb-current {
+  color: #1d1d23;
+}
+
+.inv-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.inv-print-area {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.print-only {
+  display: none;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #ececef;
+  border-radius: 12px;
+  box-shadow: 0 3px 12px rgba(20, 20, 22, 0.05);
+  padding: 18px 20px;
+}
+
+.status-card,
+.products-card {
+  grid-column: span 2;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 14px;
+}
+
+.card-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--red-soft, #fdecec);
+  color: var(--red);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.card-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.card-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1d1d23;
+  margin: 0;
+  flex: 1;
+}
+
+.pill {
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 4px 11px;
+  white-space: nowrap;
+}
+
+.pill-green {
+  background: #e7f7ec;
+  color: #15803d;
+}
+
+.pill-red {
+  background: #fdecec;
+  color: var(--red, #cc0000);
+}
+
+.pill-amber {
+  background: #fff5e0;
+  color: #b45309;
+}
+
+.pill-gray {
+  background: #f1f1f4;
+  color: #6b6b73;
+}
+
+.steps {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 10px 4px 4px;
+}
+
+.step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  position: relative;
+  text-align: center;
+  min-width: 0;
+}
+
+.step::before {
+  content: '';
+  position: absolute;
+  top: 19px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: #e7e7ec;
+  z-index: 0;
+}
+
+.step:first-child::before {
+  display: none;
+}
+
+.step.is-done::before,
+.step.is-active::before {
+  background: var(--red, #cc0000);
+}
+
+.step-node {
+  position: relative;
+  z-index: 1;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f1f4;
+  color: #a0a0aa;
+  border: 2px solid #e7e7ec;
+}
+
+.step-node svg {
+  width: 18px;
+  height: 18px;
+}
+
+.step.is-done .step-node {
+  background: var(--red, #cc0000);
+  border-color: var(--red, #cc0000);
+  color: #fff;
+}
+
+.step.is-active .step-node {
+  background: #fff;
+  border-color: var(--red, #cc0000);
+  color: var(--red, #cc0000);
+}
+
+.step-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #4a4a52;
+}
+
+.step.is-pending .step-label {
+  color: #9a9aa3;
+  font-weight: 500;
+}
+
+.step-meta {
+  font-size: 10.5px;
+  color: #9a9aa3;
+  line-height: 1.4;
+}
+
+.terminal-box {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  background: var(--red-soft, #fdecec);
+  border: 1px solid rgba(204, 0, 0, 0.25);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+
+.terminal-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--red, #cc0000);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.terminal-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.terminal-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.terminal-text strong {
+  font-size: 15px;
+  color: var(--red, #cc0000);
+}
+
+.terminal-text span {
+  font-size: 12px;
+  color: #7a5b5b;
+}
+
+.kv {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.kv-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.kv-label {
+  font-size: 12.5px;
+  color: #9a9aa3;
+  flex: 0 0 auto;
+}
+
+.kv-value {
+  font-size: 13px;
+  color: #2c2c33;
+  font-weight: 500;
+  text-align: right;
+  word-break: break-word;
+}
+
+.sum-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.sum-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13.5px;
+  color: #4a4a52;
+}
+
+.sum-row span:last-child {
+  font-weight: 600;
+  color: #1d1d23;
+}
+
+.sum-discount {
+  color: #15803d !important;
+}
+
+.sum-final {
+  border-top: 1px dashed #e3e3e8;
+  padding-top: 11px;
+  margin-top: 2px;
+}
+
+.sum-final span {
+  font-size: 15px !important;
+  font-weight: 700 !important;
+}
+
+.sum-final span:last-child {
+  color: var(--red, #cc0000) !important;
+  font-size: 17px !important;
+}
+
+.pay-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pay-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pay-main strong {
+  font-size: 13.5px;
+  color: #1d1d23;
+}
+
+.pay-sub {
+  font-size: 11.5px;
+  color: #9a9aa3;
+}
+
+.pay-amount {
+  margin-top: 10px;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--red, #cc0000);
+}
+
+.pay-note {
+  margin: 12px 0 0;
+  font-size: 11px;
+  color: #9a9aa3;
+  line-height: 1.5;
+}
+
+.count-pill {
+  font-size: 12px;
+  color: #9a9aa3;
+  font-weight: 600;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.prod-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.prod-table th {
+  font-size: 11.5px;
+  color: #77777f;
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid #ececef;
+}
+
+.prod-table td {
+  padding: 10px;
+  border-bottom: 1px solid #f3f3f5;
+  font-size: 13px;
+  color: #2c2c33;
+  vertical-align: middle;
+}
+
+.prod-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.prod-table .strong {
+  font-weight: 700;
+}
+
+.th-img {
+  width: 52px;
+}
+
+.td-img {
+  width: 52px;
+}
+
+.ph-img {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: #f5f5f8;
+  border: 1px solid #ececef;
+  color: #b6b6c0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ph-img svg {
+  width: 20px;
+  height: 20px;
+}
+
+.p-name {
+  font-weight: 600;
+  color: #1d1d23;
+}
+
+.p-sku {
+  font-size: 11.5px;
+  color: #9a9aa3;
+  margin-top: 2px;
+}
+
+.p-variant {
+  font-size: 12.5px;
+  color: #4a4a52;
+}
+
+.empty {
+  text-align: center;
+  color: #9a9aa3;
+  padding: 22px 0 !important;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  border: none;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.btn-print {
+  background: var(--red, #cc0000);
+  color: #fff;
+}
+
+.btn-print:hover {
+  background: var(--red-dark, #a30000);
+}
+
+.btn-edit {
+  background: #fff;
+  color: var(--red, #cc0000);
+  border: 1.5px solid var(--red, #cc0000);
+}
+
+.btn-edit:hover {
+  background: var(--red-soft, #fdecec);
+}
+
+.btn-edit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-edit:disabled:hover {
+  background: #fff;
+}
+
+.edit-hint {
+  font-size: 12.5px;
+  color: #8a8a94;
+  align-self: center;
+}
+
+.btn-ghost {
+  background: #f3f3f5;
+  color: #4a4a52;
+}
+
+.btn-ghost:hover {
+  background: #e7e7ec;
+}
+
+.state-card {
+  padding: 8px 20px;
 }
 
 .state-box {
@@ -203,87 +1002,271 @@ onMounted(load)
 }
 
 .state-box.is-error .state-msg {
-  color: #dc2626;
+  color: var(--red);
   font-weight: 600;
   margin-bottom: 10px;
 }
 
-.detail-code {
-  color: var(--red);
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px 18px;
-  padding: 4px 2px 8px;
-}
-
-.d-item label {
-  display: block;
-  font-size: 11.5px;
-  color: #9a9aa3;
-  margin-bottom: 3px;
-}
-
-.d-item span {
-  font-size: 13px;
-  color: #2c2c33;
-}
-
-.d-wide {
-  grid-column: span 3;
-}
-
-.detail-empty {
-  text-align: center;
-  color: #9a9aa3;
-  padding: 22px 0;
-}
-
-.detail-totals {
-  margin-left: auto;
-  width: min(360px, 100%);
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 4px 2px 8px;
-}
-
-.t-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  color: #4a4a52;
-}
-
-.t-discount {
-  color: #16a34a;
-}
-
-.t-final {
-  font-weight: 700;
-  color: var(--red);
-  font-size: 14px;
-  border-top: 1px dashed #e3e3e8;
-  padding-top: 8px;
-}
-
-.note-box {
-  font-size: 13px;
-  color: #4a4a52;
-  line-height: 1.6;
-  padding: 4px 2px 8px;
-  white-space: pre-wrap;
-}
-
-@media (max-width: 760px) {
-  .detail-grid {
+@media (max-width: 980px) {
+  .inv-layout {
     grid-template-columns: 1fr;
   }
 
-  .d-wide {
+  .inv-print-area {
+    grid-template-columns: 1fr;
+  }
+
+  .status-card,
+  .products-card {
     grid-column: span 1;
+  }
+
+  .steps {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .step {
+    flex: 1 1 40%;
+  }
+
+  .step::before {
+    display: none;
+  }
+}
+</style>
+
+<style>
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .invoice-print-sheet,
+  .invoice-print-sheet * {
+    visibility: visible !important;
+  }
+
+  .inv-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    display: block !important;
+  }
+
+  .invoice-print-sheet {
+    display: block !important;
+    width: 100%;
+    max-width: 180mm;
+    margin: 0 auto;
+    color: #202124;
+    background: #fff;
+    font-family: Arial, sans-serif;
+    font-size: 10pt;
+    line-height: 1.45;
+    zoom: var(--receipt-zoom, 1);
+    break-inside: avoid-page;
+  }
+
+  .receipt-header {
+    text-align: center;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #222;
+  }
+
+  .receipt-brand {
+    color: #c90016;
+    font-size: 21pt;
+    font-weight: 800;
+    letter-spacing: 2px;
+  }
+
+  .receipt-brand span {
+    color: #222;
+  }
+
+  .receipt-tagline {
+    margin: 0 0 10px;
+    color: #555;
+    font-size: 9pt;
+  }
+
+  .receipt-header h1 {
+    margin: 10px 0 3px;
+    font-size: 16pt;
+    letter-spacing: 1px;
+  }
+
+  .receipt-code {
+    margin: 0;
+    color: #444;
+  }
+
+  .receipt-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px 20px;
+    padding: 12px 0;
+    border-bottom: 1px solid #bbb;
+  }
+
+  .receipt-meta div,
+  .receipt-customer p,
+  .receipt-totals p {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 0;
+  }
+
+  .receipt-meta span,
+  .receipt-customer p span,
+  .receipt-totals p span {
+    color: #555;
+  }
+
+  .receipt-customer {
+    padding: 11px 0;
+    border-bottom: 1px solid #bbb;
+  }
+
+  .receipt-customer h2 {
+    margin: 0 0 7px;
+    font-size: 10pt;
+    text-transform: uppercase;
+  }
+
+  .receipt-customer p + p {
+    margin-top: 4px;
+  }
+
+  .receipt-customer p strong {
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .receipt-table {
+    width: 100%;
+    margin-top: 12px;
+    border-collapse: collapse;
+    table-layout: auto;
+  }
+
+  .receipt-table th {
+    padding: 7px 5px;
+    border-top: 1px solid #222;
+    border-bottom: 1px solid #222;
+    text-align: left;
+    font-size: 9pt;
+  }
+
+  .receipt-table td {
+    padding: 7px 5px;
+    border-bottom: 1px solid #ddd;
+    vertical-align: top;
+  }
+
+  .receipt-table td strong,
+  .receipt-table td small {
+    display: block;
+  }
+
+  .receipt-table td small {
+    margin-top: 2px;
+    color: #555;
+    font-size: 8pt;
+  }
+
+  .receipt-number {
+    text-align: right !important;
+    white-space: nowrap;
+  }
+
+  .receipt-index {
+    width: 24px;
+    text-align: center !important;
+  }
+
+  .receipt-empty {
+    padding: 16px !important;
+    text-align: center;
+  }
+
+  .receipt-totals {
+    width: 72%;
+    margin: 12px 0 0 auto;
+  }
+
+  .receipt-totals p {
+    padding: 4px 0;
+  }
+
+  .receipt-totals p small {
+    color: #666;
+  }
+
+  .receipt-grand-total {
+    margin: 4px 0 !important;
+    padding: 9px 0 !important;
+    border-top: 1px solid #222;
+    border-bottom: 1px solid #222;
+    font-size: 12pt;
+  }
+
+  .receipt-grand-total strong {
+    color: #b00014;
+    font-size: 14pt;
+  }
+
+  .receipt-footer {
+    margin-top: 18px;
+    text-align: center;
+  }
+
+  .receipt-signatures {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 30px;
+    text-align: center;
+    font-weight: 700;
+  }
+
+  .receipt-signatures span {
+    width: 40%;
+  }
+
+  .receipt-signatures small,
+  .receipt-footer > small {
+    color: #666;
+    font-weight: 400;
+  }
+
+  .receipt-footer > strong,
+  .receipt-footer > small {
+    display: block;
+  }
+
+  .receipt-footer > strong {
+    margin-bottom: 4px;
+    font-size: 11pt;
+  }
+
+  .print-head,
+  .inv-crumb,
+  .actions {
+    display: none !important;
+  }
+
+  tr,
+  .receipt-customer,
+  .receipt-totals {
+    break-inside: avoid;
   }
 }
 </style>

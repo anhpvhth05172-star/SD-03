@@ -258,7 +258,7 @@ const loiGioiTinhSua = computed(() =>
 const validateSua = () =>
   kiemTra([
     batBuoc(formSua.value.tenKhachHang, 'Họ và tên'),
-    toiDa(formSua.value.tenKhachHang, 200, 'Họ và tên'),
+    toiDa(formSua.value.tenKhachHang, 150, 'Họ và tên'),
     batBuoc(formSua.value.email, 'Email'),
     toiDa(formSua.value.email, 150, 'Email'),
     emailHopLe(formSua.value.email),

@@ -306,7 +306,7 @@ public class KhachHangService {
         if (req == null || isBlank(req.getTenKhachHang())) {
             throw new IllegalArgumentException("Họ và tên không được để trống");
         }
-        checkLength(req.getTenKhachHang(), 200, "Họ và tên");
+        checkLength(req.getTenKhachHang(), 150, "Họ và tên");
         checkLength(req.getMaKhachHang(), 50, "Mã khách hàng");
         checkLength(req.getTenTaiKhoan(), 100, "Tên đăng nhập");
         checkLength(req.getMatKhau(), 127, "Mật khẩu");

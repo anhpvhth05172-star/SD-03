@@ -231,12 +231,19 @@ const handleCancelConfirm = () => {
 
 const isSubmitting = ref(false)
 
-// SAVE / UPDATE ATTRIBUTE
 const saveAttributeDirectly = async () => {
   formError.value = ''
   const tenTrimmed = (modalForm.ten || '').trim()
   if (!tenTrimmed) {
     formError.value = 'Vui lòng nhập tên thuộc tính!'
+    return
+  }
+  if (activeTab.value === 'mau_sac' && modalForm.mo_ta && !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(modalForm.mo_ta.trim())) {
+    formError.value = 'Mã màu phải đúng định dạng HEX, ví dụ #d92d20.'
+    return
+  }
+  if (tenTrimmed.length > 150 || (modalForm.mo_ta || '').trim().length > 500) {
+    formError.value = 'Tên tối đa 150 ký tự và mô tả tối đa 500 ký tự.'
     return
   }
 
@@ -252,7 +259,7 @@ const saveAttributeDirectly = async () => {
       return
     }
     const num = Number(formatted)
-    if (isNaN(num) || num <= 0 || num > 100) {
+    if (isNaN(num) || num < 10 || num > 60) {
       formError.value = 'Kích cỡ giày phải là số hợp lệ từ 10 đến 60!'
       return
     }
@@ -299,7 +306,6 @@ const saveAttributeDirectly = async () => {
   }
 }
 
-// TOGGLE STATUS
 const toggleStatusFast = async (item) => {
   const category = activeTab.value
   try {
@@ -320,7 +326,6 @@ const toggleStatusFast = async (item) => {
   }
 }
 
-// CONFIRM & DELETE
 const confirmDeleteItem = (item) => {
   openConfirmModal({
     title: `Xác nhận xóa ${activeTabInfo.value.label}`,
@@ -503,7 +508,6 @@ const executeDeleteFast = async (item) => {
       </div>
     </div>
 
-    <!-- Modal thêm/sửa thuộc tính -->
     <transition name="fade">
       <div v-if="isModalOpen" class="modal-backdrop" @click.self="closeModal">
         <div class="modal-box">
@@ -561,7 +565,6 @@ const executeDeleteFast = async (item) => {
       </div>
     </transition>
 
-    <!-- Confirmation Modal Dialog (Redesigned) -->
     <transition name="fade">
       <div v-if="confirmModal.isOpen" class="modal-backdrop modal-backdrop-blur" @click.self="handleCancelConfirm">
         <div class="confirm-modal-box">

@@ -6,6 +6,7 @@ import com.example.datn.dto.FormDataResponse;
 import com.example.datn.dto.HoaDonDTO;
 import com.example.datn.dto.HoaDonRequest;
 import com.example.datn.dto.PageResponse;
+import com.example.datn.dto.ShippingFeeRequest;
 import com.example.datn.entity.ChiTietHoaDon;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.KhachHang;
@@ -45,18 +46,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class HoaDonService {
-
-    // ===== rule validation tung field (khong dung mot regex cho tat ca) =====
-    // Ten: chu Unicode + khoang trang + . ' - (KHONG chua so, khong cho @ # $ % va ky tu dac biet)
     private static final Pattern TEN_KHACH_HANG_HOP_LE =
         Pattern.compile("^[\\p{L}\\s.'-]+$");
-    // So dien thoai: chi so, bat dau 0, 10-11 chu so (theo du lieu hien tai cua project)
     private static final Pattern SO_DIEN_THOAI_HOP_LE =
         Pattern.compile("^0\\d{9,10}$");
-    // Dia chi: chu + so + khoang trang + / - . , (cac ky tu dia chi thuc te)
     private static final Pattern DIA_CHI_HOP_LE =
         Pattern.compile("^[\\p{L}\\p{N}\\s.,/-]+$");
-    // Ghi chu: text tu do nhung khong chua ki tu dieu khien (tru \n \t \r)
     private static final Pattern KY_TU_CONTROL =
         Pattern.compile("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]");
 
@@ -97,6 +92,7 @@ public class HoaDonService {
     private final SanPhamChiTietRepository sanPhamChiTietRepository;
     private final LichSuHoaDonRepository lichSuHoaDonRepository;
     private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository;
+    private final GHNService ghnService;
 
     @Transactional(readOnly = true)
     public PageResponse<HoaDonDTO> list(
@@ -271,6 +267,7 @@ public class HoaDonService {
     @Transactional
     public HoaDonDTO create(HoaDonRequest req) {
         validateHeader(req, null);
+        xacDinhPhiVanChuyenOnline(req);
         PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
         if (phieu != null) {
             kiemTraGioiHanSuDung(phieu, req.getIdKhachHang(), null);
@@ -303,6 +300,7 @@ public class HoaDonService {
                 "Hãy sử dụng PUT /api/hoa-don/{id}/trang-thai để đổi trạng thái hóa đơn"
             );
         }
+        xacDinhPhiVanChuyenOnline(req);
         fillHeader(hoaDon, req);
         PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
         lichSuSuDungRepository.deleteByHoaDonId(hoaDon.getId());
@@ -417,7 +415,6 @@ public class HoaDonService {
         return new FormDataResponse(khachHangs, nhanViens, phuongThucs, phieuGiamGias, spcts);
     }
 
-    // ===== private =====
 
     private void validateHeader(HoaDonRequest req, Long excludeId) {
         if (req == null || isBlank(req.getMaHoaDon())) {
@@ -462,10 +459,6 @@ public class HoaDonService {
         }
     }
 
-    /**
-     * Validate text tung field theo rule rieng (trim truoc, khong dung mot regex cho tat ca).
-     * Field tuy chon ma de trang/space -> bo qua (khong luu khoang trang).
-     */
     private void validateText(HoaDonRequest req) {
         if (isBlank(req.getTenKhachHang())) {
             throw new IllegalArgumentException("Tên khách hàng không được để trống");
@@ -522,6 +515,39 @@ public class HoaDonService {
         }
     }
 
+    private void xacDinhPhiVanChuyenOnline(HoaDonRequest req) {
+        if (!"ONLINE".equals(toMaLoaiDon(req.getLoaiDon()))) {
+            return;
+        }
+        if (req.getToProvinceId() == null) {
+            throw new IllegalArgumentException("Đơn online phải chọn tỉnh/thành phố để tính phí vận chuyển");
+        }
+        if (req.getToDistrictId() == null) {
+            throw new IllegalArgumentException("Đơn online phải chọn quận/huyện để tính phí vận chuyển");
+        }
+        if (isBlank(req.getToWardCode())) {
+            throw new IllegalArgumentException("Đơn online phải chọn phường/xã để tính phí vận chuyển");
+        }
+        if (req.getToWardCode().trim().length() > 20) {
+            throw new IllegalArgumentException("Mã phường/xã không hợp lệ");
+        }
+        if (req.getChiTiet() == null || req.getChiTiet().isEmpty()) {
+            throw new IllegalArgumentException("Chưa có sản phẩm để tính phí vận chuyển");
+        }
+        ShippingFeeRequest phiReq = new ShippingFeeRequest(
+            req.getToDistrictId(),
+            req.getToWardCode().trim(),
+            req.getChiTiet().stream()
+                .map(d -> new ShippingFeeRequest.DongHang(d.getIdSanPhamChiTiet(), d.getSoLuong()))
+                .toList()
+        );
+        int phi = ghnService.tinhPhi(phiReq);
+        if (phi <= 1000) {
+            throw new IllegalArgumentException("Phí vận chuyển từ GHN không hợp lệ");
+        }
+        req.setPhiVanChuyen(BigDecimal.valueOf(phi));
+    }
+
     private void fillHeader(HoaDon hoaDon, HoaDonRequest req) {
         hoaDon.setMaHoaDon(req.getMaHoaDon().trim());
         hoaDon.setLoaiDon(toMaLoaiDon(req.getLoaiDon()));
@@ -529,6 +555,9 @@ public class HoaDonService {
         hoaDon.setTenKhachHang(blankToNull(req.getTenKhachHang()));
         hoaDon.setSoDienThoaiKhachHang(blankToNull(req.getSoDienThoaiKhachHang()));
         hoaDon.setDiaChiNhanHang(blankToNull(req.getDiaChiNhanHang()));
+        hoaDon.setToProvinceId(req.getToProvinceId());
+        hoaDon.setToDistrictId(req.getToDistrictId());
+        hoaDon.setToWardCode(blankToNull(req.getToWardCode()));
         hoaDon.setTrangThai(toMaTrangThai(req.getTrangThai()));
         hoaDon.setGhiChu(blankToNull(req.getGhiChu()));
         hoaDon.setNguoiCapNhat("admin");
@@ -669,10 +698,6 @@ public class HoaDonService {
         return giam.max(BigDecimal.ZERO);
     }
 
-    /**
-     * Khoa dong phieu (PESSIMISTIC_WRITE) de 2 request dong thoi khong cung vuot gioi han,
-     * sau do kiem tra: ton tai, dang hoat dong, tai khoan hop le.
-     */
     private PhieuGiamGia khoaVaKiemTraCoBan(HoaDonRequest req) {
         if (req.getIdPhieuGiamGia() == null) {
             return null;
@@ -688,9 +713,6 @@ public class HoaDonService {
         return phieu;
     }
 
-    /**
-     * Dem so lan tai khoan da su dung phieu (lich su) va kiem tra khong ghi trung tren cung hoa don.
-     */
     private void kiemTraGioiHanSuDung(PhieuGiamGia phieu, Long idKhachHang, Long idHoaDon) {
         int gioiHan = phieu.getGioiHanMoiTaiKhoan() != null ? phieu.getGioiHanMoiTaiKhoan() : 1;
         long daDung = lichSuSuDungRepository.countByKhachHangIdAndPhieuGiamGiaId(idKhachHang, phieu.getId());
@@ -783,6 +805,9 @@ public class HoaDonService {
             .tenDotGiamGia(h.getDotGiamGia() != null ? h.getDotGiamGia().getTenDotGiamGia() : null)
             .tienGiam(h.getTienGiam())
             .tenGiamGiaUngDung(h.getTenGiamGiaUngDung())
+            .toProvinceId(h.getToProvinceId())
+            .toDistrictId(h.getToDistrictId())
+            .toWardCode(h.getToWardCode())
             .build();
     }
 

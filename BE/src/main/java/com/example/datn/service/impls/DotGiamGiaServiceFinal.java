@@ -79,10 +79,14 @@ public class DotGiamGiaServiceFinal {
     }
 
     private void validate(DotGiamGiaRequest r) {
+        if (r == null) throw bad("Thiếu thông tin đợt giảm giá");
         if (r.getMaDotGiamGia() == null || r.getMaDotGiamGia().isBlank())
             throw bad("Vui lòng nhập mã đợt");
         if (r.getTenDotGiamGia() == null || r.getTenDotGiamGia().isBlank())
             throw bad("Vui lòng nhập tên đợt");
+        if (r.getMaDotGiamGia().trim().length() > 50) throw bad("Mã đợt tối đa 50 ký tự");
+        if (r.getTenDotGiamGia().trim().length() > 200) throw bad("Tên đợt tối đa 200 ký tự");
+        if (r.getMoTa() != null && r.getMoTa().length() > 500) throw bad("Mô tả tối đa 500 ký tự");
         if (dotRepo.existsByMaDotGiamGia(r.getMaDotGiamGia().trim()))
             throw bad("Mã đợt đã tồn tại");
 
@@ -98,6 +102,10 @@ public class DotGiamGiaServiceFinal {
 
         if (r.getDanhSachSanPhamChiTietId() == null || r.getDanhSachSanPhamChiTietId().isEmpty())
             throw bad("Vui lòng chọn ít nhất 1 sản phẩm");
+        if (r.getDanhSachSanPhamChiTietId().stream().anyMatch(id -> id == null || id <= 0))
+            throw bad("Danh sách sản phẩm chứa mã không hợp lệ");
+        if (r.getDanhSachSanPhamChiTietId().stream().distinct().count() != r.getDanhSachSanPhamChiTietId().size())
+            throw bad("Danh sách sản phẩm có biến thể bị lặp");
     }
 
     private ResponseStatusException bad(String msg) {

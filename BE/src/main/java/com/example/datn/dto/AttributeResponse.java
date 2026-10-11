@@ -17,6 +17,6 @@ public class AttributeResponse {
     private String ma;
     private String ten;
     private String moTa;
-    private String trangThai; // "Hoạt động" hoặc "Ngừng hoạt động"
-    private Boolean status;   // true hoặc false
+    private String trangThai;
+    private Boolean status;
 }

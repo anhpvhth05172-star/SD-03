@@ -93,7 +93,7 @@ const chonVaiTro = (e) => {
 const validate = () =>
   kiemTra([
     batBuoc(form.value.tenKhachHang, 'Họ và tên'),
-    toiDa(form.value.tenKhachHang, 200, 'Họ và tên'),
+    toiDa(form.value.tenKhachHang, 150, 'Họ và tên'),
     toiDa(form.value.maKhachHang, 25, 'Mã khách hàng'),
     form.value.maKhachHang.trim() && !hopLeMa(form.value.maKhachHang)
       ? 'Mã khách hàng không hợp lệ (bắt đầu bằng chữ cái, chỉ chữ cái và số, tối đa 25 ký tự)'

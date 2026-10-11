@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { dangKy } from '../api/auth'
+import { emailHopLe, matKhauHopLe, soDienThoaiHopLe, toiDa } from '../utils/validate'
 
 const router = useRouter()
 
@@ -18,24 +19,25 @@ const loading = ref(false)
 const submit = async () => {
   error.value = ''
   const f = form.value
-  if (!f.tenTaiKhoan.trim()) {
-    error.value = 'Tên tài khoản không được để trống'
-    return
-  }
+  if (!f.tenTaiKhoan.trim()) error.value = 'Tên tài khoản không được để trống'
+  else if (toiDa(f.tenTaiKhoan, 100, 'Tên tài khoản')) error.value = toiDa(f.tenTaiKhoan, 100, 'Tên tài khoản')
+  if (error.value) return
   if (!f.email.trim()) {
     error.value = 'Email không được để trống'
     return
   }
-  if (!/^[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}$/.test(f.email.trim())) {
-    error.value = 'Email không hợp lệ'
-    return
-  }
+  error.value = emailHopLe(f.email) || toiDa(f.email, 150, 'Email')
+  if (error.value) return
   if (!f.soDienThoai.trim()) {
     error.value = 'Số điện thoại không được để trống'
     return
   }
-  if (f.matKhau.length < 6) {
-    error.value = 'Mật khẩu phải có ít nhất 6 ký tự'
+  error.value = soDienThoaiHopLe(f.soDienThoai)
+  if (error.value) return
+  error.value = matKhauHopLe(f.matKhau, true)
+  if (error.value) return
+  if (!f.xacNhanMatKhau) {
+    error.value = 'Vui lòng xác nhận mật khẩu'
     return
   }
   if (f.matKhau !== f.xacNhanMatKhau) {

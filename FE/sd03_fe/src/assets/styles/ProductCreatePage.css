@@ -5,7 +5,6 @@
   min-height: 100vh;
 }
 
-/* Top Nav */
 .top-nav-bar {
   display: flex;
   justify-content: flex-end;
@@ -28,7 +27,6 @@
   background: #fff1f2;
 }
 
-/* Form Card */
 .form-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -112,7 +110,6 @@
   resize: vertical;
 }
 
-/* Attributes Card */
 .attr-row {
   display: flex;
   align-items: center;
@@ -227,7 +224,6 @@
   margin-bottom: 10px;
 }
 
-/* Bulk Header Controls */
 .bulk-header-row {
   display: flex;
   align-items: center;
@@ -297,7 +293,6 @@
   background: #fff1f2;
 }
 
-/* Color Group Box */
 .color-group-box {
   border: 1px solid #f1f5f9;
   border-radius: 8px;
@@ -556,7 +551,6 @@
   transform: scale(1.15);
 }
 
-/* Floating Bottom Bar */
 .fixed-bottom-bar {
   position: fixed;
   bottom: 0;
@@ -590,7 +584,6 @@
   box-shadow: 0 6px 18px rgba(220, 38, 38, 0.4);
 }
 
-/* Toast Floating */
 .toast-floating {
   position: fixed;
   bottom: 80px;

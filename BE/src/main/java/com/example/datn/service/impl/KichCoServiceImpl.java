@@ -46,7 +46,7 @@ public class KichCoServiceImpl implements KichCoService {
         }
         try {
             double val = Double.parseDouble(trimmed);
-            if (val <= 0 || val > 100) {
+            if (val < 10 || val > 60) {
                 throw new IllegalArgumentException("Kích cỡ giày phải là số hợp lệ từ 10 đến 60!");
             }
         } catch (NumberFormatException e) {

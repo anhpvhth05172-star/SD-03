@@ -150,7 +150,6 @@ textarea {
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
-/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -166,7 +165,6 @@ textarea {
   background: #94a3b8;
 }
 
-/* Common App Layout */
 .app-layout {
   display: flex;
   min-height: 100vh;
@@ -189,13 +187,11 @@ textarea {
   margin: 0 auto;
 }
 
-/* Typography Helpers */
 .text-primary { color: var(--primary) !important; }
 .text-muted { color: var(--text-muted) !important; }
 .font-semibold { font-weight: 600; }
 .font-bold { font-weight: 700; }
 
-/* Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -248,7 +244,6 @@ textarea {
   border-color: #cbd5e1;
 }
 
-/* Form Controls */
 .form-group {
   display: flex;
   flex-direction: column;
@@ -323,7 +318,6 @@ textarea {
   align-items: center;
 }
 
-/* Card Container */
 .content-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -333,7 +327,6 @@ textarea {
   box-shadow: var(--shadow-xs);
 }
 
-/* Badges */
 .badge {
   display: inline-flex;
   align-items: center;

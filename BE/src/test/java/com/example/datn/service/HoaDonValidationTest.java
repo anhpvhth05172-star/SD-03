@@ -35,11 +35,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-/**
- * Test validation chinh cua module hoa don:
- * don gia, ton kho, san pham ngung ban, khach hang vo hieu hoa,
- * khoang trang, chinh sua/xoa/chuyen trang thai theo trang thai hien tai.
- */
 class HoaDonValidationTest {
 
     private static final Long SPCT_ID = 9L;
@@ -59,6 +54,7 @@ class HoaDonValidationTest {
     private final LichSuHoaDonRepository lichSuHoaDonRepository = mock(LichSuHoaDonRepository.class);
     private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository =
         mock(LichSuSuDungPhieuGiamGiaRepository.class);
+    private final GHNService ghnService = mock(GHNService.class);
 
     private final HoaDonService service = new HoaDonService(
         hoaDonRepository,
@@ -69,7 +65,8 @@ class HoaDonValidationTest {
         phieuGiamGiaRepository,
         sanPhamChiTietRepository,
         lichSuHoaDonRepository,
-        lichSuSuDungRepository
+        lichSuSuDungRepository,
+        ghnService
     );
 
     private PhuongThucThanhToan phuongThucThanhToan() {
@@ -150,7 +147,6 @@ class HoaDonValidationTest {
         return h;
     }
 
-    // ===== so / chi tiet =====
 
     @Test
     void donGiaBang0_BiTuChoi() {
@@ -188,7 +184,6 @@ class HoaDonValidationTest {
             .hasMessageContaining("đã ngừng bán");
     }
 
-    // ===== khach hang / khoang trang =====
 
     @Test
     void khachHangVoHieuHoa_BiTuChoi() {
@@ -243,7 +238,6 @@ class HoaDonValidationTest {
         assertThat(cap.getValue().getGhiChu()).isNull();
     }
 
-    // ===== text field: ten / SĐT / địa chỉ / ghi chú / mã =====
 
     @Test
     void tenKhachHangKyTuCam_BiTuChoi() {
@@ -406,7 +400,6 @@ class HoaDonValidationTest {
         assertThat(cap.getValue().getDiaChiNhanHang()).isEqualTo("123/45 Lê Lợi, Q.1 - TP.HCM");
     }
 
-    // ===== phuong thuc thanh toan =====
 
     @Test
     void phuongThucThanhToanRong_BiTuChoi() {
@@ -430,7 +423,6 @@ class HoaDonValidationTest {
             .hasMessageContaining("Phương thức thanh toán không tồn tại");
     }
 
-    // ===== nhan vien / phi van chuyen / trang thai / dia chi online =====
 
     @Test
     void nhanVienRong_BiTuChoi() {
@@ -554,7 +546,6 @@ class HoaDonValidationTest {
         assertThat(dto.getId()).isEqualTo(HD_ID);
     }
 
-    // ===== sua / xoa / chuyen trang thai =====
 
     @Test
     void khongChoSuaHoaDonDaXacNhan() {

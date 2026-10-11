@@ -10,7 +10,6 @@ const navigateToAdd = () => {
   router.push('/san-pham/them')
 }
 
-// State
 const products = ref([])
 const isLoading = ref(false)
 const totalElements = ref(0)
@@ -53,7 +52,6 @@ const origins = ref([])
 let debounceTimer = null
 let currentAbortController = null
 
-// Quick edit modal state
 const isEditModalOpen = ref(false)
 const isUpdating = ref(false)
 const editErrors = reactive({
@@ -513,7 +511,6 @@ const exportToExcel = async () => {
   }
 }
 
-// Quick edit functions
 const openQuickEdit = (item) => {
   editForm.id = item.id
   editForm.maSanPham = item.maSanPham || `SP0${item.id}`
@@ -528,7 +525,6 @@ const openQuickEdit = (item) => {
   editForm.moTa = item.moTa || ''
   editForm.trangThai = item.trangThai !== false
 
-  // Reset errors
   Object.keys(editErrors).forEach(k => editErrors[k] = '')
   isEditModalOpen.value = true
 }
@@ -539,6 +535,9 @@ const validateEditForm = () => {
 
   if (!editForm.tenSanPham || !editForm.tenSanPham.trim()) {
     editErrors.tenSanPham = 'Tên sản phẩm không được để trống'
+    valid = false
+  } else if (editForm.tenSanPham.trim().length > 200) {
+    editErrors.tenSanPham = 'Tên sản phẩm tối đa 200 ký tự'
     valid = false
   }
   if (!editForm.idThuongHieu) {
@@ -615,7 +614,6 @@ onUnmounted(() => {
 
 <template>
   <div class="product-management-page">
-    <!-- Header Section -->
     <div class="page-top-row">
       <div class="page-intro">
         <div class="breadcrumbs-tag">
@@ -627,9 +625,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Filter Card -->
     <div class="filter-box">
-      <!-- Tabs and Action Header -->
       <div class="status-tabs-row">
         <div class="tabs-group">
           <button class="status-tab" :class="{ active: activeTab === 'ALL' }" @click="selectTab('ALL')">
@@ -676,7 +672,6 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Filter Controls Grid -->
       <transition name="collapse-fade">
         <div v-show="isFilterExpanded" class="filters-grid">
           <div class="filter-col span-2">
@@ -716,7 +711,6 @@ onUnmounted(() => {
       </transition>
     </div>
 
-    <!-- Table Container -->
     <div class="table-container-card">
       <div class="table-card-head">
         <div class="head-left">
@@ -777,7 +771,6 @@ onUnmounted(() => {
               </td>
             </tr>
 
-            <!-- Skeleton loader -->
             <template v-if="isLoading && products.length === 0">
               <tr v-for="n in 5" :key="`skel-${n}`" class="skel-row">
                 <td class="text-center"><div class="skel-box skel-code"></div></td>
@@ -792,7 +785,6 @@ onUnmounted(() => {
               </tr>
             </template>
 
-            <!-- Empty State -->
             <tr v-else-if="products.length === 0">
               <td colspan="9" class="empty-state-cell">
                 <div class="empty-state-box">
@@ -807,7 +799,6 @@ onUnmounted(() => {
         </table>
       </div>
 
-      <!-- Pagination -->
       <div v-if="totalPages > 1" class="table-card-foot">
         <span class="foot-info">
           Hiển thị <strong>{{ products.length ? currentPage * pageSize + 1 : 0 }} - {{ currentPage * pageSize + products.length }}</strong> trong tổng số <strong>{{ totalElements }}</strong> mặt hàng
@@ -832,7 +823,6 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Quick Edit Modal -->
     <transition name="modal-fade">
       <div v-if="isEditModalOpen" class="modal-overlay" @click.self="isEditModalOpen = false">
         <div class="modal-dialog">

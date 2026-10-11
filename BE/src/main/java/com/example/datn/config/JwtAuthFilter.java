@@ -60,7 +60,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(xacThuc);
                     request.setAttribute("idKhachHang", idKhachHang);
 
-                    // Hoat dong hop le -> gia han phien 30 phut ke tu luc nay
                     phien.setHoatDongCuoi(bayGio);
                     phienDangNhapRepository.save(phien);
                 }

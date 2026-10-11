@@ -43,5 +43,9 @@ public class HoaDonDTO {
     private BigDecimal tienGiam;
     private String tenGiamGiaUngDung;
 
+    private Integer toProvinceId;
+    private Integer toDistrictId;
+    private String toWardCode;
+
     private List<ChiTietHoaDonDTO> chiTiet;
 }

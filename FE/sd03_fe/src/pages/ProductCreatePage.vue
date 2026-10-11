@@ -367,6 +367,9 @@ const validateForm = () => {
   if (!form.name || !form.name.trim()) {
     errors.name = 'Vui lòng nhập tên sản phẩm'
     isValid = false
+  } else if (form.name.trim().length > 200) {
+    errors.name = 'Tên sản phẩm tối đa 200 ký tự'
+    isValid = false
   }
   if (!form.brand) {
     errors.brand = 'Vui lòng chọn Thương hiệu'
@@ -412,7 +415,7 @@ const saveProduct = async (confirmMerge = false) => {
           const qty = Number(item.qty)
           const price = Number(item.price)
 
-          if (isNaN(qty) || qty < 0 || qty > 100000) {
+          if (!Number.isInteger(qty) || qty < 0 || qty > 100000) {
             invalidVariantError = `Biến thể (Màu: ${group.colorName}, Size: ${item.sizeName}) có số lượng không hợp lệ (phải từ 0 đến 100,000).`
             break
           }
