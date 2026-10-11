@@ -1,8 +1,4 @@
-/* ==========================================================================
-   POLY SHOES MINIMAL SUCCESS POPUP (XANH LÁ NHẠT THANH LỊCH)
-   ========================================================================== */
 
-/* Container Backdrop */
 .custom-swal-container,
 .swal2-container {
   backdrop-filter: blur(2px) !important;
@@ -11,8 +7,8 @@
   z-index: 100000 !important;
 }
 
-/* Modal Popup Window - Gọn gàng, thanh nhã */
-.custom-swal-popup {
+.custom-swal-popup,
+.swal2-popup {
   padding: 26px 22px 22px !important;
   border-radius: 16px !important;
   background: #ffffff !important;
@@ -24,11 +20,13 @@
   text-align: center !important;
 }
 
-.custom-swal-popup.swal2-show {
-  animation: swalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+.custom-swal-popup.swal2-show,
+.swal2-popup.swal2-show {
+  animation: swalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
 }
 
-.custom-swal-popup.swal2-hide {
+.custom-swal-popup.swal2-hide,
+.swal2-popup.swal2-hide {
   animation: swalFadeOut 0.15s ease-out forwards !important;
 }
 
@@ -46,22 +44,19 @@
 @keyframes swalFadeOut {
   0% {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
   100% {
     opacity: 0;
-    transform: scale(0.95) translateY(-4px);
+    transform: scale(0.95) translateY(4px);
   }
 }
 
-/* Hide default SweetAlert2 icons */
 .custom-swal-popup .swal2-icon {
   display: none !important;
 }
 
-/* --------------------------------------------------------------------------
-   ICON DẤU TÍCH XANH LÁ NHẠT
-   -------------------------------------------------------------------------- */
+
 .minimal-icon-box {
   width: 52px;
   height: 52px;

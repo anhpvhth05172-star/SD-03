@@ -182,7 +182,7 @@ public class KhachHangService {
         khachHangRepository.save(khachHang);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public KhachHangDTO capNhatTrangThai(Long id, String trangThaiMoi) {
         KhachHang khachHang = findOrThrow(id);
         khachHang.setTrangThai(toTrangThai(trangThaiMoi));
