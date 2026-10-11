@@ -27,7 +27,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 class NhanVienServiceTest {
 
     private static NhanVienService service(NhanVienRepository repo, VaiTroRepository vaiTroRepo) {
-        return new NhanVienService(repo, vaiTroRepo, mock(PlatformTransactionManager.class));
+        return new NhanVienService(repo, vaiTroRepo, mock(PlatformTransactionManager.class), mock(com.example.datn.service.EmailService.class));
     }
 
     private static VaiTroRepository vaiTroRepository() {

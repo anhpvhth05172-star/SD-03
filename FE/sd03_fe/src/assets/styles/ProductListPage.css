@@ -1065,3 +1065,342 @@ input:checked + .slider:before {
 
 .toast-fade-enter-active, .toast-fade-leave-active { transition: all 0.3s ease; }
 .toast-fade-enter-from, .toast-fade-leave-to { opacity: 0; transform: translateY(-20px); }
+
+/* NÚT VÀ MODAL IMPORT EXCEL */
+.btn-import-excel {
+  background: #ffffff;
+  color: #0d9488;
+  border: 1px solid #99f6e4;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(13, 148, 136, 0.05);
+}
+
+.btn-import-excel:hover {
+  background: #f0fdfa;
+  border-color: #5eead4;
+  color: #0f766e;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(13, 148, 136, 0.12);
+}
+
+.btn-import-excel svg {
+  color: #0d9488;
+}
+
+.modal-import-excel {
+  max-width: 660px;
+  width: 95%;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.modal-icon-badge.excel-badge {
+  background: #ccfbf1;
+  color: #0f766e;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.import-body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.template-download-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  padding: 14px 18px;
+  border-radius: 12px;
+}
+
+.template-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.template-icon {
+  font-size: 24px;
+}
+
+.template-heading {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.template-desc {
+  font-size: 12px;
+  color: #64748b;
+  margin: 2px 0 0;
+}
+
+.btn-download-template {
+  background: #ffffff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.btn-download-template:hover:not(:disabled) {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.dropzone-box {
+  border: 2px dashed #cbd5e1;
+  border-radius: 14px;
+  padding: 28px 20px;
+  text-align: center;
+  background: #fbfcfe;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.dropzone-box:hover {
+  border-color: #0d9488;
+  background: #f0fdfa;
+}
+
+.dropzone-box.has-file {
+  border-color: #0d9488;
+  background: #f0fdfa;
+  padding: 18px;
+  cursor: default;
+}
+
+.dropzone-icon {
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+
+.dropzone-box:hover .dropzone-icon {
+  color: #0d9488;
+  transform: translateY(-2px);
+  transition: all 0.2s ease;
+}
+
+.dropzone-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 4px;
+}
+
+.dropzone-title .highlight {
+  color: #0d9488;
+  text-decoration: underline;
+}
+
+.dropzone-hint {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+}
+
+.dropzone-file-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #ffffff;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid #99f6e4;
+}
+
+.file-icon-wrap {
+  font-size: 28px;
+}
+
+.file-meta {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  flex: 1;
+}
+
+.file-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.file-size {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.btn-remove-file {
+  background: #fee2e2;
+  color: #dc2626;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-remove-file:hover {
+  background: #fecaca;
+  color: #b91c1c;
+}
+
+.import-notice-box {
+  background: #f1f5f9;
+  border-left: 4px solid #0d9488;
+  padding: 12px 16px;
+  border-radius: 0 10px 10px 0;
+  font-size: 12.5px;
+  color: #334155;
+}
+
+.notice-title {
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: #0f172a;
+}
+
+.notice-list {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.6;
+}
+
+.import-result-card {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.import-result-card.has-errors {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.result-heading {
+  font-size: 14px;
+  font-weight: 700;
+  color: #166534;
+  margin: 0 0 10px;
+}
+
+.import-result-card.has-errors .result-heading {
+  color: #b45309;
+}
+
+.result-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stat-pill {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.stat-pill.success { background: #dcfce7; color: #15803d; }
+.stat-pill.primary { background: #e0e7ff; color: #4338ca; }
+.stat-pill.info { background: #e0f2fe; color: #0369a1; }
+.stat-pill.danger { background: #fee2e2; color: #b91c1c; }
+
+.result-errors-box {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #fcd34d;
+  font-size: 12px;
+}
+
+.errors-title {
+  font-weight: 700;
+  color: #b45309;
+  margin-bottom: 4px;
+}
+
+.errors-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #dc2626;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.btn-submit-import {
+  background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+  color: #ffffff;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 20px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.25);
+}
+
+.btn-submit-import:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.35);
+}
+
+.btn-submit-import:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner-small {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}

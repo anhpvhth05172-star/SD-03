@@ -72,6 +72,23 @@ public class SanPhamController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/excel/template")
+    public ResponseEntity<byte[]> downloadTemplate() {
+        byte[] bytes = sanPhamService.downloadExcelTemplate();
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"Mau_Import_San_Pham.xlsx\"")
+                .contentType(org.springframework.http.MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(bytes);
+    }
+
+    @PostMapping(value = "/excel/import", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<com.example.datn.dto.ProductExcelImportResult> importExcel(
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+    ) {
+        com.example.datn.dto.ProductExcelImportResult result = sanPhamService.importFromExcel(file);
+        return ResponseEntity.ok(result);
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         sanPhamService.delete(id);

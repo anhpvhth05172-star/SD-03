@@ -16,6 +16,9 @@ export const deleteCustomer = (id) => http.delete(`/khach-hang/${id}`).then((r) 
 export const suggestCustomerCode = (ten) =>
   http.get('/khach-hang/ma-tu-dong', { params: { ten } }).then((r) => r.data)
 
+export const checkCustomerEmail = (email, excludeId) =>
+  http.get('/khach-hang/check-email', { params: { email, excludeId } }).then((r) => r.data)
+
 export const updateCustomerStatus = (id, trangThai) =>
   http.put(`/khach-hang/${id}/trang-thai`, null, { params: { trangThai } }).then((r) => r.data)
 

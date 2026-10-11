@@ -1,12 +1,14 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { Html5Qrcode } from 'html5-qrcode'
 import { useRoute, useRouter } from 'vue-router'
-import { createCustomer, getCustomer, suggestCustomerCode, updateCustomer } from '../api/customer'
-import { layDiaGioi, layPhuongXa, timTinh } from '../api/diaGioi'
+import { checkCustomerEmail, createCustomer, getCustomer, suggestCustomerCode, updateCustomer } from '../api/customer'
+import { layDiaGioi, layPhuongXa, phanTichDiaChiCccd, timTinh } from '../api/diaGioi'
 import AvatarCard from '../components/AvatarCard.vue'
 import { setFlash } from '../utils/flash'
 import { hopLeMa, maDeXuat } from '../utils/maNhanVien'
 import { datVaiTro, layNguoiDung, vaiTroHienTai } from '../utils/session'
+import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import {
   batBuoc,
   duTuoiToiThieu,
@@ -14,7 +16,6 @@ import {
   isBlank,
   kiemTra,
   khongDuocTuongLai,
-  matKhauHopLe,
   soDienThoaiHopLe,
   toiDa,
 } from '../utils/validate'
@@ -48,6 +49,7 @@ const dangGoiMa = ref(false)
 const tenDaGoiMa = ref('')
 const daNopForm = ref(false)
 const ngaySinhDaCham = ref(false)
+const emailTrungLoi = ref('')
 let yeuCauHienTai = 0
 let yeuCauMa = 0
 
@@ -64,7 +66,30 @@ const form = ref({
   tinhThanhPho: '',
   phuong: '',
   diaChiCuThe: '',
+  anhDaiDien: '',
 })
+
+const onAvatarChange = (val) => {
+  form.value.anhDaiDien = val?.dataUrl || ''
+}
+
+const kiemTraEmailTrung = async () => {
+  const em = (form.value.email || '').trim()
+  if (!em || !emailHopLe(em)) {
+    emailTrungLoi.value = ''
+    return
+  }
+  try {
+    const res = await checkCustomerEmail(em, isEdit ? route.params.id : null)
+    if (res && res.exists) {
+      emailTrungLoi.value = 'Email này đã được sử dụng bởi khách hàng khác'
+    } else {
+      emailTrungLoi.value = ''
+    }
+  } catch {
+    emailTrungLoi.value = ''
+  }
+}
 
 const maPreview = computed(() => (form.value.tenKhachHang.trim() ? maDeXuat(form.value.tenKhachHang) : ''))
 
@@ -101,13 +126,12 @@ const validate = () =>
     batBuoc(form.value.email, 'Email'),
     toiDa(form.value.email, 150, 'Email'),
     emailHopLe(form.value.email),
+    emailTrungLoi.value,
     toiDa(form.value.soDienThoai, 10, 'Số điện thoại'),
     soDienThoaiHopLe(form.value.soDienThoai),
     khongDuocTuongLai(form.value.ngaySinh, 'Ngày sinh'),
     duTuoiToiThieu(form.value.ngaySinh, TUOI_TOI_THIEU, THONG_BAO_TUOI),
     loiGioiTinh.value,
-    matKhauHopLe(form.value.matKhau, false),
-    toiDa(form.value.matKhau, 127, 'Mật khẩu'),
     toiDa(form.value.tinhThanhPho, 100, 'Tỉnh/Thành phố'),
     toiDa(form.value.phuong, 100, 'Phường/Xã'),
     toiDa(form.value.diaChiCuThe, 255, 'Địa chỉ cụ thể'),
@@ -151,31 +175,240 @@ const chonMaTuDong = async (khiNop = false) => {
   }
 }
 
+
+// Modal & Camera quét mã CCCD
+const isScanModalOpen = ref(false)
+const scanTab = ref('camera') // 'camera' | 'usb'
+const isCameraRunning = ref(false)
+const cameraError = ref('')
+const rawCccdInput = ref('')
+const diaChiCccdGoc = ref('')
+let html5QrCode = null
+
+const playBeep = () => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.type = 'sine'
+    osc.frequency.value = 1200
+    gain.gain.setValueAtTime(0.15, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.18)
+  } catch {}
+}
+
+const apDungDiaChiCccd = async (diaChiRaw) => {
+  if (!diaChiRaw) return
+  diaChiCccdGoc.value = diaChiRaw
+  const parsed = phanTichDiaChiCccd(diaChiRaw)
+
+  // 1. Tỉnh/Thành phố
+  if (parsed.tinh) {
+    const ds = tinhThanhs.value.length ? tinhThanhs.value : await layDiaGioi()
+    tinhThanhs.value = ds
+    let tinh = timTinh(ds, parsed.tinh)
+    if (tinh) {
+      form.value.tinhThanhPho = tinh.ten
+    } else {
+      tinh = { code: 'cccd_tinh', ten: parsed.tinh }
+      tinhThanhs.value.unshift(tinh)
+      form.value.tinhThanhPho = parsed.tinh
+    }
+
+    // 2. Nạp danh mục con (Huyện/Xã)
+    const listCon = await layPhuongXa(tinhThanhs.value, tinh)
+    phuongXas.value = listCon || []
+
+    // 3. Phường/Xã
+    if (parsed.phuong) {
+      const pxMatch = phuongXas.value.find((p) => {
+        const rawP = p.ten.toLowerCase()
+        const targetP = parsed.phuong.toLowerCase()
+        return rawP.includes(targetP) || targetP.includes(rawP)
+      })
+      if (pxMatch) {
+        form.value.phuong = pxMatch.ten
+      } else {
+        phuongXas.value.unshift({ code: 'cccd_px', ten: parsed.phuong })
+        form.value.phuong = parsed.phuong
+      }
+    }
+  }
+
+  // 4. Địa chỉ cụ thể
+  if (parsed.diaChiCuThe) {
+    form.value.diaChiCuThe = parsed.diaChiCuThe
+  }
+}
+
+const xuLyChuoiCccd = async (raw) => {
+  if (!raw || !raw.trim()) return false
+  const parts = raw.trim().split('|')
+  if (parts.length >= 5) {
+    const hoTen = parts[2]?.trim()
+    const dobRaw = parts[3]?.trim()
+    const gioiTinhRaw = parts[4]?.trim()
+    const diaChiRaw = parts[5]?.trim()
+
+    // Chỉ điền các mục có trong CCCD: Họ tên, Ngày sinh, Giới tính, Địa chỉ
+    if (hoTen) {
+      form.value.tenKhachHang = hoTen
+      if (!isEdit && maTuDong.value) {
+        chonMaTuDong()
+      }
+    }
+    if (dobRaw && dobRaw.length === 8) {
+      const d = dobRaw.substring(0, 2)
+      const m = dobRaw.substring(2, 4)
+      const y = dobRaw.substring(4, 8)
+      form.value.ngaySinh = `${y}-${m}-${d}`
+    }
+    if (gioiTinhRaw) {
+      form.value.gioiTinh = gioiTinhRaw.toLowerCase().includes('nữ') ? 'NU' : 'NAM'
+    }
+    if (diaChiRaw) {
+      await apDungDiaChiCccd(diaChiRaw)
+    }
+    playBeep()
+    dongModalQuet()
+    const parsed = phanTichDiaChiCccd(diaChiRaw)
+    if (parsed.daDoiTinh) {
+      notifySuccess(`Đã trích xuất CCCD thành công! Tỉnh ${parsed.tinhGoc} được chuẩn hóa thành "${parsed.tinh}" (theo danh mục 34 Tỉnh/TP mới nhất).`)
+    } else {
+      notifySuccess('Đã trích xuất thông tin khách hàng từ CCCD thành công!')
+    }
+    return true
+  } else {
+    notifyWarning('Mã QR không đúng định dạng CCCD chuẩn (cần phân tách bằng dấu |)')
+    return false
+  }
+}
+
+const startCamera = async () => {
+  cameraError.value = ''
+  try {
+    const devices = await Html5Qrcode.getCameras()
+    if (!devices || devices.length === 0) {
+      cameraError.value = 'Không tìm thấy thiết bị Camera trên máy này'
+      scanTab.value = 'usb'
+      return
+    }
+    if (html5QrCode) {
+      await stopCamera()
+    }
+    html5QrCode = new Html5Qrcode('customer-cccd-reader')
+    isCameraRunning.value = true
+    await html5QrCode.start(
+      { facingMode: 'environment' },
+      { fps: 15, qrbox: { width: 260, height: 260 }, aspectRatio: 1.0 },
+      (decodedText) => {
+        xuLyChuoiCccd(decodedText)
+      },
+      () => {}
+    )
+  } catch (err) {
+    isCameraRunning.value = false
+    cameraError.value = 'Không thể mở Camera. Vui lòng cấp quyền truy cập hoặc dùng súng quét USB.'
+    scanTab.value = 'usb'
+  }
+}
+
+const stopCamera = async () => {
+  if (html5QrCode && isCameraRunning.value) {
+    try {
+      await html5QrCode.stop()
+      html5QrCode.clear()
+    } catch {}
+    isCameraRunning.value = false
+  }
+}
+
+const moModalQuetCccd = () => {
+  rawCccdInput.value = ''
+  isScanModalOpen.value = true
+  scanTab.value = 'camera'
+  nextTick(() => {
+    startCamera()
+  })
+}
+
+const dongModalQuet = async () => {
+  await stopCamera()
+  isScanModalOpen.value = false
+}
+
+const xuLyQuetCccdUsb = () => {
+  xuLyChuoiCccd(rawCccdInput.value)
+}
+
+const onScanFileChange = async (e) => {
+  const file = e.target.files && e.target.files[0]
+  if (!file) return
+  try {
+    if (!html5QrCode) {
+      html5QrCode = new Html5Qrcode('customer-cccd-reader')
+    }
+    const decodedText = await html5QrCode.scanFile(file, true)
+    xuLyChuoiCccd(decodedText)
+  } catch {
+    notifyWarning('Không tìm thấy mã QR hợp lệ trong hình ảnh')
+  } finally {
+    e.target.value = ''
+  }
+}
+
+onUnmounted(() => {
+  stopCamera()
+})
+
 const submit = async () => {
   daNopForm.value = true
+  if ((form.value.email || '').trim()) {
+    await kiemTraEmailTrung()
+  }
   const error = validate()
   if (error) {
     errorMsg.value = error
+    notifyWarning('Vui lòng kiểm tra lại thông tin', error)
     return
   }
   errorMsg.value = ''
+
+  const actionTitle = isEdit ? 'Xác nhận cập nhật' : 'Xác nhận thêm mới'
+  const actionMessage = isEdit
+    ? `Bạn có chắc chắn muốn cập nhật thông tin khách hàng "${form.value.tenKhachHang}"?`
+    : `Bạn có chắc chắn muốn thêm mới khách hàng "${form.value.tenKhachHang}"?`
+  const ok = await notifyConfirm(actionTitle, actionMessage, isEdit ? 'Cập nhật' : 'Thêm mới', 'Hủy bỏ')
+  if (!ok) return
+
   // Họ tên đổi sau lần gọi trước -> cập nhật lại mã đề xuất trước khi lưu.
-  if (!isEdit && maTuDong.value && tenDaGoiMa.value !== form.value.tenKhachHang.trim()) {
+  if (!isEdit && maTuDong.value && tenDaGoiMa.value !== (form.value.tenKhachHang || '').trim()) {
     await chonMaTuDong(true)
   }
   saving.value = true
   try {
     const payload = buildPayload()
+    let msg = ''
     if (isEdit) {
       await updateCustomer(route.params.id, payload)
-      setFlash('Đã cập nhật thông tin khách hàng')
+      msg = `Đã cập nhật thông tin khách hàng "${form.value.tenKhachHang}" thành công!`
+      setFlash(msg)
     } else {
       const taoMoi = await createCustomer(payload)
-      setFlash(`Đã thêm khách hàng ${taoMoi.maKhachHang} — ${taoMoi.tenKhachHang}`)
+      msg = `Đã thêm khách hàng "${taoMoi.tenKhachHang}" (${taoMoi.maKhachHang}) thành công! Thông tin tài khoản đã được gửi về email ${taoMoi.email || form.value.email}.`
+      setFlash(msg)
     }
-    router.push('/khach-hang')
+    notifySuccess(msg)
+    setTimeout(() => {
+      router.push('/khach-hang')
+    }, 500)
   } catch (e) {
     errorMsg.value = e.message
+    notifyError(isEdit ? 'Cập nhật thất bại' : 'Thêm mới thất bại', e.message)
   } finally {
     saving.value = false
   }
@@ -190,7 +423,7 @@ const napDiaGioi = async (tenTinh, tenPhuong) => {
     if (myToken !== yeuCauHienTai) return
     tinhThanhs.value = ds
     const tinh = timTinh(ds, tenTinh)
-    phuongXas.value = layPhuongXa(ds, tinh)
+    phuongXas.value = await layPhuongXa(ds, tinh)
     if (tenPhuong && !phuongXas.value.some((p) => p.ten === tenPhuong)) {
       phuongXas.value = [{ code: 'khac', ten: tenPhuong }, ...phuongXas.value]
     }
@@ -207,7 +440,12 @@ const chonTinh = async (tenTinh) => {
   const myToken = ++yeuCauHienTai
   const ds = tinhThanhs.value.length ? tinhThanhs.value : await layDiaGioi().catch(() => null)
   if (myToken !== yeuCauHienTai || !ds) return
-  phuongXas.value = layPhuongXa(ds, timTinh(ds, tenTinh))
+  diaGioiLoading.value = true
+  try {
+    phuongXas.value = await layPhuongXa(ds, timTinh(ds, tenTinh))
+  } finally {
+    diaGioiLoading.value = false
+  }
 }
 
 onMounted(async () => {
@@ -258,7 +496,12 @@ onMounted(async () => {
     <p v-if="loading" class="form-error">Đang tải dữ liệu...</p>
 
     <div class="create-grid">
-      <AvatarCard :ten="form.tenKhachHang" :phu="form.email || form.maKhachHang" />
+      <AvatarCard
+        :ten="form.tenKhachHang"
+        :phu="form.email || form.maKhachHang"
+        :anh="form.anhDaiDien"
+        @change="onAvatarChange"
+      />
 
       <div class="form-col">
         <section class="panel">
@@ -292,17 +535,14 @@ onMounted(async () => {
 
             <div class="field">
               <label class="field-label">Email <b class="req">*</b></label>
-              <input v-model="form.email" type="email" maxlength="150" placeholder="khachhang@gmail.com" />
-            </div>
-
-            <div class="field">
-              <label class="field-label">Mật khẩu</label>
               <input
-                v-model="form.matKhau"
-                type="password"
-                maxlength="127"
-                :placeholder="isEdit ? 'Mật khẩu mới (bỏ trống để giữ nguyên)' : 'Tối thiểu 6 ký tự, mặc định 123456'"
+                v-model="form.email"
+                type="email"
+                maxlength="150"
+                placeholder="khachhang@gmail.com"
+                @blur="kiemTraEmailTrung"
               />
+              <p v-if="emailTrungLoi" class="field-hint is-error">{{ emailTrungLoi }}</p>
             </div>
 
             <div class="field">
@@ -350,6 +590,16 @@ onMounted(async () => {
               </svg>
             </span>
             <h3 class="panel-title">Địa chỉ</h3>
+          </div>
+          <!-- Thông tin trích xuất rõ ràng từ CCCD -->
+          <div v-if="diaChiCccdGoc" class="cccd-address-display" style="margin: 0 0 16px 0;">
+            <div class="cccd-address-header">
+              <i class="bi bi-qr-code-scan"></i>
+              <span>Địa chỉ trích xuất từ CCCD:</span>
+            </div>
+            <div class="cccd-address-val">
+              {{ diaChiCccdGoc }}
+            </div>
           </div>
 
           <div class="form-fields">
@@ -624,5 +874,286 @@ onMounted(async () => {
   .form-actions {
     flex-wrap: wrap;
   }
+}
+
+/* Nút Quét CCCD */
+.btn-scan-cccd-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-scan-cccd-pill:hover {
+  background: #eff6ff;
+  border-color: #60a5fa;
+}
+
+/* Modal Quét CCCD */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  backdrop-filter: blur(4px);
+  padding: 16px;
+}
+
+.scan-modal-card {
+  background: #ffffff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.16);
+  overflow: hidden;
+  animation: modalScale 0.2s ease-out;
+}
+
+@keyframes modalScale {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.scan-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.scan-header-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.btn-close-modal {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  color: #64748b;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.scan-tab-bar {
+  display: flex;
+  border-bottom: 1px solid #f1f5f9;
+  background: #f8fafc;
+  padding: 0 20px;
+  gap: 8px;
+}
+
+.scan-tab-btn {
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.scan-tab-btn:hover { color: #1e293b; }
+.scan-tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; background: #ffffff; }
+
+.scan-modal-body { padding: 20px; }
+
+.camera-scan-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.camera-viewport-box {
+  width: 100%;
+  max-width: 380px;
+  height: 280px;
+  background: #0f172a;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.camera-stream-el {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.camera-stream-el video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 14px;
+}
+
+.scanner-laser-line {
+  position: absolute;
+  top: 15%;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background: #3b82f6;
+  box-shadow: 0 0 12px 2px #3b82f6;
+  animation: laserScan 2s infinite ease-in-out alternate;
+  z-index: 10;
+}
+
+@keyframes laserScan {
+  0% { top: 15%; }
+  100% { top: 85%; }
+}
+
+.scanner-frame-overlay {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.scanner-frame-overlay .corner {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-color: #ffffff;
+  border-style: solid;
+}
+
+.corner.top-left { top: 0; left: 0; border-width: 3px 0 0 3px; border-top-left-radius: 6px; }
+.corner.top-right { top: 0; right: 0; border-width: 3px 3px 0 0; border-top-right-radius: 6px; }
+.corner.bottom-left { bottom: 0; left: 0; border-width: 0 0 3px 3px; border-bottom-left-radius: 6px; }
+.corner.bottom-right { bottom: 0; right: 0; border-width: 0 3px 3px 0; border-bottom-right-radius: 6px; }
+
+.scan-instruction-text {
+  margin: 0;
+  font-size: 12.5px;
+  color: #475569;
+  text-align: center;
+}
+
+.camera-alert-error {
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  color: #ef4444;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-scan-file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.scan-textarea {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 13px;
+  color: #1e293b;
+  font-family: inherit;
+  box-sizing: border-box;
+  outline: none;
+  resize: vertical;
+}
+
+.scan-textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.btn-cancel-action {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  border-radius: 9999px;
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-submit-action {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cccd-address-display {
+  background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%);
+  border: 1px solid #bbf7d0;
+  border-left: 4px solid #10b981;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cccd-address-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #047857;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cccd-address-val {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #1e293b;
 }
 </style>

@@ -14,5 +14,7 @@ public interface SanPhamService {
     SanPhamResponse toggleStatus(Long id);
     void delete(Long id);
     SmartProductSaveResponse smartSave(SmartProductSaveRequest request);
+    byte[] downloadExcelTemplate();
+    com.example.datn.dto.ProductExcelImportResult importFromExcel(org.springframework.web.multipart.MultipartFile file);
 }
 

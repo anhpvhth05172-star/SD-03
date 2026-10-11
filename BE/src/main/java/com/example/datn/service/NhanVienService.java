@@ -201,7 +201,7 @@ public class NhanVienService {
         checkLength(req.getQueQuan(), 150, "Quê quán");
         checkLength(req.getPhuong(), 100, "Phường");
         checkLength(req.getDiaChiCuThe(), 255, "Địa chỉ cụ thể");
-        checkLength(req.getAnhNhanVien(), 1000, "Ảnh nhân viên");
+        // anhNhanVien lưu chuỗi Base64 hoặc URL nên không giới hạn 1000 ký tự
         checkLength(req.getNguoiCapNhat(), 100, "Người cập nhật");
         String ten = req.getTenTaiKhoan().trim();
         boolean trungTen = taoMoi

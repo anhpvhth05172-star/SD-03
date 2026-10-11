@@ -1,12 +1,19 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { Html5Qrcode } from 'html5-qrcode'
 import { useRoute, useRouter } from 'vue-router'
-import { layDiaGioi, layPhuongXa, timTinh } from '../api/diaGioi'
-import { createEmployee, getEmployee, getEmployeeFormData, suggestEmployeeCode, updateEmployee } from '../api/employee'
-import AvatarCard from '../components/AvatarCard.vue'
+import { layDiaGioi, layPhuongXa, phanTichDiaChiCccd, timTinh } from '../api/diaGioi'
+import {
+  checkEmployeeEmail,
+  createEmployee,
+  getEmployee,
+  getEmployeeFormData,
+  suggestEmployeeCode,
+  updateEmployee,
+} from '../api/employee'
 import { setFlash } from '../utils/flash'
-import { hopLeMaNhanVien, maDeXuat } from '../utils/maNhanVien'
 import { datVaiTro, layNguoiDung, vaiTroHienTai } from '../utils/session'
+import { notifyConfirm, notifyError, notifySuccess, notifyWarning } from '@/utils/notify'
 import {
   batBuoc,
   chonBatBuoc,
@@ -15,7 +22,6 @@ import {
   isBlank,
   kiemTra,
   khongDuocTuongLai,
-  matKhauHopLe,
   soDienThoaiHopLe,
   toiDa,
 } from '../utils/validate'
@@ -30,30 +36,26 @@ const saving = ref(false)
 const loading = ref(false)
 const errorMsg = ref('')
 const anhDaChon = ref('')
+const fileInputEl = ref(null)
 
-/** Chỉ Nam/Nữ theo yêu cầu; value giữ nguyên NAM/NU để khớp payload API. */
 const gioiTinhOptions = [
   { value: 'NAM', label: 'Nam' },
   { value: 'NU', label: 'Nữ' },
 ]
-const trangThais = [
-  { value: 'true', label: 'Đang hoạt động' },
-  { value: 'false', label: 'Đã khóa' },
-]
 
 const vaiTros = ref([])
-const maTuDong = ref(true)
-const dangGoiMa = ref(false)
-const tenDaGoiMa = ref('')
 const daNopForm = ref(false)
 const ngaySinhDaCham = ref(false)
-let yeuCauMa = 0
+const emailTrungLoi = ref('')
+let yeuCauHienTai = 0
 
 const tinhThanhs = ref([])
 const phuongXas = ref([])
 const diaGioiLoading = ref(false)
-const diaGioiError = ref('')
-let yeuCauHienTai = 0
+
+
+const isScanModalOpen = ref(false)
+const diaChiCccdGoc = ref('')
 
 const form = ref({
   maNhanVien: '',
@@ -62,7 +64,7 @@ const form = ref({
   email: '',
   soDienThoai: '',
   ngaySinh: '',
-  gioiTinh: '',
+  gioiTinh: 'NAM',
   idVaiTro: '',
   queQuan: '',
   phuong: '',
@@ -70,7 +72,253 @@ const form = ref({
   trangThai: 'true',
 })
 
-const maPreview = computed(() => (form.value.tenTaiKhoan.trim() ? maDeXuat(form.value.tenTaiKhoan) : ''))
+
+const moChonAnh = () => {
+  if (fileInputEl.value) {
+    fileInputEl.value.click()
+  }
+}
+
+const nenAnh = (file, maxKichThuoc = 400, chatLuong = 0.85) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        let { width, height } = img
+        if (width > maxKichThuoc || height > maxKichThuoc) {
+          if (width > height) {
+            height = Math.round((height * maxKichThuoc) / width)
+            width = maxKichThuoc
+          } else {
+            width = Math.round((width * maxKichThuoc) / height)
+            height = maxKichThuoc
+          }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, width, height)
+        resolve(canvas.toDataURL('image/jpeg', chatLuong))
+      }
+      img.onerror = () => resolve(e.target.result)
+      img.src = e.target.result
+    }
+    reader.onerror = () => resolve('')
+    reader.readAsDataURL(file)
+  })
+}
+
+const onFileChange = async (e) => {
+  const file = e.target.files && e.target.files[0]
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    notifyWarning('Vui lòng chọn tệp định dạng hình ảnh')
+    return
+  }
+  try {
+    anhDaChon.value = await nenAnh(file)
+  } catch {
+    const reader = new FileReader()
+    reader.onload = () => {
+      anhDaChon.value = reader.result
+    }
+    reader.readAsDataURL(file)
+  }
+}
+
+
+const kiemTraEmailTrung = async () => {
+  const em = (form.value.email || '').trim()
+  if (!em || !emailHopLe(em)) {
+    emailTrungLoi.value = ''
+    return
+  }
+  try {
+    const res = await checkEmployeeEmail(em, isEdit ? route.params.id : null)
+    if (res && res.exists) {
+      emailTrungLoi.value = 'Email này đã được sử dụng bởi nhân viên khác'
+    } else {
+      emailTrungLoi.value = ''
+    }
+  } catch {
+    emailTrungLoi.value = ''
+  }
+}
+
+
+const isCameraRunning = ref(false)
+const cameraError = ref('')
+let html5QrCode = null
+
+const playBeep = () => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.type = 'sine'
+    osc.frequency.value = 1200
+    gain.gain.setValueAtTime(0.15, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.18)
+  } catch { }
+}
+
+const apDungDiaChiCccd = async (diaChiRaw) => {
+  if (!diaChiRaw) return
+  diaChiCccdGoc.value = diaChiRaw
+  const parsed = phanTichDiaChiCccd(diaChiRaw)
+
+  if (parsed.tinh) {
+    const ds = tinhThanhs.value.length ? tinhThanhs.value : await layDiaGioi()
+    tinhThanhs.value = ds
+    let tinh = timTinh(ds, parsed.tinh)
+    if (tinh) {
+      form.value.queQuan = tinh.ten
+    } else {
+      tinh = { code: 'cccd_tinh', ten: parsed.tinh }
+      tinhThanhs.value.unshift(tinh)
+      form.value.queQuan = parsed.tinh
+    }
+
+    const listCon = await layPhuongXa(tinhThanhs.value, tinh)
+    phuongXas.value = listCon || []
+
+    if (parsed.phuong) {
+      const pxMatch = phuongXas.value.find((p) => {
+        const rawP = p.ten.toLowerCase()
+        const targetP = parsed.phuong.toLowerCase()
+        return rawP.includes(targetP) || targetP.includes(rawP)
+      })
+      if (pxMatch) {
+        form.value.phuong = pxMatch.ten
+      } else {
+        phuongXas.value.unshift({ code: 'cccd_px', ten: parsed.phuong })
+        form.value.phuong = parsed.phuong
+      }
+    }
+  }
+
+  if (parsed.diaChiCuThe) {
+    form.value.diaChiCuThe = parsed.diaChiCuThe
+  }
+}
+
+const xuLyChuoiCccd = async (raw) => {
+  if (!raw || !raw.trim()) return false
+  const parts = raw.trim().split('|')
+  if (parts.length >= 5) {
+    const hoTen = parts[2]?.trim()
+    const dobRaw = parts[3]?.trim()
+    const gioiTinhRaw = parts[4]?.trim()
+    const diaChiRaw = parts[5]?.trim()
+
+    if (hoTen) form.value.tenTaiKhoan = hoTen
+    if (dobRaw && dobRaw.length === 8) {
+      const d = dobRaw.substring(0, 2)
+      const m = dobRaw.substring(2, 4)
+      const y = dobRaw.substring(4, 8)
+      form.value.ngaySinh = `${y}-${m}-${d}`
+    }
+    if (gioiTinhRaw) {
+      form.value.gioiTinh = gioiTinhRaw.toLowerCase().includes('nữ') ? 'NU' : 'NAM'
+    }
+    if (diaChiRaw) {
+      await apDungDiaChiCccd(diaChiRaw)
+    }
+
+    playBeep()
+    dongModalQuet()
+    const parsed = phanTichDiaChiCccd(diaChiRaw)
+    if (parsed.daDoiTinh) {
+      notifySuccess(`Đã trích xuất CCCD thành công! Tỉnh ${parsed.tinhGoc} được chuẩn hóa thành "${parsed.tinh}" (theo danh mục 34 Tỉnh/TP mới nhất).`)
+    } else {
+      notifySuccess('Đã trích xuất thông tin từ CCCD thành công!')
+    }
+    return true
+  } else {
+    notifyWarning('Mã QR không đúng định dạng CCCD chuẩn (cần phân tách bằng dấu |)')
+    return false
+  }
+}
+
+const startCamera = async () => {
+  cameraError.value = ''
+  try {
+    const devices = await Html5Qrcode.getCameras()
+    if (!devices || devices.length === 0) {
+      cameraError.value = 'Không tìm thấy thiết bị Camera trên máy này.'
+      return
+    }
+    if (html5QrCode) {
+      await stopCamera()
+    }
+    html5QrCode = new Html5Qrcode('cccd-reader')
+    isCameraRunning.value = true
+    await html5QrCode.start(
+      { facingMode: 'environment' },
+      {
+        fps: 15,
+        qrbox: { width: 260, height: 260 },
+        aspectRatio: 1.0,
+      },
+      (decodedText) => {
+        xuLyChuoiCccd(decodedText)
+      },
+      () => { }
+    )
+  } catch (err) {
+    console.warn('Camera error:', err)
+    isCameraRunning.value = false
+    cameraError.value = 'Không thể mở Camera (chưa cấp quyền truy cập hoặc camera đang bận).'
+  }
+}
+
+const stopCamera = async () => {
+  if (html5QrCode && isCameraRunning.value) {
+    try {
+      await html5QrCode.stop()
+      html5QrCode.clear()
+    } catch { }
+    isCameraRunning.value = false
+  }
+}
+
+const moModalQuetCccd = () => {
+  isScanModalOpen.value = true
+  nextTick(() => {
+    startCamera()
+  })
+}
+
+const dongModalQuet = async () => {
+  await stopCamera()
+  isScanModalOpen.value = false
+}
+
+const onScanFileChange = async (e) => {
+  const file = e.target.files && e.target.files[0]
+  if (!file) return
+  try {
+    if (!html5QrCode) {
+      html5QrCode = new Html5Qrcode('cccd-reader')
+    }
+    const decodedText = await html5QrCode.scanFile(file, true)
+    xuLyChuoiCccd(decodedText)
+  } catch (err) {
+    notifyWarning('Không tìm thấy mã QR hợp lệ trong hình ảnh tải lên')
+  } finally {
+    e.target.value = ''
+  }
+}
+
+onUnmounted(() => {
+  stopCamera()
+})
 
 const loiNgaySinh = computed(() =>
   kiemTra([
@@ -80,50 +328,35 @@ const loiNgaySinh = computed(() =>
   ]),
 )
 
-/** Hiện lỗi ngay khi đã chọn ngày sinh; với ô trống chỉ hiện sau submit/blur. */
 const hienThiLoiNgaySinh = computed(() =>
   !isBlank(form.value.ngaySinh) || daNopForm.value || ngaySinhDaCham.value
     ? loiNgaySinh.value
     : '',
 )
 
-const loiGioiTinh = computed(() => (isBlank(form.value.gioiTinh) ? 'Vui lòng chọn giới tính' : ''))
-
-const chonVaiTro = (e) => {
-  const id = e.target.value
-  form.value.idVaiTro = id
-  const v = vaiTros.value.find((x) => String(x.id) === String(id))
-  if (v) datVaiTro(v.ma)
-}
-
 const validate = () =>
   kiemTra([
     batBuoc(form.value.tenTaiKhoan, 'Họ và tên'),
     toiDa(form.value.tenTaiKhoan, 100, 'Họ và tên'),
-    toiDa(form.value.maNhanVien, 25, 'Mã nhân viên'),
-    form.value.maNhanVien.trim() && !hopLeMaNhanVien(form.value.maNhanVien)
-      ? 'Mã nhân viên không hợp lệ (bắt đầu bằng chữ cái, chỉ chữ cái và số, tối đa 25 ký tự)'
-      : '',
     batBuoc(form.value.email, 'Email'),
     toiDa(form.value.email, 150, 'Email'),
     emailHopLe(form.value.email),
+    emailTrungLoi.value,
     batBuoc(form.value.soDienThoai, 'Số điện thoại'),
     toiDa(form.value.soDienThoai, 10, 'Số điện thoại'),
     soDienThoaiHopLe(form.value.soDienThoai),
+    chonBatBuoc(form.value.idVaiTro, 'vai trò'),
+    batBuoc(form.value.gioiTinh, 'Giới tính'),
     batBuoc(form.value.ngaySinh, 'Ngày sinh'),
     khongDuocTuongLai(form.value.ngaySinh, 'Ngày sinh'),
     duTuoiToiThieu(form.value.ngaySinh, TUOI_TOI_THIEU, THONG_BAO_TUOI),
-    loiGioiTinh.value,
-    chonBatBuoc(form.value.idVaiTro, 'vai trò'),
-    matKhauHopLe(form.value.matKhau, false),
-    toiDa(form.value.matKhau, 127, 'Mật khẩu'),
     toiDa(form.value.queQuan, 150, 'Tỉnh/Thành phố'),
     toiDa(form.value.phuong, 100, 'Phường/Xã'),
     toiDa(form.value.diaChiCuThe, 255, 'Địa chỉ cụ thể'),
   ])
 
 const buildPayload = () => ({
-  maNhanVien: form.value.maNhanVien.trim() || null,
+  maNhanVien: form.value.maNhanVien ? form.value.maNhanVien.trim() : null,
   tenTaiKhoan: form.value.tenTaiKhoan.trim(),
   matKhau: form.value.matKhau ? form.value.matKhau : null,
   email: form.value.email.trim(),
@@ -133,79 +366,70 @@ const buildPayload = () => ({
   idVaiTro: Number(form.value.idVaiTro),
   queQuan: form.value.queQuan || null,
   phuong: form.value.phuong || null,
-  diaChiCuThe: form.value.diaChiCuThe.trim() || null,
+  diaChiCuThe: form.value.diaChiCuThe ? form.value.diaChiCuThe.trim() : null,
+  anhNhanVien: anhDaChon.value || null,
   trangThai: form.value.trangThai === 'true',
   nguoiCapNhat: layNguoiDung(),
 })
 
 const submit = async () => {
   daNopForm.value = true
+  if (form.value.email.trim()) {
+    await kiemTraEmailTrung()
+  }
   const error = validate()
   if (error) {
     errorMsg.value = error
+    notifyWarning('Vui lòng kiểm tra lại thông tin', error)
     return
   }
   errorMsg.value = ''
-  // Họ tên đổi sau lần gọi trước -> cập nhật lại mã đề xuất trước khi lưu.
-  if (!isEdit && maTuDong.value && tenDaGoiMa.value !== form.value.tenTaiKhoan.trim()) {
-    await chonMaTuDong(true)
-  }
+
+  const actionTitle = isEdit ? 'Xác nhận cập nhật' : 'Xác nhận thêm mới'
+  const actionMessage = isEdit
+    ? `Bạn có chắc chắn muốn cập nhật thông tin nhân viên "${form.value.tenTaiKhoan}"?`
+    : `Bạn có chắc chắn muốn thêm mới nhân viên "${form.value.tenTaiKhoan}"?`
+  const ok = await notifyConfirm(actionTitle, actionMessage, isEdit ? 'Cập nhật' : 'Thêm mới', 'Hủy bỏ')
+  if (!ok) return
+
   saving.value = true
   try {
     const payload = buildPayload()
+    let msg = ''
     if (isEdit) {
       await updateEmployee(route.params.id, payload)
-      setFlash('Đã cập nhật thông tin nhân viên')
+      msg = `Đã cập nhật thông tin nhân viên "${form.value.tenTaiKhoan}" thành công!`
+      setFlash(msg)
     } else {
       const taoMoi = await createEmployee(payload)
-      setFlash(`Đã thêm nhân viên ${taoMoi.maNhanVien} — ${taoMoi.tenTaiKhoan}`)
+      msg = `Đã tạo nhân viên "${taoMoi.tenTaiKhoan}" (${taoMoi.maNhanVien}) thành công! Thông tin tài khoản đã được gửi về email.`
+      setFlash(msg)
     }
-    router.push('/nhan-vien')
+    notifySuccess(msg)
+    setTimeout(() => {
+      router.push('/nhan-vien')
+    }, 600)
   } catch (e) {
     errorMsg.value = e.message
+    notifyError(isEdit ? 'Cập nhật thất bại' : 'Thêm mới thất bại', e.message)
   } finally {
     saving.value = false
-  }
-}
-
-const chonMaTuDong = async (khiNop = false) => {
-  if (isEdit || !maTuDong.value) return
-  const ten = form.value.tenTaiKhoan.trim()
-  if (!ten) return
-  if (!khiNop && dangGoiMa.value) return
-  const myToken = ++yeuCauMa
-  dangGoiMa.value = true
-  try {
-    const data = await suggestEmployeeCode(ten)
-    if (myToken === yeuCauMa && maTuDong.value) {
-      form.value.maNhanVien = data.ma || maDeXuat(ten)
-      tenDaGoiMa.value = ten
-    }
-  } catch {
-    if (myToken === yeuCauMa && maTuDong.value) {
-      form.value.maNhanVien = maDeXuat(ten)
-      tenDaGoiMa.value = ten
-    }
-  } finally {
-    dangGoiMa.value = false
   }
 }
 
 const napDiaGioi = async (tenTinh, tenPhuong) => {
   const myToken = ++yeuCauHienTai
   diaGioiLoading.value = true
-  diaGioiError.value = ''
   try {
     const ds = await layDiaGioi()
     if (myToken !== yeuCauHienTai) return
     tinhThanhs.value = ds
     const tinh = timTinh(ds, tenTinh)
-    phuongXas.value = layPhuongXa(ds, tinh)
+    phuongXas.value = await layPhuongXa(ds, tinh)
     if (tenPhuong && !phuongXas.value.some((p) => p.ten === tenPhuong)) {
       phuongXas.value = [{ code: 'khac', ten: tenPhuong }, ...phuongXas.value]
     }
-  } catch (e) {
-    if (myToken === yeuCauHienTai) diaGioiError.value = e.message || 'Không tải được danh sách địa lý'
+  } catch {
   } finally {
     if (myToken === yeuCauHienTai) diaGioiLoading.value = false
   }
@@ -217,7 +441,12 @@ const chonTinh = async (tenTinh) => {
   const myToken = ++yeuCauHienTai
   const ds = tinhThanhs.value.length ? tinhThanhs.value : await layDiaGioi().catch(() => null)
   if (myToken !== yeuCauHienTai || !ds) return
-  phuongXas.value = layPhuongXa(ds, timTinh(ds, tenTinh))
+  diaGioiLoading.value = true
+  try {
+    phuongXas.value = await layPhuongXa(ds, timTinh(ds, tenTinh))
+  } finally {
+    diaGioiLoading.value = false
+  }
 }
 
 onMounted(async () => {
@@ -225,6 +454,12 @@ onMounted(async () => {
   try {
     const data = await getEmployeeFormData()
     vaiTros.value = data.vaiTros || []
+
+    if (!isEdit && vaiTros.value.length > 0) {
+      const vtStaff = vaiTros.value.find((v) => v.ma === 'STAFF' || v.ten.toLowerCase().includes('nhân viên'))
+      form.value.idVaiTro = vtStaff ? vtStaff.id : vaiTros.value[0].id
+    }
+
     if (isEdit) {
       const nv = await getEmployee(route.params.id)
       form.value = {
@@ -234,7 +469,7 @@ onMounted(async () => {
         email: nv.email || '',
         soDienThoai: nv.soDienThoai || '',
         ngaySinh: nv.ngaySinh || '',
-        gioiTinh: nv.gioiTinh || '',
+        gioiTinh: nv.gioiTinh || 'NAM',
         idVaiTro: nv.idVaiTro || '',
         queQuan: nv.queQuan || '',
         phuong: nv.phuong || '',
@@ -242,7 +477,6 @@ onMounted(async () => {
         trangThai: nv.trangThai === false ? 'false' : 'true',
       }
       anhDaChon.value = nv.anhNhanVien || ''
-      maTuDong.value = false
     }
     await napDiaGioi(form.value.queQuan, form.value.phuong)
   } catch (e) {
@@ -254,158 +488,228 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="create-wrap">
-    <h2 class="create-title">{{ isEdit ? 'Cập nhật Tài Khoản Nhân Viên' : 'Tạo Tài Khoản Nhân Viên' }}</h2>
-
-    <div class="role-bar">
-      <span>Đang thao tác với vai trò: <b>{{ vaiTroHienTai === 'ADMIN' ? 'Admin' : 'Nhân viên' }}</b></span>
-      <select :value="vaiTroHienTai" @change="chonVaiTro">
-        <option value="ADMIN">Admin</option>
-        <option value="STAFF">Nhân viên</option>
-      </select>
+  <div class="employee-create-page">
+    <div class="top-nav-bar">
+      <button class="btn-back" type="button" title="Quay lại danh sách" @click="router.push('/nhan-vien')">
+        <i class="bi bi-arrow-left"></i>
+      </button>
     </div>
 
-    <p v-if="errorMsg" class="form-error">{{ errorMsg }}</p>
-    <p v-if="loading" class="form-error">Đang tải dữ liệu...</p>
+    <div class="create-layout">
+      <div class="avatar-card-col">
+        <div class="avatar-box" @click="moChonAnh">
+          <input ref="fileInputEl" type="file" accept="image/*" style="display: none;" @change="onFileChange" />
 
-    <div class="create-grid">
-      <AvatarCard
-        :ten="form.tenTaiKhoan"
-        :phu="form.email || form.maNhanVien"
-        :anh="anhDaChon"
-      />
-
-      <div class="form-col">
-        <section class="panel">
-          <div class="panel-head">
-            <span class="panel-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
+          <div class="avatar-circle">
+            <img v-if="anhDaChon" :src="anhDaChon" alt="Avatar" class="avatar-img" />
+            <span v-else class="avatar-letter">
+              {{ form.tenTaiKhoan.trim() ? form.tenTaiKhoan.trim().charAt(0).toUpperCase() : 'N' }}
             </span>
-            <h3 class="panel-title">Thông tin cơ bản</h3>
           </div>
 
-          <div class="form-fields">
-            <div class="field">
-              <label class="field-label">Họ và tên <b class="req">*</b></label>
-              <input v-model="form.tenTaiKhoan" type="text" maxlength="100" placeholder="Nguyễn Văn An" @blur="chonMaTuDong()" />
-            </div>
+          <h3 class="avatar-title">
+            {{ form.tenTaiKhoan.trim() ? form.tenTaiKhoan.trim() : 'Nhân viên mới' }}
+          </h3>
 
-            <div class="field">
-              <label class="field-label">Mã nhân viên</label>
-              <input v-model="form.maNhanVien" type="text" maxlength="25" placeholder="Để trống sẽ tự sinh theo họ tên" @input="maTuDong = false" />
-              <p v-if="!isEdit && maPreview" class="field-hint">Mã gợi ý theo họ tên: <b>{{ maPreview }}</b></p>
-            </div>
+          <p class="avatar-sub">
+            {{ form.email.trim() ? form.email.trim() : 'Chưa cập nhật email' }}
+          </p>
 
-            <div class="field">
-              <label class="field-label">Email <b class="req">*</b></label>
-              <input v-model="form.email" type="email" maxlength="150" placeholder="ten@polyshoes.vn" />
-            </div>
+          <span class="avatar-hint">(Bấm vào ảnh để chọn avatar)</span>
+        </div>
+      </div>
 
-            <div class="field">
-              <label class="field-label">Mật khẩu</label>
-              <input
-                v-model="form.matKhau"
-                type="password"
-                maxlength="127"
-                :placeholder="isEdit ? 'Mật khẩu mới (bỏ trống để giữ nguyên)' : 'Tối thiểu 6 ký tự, mặc định 123456'"
-              />
-            </div>
-
-            <div class="field">
-              <label class="field-label">Số điện thoại <b class="req">*</b></label>
-              <input v-model="form.soDienThoai" type="tel" maxlength="10" placeholder="0901234567" />
-            </div>
-
-            <div class="field">
-              <label class="field-label">Vai trò <b class="req">*</b></label>
-              <select v-model="form.idVaiTro">
-                <option value="" disabled>Chọn vai trò</option>
-                <option v-for="v in vaiTros" :key="v.id" :value="v.id">{{ v.ten }} ({{ v.ma }})</option>
-              </select>
-            </div>
-
-            <div class="field">
-              <label class="field-label">Giới tính <b class="req">*</b></label>
-              <div class="radio-row" role="radiogroup" aria-label="Giới tính">
-                <label v-for="item in gioiTinhOptions" :key="item.value" class="radio-item">
-                  <input v-model="form.gioiTinh" type="radio" name="gioiTinh" :value="item.value" />
-                  <span class="radio-dot"></span>
-                  <span>{{ item.label }}</span>
-                </label>
+      <div class="form-content-col">
+        <section class="info-card">
+          <div class="card-header-row">
+            <div class="card-title-group">
+              <div class="header-icon-box purple">
+                <i class="bi bi-person"></i>
               </div>
-              <p v-if="daNopForm && loiGioiTinh" class="field-hint is-error">{{ loiGioiTinh }}</p>
+              <div>
+                <h2 class="card-title">Thông tin cơ bản</h2>
+                <p class="card-subtitle">Họ tên, email, liên hệ và tài khoản.</p>
+              </div>
+            </div>
+            <button class="btn-scan-cccd" type="button" @click="moModalQuetCccd">
+              <i class="bi bi-qr-code-scan"></i>
+              <span>Quét mã CCCD</span>
+            </button>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label">Họ và tên <span class="req">*</span></label>
+              <input v-model="form.tenTaiKhoan" type="text" class="form-input" placeholder="Nhập họ và tên"
+                maxlength="100" />
+              <p v-if="daNopForm && !form.tenTaiKhoan.trim()" class="input-error">Vui lòng nhập họ và tên</p>
             </div>
 
-            <div class="field">
-              <label class="field-label">Ngày sinh <b class="req">*</b></label>
-              <input
-                v-model="form.ngaySinh"
-                type="date"
-                @blur="ngaySinhDaCham = true"
-              />
-              <p v-if="hienThiLoiNgaySinh" class="field-hint is-error">{{ hienThiLoiNgaySinh }}</p>
+            <div class="form-group">
+              <label class="form-label">Email <span class="req">*</span></label>
+              <input v-model="form.email" type="email" class="form-input" :class="{ 'has-error': emailTrungLoi }"
+                placeholder="Nhập email" maxlength="150" @blur="kiemTraEmailTrung" />
+              <p v-if="emailTrungLoi" class="input-error">{{ emailTrungLoi }}</p>
+              <p v-else-if="daNopForm && !form.email.trim()" class="input-error">Vui lòng nhập email</p>
             </div>
 
-            <div v-if="isEdit" class="field">
-              <label class="field-label">Trạng thái</label>
-              <select v-model="form.trangThai">
-                <option v-for="item in trangThais" :key="item.value" :value="item.value">{{ item.label }}</option>
-              </select>
+            <div class="form-group">
+              <label class="form-label">Số điện thoại <span class="req">*</span></label>
+              <input v-model="form.soDienThoai" type="tel" class="form-input" placeholder="Nhập số điện thoại"
+                maxlength="10" />
+              <p v-if="daNopForm && !form.soDienThoai.trim()" class="input-error">Vui lòng nhập số điện thoại</p>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Vai trò <span class="req">*</span></label>
+              <div class="select-wrapper">
+                <select v-model="form.idVaiTro" class="form-select">
+                  <option value="" disabled>Chọn vai trò</option>
+                  <option v-for="v in vaiTros" :key="v.id" :value="v.id">{{ v.ten }}</option>
+                </select>
+                <i class="bi bi-chevron-down select-arrow"></i>
+              </div>
+              <p v-if="daNopForm && !form.idVaiTro" class="input-error">Vui lòng chọn vai trò</p>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Giới tính <span class="req">*</span></label>
+              <div class="select-wrapper">
+                <select v-model="form.gioiTinh" class="form-select">
+                  <option v-for="g in gioiTinhOptions" :key="g.value" :value="g.value">{{ g.label }}</option>
+                </select>
+                <i class="bi bi-chevron-down select-arrow"></i>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Ngày sinh <span class="req">*</span></label>
+              <div class="date-input-wrapper">
+                <input v-model="form.ngaySinh" type="date" class="form-input" placeholder="mm/dd/yyyy"
+                  @blur="ngaySinhDaCham = true" />
+              </div>
+              <p v-if="hienThiLoiNgaySinh" class="input-error">{{ hienThiLoiNgaySinh }}</p>
             </div>
           </div>
         </section>
 
-        <section class="panel">
-          <div class="panel-head">
-            <span class="panel-icon is-red">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z" />
-                <circle cx="12" cy="10" r="2.6" />
-              </svg>
-            </span>
-            <h3 class="panel-title">Địa chỉ</h3>
+        <section class="info-card">
+          <div class="card-header-row" style="margin-bottom: 20px;">
+            <div class="card-title-group">
+              <div class="header-icon-box blue">
+                <i class="bi bi-geo-alt"></i>
+              </div>
+              <div>
+                <h2 class="card-title">Địa chỉ</h2>
+              </div>
+            </div>
           </div>
 
-          <div class="form-fields">
-            <div class="field">
-              <label class="field-label">Tỉnh/Thành phố</label>
-              <select v-model="form.queQuan" :disabled="diaGioiLoading" @change="chonTinh($event.target.value)">
-                <option value="">
-                  {{ diaGioiLoading ? 'Đang tải danh sách tỉnh/thành...' : 'Chọn tỉnh/thành phố' }}
-                </option>
-                <option v-for="t in tinhThanhs" :key="t.code" :value="t.ten">{{ t.ten }}</option>
-              </select>
-              <p v-if="diaGioiError" class="field-hint is-error">
-                {{ diaGioiError }}
-                <button type="button" class="link-retry" @click="napDiaGioi(form.queQuan, form.phuong)">Thử lại</button>
-              </p>
+          <div v-if="diaChiCccdGoc" class="cccd-address-display">
+            <div class="cccd-address-header">
+              <i class="bi bi-qr-code-scan"></i>
+              <span>Địa chỉ trích xuất từ CCCD:</span>
+            </div>
+            <div class="cccd-address-val">
+              {{ diaChiCccdGoc }}
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label">Tỉnh/Thành phố <span class="req">*</span></label>
+              <div class="select-wrapper">
+                <select v-model="form.queQuan" class="form-select" :disabled="diaGioiLoading"
+                  @change="chonTinh($event.target.value)">
+                  <option value="">{{ diaGioiLoading ? 'Đang tải tỉnh thành...' : 'Chọn tỉnh thành' }}</option>
+                  <option v-for="t in tinhThanhs" :key="t.code" :value="t.ten">{{ t.ten }}</option>
+                </select>
+                <i class="bi bi-chevron-down select-arrow"></i>
+              </div>
             </div>
 
-            <div class="field">
-              <label class="field-label">Phường/Xã</label>
-              <select v-model="form.phuong" :disabled="diaGioiLoading || !form.queQuan">
-                <option value="">
-                  {{ diaGioiLoading ? 'Đang tải...' : form.queQuan ? 'Chọn phường/xã' : 'Chọn tỉnh trước' }}
-                </option>
-                <option v-for="p in phuongXas" :key="p.code" :value="p.ten">{{ p.ten }}</option>
-              </select>
+            <div class="form-group">
+              <label class="form-label">Xã/Phường/Thị trấn <span class="req">*</span></label>
+              <div class="select-wrapper">
+                <select v-model="form.phuong" class="form-select" :disabled="diaGioiLoading || !form.queQuan">
+                  <option value="">
+                    {{ diaGioiLoading ? 'Đang tải...' : form.queQuan ? 'Chọn xã phường' : 'Chọn xã phường' }}
+                  </option>
+                  <option v-for="p in phuongXas" :key="p.code" :value="p.ten">{{ p.ten }}</option>
+                </select>
+                <i class="bi bi-chevron-down select-arrow"></i>
+              </div>
             </div>
+          </div>
 
-            <div class="field field-wide">
-              <label class="field-label">Địa chỉ cụ thể</label>
-              <textarea v-model="form.diaChiCuThe" maxlength="255" placeholder="Số nhà, đường..." rows="3"></textarea>
-            </div>
+          <div class="form-group" style="margin-top: 16px;">
+            <label class="form-label">Địa chỉ cụ thể</label>
+            <input v-model="form.diaChiCuThe" type="text" class="form-input" placeholder="Nhập địa chỉ cụ thể"
+              maxlength="255" />
+          </div>
+
+          <div class="action-buttons-group">
+            <button class="btn-submit-action" type="button" :disabled="saving" @click="submit">
+              <i class="bi bi-person-check-fill"></i>
+              <span>{{ saving ? 'Đang lưu...' : isEdit ? 'Cập nhật nhân viên' : 'Tạo nhân viên' }}</span>
+            </button>
+
+            <button class="btn-cancel-action" type="button" @click="router.push('/nhan-vien')">
+              Hủy
+            </button>
           </div>
         </section>
+      </div>
+    </div>
 
-        <div class="form-actions">
-          <button class="btn-primary" type="button" :disabled="saving" @click="submit">
-            {{ saving ? 'Đang lưu...' : isEdit ? 'Cập nhật' : 'Thêm' }}
-          </button>
-          <button class="btn-cancel" type="button" @click="router.push('/nhan-vien')">Hủy</button>
+    <div v-if="isScanModalOpen" class="modal-backdrop" @click.self="dongModalQuet">
+      <div class="scan-modal-card">
+        <div class="scan-modal-header">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="scan-header-icon">
+              <i class="bi bi-qr-code-scan"></i>
+            </div>
+            <div>
+              <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #1e293b;">Quét thẻ Căn cước công dân
+                (CCCD)</h3>
+              <p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">Tự động nhận diện và trích xuất thông tin
+                công dân</p>
+            </div>
+          </div>
+          <button type="button" class="btn-close-modal" title="Đóng" @click="dongModalQuet">×</button>
+        </div>
+
+        <div class="scan-modal-body">
+          <div class="camera-scan-wrap">
+            <div class="camera-viewport-box">
+              <div id="cccd-reader" class="camera-stream-el"></div>
+
+              <div v-if="isCameraRunning" class="scanner-laser-line"></div>
+              <div class="scanner-frame-overlay">
+                <span class="corner top-left"></span>
+                <span class="corner top-right"></span>
+                <span class="corner bottom-left"></span>
+                <span class="corner bottom-right"></span>
+              </div>
+            </div>
+
+            <p class="scan-instruction-text">
+              <i class="bi bi-info-circle-fill text-primary"></i> Đưa <b>mã QR góc phải</b> trên thẻ CCCD vào giữa khung
+              hình để camera tự nhận diện.
+            </p>
+
+            <div v-if="cameraError" class="camera-alert-error">
+              <i class="bi bi-exclamation-triangle-fill"></i>
+              <span>{{ cameraError }}</span>
+            </div>
+
+            <div class="camera-extra-actions">
+              <label class="btn-scan-file-label">
+                <i class="bi bi-image"></i> Tải ảnh chụp CCCD từ máy
+                <input type="file" accept="image/*" style="display: none;" @change="onScanFileChange" />
+              </label>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -413,233 +717,640 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.create-wrap {
+.employee-create-page {
+  padding: 8px 12px 60px;
+  background-color: transparent;
   min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 6px 4px 40px;
 }
 
-.create-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: #1d1d23;
+.top-nav-bar {
+  margin-bottom: 16px;
 }
 
-.create-grid {
+.btn-back {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  color: #1e293b;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.btn-back:hover {
+  background: #e2e8f0;
+}
+
+/* Layout 2 cột */
+.create-layout {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 24px;
   align-items: start;
 }
 
-.form-col {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+/* CỘT TRÁI: CARD AVATAR */
+.avatar-card-col {
   min-width: 0;
 }
 
-.form-col .panel {
-  padding: 18px 22px 22px;
+.avatar-box {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 16px;
+  padding: 36px 20px 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.form-col .panel-head {
-  padding-bottom: 12px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid #f0f0f3;
+.avatar-box:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
 }
 
-.role-bar {
+.avatar-circle {
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: #edf2f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-bottom: 20px;
+  transition: all 0.2s ease;
+}
+
+.avatar-box:hover .avatar-circle {
+  transform: scale(1.02);
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-letter {
+  font-size: 52px;
+  font-weight: 500;
+  color: #64748b;
+  user-select: none;
+}
+
+.avatar-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  word-break: break-word;
+}
+
+.avatar-sub {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #94a3b8;
+  word-break: break-word;
+}
+
+.avatar-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  user-select: none;
+}
+
+/* CỘT PHẢI: FORM CHÍNH */
+.form-content-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.info-card {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 16px;
+  padding: 24px 28px 28px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+/* Header của Card */
+.card-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  background: #f7f7f9;
-  border: 1px solid #ececef;
-  border-radius: 8px;
-  padding: 9px 12px;
-  font-size: 12.5px;
-  color: #4a4a52;
+  margin-bottom: 24px;
 }
 
-.role-bar select {
-  height: 30px;
-  border: 1px solid #e3e3e8;
-  border-radius: 6px;
-  background: #fff;
-  font-size: 12.5px;
-  padding: 0 8px;
-  color: #4a4a52;
-  outline: none;
+.card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
-.form-error {
-  background: #fdecec;
-  color: #dc2626;
-  font-size: 12.5px;
+.header-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+}
+
+.header-icon-box.purple {
+  background: #f5f3ff;
+  color: #8b5cf6;
+}
+
+.header-icon-box.blue {
+  background: #f0f9ff;
+  color: #0284c7;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.card-subtitle {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* Nút quét mã CCCD */
+.btn-scan-cccd {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 9999px;
+  padding: 7px 18px;
+  font-size: 13px;
   font-weight: 600;
-  border-radius: 7px;
-  padding: 9px 12px;
+  color: #1e293b;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.form-fields {
+.btn-scan-cccd i {
+  font-size: 14px;
+  color: #1e293b;
+}
+
+.btn-scan-cccd:hover {
+  background: #fff7ed;
+  border-color: #f97316;
+}
+
+/* Grid form 2 cột */
+.form-grid-2 {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px 18px;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 20px;
+  row-gap: 16px;
 }
 
-.field {
+.form-group {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  min-width: 0;
 }
 
-.field-wide {
-  grid-column: 1 / -1;
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 6px;
 }
 
-.field-label {
+.form-label .req {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+/* Inputs & Selects */
+.form-input,
+.form-select {
+  height: 42px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0 14px;
+  font-size: 13.5px;
+  color: #1e293b;
+  width: 100%;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.form-input::placeholder {
+  color: #94a3b8;
+}
+
+.form-input:focus,
+.form-select:focus {
+  border-color: #f43f5e;
+  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
+}
+
+.form-input.has-error {
+  border-color: #ef4444;
+}
+
+.input-error {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: #ef4444;
+  font-weight: 500;
+}
+
+/* Custom Select Dropdown wrapper */
+.select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.form-select {
+  appearance: none;
+  cursor: pointer;
+  padding-right: 36px;
+}
+
+.select-arrow {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* Cụm nút hành động */
+.action-buttons-group {
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.btn-submit-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #ef4444 0%, #e11d48 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  padding: 10px 24px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.25);
+  transition: all 0.2s ease;
+}
+
+.btn-submit-action:hover:not(:disabled) {
+  opacity: 0.94;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(225, 29, 72, 0.32);
+}
+
+.btn-submit-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-cancel-action {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  border-radius: 9999px;
+  padding: 10px 24px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-cancel-action:hover {
+  background: #f8fafc;
+  color: #1e293b;
+  border-color: #cbd5e1;
+}
+
+/* Modal Quét CCCD */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  padding: 16px;
+}
+
+.scan-modal-card {
+  background: #ffffff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.16);
+  overflow: hidden;
+  animation: modalScale 0.2s ease-out;
+}
+
+@keyframes modalScale {
+  from {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.scan-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.btn-close-modal {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  color: #64748b;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.scan-modal-body {
+  padding: 20px;
+}
+
+.scan-textarea {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 13px;
+  color: #1e293b;
+  font-family: inherit;
+  box-sizing: border-box;
+  outline: none;
+  resize: vertical;
+}
+
+.scan-textarea:focus {
+  border-color: #e11d48;
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.1);
+}
+
+@media (max-width: 900px) {
+  .create-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .form-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   CAMERA SCANNER & CCCD MODAL STYLES
+   ========================================================================== */
+.scan-header-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #fff1f2;
+  color: #e11d48;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.scan-tab-bar {
+  display: flex;
+  border-bottom: 1px solid #f1f5f9;
+  background: #f8fafc;
+  padding: 0 20px;
+  gap: 8px;
+}
+
+.scan-tab-btn {
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.scan-tab-btn:hover {
+  color: #1e293b;
+}
+
+.scan-tab-btn.active {
+  color: #e11d48;
+  border-bottom-color: #e11d48;
+  background: #ffffff;
+}
+
+.camera-scan-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.camera-viewport-box {
+  width: 100%;
+  max-width: 380px;
+  height: 280px;
+  background: #0f172a;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.camera-stream-el {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.camera-stream-el video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 14px;
+}
+
+/* Tia laser quét chạy lên xuống */
+.scanner-laser-line {
+  position: absolute;
+  top: 15%;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background: #ef4444;
+  box-shadow: 0 0 12px 2px #ef4444;
+  animation: laserScan 2s infinite ease-in-out alternate;
+  z-index: 10;
+}
+
+@keyframes laserScan {
+  0% {
+    top: 15%;
+  }
+
+  100% {
+    top: 85%;
+  }
+}
+
+/* 4 góc khung quét */
+.scanner-frame-overlay {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.scanner-frame-overlay .corner {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-color: #ffffff;
+  border-style: solid;
+}
+
+.corner.top-left {
+  top: 0;
+  left: 0;
+  border-width: 3px 0 0 3px;
+  border-top-left-radius: 6px;
+}
+
+.corner.top-right {
+  top: 0;
+  right: 0;
+  border-width: 3px 3px 0 0;
+  border-top-right-radius: 6px;
+}
+
+.corner.bottom-left {
+  bottom: 0;
+  left: 0;
+  border-width: 0 0 3px 3px;
+  border-bottom-left-radius: 6px;
+}
+
+.corner.bottom-right {
+  bottom: 0;
+  right: 0;
+  border-width: 0 3px 3px 0;
+  border-bottom-right-radius: 6px;
+}
+
+.scan-instruction-text {
+  margin: 0;
+  font-size: 12.5px;
+  color: #475569;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.camera-alert-error {
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  color: #ef4444;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-scan-file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12.5px;
   font-weight: 600;
-  color: #3d3d45;
-}
-
-.field-label .req {
-  color: var(--red);
-}
-
-.field-hint {
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.field-hint.is-error {
-  color: #dc2626;
-}
-
-.link-retry {
-  border: none;
-  background: none;
-  color: var(--red);
-  font-size: 12px;
-  font-weight: 600;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 6px 14px;
+  border-radius: 20px;
   cursor: pointer;
-  text-decoration: underline;
-  padding: 0;
-  margin-left: 6px;
+  transition: all 0.2s ease;
 }
 
-.form-fields input:not([type='radio']),
-.form-fields select,
-.form-fields textarea {
-  width: 100%;
-  height: 38px;
-  padding: 0 13px;
-  border: 1px solid #e3e3e8;
-  border-radius: 7px;
-  background: #fff;
-  font-size: 13px;
-  color: #4a4a52;
-  outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+.btn-scan-file-label:hover {
+  background: #dbeafe;
 }
 
-.form-fields textarea {
-  height: auto;
-  min-height: 78px;
-  padding: 10px 13px;
-  resize: vertical;
-  line-height: 1.5;
-}
-
-.form-fields input:not([type='radio'])::placeholder,
-.form-fields textarea::placeholder {
-  color: #9a9aa3;
-}
-
-.form-fields input:not([type='radio']):focus,
-.form-fields select:focus,
-.form-fields textarea:focus {
-  border-color: var(--red);
-  box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
-}
-
-.form-actions {
+.cccd-address-display {
+  background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%);
+  border: 1px solid #bbf7d0;
+  border-left: 4px solid #10b981;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
   display: flex;
-  justify-content: flex-start;
-  gap: 10px;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.btn-primary {
-  height: 36px;
-  min-width: 92px;
-  padding: 0 22px;
-  border: none;
-  border-radius: 7px;
-  background: var(--red);
-  color: #fff;
-  font-size: 13px;
+.cccd-address-header {
+  font-size: 12px;
   font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s ease;
+  color: #047857;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.btn-primary:hover {
-  background: var(--red-dark);
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.btn-cancel {
-  height: 36px;
-  min-width: 76px;
-  padding: 0 18px;
-  border: none;
-  border-radius: 7px;
-  background: #6b7280;
-  color: #fff;
-  font-size: 13px;
+.cccd-address-val {
+  font-size: 13.5px;
   font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.btn-cancel:hover {
-  background: #59606b;
-}
-
-@media (max-width: 1024px) {
-  .create-grid {
-    grid-template-columns: 200px minmax(0, 1fr);
-    gap: 12px;
-  }
-
-  .form-col .panel {
-    padding: 16px 16px 18px;
-  }
-
-  .form-fields {
-    gap: 12px 14px;
-  }
-}
-
-@media (max-width: 760px) {
-  .create-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .form-fields {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .form-actions {
-    flex-wrap: wrap;
-  }
+  color: #1e293b;
 }
 </style>

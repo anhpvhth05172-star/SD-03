@@ -230,8 +230,6 @@ const handleCancelConfirm = () => {
 }
 
 const isSubmitting = ref(false)
-
-// SAVE / UPDATE ATTRIBUTE
 const saveAttributeDirectly = async () => {
   formError.value = ''
   const tenTrimmed = (modalForm.ten || '').trim()
@@ -299,7 +297,6 @@ const saveAttributeDirectly = async () => {
   }
 }
 
-// TOGGLE STATUS
 const toggleStatusFast = async (item) => {
   const category = activeTab.value
   try {
@@ -320,7 +317,6 @@ const toggleStatusFast = async (item) => {
   }
 }
 
-// CONFIRM & DELETE
 const confirmDeleteItem = (item) => {
   openConfirmModal({
     title: `Xác nhận xóa ${activeTabInfo.value.label}`,
@@ -422,7 +418,7 @@ const executeDeleteFast = async (item) => {
               <td class="text-center text-slate">{{ getIndex(index) }}</td>
               <td>
                 <span class="code-pill">{{ item.ma || (activeTabInfo.codePrefix + String(item.id).padStart(2, '0'))
-                  }}</span>
+                }}</span>
               </td>
               <td>
                 <div class="name-col">
@@ -503,7 +499,6 @@ const executeDeleteFast = async (item) => {
       </div>
     </div>
 
-    <!-- Modal thêm/sửa thuộc tính -->
     <transition name="fade">
       <div v-if="isModalOpen" class="modal-backdrop" @click.self="closeModal">
         <div class="modal-box">
@@ -561,7 +556,6 @@ const executeDeleteFast = async (item) => {
       </div>
     </transition>
 
-    <!-- Confirmation Modal Dialog (Redesigned) -->
     <transition name="fade">
       <div v-if="confirmModal.isOpen" class="modal-backdrop modal-backdrop-blur" @click.self="handleCancelConfirm">
         <div class="confirm-modal-box">
@@ -569,16 +563,19 @@ const executeDeleteFast = async (item) => {
 
           <div class="confirm-hero-badge" :class="`badge-${confirmModal.variant}`">
             <div class="confirm-icon-glow">
-              <svg v-if="confirmModal.variant === 'danger'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-if="confirmModal.variant === 'danger'" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 <line x1="10" y1="11" x2="10" y2="17"></line>
                 <line x1="14" y1="11" x2="14" y2="17"></line>
               </svg>
-              <svg v-else-if="confirmModal.variant === 'warning'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-else-if="confirmModal.variant === 'warning'" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
               </svg>
-              <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                 <polyline points="17 21 17 13 7 13 7 21"></polyline>
                 <polyline points="7 3 7 8 15 8"></polyline>
