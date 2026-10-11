@@ -3,8 +3,12 @@ package com.example.datn.controller;
 import com.example.datn.dto.KhachHangDTO;
 import com.example.datn.dto.KhachHangRequest;
 import com.example.datn.dto.PageResponse;
+import com.example.datn.entity.KhachHang;
+import com.example.datn.repository.KhachHangRepository;
 import com.example.datn.service.KhachHangService;
 import java.time.LocalDate;
+import java.util.List;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -25,6 +29,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class KhachHangController {
 
     private final KhachHangService khachHangService;
+
+    private final KhachHangRepository khachHangRepository;
+
+    @GetMapping("/all")
+    public List<KhachHang> getList() {
+        return khachHangRepository.findAll();
+    }
 
     @GetMapping
     public PageResponse<KhachHangDTO> list(

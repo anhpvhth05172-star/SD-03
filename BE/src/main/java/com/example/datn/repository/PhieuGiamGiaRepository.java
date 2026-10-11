@@ -25,4 +25,6 @@ public interface PhieuGiamGiaRepository extends JpaRepository<PhieuGiamGia, Long
 
     @Query("SELECT new com.example.datn.dto.PhieuGiamGiaDTO(pgg.id, pgg.maPhieuGiamGia, pgg.tenPhieuGiamGia, pgg.giaTriGiam, pgg.moTa, pgg.soLuongDaSuDung, pgg.ngayKetThuc, pgg.trangThai) FROM PhieuGiamGia pgg")
     Page<PhieuGiamGiaDTO> getListPageDiscount(Pageable pageable);
+
+    boolean existsByMaPhieuGiamGia(String maPhieuGiamGia);
 }
