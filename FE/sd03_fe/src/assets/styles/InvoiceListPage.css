@@ -225,19 +225,22 @@
 .dot-rose { background-color: #f43f5e; }
 
 .filters-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
   gap: 14px;
-}
-
-.span-2 {
-  grid-column: span 2;
 }
 
 .filter-col {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.filter-col-search {
+  flex: 2 1 260px;
 }
 
 .filter-lbl {
@@ -316,7 +319,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 14px;
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .btn-apply {
@@ -712,22 +716,14 @@
 }
 
 @media (max-width: 980px) {
-  .filters-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .span-2 {
-    grid-column: span 2;
+  .filter-actions {
+    margin-left: 0;
   }
 }
 
 @media (max-width: 560px) {
-  .filters-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .span-2 {
-    grid-column: span 1;
+  .filter-col-search {
+    flex: 1 1 100%;
   }
 
   .page-actions {

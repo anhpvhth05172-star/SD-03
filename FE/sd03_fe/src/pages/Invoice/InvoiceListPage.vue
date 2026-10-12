@@ -311,7 +311,7 @@ onMounted(load)
 
       <div v-show="showFilter">
         <div class="filters-grid">
-          <div class="filter-col span-2">
+          <div class="filter-col filter-col-search">
             <label class="filter-lbl">Tìm kiếm hóa đơn</label>
             <div class="search-wrap">
               <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -339,13 +339,6 @@ onMounted(load)
           </div>
 
           <div class="filter-col">
-            <label class="filter-lbl">Trạng thái thanh toán</label>
-            <div class="form-control no-icon" style="cursor: default; color: #94a3b8">
-              Theo trạng thái đơn hàng
-            </div>
-          </div>
-
-          <div class="filter-col">
             <label class="filter-lbl">Từ ngày</label>
             <input v-model="fTuNgay" type="date" class="form-control" @change="applyFilter" />
           </div>
@@ -354,23 +347,23 @@ onMounted(load)
             <label class="filter-lbl">Đến ngày</label>
             <input v-model="fDenNgay" type="date" class="form-control" @change="applyFilter" />
           </div>
-        </div>
 
-        <div class="filter-actions">
-          <button class="btn-apply" type="button" @click="applyFilter">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-              <path d="M4 6h16M7 12h10M10 18h4" />
-            </svg>
-            Áp dụng
-          </button>
-          <button class="btn-reset-filter" type="button" @click="resetFilter">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 11a8 8 0 1 0-.9 4.5" />
-              <path d="M20 4.5V11h-6.5" />
-            </svg>
-            Đặt lại
-          </button>
-          <span v-if="appliedRange" class="foot-info">Khoảng thời gian: {{ appliedRange }}</span>
+          <div class="filter-actions">
+            <button class="btn-apply" type="button" @click="applyFilter">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                <path d="M4 6h16M7 12h10M10 18h4" />
+              </svg>
+              Áp dụng
+            </button>
+            <button class="btn-reset-filter" type="button" @click="resetFilter">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 11a8 8 0 1 0-.9 4.5" />
+                <path d="M20 4.5V11h-6.5" />
+              </svg>
+              Đặt lại
+            </button>
+            <span v-if="appliedRange" class="foot-info">Khoảng thời gian: {{ appliedRange }}</span>
+          </div>
         </div>
       </div>
     </div>
