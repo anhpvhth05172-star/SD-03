@@ -1,12 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import {
-  listInvoices,
-  exportInvoices,
-  deleteInvoice,
-  restoreInvoice,
-} from '@/api/invoice'
+import { listInvoices, exportInvoices } from '@/api/invoice'
 import {
   avatarColor,
   formatDate,
@@ -15,7 +10,7 @@ import {
   initialsOf,
   payStatusOf,
 } from '@/utils/format'
-import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 
 const router = useRouter()
 
@@ -29,7 +24,6 @@ const tabs = [
   { key: 'DA_HOAN_THANH', label: 'Đã hoàn thành' },
   { key: 'DA_HUY', label: 'Đã hủy' },
   { key: 'DA_HOAN_TIEN', label: 'Đã hoàn tiền' },
-  { key: 'DA_XOA', label: 'Đã xóa' },
 ]
 
 const tabDot = {
@@ -42,7 +36,6 @@ const tabDot = {
   DA_HOAN_THANH: 'dot-green',
   DA_HUY: 'dot-gray',
   DA_HOAN_TIEN: 'dot-rose',
-  DA_XOA: 'dot-red',
 }
 
 const activeTab = ref('ALL')
@@ -81,9 +74,7 @@ const buildParams = () => {
   if (tu) params.tuNgay = tu
   if (den) params.denNgay = den
   if (fLoaiDon.value) params.loaiDon = fLoaiDon.value
-  if (activeTab.value === 'DA_XOA') {
-    params.daXoa = true
-  } else if (activeTab.value !== 'ALL') {
+  if (activeTab.value !== 'ALL') {
     const tab = tabs.find((t) => t.key === activeTab.value)
     params.trangThai = tab ? tab.label : ''
   }
@@ -157,33 +148,6 @@ const onPageSizeChange = () => {
   load()
 }
 
-const isDeletedTab = computed(() => activeTab.value === 'DA_XOA')
-
-const canSoftDelete = (row) =>
-  row.trangThai === 'Chờ xác nhận' || row.trangThai === 'Đã hủy'
-
-const xoaHoaDon = async (row) => {
-  const ok = await notifyDeleteConfirm(row.maHoaDon || `hóa đơn #${row.id}`)
-  if (!ok) return
-  try {
-    await deleteInvoice(row.id)
-    notifySuccess('Đã xóa hóa đơn', `Hóa đơn ${row.maHoaDon} đã được chuyển vào thùng rác`)
-    load()
-  } catch (e) {
-    notifyError('Không thể xóa', e.message || 'Chỉ hóa đơn Chờ xác nhận hoặc Đã hủy mới được xóa')
-  }
-}
-
-const khoiPhucHoaDon = async (row) => {
-  try {
-    await restoreInvoice(row.id)
-    notifySuccess('Đã khôi phục', `Hóa đơn ${row.maHoaDon} đã được khôi phục`)
-    load()
-  } catch (e) {
-    notifyError('Không thể khôi phục', e.message || 'Có lỗi xảy ra')
-  }
-}
-
 const exporting = ref(false)
 
 const xuatExcel = async () => {
@@ -195,7 +159,6 @@ const xuatExcel = async () => {
   const exportParams = { ...params }
   delete exportParams.page
   delete exportParams.size
-  delete exportParams.daXoa
   exporting.value = true
   try {
     const blob = await exportInvoices(exportParams)
@@ -330,7 +293,7 @@ onMounted(load)
             :key="tab.key"
             type="button"
             class="status-tab"
-            :class="{ active: activeTab === tab.key, 'tab-danger': tab.key === 'DA_XOA' }"
+            :class="{ active: activeTab === tab.key }"
             @click="selectTab(tab.key)"
           >
             <span v-if="tabDot[tab.key]" class="dot" :class="tabDot[tab.key]"></span>
@@ -378,7 +341,7 @@ onMounted(load)
           <div class="filter-col">
             <label class="filter-lbl">Trạng thái thanh toán</label>
             <div class="form-control no-icon" style="cursor: default; color: #94a3b8">
-              {{ isDeletedTab ? 'Không áp dụng' : 'Theo trạng thái đơn hàng' }}
+              Theo trạng thái đơn hàng
             </div>
           </div>
 
@@ -501,7 +464,6 @@ onMounted(load)
                 <td class="text-center">
                   <div class="action-btns">
                     <button
-                      v-if="!isDeletedTab"
                       class="act-btn view-btn"
                       type="button"
                       title="Xem chi tiết"
@@ -510,30 +472,6 @@ onMounted(load)
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                         <circle cx="12" cy="12" r="3"></circle>
-                      </svg>
-                    </button>
-                    <button
-                      v-if="isDeletedTab"
-                      class="act-btn restore-btn"
-                      type="button"
-                      title="Khôi phục hóa đơn"
-                      @click="khoiPhucHoaDon(row)"
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="1 4 1 10 7 10"></polyline>
-                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
-                      </svg>
-                    </button>
-                    <button
-                      v-else-if="canSoftDelete(row)"
-                      class="act-btn del-btn"
-                      type="button"
-                      title="Xóa mềm hóa đơn"
-                      @click="xoaHoaDon(row)"
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                       </svg>
                     </button>
                   </div>
