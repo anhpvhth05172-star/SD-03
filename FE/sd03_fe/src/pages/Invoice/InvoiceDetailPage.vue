@@ -32,10 +32,6 @@ const stepIndex = computed(() =>
   data.value ? STEPS.indexOf(data.value.trangThai) : -1,
 )
 
-const isChoXacNhan = computed(
-  () => !!data.value && data.value.trangThai === 'Chờ xác nhận',
-)
-
 const stepClass = (i) => {
   if (i < stepIndex.value) return 'is-done'
   if (i === stepIndex.value) return 'is-active'
@@ -43,12 +39,12 @@ const stepClass = (i) => {
 }
 
 const pillClass = (value) => {
-  if (['Đã hoàn thành', 'Đã xác nhận', 'Đã giao hàng'].includes(value))
-    return 'pill-green'
-  if (['Đã hủy', 'Đã hoàn tiền'].includes(value)) return 'pill-red'
-  if (['Chờ xác nhận', 'Chờ giao hàng', 'Đang giao hàng'].includes(value))
-    return 'pill-amber'
-  return 'pill-gray'
+  if (['Đã hoàn thành', 'Đã giao hàng', 'Đã xác nhận'].includes(value))
+    return 'inv-pill-green'
+  if (['Đã hủy', 'Đã hoàn tiền'].includes(value)) return 'inv-pill-red'
+  if (['Chờ xác nhận', 'Chờ giao hàng'].includes(value)) return 'inv-pill-amber'
+  if (['Đang giao hàng'].includes(value)) return 'inv-pill-teal'
+  return 'inv-pill-gray'
 }
 
 const tienHang = computed(() =>
@@ -111,25 +107,25 @@ const load = async () => {
 
 const inHoaDon = () => window.print()
 
-const suaDon = () => router.push(`/hoa-don/${route.params.id}/sua`)
-
 watch(() => route.params.id, load)
 onMounted(load)
 </script>
 
 <template>
   <div class="inv-detail">
-    <nav class="inv-crumb no-print" aria-label="Breadcrumb">
-      <router-link class="crumb-link" to="/hoa-don">Hóa đơn</router-link>
+    <nav class="inv-crumb" aria-label="Breadcrumb">
+      <router-link class="crumb-link" to="/hoa-don">Trang chủ</router-link>
+      <span class="crumb-sep">/</span>
+      <router-link class="crumb-link" to="/hoa-don">Quản lý hóa đơn</router-link>
       <span class="crumb-sep">/</span>
       <span class="crumb-current">Chi tiết hóa đơn</span>
     </nav>
 
-    <section v-if="loading" class="card state-card">
+    <section v-if="loading" class="state-card">
       <div class="state-box">Đang tải dữ liệu...</div>
     </section>
 
-    <section v-else-if="error" class="card state-card">
+    <section v-else-if="error" class="state-card">
       <div class="state-box is-error">
         <p class="state-msg">{{ error }}</p>
         <button class="btn btn-ghost" type="button" @click="router.push('/hoa-don')">
@@ -143,7 +139,7 @@ onMounted(load)
         <article class="invoice-print-sheet print-only" :style="{ '--receipt-zoom': printZoom }">
           <header class="receipt-header">
             <div class="receipt-brand">POLY<span>SHOES</span></div>
-            <p class="receipt-tagline">Thời trang & phong cách</p>
+            <p class="receipt-tagline">Thời trang &amp; phong cách</p>
             <h1>HÓA ĐƠN BÁN HÀNG</h1>
             <p class="receipt-code">Mã hóa đơn <strong>{{ data.maHoaDon }}</strong></p>
           </header>
@@ -216,7 +212,7 @@ onMounted(load)
               </svg>
             </span>
             <h3 class="card-title">Trạng thái đơn hàng</h3>
-            <span class="pill" :class="pillClass(data.trangThai)">{{ data.trangThai }}</span>
+            <span class="inv-pill" :class="pillClass(data.trangThai)">{{ data.trangThai }}</span>
           </div>
 
           <div v-if="isTerminal" class="terminal-box">
@@ -288,7 +284,7 @@ onMounted(load)
           <div class="kv">
             <div class="kv-row">
               <span class="kv-label">Tên khách hàng</span>
-              <span class="kv-value">{{ data.tenKhachHang || '—' }}</span>
+              <span class="kv-value">{{ data.tenKhachHang || 'Khách lẻ' }}</span>
             </div>
             <div class="kv-row">
               <span class="kv-label">Số điện thoại</span>
@@ -386,7 +382,7 @@ onMounted(load)
               <strong>{{ data.tenPhuongThucThanhToan || '—' }}</strong>
               <span class="pay-sub">Lập đơn: {{ formatDateTime(data.ngayTao) }}</span>
             </div>
-            <span class="pill" :class="pillClass(payStatusOf(data.trangThai))">
+            <span class="inv-pill" :class="pillClass(payStatusOf(data.trangThai))">
               {{ payStatusOf(data.trangThai) }}
             </span>
           </div>
@@ -448,32 +444,19 @@ onMounted(load)
             </table>
           </div>
         </section>
-        <button class="btn btn-print" type="button" @click="inHoaDon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
-            <rect x="6" y="14" width="12" height="7" />
-          </svg>
-          In hóa đơn
-        </button>
-        <button
-          class="btn btn-edit"
-          type="button"
-          :disabled="!isChoXacNhan"
-          :title="isChoXacNhan ? 'Chỉnh sửa thông tin và sản phẩm của hóa đơn' : 'Chỉ hóa đơn Chờ xác nhận mới được sửa'"
-          @click="suaDon"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14.5 6.5l3 3L8 19H5v-3L14.5 6.5z" />
-            <path d="M4 21h16" />
-          </svg>
-          Chỉnh sửa đơn hàng
-        </button>
-        <span v-if="!isChoXacNhan" class="edit-hint">
-          Chỉ hóa đơn Chờ xác nhận mới được sửa (trạng thái hiện tại: {{ data.trangThai }})
-        </span>
-        <button class="btn btn-ghost" type="button" @click="router.push('/hoa-don')">
-          Quay lại danh sách
-        </button>
+
+        <div class="action-bar">
+          <button class="btn btn-print" type="button" @click="inHoaDon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
+              <rect x="6" y="14" width="12" height="7" />
+            </svg>
+            In hóa đơn
+          </button>
+          <button class="btn btn-ghost" type="button" @click="router.push('/hoa-don')">
+            Quay lại danh sách
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -484,28 +467,30 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 14.5px;
-  font-weight: 700;
-  color: #1d1d23;
-  margin-bottom: 14px;
+  font-size: 12.5px;
+  color: #94a3b8;
+  margin-bottom: 16px;
 }
 
 .crumb-link {
-  color: var(--red);
+  color: #64748b;
   text-decoration: none;
+  font-weight: 500;
 }
 
 .crumb-link:hover {
+  color: #dc2626;
   text-decoration: underline;
 }
 
 .crumb-sep {
-  color: #c5c5cc;
+  color: #cbd5e1;
   font-weight: 500;
 }
 
 .crumb-current {
-  color: #1d1d23;
+  color: #475569;
+  font-weight: 600;
 }
 
 .inv-layout {
@@ -528,14 +513,15 @@ onMounted(load)
 
 .card {
   background: #fff;
-  border: 1px solid #ececef;
-  border-radius: 12px;
-  box-shadow: 0 3px 12px rgba(20, 20, 22, 0.05);
+  border: 1px solid #f1f5f9;
+  border-radius: 14px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
   padding: 18px 20px;
 }
 
 .status-card,
-.products-card {
+.products-card,
+.action-bar {
   grid-column: span 2;
 }
 
@@ -547,11 +533,11 @@ onMounted(load)
 }
 
 .card-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: var(--red-soft, #fdecec);
-  color: var(--red);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #dc2626;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -566,38 +552,25 @@ onMounted(load)
 .card-title {
   font-size: 13.5px;
   font-weight: 700;
-  color: #1d1d23;
+  color: #0f172a;
   margin: 0;
   flex: 1;
 }
 
-.pill {
-  font-size: 11.5px;
+.inv-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
   font-weight: 600;
-  border-radius: 999px;
-  padding: 4px 11px;
   white-space: nowrap;
 }
 
-.pill-green {
-  background: #e7f7ec;
-  color: #15803d;
-}
-
-.pill-red {
-  background: #fdecec;
-  color: var(--red, #cc0000);
-}
-
-.pill-amber {
-  background: #fff5e0;
-  color: #b45309;
-}
-
-.pill-gray {
-  background: #f1f1f4;
-  color: #6b6b73;
-}
+.inv-pill-green { background: #f0fdf4; color: #15803d; }
+.inv-pill-red { background: #fef2f2; color: #dc2626; }
+.inv-pill-amber { background: #fffbeb; color: #b45309; }
+.inv-pill-teal { background: #f0fdfa; color: #0f766e; }
+.inv-pill-gray { background: #f1f5f9; color: #64748b; }
 
 .steps {
   display: flex;
@@ -625,7 +598,7 @@ onMounted(load)
   right: 50%;
   width: 100%;
   height: 2px;
-  background: #e7e7ec;
+  background: #e2e8f0;
   z-index: 0;
 }
 
@@ -635,7 +608,7 @@ onMounted(load)
 
 .step.is-done::before,
 .step.is-active::before {
-  background: var(--red, #cc0000);
+  background: #dc2626;
 }
 
 .step-node {
@@ -647,9 +620,9 @@ onMounted(load)
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #f1f1f4;
-  color: #a0a0aa;
-  border: 2px solid #e7e7ec;
+  background: #f1f5f9;
+  color: #94a3b8;
+  border: 2px solid #e2e8f0;
 }
 
 .step-node svg {
@@ -658,31 +631,31 @@ onMounted(load)
 }
 
 .step.is-done .step-node {
-  background: var(--red, #cc0000);
-  border-color: var(--red, #cc0000);
+  background: #dc2626;
+  border-color: #dc2626;
   color: #fff;
 }
 
 .step.is-active .step-node {
   background: #fff;
-  border-color: var(--red, #cc0000);
-  color: var(--red, #cc0000);
+  border-color: #dc2626;
+  color: #dc2626;
 }
 
 .step-label {
   font-size: 11.5px;
   font-weight: 600;
-  color: #4a4a52;
+  color: #475569;
 }
 
 .step.is-pending .step-label {
-  color: #9a9aa3;
+  color: #94a3b8;
   font-weight: 500;
 }
 
 .step-meta {
   font-size: 10.5px;
-  color: #9a9aa3;
+  color: #94a3b8;
   line-height: 1.4;
 }
 
@@ -690,9 +663,9 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 13px;
-  background: var(--red-soft, #fdecec);
-  border: 1px solid rgba(204, 0, 0, 0.25);
-  border-radius: 10px;
+  background: #fef2f2;
+  border: 1px solid #fecdd3;
+  border-radius: 12px;
   padding: 16px 18px;
 }
 
@@ -700,7 +673,7 @@ onMounted(load)
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: var(--red, #cc0000);
+  background: #dc2626;
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -721,12 +694,12 @@ onMounted(load)
 
 .terminal-text strong {
   font-size: 15px;
-  color: var(--red, #cc0000);
+  color: #dc2626;
 }
 
 .terminal-text span {
   font-size: 12px;
-  color: #7a5b5b;
+  color: #7f1d1d;
 }
 
 .kv {
@@ -744,13 +717,13 @@ onMounted(load)
 
 .kv-label {
   font-size: 12.5px;
-  color: #9a9aa3;
+  color: #94a3b8;
   flex: 0 0 auto;
 }
 
 .kv-value {
   font-size: 13px;
-  color: #2c2c33;
+  color: #1e293b;
   font-weight: 500;
   text-align: right;
   word-break: break-word;
@@ -768,12 +741,12 @@ onMounted(load)
   align-items: baseline;
   gap: 12px;
   font-size: 13.5px;
-  color: #4a4a52;
+  color: #475569;
 }
 
 .sum-row span:last-child {
   font-weight: 600;
-  color: #1d1d23;
+  color: #0f172a;
 }
 
 .sum-discount {
@@ -781,7 +754,7 @@ onMounted(load)
 }
 
 .sum-final {
-  border-top: 1px dashed #e3e3e8;
+  border-top: 1px dashed #e2e8f0;
   padding-top: 11px;
   margin-top: 2px;
 }
@@ -792,7 +765,7 @@ onMounted(load)
 }
 
 .sum-final span:last-child {
-  color: var(--red, #cc0000) !important;
+  color: #dc2626 !important;
   font-size: 17px !important;
 }
 
@@ -812,12 +785,12 @@ onMounted(load)
 
 .pay-main strong {
   font-size: 13.5px;
-  color: #1d1d23;
+  color: #0f172a;
 }
 
 .pay-sub {
   font-size: 11.5px;
-  color: #9a9aa3;
+  color: #94a3b8;
 }
 
 .pay-amount {
@@ -825,19 +798,19 @@ onMounted(load)
   text-align: right;
   font-size: 15px;
   font-weight: 700;
-  color: var(--red, #cc0000);
+  color: #dc2626;
 }
 
 .pay-note {
   margin: 12px 0 0;
   font-size: 11px;
-  color: #9a9aa3;
+  color: #94a3b8;
   line-height: 1.5;
 }
 
 .count-pill {
   font-size: 12px;
-  color: #9a9aa3;
+  color: #94a3b8;
   font-weight: 600;
 }
 
@@ -852,17 +825,21 @@ onMounted(load)
 
 .prod-table th {
   font-size: 11.5px;
-  color: #77777f;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   text-align: left;
-  padding: 8px 10px;
-  border-bottom: 1px solid #ececef;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
 }
 
 .prod-table td {
-  padding: 10px;
-  border-bottom: 1px solid #f3f3f5;
+  padding: 11px 12px;
+  border-bottom: 1px solid #f1f5f9;
   font-size: 13px;
-  color: #2c2c33;
+  color: #334155;
   vertical-align: middle;
 }
 
@@ -887,9 +864,9 @@ onMounted(load)
   width: 42px;
   height: 42px;
   border-radius: 8px;
-  background: #f5f5f8;
-  border: 1px solid #ececef;
-  color: #b6b6c0;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #94a3b8;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -901,31 +878,31 @@ onMounted(load)
 }
 
 .p-name {
-  font-weight: 600;
-  color: #1d1d23;
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .p-sku {
   font-size: 11.5px;
-  color: #9a9aa3;
+  color: #94a3b8;
   margin-top: 2px;
 }
 
 .p-variant {
   font-size: 12.5px;
-  color: #4a4a52;
+  color: #475569;
 }
 
 .empty {
   text-align: center;
-  color: #9a9aa3;
+  color: #94a3b8;
   padding: 22px 0 !important;
 }
 
-.actions {
+.action-bar {
   display: flex;
-  flex-direction: column;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .btn {
@@ -934,12 +911,13 @@ onMounted(load)
   justify-content: center;
   gap: 8px;
   height: 42px;
+  padding: 0 20px;
   border: none;
-  border-radius: 9px;
+  border-radius: 8px;
   font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn svg {
@@ -948,61 +926,44 @@ onMounted(load)
 }
 
 .btn-print {
-  background: var(--red, #cc0000);
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
   color: #fff;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
 }
 
 .btn-print:hover {
-  background: var(--red-dark, #a30000);
-}
-
-.btn-edit {
-  background: #fff;
-  color: var(--red, #cc0000);
-  border: 1.5px solid var(--red, #cc0000);
-}
-
-.btn-edit:hover {
-  background: var(--red-soft, #fdecec);
-}
-
-.btn-edit:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-edit:disabled:hover {
-  background: #fff;
-}
-
-.edit-hint {
-  font-size: 12.5px;
-  color: #8a8a94;
-  align-self: center;
+  background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
+  transform: translateY(-1px);
 }
 
 .btn-ghost {
-  background: #f3f3f5;
-  color: #4a4a52;
+  background: #ffffff;
+  color: #475569;
+  border: 1px solid #e2e8f0;
 }
 
 .btn-ghost:hover {
-  background: #e7e7ec;
+  background: #f8fafc;
+  color: #0f172a;
 }
 
 .state-card {
+  background: #fff;
+  border: 1px solid #f1f5f9;
+  border-radius: 14px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
   padding: 8px 20px;
 }
 
 .state-box {
   padding: 26px 0;
   text-align: center;
-  color: #9a9aa3;
+  color: #94a3b8;
   font-size: 13.5px;
 }
 
 .state-box.is-error .state-msg {
-  color: var(--red);
+  color: #dc2626;
   font-weight: 600;
   margin-bottom: 10px;
 }
@@ -1017,7 +978,8 @@ onMounted(load)
   }
 
   .status-card,
-  .products-card {
+  .products-card,
+  .action-bar {
     grid-column: span 1;
   }
 
@@ -1106,6 +1068,12 @@ onMounted(load)
   .receipt-code {
     margin: 0;
     color: #444;
+  }
+
+  .receipt-code strong {
+    font-size: 12pt;
+    color: #c90016;
+    letter-spacing: 0.5px;
   }
 
   .receipt-meta {
@@ -1259,7 +1227,7 @@ onMounted(load)
 
   .print-head,
   .inv-crumb,
-  .actions {
+  .action-bar {
     display: none !important;
   }
 

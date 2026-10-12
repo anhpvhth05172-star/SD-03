@@ -44,7 +44,7 @@ const routes = [
       { path: '/hoa-don', component: InvoiceListPage, meta: { title: 'Quản lý hóa đơn', requiresAuth: true } },
       { path: '/hoa-don/them', component: InvoiceFormPage, meta: { title: 'Tạo hóa đơn', requiresAuth: true } },
       { path: '/hoa-don/:id', component: InvoiceDetailPage, meta: { title: 'Chi tiết hóa đơn', requiresAuth: true } },
-      { path: '/hoa-don/:id/sua', component: InvoiceFormPage, meta: { title: 'Sửa hóa đơn', requiresAuth: true } },
+      { path: '/hoa-don/:id/sua', redirect: (to) => `/hoa-don/${to.params.id}` },
       { path: '/phieu-giam-gia', component: VoucherListPage, meta: { title: 'Quản lý phiếu giảm giá' } },
       { path: '/phieu-giam-gia/add', component: DiscountForm, meta: { title: 'Thêm phiếu giảm giá' } },
       { path: '/phieu-giam-gia/detail/:id', component: DiscountFormDetail, meta: { title: 'Chi tiết phiếu giảm giá' } },

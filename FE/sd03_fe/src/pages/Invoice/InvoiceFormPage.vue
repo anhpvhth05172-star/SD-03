@@ -1,26 +1,20 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import {
   createInvoice,
-  getInvoice,
   getInvoiceFormData,
   listInvoices,
-  updateInvoice,
 } from '@/api/invoice'
 import { getDistricts, getProvinces, getWards, tinhPhi } from '@/api/shipping'
 import ProductPickerModal from '@/components/ProductPickerModal.vue'
-import { notifySuccess, notifyWarning } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 import { formatVnd } from '@/utils/format'
 
-const route = useRoute()
 const router = useRouter()
 const saving = ref(false)
 const loading = ref(false)
 const pickerOpen = ref(false)
-
-const isEdit = computed(() => Boolean(route.params.id))
-const editId = computed(() => route.params.id)
 
 const statusOptions = [
   'Chờ xác nhận',
@@ -134,11 +128,6 @@ const addLine = () => {
 const removeLine = (index) => {
   if (form.value.chiTiet.length === 1) return
   form.value.chiTiet.splice(index, 1)
-}
-
-const onProductChange = (line) => {
-  const spct = spctById.value[line.idSanPhamChiTiet]
-  if (spct) line.donGia = Number(spct.giaBan)
 }
 
 const onKhachHangChange = () => {
@@ -344,46 +333,6 @@ const onPhuongChange = () => {
 
 const onPhoSoNhaChange = () => capNhatDiaChiText()
 
-const khoiPhucDiaChi = async (inv) => {
-  diaChi.value.tinhId = inv.toProvinceId ?? ''
-  diaChi.value.quanId = inv.toDistrictId ?? ''
-  diaChi.value.phuongCode = inv.toWardCode ?? ''
-  try {
-    if (!tinhThanhs.value.length) await taiTinhThanh()
-    const t = tinhThanhs.value.find((x) => x.id === inv.toProvinceId)
-    diaChi.value.tinhTen = t ? t.name : ''
-    if (inv.toProvinceId) {
-      await taiQuanHuyen(inv.toProvinceId)
-      const q = quanHuyens.value.find((x) => x.id === inv.toDistrictId)
-      diaChi.value.quanTen = q ? q.name : ''
-      if (inv.toDistrictId) {
-        await taiPhuongXa(inv.toDistrictId)
-        const w = phuongXas.value.find((x) => String(x.code) === String(inv.toWardCode))
-        diaChi.value.phuongTen = w ? w.name : ''
-      }
-    }
-    const full = String(inv.diaChiNhanHang || '')
-    const suffix = [diaChi.value.phuongTen, diaChi.value.quanTen, diaChi.value.tinhTen]
-      .filter(Boolean)
-      .join(', ')
-    let duongDay = full
-    if (diaChi.value.phuongTen && suffix && full.endsWith(', ' + suffix)) {
-      duongDay = full.slice(0, -(suffix.length + 2))
-    }
-    const tachSoNha = duongDay.match(/^(\d[\d\/.-]*)\s+(.*)$/)
-    if (tachSoNha) {
-      diaChi.value.soNha = tachSoNha[1]
-      diaChi.value.pho = tachSoNha[2]
-    } else {
-      diaChi.value.soNha = ''
-      diaChi.value.pho = duongDay
-    }
-    if (diaChi.value.phuongTen) capNhatDiaChiText()
-  } catch {
-    diaChiLoi.value = 'Không tải được danh sách địa chỉ. Vui lòng chọn lại địa chỉ nhận hàng.'
-  }
-}
-
 watch(
   () => form.value.loaiDon,
   (moi) => {
@@ -571,38 +520,24 @@ const submit = async () => {
   saving.value = true
   try {
     const payload = buildPayload()
-    if (isEdit.value) {
-      await updateInvoice(editId.value, payload)
-      router.push(`/hoa-don/${editId.value}`)
-      return
-    }
     const ma = form.value.maHoaDon.trim()
     const kiemTra = await listInvoices({ ma, size: 100 })
     if ((kiemTra.content || []).some((h) => h.maHoaDon === ma)) {
       errors.value = { ...errors.value, maHoaDon: `Mã hóa đơn "${ma}" đã tồn tại` }
+      saving.value = false
       return
     }
     await createInvoice(payload)
     router.push('/hoa-don')
   } catch (e) {
-    const msg = e.message || 'Có lỗi xảy ra'
-    alert(msg)
-    if (isEdit.value && msg.includes('Chỉ hóa đơn Chờ xác nhận')) {
-      try {
-        await getInvoice(editId.value)
-        router.replace(`/hoa-don/${editId.value}`)
-      } catch {
-        router.replace('/hoa-don')
-      }
-    }
+    notifyError('Không thể tạo hóa đơn', e.message || 'Có lỗi xảy ra')
   } finally {
     saving.value = false
   }
 }
 
 const huy = () => {
-  if (isEdit.value) router.push(`/hoa-don/${editId.value}`)
-  else router.push('/hoa-don')
+  router.push('/hoa-don')
 }
 
 const xoaLoiDong = () => {
@@ -653,58 +588,14 @@ const onPickProducts = (ids) => {
   }
 }
 
-const optionLabel = (s) =>
-  `${s.ma} - ${s.tenSanPham} (${s.tenKichCo} / ${s.tenMau}) - ${formatVnd(s.giaBan)} - còn ${s.soLuong}` +
-  (s.trangThai === false || s.trangThaiSanPham === false ? ' - ngừng bán' : '')
-
 onMounted(async () => {
   loading.value = true
   try {
     options.value = await getInvoiceFormData()
   } catch (e) {
-    alert(e.message)
+    notifyError('Không tải được dữ liệu', e.message)
     loading.value = false
     return
-  }
-  if (isEdit.value) {
-    try {
-      const inv = await getInvoice(editId.value)
-      if (inv.trangThai !== 'Chờ xác nhận') {
-        alert(
-          `Chỉ hóa đơn Chờ xác nhận mới được sửa (trạng thái hiện tại: ${inv.trangThai})`,
-        )
-        loading.value = false
-        router.replace(`/hoa-don/${editId.value}`)
-        return
-      }
-      form.value = {
-        maHoaDon: inv.maHoaDon,
-        loaiDon: inv.loaiDon,
-        phiVanChuyen: Number(inv.phiVanChuyen) || 0,
-        tenKhachHang: inv.tenKhachHang || '',
-        soDienThoaiKhachHang: inv.soDienThoaiKhachHang || '',
-        diaChiNhanHang: inv.diaChiNhanHang || '',
-        trangThai: inv.trangThai,
-        ghiChu: inv.ghiChu || '',
-        idKhachHang: inv.idKhachHang ?? '',
-        idNhanVien: inv.idNhanVien ?? '',
-        idPhuongThucThanhToan: inv.idPhuongThucThanhToan ?? '',
-        idPhieuGiamGia: inv.idPhieuGiamGia ?? '',
-        chiTiet: (inv.chiTiet || []).map((l) => ({
-          idSanPhamChiTiet: l.idSanPhamChiTiet ?? '',
-          soLuong: l.soLuong,
-          donGia: Number(l.donGia) || 0,
-          ghiChu: l.ghiChu || '',
-        })),
-      }
-      if (!form.value.chiTiet.length) form.value.chiTiet = [blankLine()]
-      if (inv.loaiDon === 'Online') await khoiPhucDiaChi(inv)
-    } catch (e) {
-      alert(e.message || 'Không tải được hóa đơn')
-      loading.value = false
-      router.replace('/hoa-don')
-      return
-    }
   }
   loading.value = false
 })
@@ -713,7 +604,7 @@ onMounted(async () => {
 <template>
   <div class="create-wrap">
     <section class="create-card" v-if="!loading">
-      <h2 class="create-title">{{ isEdit ? 'Chỉnh sửa hóa đơn' : 'Tạo hóa đơn' }}</h2>
+      <h2 class="create-title">Tạo hóa đơn</h2>
 
       <div class="section-label">Thông tin hóa đơn</div>
       <div class="form-grid">
@@ -731,8 +622,8 @@ onMounted(async () => {
           <div v-if="errors.loaiDon" class="field-error">{{ errors.loaiDon }}</div>
         </div>
         <div class="field">
-          <label>Trạng thái *{{ isEdit ? ' (không thể đổi khi sửa)' : '' }}</label>
-          <select v-model="form.trangThai" :disabled="isEdit">
+          <label>Trạng thái *</label>
+          <select v-model="form.trangThai">
             <option v-for="s in statusOptions" :key="s" :value="s">{{ s }}</option>
           </select>
           <div v-if="errors.trangThai" class="field-error">{{ errors.trangThai }}</div>
@@ -900,6 +791,12 @@ onMounted(async () => {
       </div>
 
       <div class="section-label">Chi tiết hóa đơn</div>
+      <div class="picker-toolbar">
+        <button class="line-add line-add--strong" type="button" @click="pickerOpen = true">
+          + Chọn sản phẩm (chọn nhiều)
+        </button>
+        <span class="picker-hint">Dùng checkbox để chọn nhiều biến thể cùng lúc, chống trùng SKU tự động.</span>
+      </div>
       <table class="line-table">
         <thead>
           <tr>
@@ -913,17 +810,17 @@ onMounted(async () => {
         <tbody>
           <tr v-for="(line, i) in form.chiTiet" :key="i">
             <td class="col-sp">
-              <select v-model="line.idSanPhamChiTiet" @change="onProductChange(line)">
-                <option value="">— Chọn sản phẩm —</option>
-                <option
-                  v-for="s in options.sanPhamChiTiets"
-                  :key="s.id"
-                  :value="s.id"
-                  :disabled="s.trangThai === false || s.trangThaiSanPham === false"
-                >
-                  {{ optionLabel(s) }}
-                </option>
-              </select>
+              <div class="line-product" :class="{ 'is-empty': !line.idSanPhamChiTiet }">
+                <template v-if="line.idSanPhamChiTiet && spctById[line.idSanPhamChiTiet]">
+                  <span class="line-sku">{{ spctById[line.idSanPhamChiTiet].ma }}</span>
+                  <span class="line-name">{{ spctById[line.idSanPhamChiTiet].tenSanPham }}</span>
+                  <span class="line-variant">
+                    {{ [spctById[line.idSanPhamChiTiet].tenKichCo, spctById[line.idSanPhamChiTiet].tenMau].filter(Boolean).join(' / ') }}
+                  </span>
+                  <span class="line-stock">còn {{ spctById[line.idSanPhamChiTiet].soLuong }}</span>
+                </template>
+                <span v-else class="line-placeholder">Chưa chọn sản phẩm — bấm nút ở trên để thêm</span>
+              </div>
             </td>
             <td class="col-sl"><input v-model.number="line.soLuong" type="number" min="1" /></td>
             <td class="col-gia"><input v-model.number="line.donGia" type="number" min="0" step="1000" /></td>
@@ -942,7 +839,6 @@ onMounted(async () => {
           </tr>
         </tbody>
       </table>
-      <button class="line-add" type="button" @click="addLine">+ Thêm dòng sản phẩm</button>
       <div v-if="errors.chiTiet" class="field-error">{{ errors.chiTiet }}</div>
       <ul v-if="dongLoi.length" class="line-error-list">
         <li v-for="lo in dongLoi" :key="lo.dong">Dòng {{ lo.dong }}: {{ lo.msg }}</li>
@@ -965,7 +861,7 @@ onMounted(async () => {
 
       <div class="form-actions">
         <button class="btn-primary" type="button" :disabled="saving" @click="submit">
-          {{ saving ? 'Đang lưu...' : isEdit ? 'Lưu thay đổi' : 'Thêm' }}
+          {{ saving ? 'Đang lưu...' : 'Tạo hóa đơn' }}
         </button>
         <button class="btn-cancel" type="button" @click="huy">Hủy</button>
       </div>
@@ -1258,6 +1154,70 @@ onMounted(async () => {
 
 .line-add:hover {
   background: var(--red-soft);
+}
+
+.picker-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.line-add--strong {
+  width: auto;
+  margin-bottom: 0;
+  padding: 0 16px;
+  border-style: solid;
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+
+.line-add--strong:hover {
+  background: #fdecec;
+  color: var(--red-dark);
+}
+
+.picker-hint {
+  font-size: 12px;
+  color: #8a8a94;
+}
+
+.line-product {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.line-product.is-empty .line-placeholder {
+  color: #9a9aa3;
+  font-style: italic;
+  font-size: 12.5px;
+}
+
+.line-sku {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b6b73;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.line-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d1d23;
+}
+
+.line-variant {
+  font-size: 12px;
+  color: #4a4a52;
+}
+
+.line-stock {
+  font-size: 11px;
+  color: #15803d;
+  font-weight: 600;
 }
 
 .totals-box {

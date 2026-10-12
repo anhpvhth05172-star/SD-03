@@ -307,14 +307,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 }
 
 .pp-search:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
 }
 
 .pp-selected {
   font-size: 13px;
   font-weight: 600;
-  color: #2563eb;
+  color: #dc2626;
   white-space: nowrap;
 }
 
@@ -369,7 +369,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 }
 
 .pp-row-sel {
-  background: #eff6ff !important;
+  background: #fef2f2 !important;
 }
 
 .pp-row-off {
@@ -490,12 +490,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 }
 
 .pp-btn-ok {
-  background: #2563eb;
+  background: #dc2626;
   color: #fff;
 }
 
 .pp-btn-ok:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: #b91c1c;
 }
 
 .pp-btn-ok:disabled {
