@@ -1,11 +1,17 @@
 let thongDiep = ''
+let loaiThongDiep = 'success'
 
-export const setFlash = (message) => {
+export const setFlash = (message, loai = 'success') => {
   thongDiep = message || ''
+  loaiThongDiep = loai === 'warning' || loai === 'error' ? loai : 'success'
 }
 
-export const takeFlash = () => {
-  const m = thongDiep
+export const takeFlash = () => takeFlashWithMeta().message
+
+export const takeFlashWithMeta = () => {
+  const message = thongDiep
+  const type = loaiThongDiep
   thongDiep = ''
-  return m
+  loaiThongDiep = 'success'
+  return { message, type }
 }

@@ -18,6 +18,7 @@ public class KhachHangRequest {
     private String tenKhachHang;
     private String email;
     private String soDienThoai;
+    private String soCccd;
     private LocalDate ngaySinh;
     private String gioiTinh;
     private Boolean trangThai;

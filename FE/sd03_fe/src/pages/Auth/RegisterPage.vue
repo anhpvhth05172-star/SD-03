@@ -1,4 +1,5 @@
 <script setup>
+/* Tạm comment logic đăng ký (không xóa)
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { dangKy } from '@/api/auth'
@@ -62,9 +63,11 @@ const submit = async () => {
     loading.value = false
   }
 }
+*/
 </script>
 
 <template>
+  <!-- Tạm comment giao diện trang đăng ký (không xóa)
   <div class="auth-screen">
     <div class="auth-card">
       <div class="auth-brand">
@@ -122,6 +125,7 @@ const submit = async () => {
       </p>
     </div>
   </div>
+  -->
 </template>
 
 <style scoped>

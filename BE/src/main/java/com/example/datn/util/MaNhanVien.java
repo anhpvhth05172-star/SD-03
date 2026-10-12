@@ -5,8 +5,9 @@ import java.text.Normalizer;
 /**
  * Sinh mã từ họ tên (dùng chung cho nhân viên và khách hàng).
  * Quy tắc: tên gọi cuối cùng viết hoa chữ đầu + chữ cái đầu của họ và tên đệm
- * (viết thường, không dấu), cộng số thứ tự 2 chữ số.
- * Ví dụ: "Nguyễn Thị Bình" -&gt; "Binhnt01", "Phạm Hà Anh" -&gt; "Anhph01".
+ * (viết thường, không dấu). Ví dụ: "Nguyễn Thị Bình" -&gt; "Binhnt", "Phạm Hà Anh" -&gt; "Anhph".
+ * Số thứ tự (02, 03, ...) chỉ được cộng thêm khi mã gốc đã tồn tại, do service quyết định
+ * bằng {@link #congSo(String, int)}.
  */
 public final class MaNhanVien {
 

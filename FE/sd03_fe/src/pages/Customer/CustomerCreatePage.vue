@@ -60,6 +60,7 @@ const form = ref({
   matKhau: '',
   email: '',
   soDienThoai: '',
+  soCccd: '',
   ngaySinh: '',
   gioiTinh: '',
   trangThai: 'true',
@@ -109,6 +110,15 @@ const hienThiLoiNgaySinh = computed(() =>
 
 const loiGioiTinh = computed(() => (isBlank(form.value.gioiTinh) ? 'Vui lòng chọn giới tính' : ''))
 
+const loiSoCccd = computed(() =>
+  kiemTra([
+    toiDa(form.value.soCccd, 20, 'Số CCCD'),
+    !isBlank(form.value.soCccd) && !/^\d{9,12}$/.test(form.value.soCccd.trim())
+      ? 'Số CCCD không hợp lệ (gồm 9-12 chữ số, không chứa chữ cái)'
+      : '',
+  ]),
+)
+
 const chonVaiTro = (e) => {
   const id = e.target.value
   const v = id
@@ -129,6 +139,7 @@ const validate = () =>
     emailTrungLoi.value,
     toiDa(form.value.soDienThoai, 10, 'Số điện thoại'),
     soDienThoaiHopLe(form.value.soDienThoai),
+    loiSoCccd.value,
     khongDuocTuongLai(form.value.ngaySinh, 'Ngày sinh'),
     duTuoiToiThieu(form.value.ngaySinh, TUOI_TOI_THIEU, THONG_BAO_TUOI),
     loiGioiTinh.value,
@@ -143,6 +154,7 @@ const buildPayload = () => ({
   matKhau: form.value.matKhau ? form.value.matKhau : null,
   email: form.value.email.trim(),
   soDienThoai: form.value.soDienThoai.trim() || null,
+  soCccd: form.value.soCccd.trim(),
   ngaySinh: form.value.ngaySinh || null,
   gioiTinh: form.value.gioiTinh || null,
   trangThai: form.value.trangThai === 'true',
@@ -390,6 +402,7 @@ const submit = async () => {
     await chonMaTuDong(true)
   }
   saving.value = true
+  let emailThatBai = false
   try {
     const payload = buildPayload()
     let msg = ''
@@ -399,10 +412,23 @@ const submit = async () => {
       setFlash(msg)
     } else {
       const taoMoi = await createCustomer(payload)
-      msg = `Đã thêm khách hàng "${taoMoi.tenKhachHang}" (${taoMoi.maKhachHang}) thành công! Thông tin tài khoản đã được gửi về email ${taoMoi.email || form.value.email}.`
-      setFlash(msg)
+      const emailNhan = taoMoi.email || form.value.email || '(chưa có địa chỉ email)'
+      msg = `Đã thêm khách hàng "${taoMoi.tenKhachHang}" (${taoMoi.maKhachHang}) thành công!`
+      if (taoMoi.emailGuiThanhCong === true) {
+        msg += ` Email thông tin tài khoản đã được nhà cung cấp chấp nhận gửi tới ${emailNhan} — nếu chưa thấy, hãy kiểm tra thư mục Spam.`
+      } else if (taoMoi.emailGuiThanhCong === false) {
+        emailThatBai = true
+        msg += ` Hệ thống KHÔNG gửi được email thông tin tài khoản tới ${emailNhan}. Vui lòng kiểm tra lại địa chỉ email hoặc cấu hình gửi mail.`
+      } else {
+        msg += ` Hệ thống chưa xác nhận trạng thái gửi email thông tin tài khoản.`
+      }
+      setFlash(msg, emailThatBai ? 'warning' : 'success')
     }
-    notifySuccess(msg)
+    if (emailThatBai) {
+      notifyWarning('Thêm mới thành công, gửi email thất bại', msg)
+    } else {
+      notifySuccess(msg)
+    }
     setTimeout(() => {
       router.push('/khach-hang')
     }, 500)
@@ -464,6 +490,7 @@ onMounted(async () => {
       matKhau: '',
       email: kh.email || '',
       soDienThoai: kh.soDienThoai || '',
+      soCccd: kh.soCccd || '',
       ngaySinh: kh.ngaySinh || '',
       gioiTinh: kh.gioiTinh || '',
       trangThai: kh.trangThai === false ? 'false' : 'true',
@@ -548,6 +575,18 @@ onMounted(async () => {
             <div class="field">
               <label class="field-label">Số điện thoại</label>
               <input v-model="form.soDienThoai" type="tel" maxlength="10" placeholder="0901234567" />
+            </div>
+
+            <div class="field">
+              <label class="field-label">Số CCCD/CMND</label>
+              <input
+                v-model="form.soCccd"
+                type="text"
+                inputmode="numeric"
+                maxlength="20"
+                placeholder="012345678901"
+              />
+              <p v-if="daNopForm && loiSoCccd" class="field-hint is-error">{{ loiSoCccd }}</p>
             </div>
 
             <div class="field">

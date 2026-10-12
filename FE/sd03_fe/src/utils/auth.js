@@ -1,3 +1,4 @@
+/*
 const TOKEN_KEY = 'polyshoes_token'
 const REFRESH_KEY = 'polyshoes_refresh'
 const USER_KEY = 'polyshoes_user'
@@ -49,3 +50,4 @@ export const isTokenExpired = (token) => {
     return true
   }
 }
+*/

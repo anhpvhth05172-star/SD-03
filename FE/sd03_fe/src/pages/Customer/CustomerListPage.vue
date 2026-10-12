@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import CustomerAddressModal from '@/components/CustomerAddressModal.vue'
 import { getCustomer, listCustomers, updateCustomerStatus, deleteCustomer } from '@/api/customer'
 import { exportCsv, fetchAllPages } from '@/utils/export'
-import { takeFlash } from '@/utils/flash'
+import { takeFlashWithMeta } from '@/utils/flash'
 import { avatarColor, formatDate, formatDateTime, formatVnd, initialsOf } from '@/utils/format'
 import { getAvatarSrc, onAvatarError } from '@/utils/avatar'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm, notifyDeleteConfirm } from '@/utils/notify'
@@ -84,10 +84,25 @@ const goPage = (p) => {
 }
 
 const formatCustomerAddress = (row) => {
-  const d = row.diaChiMacDinh || (row.danhSachDiaChi && row.danhSachDiaChi.length ? row.danhSachDiaChi[0] : null)
-  if (!d) return '—'
-  const parts = [d.diaChiCuThe, d.phuong, d.thanhPho].filter(Boolean)
-  return parts.length ? parts.join(', ') : '—'
+  const ds =
+    row.danhSachDiaChi && row.danhSachDiaChi.length
+      ? row.danhSachDiaChi
+      : row.diaChiMacDinh
+        ? [row.diaChiMacDinh]
+        : []
+  if (!ds.length) return '—'
+  return ds
+    .map((d) => {
+      const parts = [d.diaChiCuThe, d.phuong, d.thanhPho].filter(Boolean)
+      const diaChi = parts.length ? parts.join(', ') : '—'
+      const ma = d.maDiaChi ? `${d.maDiaChi}: ` : ''
+      const ten = d.tenChiChi ? `${d.tenChiChi} — ` : ''
+      const nhan = []
+      if (d.macDinh) nhan.push('mặc định')
+      if (d.trangThai === false) nhan.push('ngừng dùng')
+      return `${ma}${ten}${diaChi}${nhan.length ? ` (${nhan.join(', ')})` : ''}`
+    })
+    .join('\n')
 }
 
 const exportFile = async () => {
@@ -173,6 +188,11 @@ const diaChiCustomerId = ref(null)
 const openAddress = (row) => {
   diaChiCustomerId.value = row.id
 }
+const moSoDiaChi = (row) => {
+  if (!row) return
+  detailData.value = null
+  openAddress(row)
+}
 const dongDiaChi = () => {
   diaChiCustomerId.value = null
 }
@@ -201,14 +221,28 @@ const diaChiText = computed(() => {
   const ds = (detailData.value && detailData.value.danhSachDiaChi) || []
   if (!ds.length) return ''
   return ds
-    .map((d) => `${d.maDiaChi} — ${diaChiLine(d)}${d.macDinh ? ' (mặc định)' : ''}`)
+    .map((d) => {
+      const nhan = []
+      if (d.macDinh) nhan.push('mặc định')
+      if (d.trangThai === false) nhan.push('ngừng dùng')
+      return `${d.maDiaChi} — ${d.tenChiChi ? `${d.tenChiChi}: ` : ''}${diaChiLine(d)}${
+        nhan.length ? ` (${nhan.join(', ')})` : ''
+      }`
+    })
     .join('\n')
 })
 
 onMounted(() => {
-  flashMsg.value = takeFlash()
-  if (flashMsg.value) {
-    notifySuccess(flashMsg.value)
+  const { message, type } = takeFlashWithMeta()
+  flashMsg.value = message
+  if (message) {
+    if (type === 'warning') {
+      notifyWarning(message)
+    } else if (type === 'error') {
+      notifyError(message)
+    } else {
+      notifySuccess(message)
+    }
   }
   load()
 })
@@ -321,7 +355,7 @@ onMounted(() => {
                 <td class="cell-name">{{ row.tenKhachHang }}</td>
                 <td class="cell-email">{{ row.email || '—' }}</td>
                 <td class="cell-address">
-                  <span class="address-clamp" :title="formatCustomerAddress(row)">
+                  <span class="address-all" :title="formatCustomerAddress(row)">
                     {{ formatCustomerAddress(row) }}
                   </span>
                 </td>
@@ -349,28 +383,15 @@ onMounted(() => {
                         <circle cx="12" cy="10" r="3"></circle>
                       </svg>
                     </button>
-                    <button class="btn-icon is-edit" type="button" title="Chỉnh sửa thông tin"
-                      @click="router.push(`/khach-hang/${row.id}/sua`)">
+                    <button class="btn-icon is-view" type="button" title="Xem chi tiết" aria-label="Xem chi tiết"
+                      @click="openDetail(row)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                         stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                      </svg>
-                    </button>
-                    <button class="btn-icon is-view" type="button" title="Xem chi tiết" @click="openDetail(row)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                        <circle cx="12" cy="12" r="3"></circle>
-                      </svg>
-                    </button>
-                    <button class="btn-icon is-delete" type="button" title="Xóa tài khoản" @click="removeCustomer(row)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                        <line x1="10" y1="11" x2="10" y2="17"></line>
-                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                        <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                        <circle cx="9" cy="10" r="2"></circle>
+                        <path d="M6 16c0-1.7 1.3-3 3-3s3 1.3 3 3"></path>
+                        <line x1="15" y1="9" x2="18" y2="9"></line>
+                        <line x1="15" y1="13" x2="18" y2="13"></line>
                       </svg>
                     </button>
                   </div>
@@ -382,6 +403,10 @@ onMounted(() => {
       </div>
 
       <div class="table-pagination-row">
+        <div class="pagination-summary">
+          Hiển thị <strong>{{ rows.length }}</strong> khách hàng trong tổng số
+          <strong>{{ totalElements }}</strong> khách hàng
+        </div>
         <div class="pagination-size-wrap">
           <select v-model="size" class="pagination-select" @change="onSizeChange">
             <option :value="5">5</option>
@@ -479,6 +504,10 @@ onMounted(() => {
                 <span class="info-cell-label"><i class="bi bi-person-badge"></i> Tên đăng nhập</span>
                 <span class="info-cell-value">{{ detailData.tenTaiKhoan || detailData.email || '—' }}</span>
               </div>
+              <div class="info-cell">
+                <span class="info-cell-label"><i class="bi bi-card-heading"></i> Số CCCD/CMND</span>
+                <span class="info-cell-value">{{ detailData.soCccd || 'Chưa cập nhật' }}</span>
+              </div>
             </div>
           </div>
 
@@ -499,7 +528,7 @@ onMounted(() => {
         </div>
 
         <div class="profile-modal-actions">
-          <button class="btn-profile-address" type="button" @click="moDiaChi(detailData.id)">
+          <button class="btn-profile-address" type="button" @click="moSoDiaChi(detailData)">
             <i class="bi bi-geo-alt"></i>
             <span>Sổ địa chỉ</span>
           </button>
@@ -768,13 +797,11 @@ onMounted(() => {
   line-height: 1.45;
 }
 
-.address-clamp {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 320px;
+.address-all {
+  display: block;
+  max-width: 360px;
+  white-space: pre-line;
+  word-break: break-word;
 }
 
 /* Avatar tròn */
@@ -920,6 +947,18 @@ onMounted(() => {
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid #f8fafc;
+}
+
+.pagination-summary {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.pagination-summary strong {
+  color: #1f2937;
+  font-weight: 700;
 }
 
 .pagination-size-wrap {
@@ -1288,6 +1327,7 @@ onMounted(() => {
   font-weight: 500;
   color: #1e293b;
   line-height: 1.5;
+  white-space: pre-line;
 }
 
 .modal-time-footer {

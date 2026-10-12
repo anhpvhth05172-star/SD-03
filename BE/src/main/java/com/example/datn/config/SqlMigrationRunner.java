@@ -63,12 +63,25 @@ public class SqlMigrationRunner implements ApplicationRunner {
                     continue;
                 }
                 long batDau = System.currentTimeMillis();
-                st.execute(doc(r));
-                try (Statement st2 = conn.createStatement()) {
-                    st2.execute(
-                        "INSERT INTO " + BANG + " (ten_file) VALUES (N'"
-                            + ten.replace("'", "''") + "')"
-                    );
+                // Script có BEGIN TRANSACTION/COMMIT riêng: nếu chạy trên kết nối autocommit=true,
+                // phiên SQL Server bị kẹt ở trạng thái giao dịch sai và mọi câu lệnh sau đều lỗi
+                // ("The server failed to resume the transaction") -> ghi nhận migration thất bại.
+                // Tự quản lý giao dịch ở mức kết nối để script lồng vào giao dịch của mình.
+                conn.setAutoCommit(false);
+                try {
+                    st.execute(doc(r));
+                    try (Statement st2 = conn.createStatement()) {
+                        st2.execute(
+                            "INSERT INTO " + BANG + " (ten_file) VALUES (N'"
+                                + ten.replace("'", "''") + "')"
+                        );
+                    }
+                    conn.commit();
+                } catch (Exception e) {
+                    rollbackImQuietly(conn);
+                    throw e;
+                } finally {
+                    setAutocommitImQuietly(conn, true);
                 }
                 moi++;
                 log.info(
@@ -90,6 +103,25 @@ public class SqlMigrationRunner implements ApplicationRunner {
                 sql = sql.substring(1);
             }
             return sql;
+        }
+    }
+
+    /** Rollback im khi kết nối đã ở trạng thái giao dịch sai; không được che lỗi gốc. */
+    private void rollbackImQuietly(Connection conn) {
+        try {
+            conn.rollback();
+        } catch (Exception e) {
+            log.warn("Không rollback được kết nối khi migration lỗi: {}", e.getMessage());
+        }
+    }
+
+    private void setAutocommitImQuietly(Connection conn, boolean autocommit) {
+        try {
+            if (conn.getAutoCommit() != autocommit) {
+                conn.setAutoCommit(autocommit);
+            }
+        } catch (Exception e) {
+            log.warn("Không khôi phục được autocommit của kết nối: {}", e.getMessage());
         }
     }
 }

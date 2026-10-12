@@ -1,3 +1,4 @@
+/*
 package com.example.datn.config;
 
 import com.example.datn.entity.PhienDangNhap;
@@ -68,3 +69,4 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 }
+*/
