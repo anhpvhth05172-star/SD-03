@@ -1,7 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-// Tạm comment phần token/JWT của phiên đăng nhập (không xóa)
-// import { getToken, getRefreshToken, isTokenExpired, dangXuat } from '../utils/auth'
-// import { refreshSession } from '../api/http'
 import { laAdmin } from '../utils/session'
 import AdminLayout from '../layouts/AdminLayout.vue'
 import ProductListPage from '@/pages/Product/ProductListPage.vue'
@@ -18,9 +15,6 @@ import CustomerListPage from '@/pages/Customer/CustomerListPage.vue'
 import CustomerCreatePage from '@/pages/Customer/CustomerCreatePage.vue'
 import PosSalesPage from '@/pages/Pos/PosSalesPage.vue'
 import AttributeCategoryPage from '@/pages/Product/AttributeCategoryPage.vue'
-// Tạm comment trang đăng nhập/đăng ký (không xóa)
-// import LoginPage from '@/pages/Auth/LoginPage.vue'
-// import RegisterPage from '@/pages/Auth/RegisterPage.vue'
 import PlaceholderPage from '@/pages/Common/PlaceholderPage.vue'
 import DiscountForm from '@/pages/Discount/DiscountForm.vue'
 import VoucherForm from '@/pages/Discount/VoucherForm.vue'
@@ -30,44 +24,155 @@ import DiscountFormUpdate from '@/pages/Discount/DiscountFormUpdate.vue'
 import VoucherFormUpdate from '@/pages/Discount/VoucherFormUpdate.vue'
 
 const routes = [
-  // Tạm comment route đăng nhập/đăng ký (không xóa)
-  // { path: '/dang-nhap', component: LoginPage, meta: { title: 'Đăng nhập' } },
-  // { path: '/dang-ky', component: RegisterPage, meta: { title: 'Đăng ký' } },
   {
     path: '/',
     component: AdminLayout,
     children: [
       { path: '', redirect: '/san-pham' },
-      { path: '/san-pham', name: 'ProductList', component: ProductListPage, meta: { title: 'Quản lý sản phẩm' } },
-      { path: '/san-pham/them', name: 'ProductCreate', component: ProductCreatePage, meta: { title: 'Thêm mới sản phẩm' } },
-      { path: '/san-pham/bien-the', name: 'ProductVariant', component: ProductVariantPage, meta: { title: 'Biến thể sản phẩm' } },
-      { path: '/bien-the-san-pham', component: ProductVariantPage, meta: { title: 'Biến thể sản phẩm' } },
-      { path: '/thuoc-tinh', component: AttributeCategoryPage, meta: { title: 'Danh mục thuộc tính' } },
-      { path: '/thuoc-tinh/:category', component: AttributeCategoryPage, meta: { title: 'Danh mục thuộc tính' } },
-      { path: '/hoa-don', component: InvoiceListPage, meta: { title: 'Quản lý hóa đơn', requiresAuth: true } },
-      { path: '/hoa-don/them', component: InvoiceFormPage, meta: { title: 'Tạo hóa đơn', requiresAuth: true } },
-      { path: '/hoa-don/:id', component: InvoiceDetailPage, meta: { title: 'Chi tiết hóa đơn', requiresAuth: true } },
-      { path: '/hoa-don/:id/sua', redirect: (to) => `/hoa-don/${to.params.id}` },
-      { path: '/phieu-giam-gia', component: VoucherListPage, meta: { title: 'Quản lý phiếu giảm giá' } },
-      { path: '/phieu-giam-gia/add', component: DiscountForm, meta: { title: 'Thêm phiếu giảm giá' } },
-      { path: '/phieu-giam-gia/detail/:id', component: DiscountFormDetail, meta: { title: 'Chi tiết phiếu giảm giá' } },
-      { path: '/phieu-giam-gia/update/:id', component: VoucherFormUpdate, meta: { title: 'Cập nhật phiếu giảm giá' } },
-      { path: '/phieu-giam-gia/:id/edit', redirect: to => `/phieu-giam-gia/update/${to.params.id}` },
-      { path: '/dot-giam-gia', component: DiscountEventPage, meta: { title: 'Quản lý đợt giảm giá', requiresAuth: true } },
-      { path: '/dot-giam-gia/add', component: VoucherForm, meta: { title: 'Thêm đợt giảm giá' } },
-      { path: '/dot-giam-gia/detail/:id', component: VoucherFormDetail, meta: { title: 'Chi tiết đợt giảm giá' } },
-      { path: '/dot-giam-gia/update/:id', component: DiscountFormUpdate, meta: { title: 'Cập nhật đợt giảm giá' } },
-      { path: '/dot-giam-gia/edit/:id', redirect: to => `/dot-giam-gia/update/${to.params.id}` },
+      {
+        path: '/san-pham',
+        name: 'ProductList',
+        component: ProductListPage,
+        meta: { title: 'Quản lý sản phẩm' },
+      },
+      {
+        path: '/san-pham/them',
+        name: 'ProductCreate',
+        component: ProductCreatePage,
+        meta: { title: 'Thêm mới sản phẩm' },
+      },
+      {
+        path: '/san-pham/bien-the',
+        name: 'ProductVariant',
+        component: ProductVariantPage,
+        meta: { title: 'Biến thể sản phẩm' },
+      },
+      {
+        path: '/bien-the-san-pham',
+        component: ProductVariantPage,
+        meta: { title: 'Biến thể sản phẩm' },
+      },
+      {
+        path: '/thuoc-tinh',
+        component: AttributeCategoryPage,
+        meta: { title: 'Danh mục thuộc tính' },
+      },
+      {
+        path: '/thuoc-tinh/:category',
+        component: AttributeCategoryPage,
+        meta: { title: 'Danh mục thuộc tính' },
+      },
+      {
+        path: '/hoa-don',
+        component: InvoiceListPage,
+        meta: { title: 'Quản lý hóa đơn', requiresAuth: true },
+      },
+      {
+        path: '/hoa-don/them',
+        component: InvoiceFormPage,
+        meta: { title: 'Tạo hóa đơn', requiresAuth: true },
+      },
+      {
+        path: '/hoa-don/:id',
+        component: InvoiceDetailPage,
+        meta: { title: 'Chi tiết hóa đơn', requiresAuth: true },
+      },
+      {
+        path: '/hoa-don/:id/sua',
+        component: InvoiceFormPage,
+        meta: { title: 'Sửa hóa đơn', requiresAuth: true },
+      },
+      {
+        path: '/phieu-giam-gia',
+        component: VoucherListPage,
+        meta: { title: 'Quản lý phiếu giảm giá' },
+      },
+      {
+        path: '/phieu-giam-gia/add',
+        component: DiscountForm,
+        meta: { title: 'Thêm phiếu giảm giá' },
+      },
+      {
+        path: '/phieu-giam-gia/detail/:id',
+        component: DiscountFormDetail,
+        meta: { title: 'Chi tiết phiếu giảm giá' },
+      },
+      {
+        path: '/phieu-giam-gia/update/:id',
+        component: VoucherFormUpdate,
+        meta: { title: 'Cập nhật phiếu giảm giá' },
+      },
+      {
+        path: '/phieu-giam-gia/:id/edit',
+        redirect: (to) => `/phieu-giam-gia/update/${to.params.id}`,
+      },
+      {
+        path: '/dot-giam-gia',
+        component: DiscountEventPage,
+        meta: { title: 'Quản lý đợt giảm giá', requiresAuth: true },
+      },
+      {
+        path: '/dot-giam-gia/add',
+        component: VoucherForm,
+        meta: { title: 'Thêm đợt giảm giá' },
+      },
+      {
+        path: '/dot-giam-gia/detail/:id',
+        component: VoucherFormDetail,
+        meta: { title: 'Chi tiết đợt giảm giá' },
+      },
+      {
+        path: '/dot-giam-gia/update/:id',
+        component: DiscountFormUpdate,
+        meta: { title: 'Cập nhật đợt giảm giá' },
+      },
+      {
+        path: '/dot-giam-gia/edit/:id',
+        redirect: (to) => `/dot-giam-gia/update/${to.params.id}`,
+      },
       { path: '/giam-gia', redirect: '/phieu-giam-gia' },
-      { path: '/thong-ke', component: PlaceholderPage, meta: { title: 'Thống kê', requiresAuth: true } },
-      { path: '/ban-hang', name: 'PosSales', component: PosSalesPage, meta: { title: 'Bán hàng tại quầy', requiresAuth: true } },
-      { path: '/khach-hang', component: CustomerListPage, meta: { title: 'Quản lý khách hàng', requiresAuth: true } },
-      { path: '/khach-hang/them', component: CustomerCreatePage, meta: { title: 'Quản lý khách hàng', requiresAuth: true } },
-      { path: '/khach-hang/:id/sua', component: CustomerCreatePage, meta: { title: 'Quản lý khách hàng', requiresAuth: true } },
-      { path: '/nhan-vien', component: EmployeeListPage, meta: { title: 'Quản lý nhân viên', requiresAuth: true } },
-      { path: '/nhan-vien/them', component: EmployeeCreatePage, meta: { title: 'Quản lý nhân viên', requiresAuth: true } },
-      { path: '/nhan-vien/:id/sua', component: EmployeeCreatePage, meta: { title: 'Quản lý nhân viên', requiresAuth: true } }
-    ]
+      {
+        path: '/thong-ke',
+        component: PlaceholderPage,
+        meta: { title: 'Thống kê', requiresAuth: true },
+      },
+      {
+        path: '/ban-hang',
+        name: 'PosSales',
+        component: PosSalesPage,
+        meta: { title: 'Bán hàng tại quầy', requiresAuth: true },
+      },
+      {
+        path: '/khach-hang',
+        component: CustomerListPage,
+        meta: { title: 'Quản lý khách hàng', requiresAuth: true },
+      },
+      {
+        path: '/khach-hang/them',
+        component: CustomerCreatePage,
+        meta: { title: 'Quản lý khách hàng', requiresAuth: true },
+      },
+      {
+        path: '/khach-hang/:id/sua',
+        component: CustomerCreatePage,
+        meta: { title: 'Quản lý khách hàng', requiresAuth: true },
+      },
+      {
+        path: '/nhan-vien',
+        component: EmployeeListPage,
+        meta: { title: 'Quản lý nhân viên', requiresAuth: true },
+      },
+      {
+        path: '/nhan-vien/them',
+        component: EmployeeCreatePage,
+        meta: { title: 'Quản lý nhân viên', requiresAuth: true },
+      },
+      {
+        path: '/nhan-vien/:id/sua',
+        component: EmployeeCreatePage,
+        meta: { title: 'Quản lý nhân viên', requiresAuth: true },
+      },
+    ],
   },
   {
     path: '/admin/:pathMatch(.*)*',
@@ -75,17 +180,17 @@ const routes = [
       const sub = to.params.pathMatch
       const path = Array.isArray(sub) ? sub.join('/') : sub
       return path ? `/${path}` : '/san-pham'
-    }
+    },
   },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/san-pham'
-  }
+    redirect: '/san-pham',
+  },
 ]
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes
+  routes,
 })
 
 /* Tạm comment guard kiểm tra phiên đăng nhập (không xóa)
@@ -114,11 +219,13 @@ router.beforeEach(async (to) => {
 })
 */
 
+
 router.beforeEach((to) => {
   if (to.path.startsWith('/nhan-vien') && !laAdmin()) {
     return '/khach-hang'
   }
   return true
 })
+
 
 export default router

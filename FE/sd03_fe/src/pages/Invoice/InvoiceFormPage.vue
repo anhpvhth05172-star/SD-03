@@ -429,7 +429,7 @@ const validate = () => {
       const phi = Number(phiRaw)
       if (!Number.isFinite(phi)) e.phiVanChuyen = 'Phí vận chuyển chỉ được nhập số'
       else if (phi < 0) e.phiVanChuyen = 'Phí vận chuyển không được âm'
-      else if (phi <= 1000) e.phiVanChuyen = 'Phí vận chuyển phải lớn hơn 1000'
+      else if (phi > 0 && phi < 1000) e.phiVanChuyen = 'Phí vận chuyển nếu có phải từ 1.000đ trở lên'
     }
   }
 
@@ -700,7 +700,7 @@ onMounted(async () => {
             v-else
             v-model.number="form.phiVanChuyen"
             type="number"
-            min="1001"
+            min="0"
             placeholder="0"
           />
           <div v-if="errors.phiVanChuyen" class="field-error">{{ errors.phiVanChuyen }}</div>

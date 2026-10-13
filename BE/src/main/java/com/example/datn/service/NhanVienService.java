@@ -221,13 +221,7 @@ public class NhanVienService {
         checkLength(req.getDiaChiCuThe(), 255, "Địa chỉ cụ thể");
         // anhNhanVien lưu chuỗi Base64 hoặc URL nên không giới hạn 1000 ký tự
         checkLength(req.getNguoiCapNhat(), 100, "Người cập nhật");
-        String ten = req.getTenTaiKhoan().trim();
-        boolean trungTen = taoMoi
-            ? nhanVienRepository.existsByTenTaiKhoan(ten)
-            : nhanVienRepository.existsByTenTaiKhoanAndIdNot(ten, excludeId);
-        if (trungTen) {
-            throw new IllegalArgumentException("Tên nhân viên đã tồn tại");
-        }
+
         if (!isBlank(req.getMaNhanVien())) {
             String ma = req.getMaNhanVien().trim();
             if (!MaNhanVien.hopLe(ma)) {

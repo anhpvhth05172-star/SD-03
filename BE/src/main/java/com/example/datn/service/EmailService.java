@@ -17,7 +17,7 @@ public class EmailService {
     private final JavaMailSender mailSender;
 
     /** Địa chỉ người gửi lấy từ cấu hình (không ghi cứng tài khoản trong source). */
-    @Value("${spring.mail.from:${spring.mail.username:}}")
+    @Value("${spring.mail.from:${spring.mail.username:maninoduc123@gmail.com}}")
     private String fromEmail;
 
     /**

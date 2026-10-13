@@ -4,15 +4,9 @@ import QRCode from 'qrcode'
 import http from '@/api/http'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import { formatVnd } from '@/utils/format'
-import { emailHopLe, toiDa } from '@/utils/validate'
-import { createCustomer } from '@/api/customer'
-import { getProvinces, getDistricts, getWards, tinhPhi } from '@/api/shipping'
 
 const API_BASE = 'http://localhost:8080/api/v1'
 
-// ==========================================
-// 1. DATA STATE & PENDING INVOICES
-// ==========================================
 const MAX_ORDERS = 5
 const pendingOrders = ref([])
 const activeOrderIndex = ref(0)
@@ -22,10 +16,8 @@ const allCustomers = ref([])
 const allVouchers = ref([])
 const allEmployees = ref([])
 const allPaymentMethods = ref([])
-const shippingProvinces = ref([])
 const isLoadingData = ref(false)
 
-// Attributes for modal filters
 const brandsList = ref([])
 const categoriesList = ref([])
 const colorsList = ref([])
@@ -62,16 +54,12 @@ const createNewOrder = () => {
       recipientName: '',
       recipientPhone: '',
       recipientAddress: '',
-      shippingFee: 0,
-      provinceId: '',
-      districtId: '',
-      wardCode: '',
-      districts: [],
-      wards: []
+      shippingFee: 0
     },
     paymentMethod: 'TIEN_MAT',
     selectedVoucher: null,
     cashGiven: 0,
+    transferGiven: 0,
     note: ''
   }
 
@@ -99,7 +87,6 @@ const closeOrderTab = async (index, event) => {
     if (!ok) return
   }
 
-  // Hoàn trả lại số lượng vào tồn kho
   target.cart.forEach(item => {
     const targetProd = allProducts.value.find(p => p.id === item.idCtsp)
     if (targetProd) {
@@ -114,9 +101,6 @@ const closeOrderTab = async (index, event) => {
   }
 }
 
-// ==========================================
-// 2. CART TOTAL CALCULATIONS
-// ==========================================
 const subTotal = computed(() => {
   if (!currentOrder.value) return 0
   return currentOrder.value.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
@@ -155,14 +139,18 @@ const changeDue = computed(() => {
   if (!currentOrder.value) return 0
   if (currentOrder.value.paymentMethod === 'TIEN_MAT') {
     return (currentOrder.value.cashGiven || 0) - finalTotal.value
+  } else if (currentOrder.value.paymentMethod === 'CHUYEN_KHOAN') {
+    return 0
+  } else {
+    const totalPaid = Number(currentOrder.value.cashGiven || 0) + Number(currentOrder.value.transferGiven || 0)
+    return totalPaid - finalTotal.value
   }
-  return 0
 })
 
-// ==========================================
-// 3. CART OPERATIONS
-// ==========================================
 const getEffectivePrice = (item) => {
+  if (item.giaSauGiam !== null && item.giaSauGiam !== undefined) {
+    return Number(item.giaSauGiam)
+  }
   const basePrice = Number(item.price || item.giaBan || 0)
   if (item.discount) {
     const discNum = parseFloat(item.discount.toString().replace(/[^0-9.-]+/g, ''))
@@ -182,7 +170,6 @@ const addToCart = (productVariant, qtyToAdd = 1) => {
     createNewOrder()
   }
 
-  // Tìm biến thể trong allProducts để kiểm tra và trừ tồn kho
   const targetProd = allProducts.value.find(p => p.id === productVariant.id)
   const currentAvailableStock = targetProd
     ? (targetProd.stock !== undefined ? targetProd.stock : (targetProd.soLuong || 0))
@@ -193,7 +180,6 @@ const addToCart = (productVariant, qtyToAdd = 1) => {
     return
   }
 
-  // Trừ tồn kho trong danh sách sản phẩm
   if (targetProd) {
     if (targetProd.stock !== undefined) targetProd.stock -= qtyToAdd
     if (targetProd.soLuong !== undefined) targetProd.soLuong -= qtyToAdd
@@ -237,7 +223,6 @@ const updateCartItemQty = (item, newQty) => {
     : 0
 
   if (delta > 0) {
-    // Tăng số lượng -> kiểm tra tồn kho và trừ đi
     if (delta > currentAvailable) {
       notifyWarning('Vượt quá tồn kho!', `Chỉ còn thêm ${currentAvailable} sản phẩm trong kho.`)
       const actualAdd = currentAvailable
@@ -257,7 +242,6 @@ const updateCartItemQty = (item, newQty) => {
     }
     item.quantity = newQty
   } else if (delta < 0) {
-    // Giảm số lượng -> hoàn trả lại vào tồn kho
     const returnQty = Math.abs(delta)
     if (targetProd) {
       if (targetProd.stock !== undefined) targetProd.stock += returnQty
@@ -271,7 +255,6 @@ const removeCartItem = (item) => {
   if (!currentOrder.value) return
   const idx = currentOrder.value.cart.findIndex(i => i.idCtsp === item.idCtsp)
   if (idx !== -1) {
-    // Hoàn trả lại toàn bộ số lượng vào kho
     const targetProd = allProducts.value.find(p => p.id === item.idCtsp)
     if (targetProd) {
       if (targetProd.stock !== undefined) targetProd.stock += item.quantity
@@ -295,9 +278,6 @@ const setQuickCash = (amount) => {
   }
 }
 
-// ==========================================
-// 4. CUSTOMER SEARCH & MANAGEMENT
-// ==========================================
 const customerSearchQuery = ref('')
 const showCustomerDropdown = ref(false)
 const isAddCustomerModalOpen = ref(false)
@@ -328,118 +308,67 @@ const selectCustomer = (cust) => {
   }
 }
 
-const onDeliveryProvinceChange = async (order) => {
-  const address = order.deliveryInfo
-  address.districtId = ''
-  address.wardCode = ''
-  address.districts = []
-  address.wards = []
-  address.shippingFee = 0
-  if (!address.provinceId) return
-  try {
-    address.districts = await getDistricts(Number(address.provinceId))
-  } catch (err) {
-    notifyError('Không tải được quận/huyện', err.message || 'Vui lòng thử lại.')
-  }
-}
-
-const onDeliveryToggle = (order) => {
-  if (!order.isDelivery || !order.customer) return
-  order.deliveryInfo.recipientName = order.customer.ten || order.customer.tenKhachHang || ''
-  order.deliveryInfo.recipientPhone = order.customer.soDienThoai || ''
-}
-
-const onDeliveryDistrictChange = async (order) => {
-  const address = order.deliveryInfo
-  address.wardCode = ''
-  address.wards = []
-  address.shippingFee = 0
-  if (!address.districtId) return
-  try {
-    address.wards = await getWards(Number(address.districtId))
-  } catch (err) {
-    notifyError('Không tải được phường/xã', err.message || 'Vui lòng thử lại.')
-  }
-}
-
-const onDeliveryWardChange = (order) => {
-  order.deliveryInfo.shippingFee = 0
-}
-
 const removeSelectedCustomer = () => {
   if (currentOrder.value) {
     currentOrder.value.customer = null
   }
 }
 
-const isSavingQuickCustomer = ref(false)
+const isSavingCustomer = ref(false)
+
 const saveQuickCustomer = async () => {
-  const ten = newCustomerForm.tenKhachHang.trim()
-  const soDienThoai = newCustomerForm.soDienThoai.trim()
-  const email = newCustomerForm.email.trim()
-  if (!ten) {
+  if (!newCustomerForm.tenKhachHang.trim()) {
     notifyWarning('Thiếu thông tin', 'Vui lòng nhập tên khách hàng!')
     return
   }
-  if (ten.length > 150 || !/^[\p{L}\s.'-]+$/u.test(ten)) {
-    notifyWarning('Thông tin không hợp lệ', 'Tên khách hàng tối đa 150 ký tự và chỉ gồm chữ, khoảng trắng, dấu chấm, nháy đơn hoặc gạch ngang.')
-    return
-  }
-  if (!soDienThoai) {
+  const phone = newCustomerForm.soDienThoai.trim()
+  if (!phone) {
     notifyWarning('Thiếu thông tin', 'Vui lòng nhập số điện thoại khách hàng!')
     return
   }
-  if (!/^0\d{8,9}$/.test(soDienThoai)) {
-    notifyWarning('Thông tin không hợp lệ', 'Số điện thoại phải gồm 9 hoặc 10 chữ số và bắt đầu bằng 0.')
-    return
-  }
-  if (!email) {
-    notifyWarning('Thiếu thông tin', 'Vui lòng nhập email khách hàng.')
-    return
-  }
-  const loiEmail = emailHopLe(email) || toiDa(email, 150, 'Email')
-  if (loiEmail) {
-    notifyWarning('Thông tin không hợp lệ', loiEmail)
-    return
-  }
-  if (newCustomerForm.diaChi.trim().length > 500) {
-    notifyWarning('Thông tin không hợp lệ', 'Địa chỉ không được vượt quá 500 ký tự.')
+  if (!/^0\d{9,10}$/.test(phone)) {
+    notifyWarning('Số điện thoại không hợp lệ', 'Số điện thoại phải gồm 10 hoặc 11 chữ số và bắt đầu bằng số 0!')
     return
   }
 
-  isSavingQuickCustomer.value = true
+  isSavingCustomer.value = true
   try {
-    const created = await createCustomer({
-      tenKhachHang: ten,
-      email,
-      soDienThoai,
-      diaChiCuThe: newCustomerForm.diaChi.trim() || null,
-      trangThai: true,
-      nguoiCapNhat: 'POS'
-    })
-    const createdCust = {
-      ...created,
-      ten: created.tenKhachHang,
-      diaChi: newCustomerForm.diaChi.trim()
+    const payload = {
+      tenKhachHang: newCustomerForm.tenKhachHang.trim(),
+      soDienThoai: phone,
+      email: newCustomerForm.email.trim() || undefined,
+      diaChiCuThe: newCustomerForm.diaChi.trim() || undefined,
+      trangThai: true
     }
+
+    const res = await http.post('/khach-hang', payload)
+    const newCust = res.data
+    const createdCust = {
+      id: newCust.id,
+      ten: newCust.tenKhachHang,
+      soDienThoai: newCust.soDienThoai,
+      email: newCust.email,
+      diaChi: newCust.diaChiMacDinh ? newCust.diaChiMacDinh.diaChiCuThe : (newCustomerForm.diaChi.trim() || '')
+    }
+
     allCustomers.value.unshift(createdCust)
     selectCustomer(createdCust)
     isAddCustomerModalOpen.value = false
+
     newCustomerForm.tenKhachHang = ''
     newCustomerForm.soDienThoai = ''
     newCustomerForm.email = ''
     newCustomerForm.diaChi = ''
-    notifySuccess('Thành công', 'Đã thêm và chọn khách hàng mới!')
+
+    notifySuccess('Thành công', `Đã thêm khách hàng "${createdCust.ten}" thành công!`)
   } catch (err) {
-    notifyError('Không thể thêm khách hàng', err.message || 'Vui lòng kiểm tra lại thông tin.')
+    console.error('Error creating customer:', err)
+    notifyError('Lỗi thêm khách hàng', err.message || 'Không thể tạo khách hàng mới trên máy chủ!')
   } finally {
-    isSavingQuickCustomer.value = false
+    isSavingCustomer.value = false
   }
 }
 
-// ==========================================
-// 5. PRODUCT PICKER MODAL (LIKE SCREENSHOT)
-// ==========================================
 const isProductModalOpen = ref(false)
 const modalFilters = reactive({
   search: '',
@@ -466,8 +395,6 @@ const resetModalFilters = () => {
 
 const filteredModalVariants = computed(() => {
   let list = allProducts.value || []
-
-  // 1. Search text
   const term = modalFilters.search.trim().toLowerCase()
   if (term) {
     list = list.filter(p =>
@@ -481,27 +408,22 @@ const filteredModalVariants = computed(() => {
     )
   }
 
-  // 2. Brand
   if (modalFilters.idThuongHieu) {
     list = list.filter(p => String(p.idThuongHieu) === String(modalFilters.idThuongHieu) || (p.tenThuongHieu && p.tenThuongHieu === modalFilters.idThuongHieu))
   }
 
-  // 3. Category / Shoe type
   if (modalFilters.idLoaiGiay) {
     list = list.filter(p => String(p.idLoaiGiay) === String(modalFilters.idLoaiGiay) || (p.tenLoaiGiay && p.tenLoaiGiay === modalFilters.idLoaiGiay))
   }
 
-  // 4. Color
   if (modalFilters.idMauSac) {
     list = list.filter(p => String(p.idMauSac) === String(modalFilters.idMauSac) || (p.color && p.color === modalFilters.idMauSac) || (p.tenMau && p.tenMau === modalFilters.idMauSac))
   }
 
-  // 5. Size
   if (modalFilters.idKichCo) {
     list = list.filter(p => String(p.idKichCo) === String(modalFilters.idKichCo) || (p.size && p.size === modalFilters.idKichCo) || (p.tenKichCo && p.tenKichCo === modalFilters.idKichCo))
   }
 
-  // 6. Price Range
   if (modalFilters.priceRange) {
     list = list.filter(p => {
       const pr = getEffectivePrice(p)
@@ -628,8 +550,51 @@ const handleCancelOrder = async () => {
     currentOrder.value.cart = []
     currentOrder.value.customer = null
     currentOrder.value.cashGiven = 0
+    currentOrder.value.transferGiven = 0
     currentOrder.value.note = ''
     notifySuccess('Đã làm mới giỏ hàng và hoàn trả tồn kho')
+  }
+}
+
+const getPaymentMethodId = (methodType) => {
+  if (!allPaymentMethods.value || allPaymentMethods.value.length === 0) return 1
+  if (methodType === 'TIEN_MAT') {
+    const found = allPaymentMethods.value.find(p => p.ten && p.ten.toLowerCase().includes('tiền mặt'))
+    return found ? found.id : (allPaymentMethods.value[0]?.id || 1)
+  }
+  if (methodType === 'CHUYEN_KHOAN') {
+    const found = allPaymentMethods.value.find(p => p.ten && p.ten.toLowerCase().includes('chuyển khoản'))
+    return found ? found.id : (allPaymentMethods.value[1]?.id || 2)
+  }
+  return allPaymentMethods.value[0]?.id || 1
+}
+
+const isVoucherModalOpen = ref(false)
+
+const openVoucherModal = () => {
+  if (!currentOrder.value) createNewOrder()
+  isVoucherModalOpen.value = true
+}
+
+const applyVoucher = (voucher) => {
+  if (!currentOrder.value) return
+  if (!currentOrder.value.customer) {
+    notifyWarning('Yêu cầu khách hàng', 'Vui lòng chọn hoặc thêm khách hàng để áp dụng phiếu giảm giá!')
+    return
+  }
+  if (subTotal.value < (voucher.hoaDonToiThieu || 0)) {
+    notifyWarning('Chưa đủ điều kiện', `Đơn hàng tối thiểu cần đạt ${formatVnd(voucher.hoaDonToiThieu)} để áp dụng phiếu này!`)
+    return
+  }
+  currentOrder.value.selectedVoucher = voucher
+  isVoucherModalOpen.value = false
+  notifySuccess('Đã áp dụng voucher', `Đã áp dụng mã "${voucher.ma}" (${voucher.ten})!`)
+}
+
+const removeVoucher = () => {
+  if (currentOrder.value) {
+    currentOrder.value.selectedVoucher = null
+    notifySuccess('Đã hủy voucher', 'Đã hủy áp dụng phiếu giảm giá cho đơn hàng!')
   }
 }
 
@@ -640,74 +605,8 @@ const handleCheckout = async () => {
     return
   }
 
-  if (!currentOrder.value.customer?.id) {
-    notifyWarning('Chưa chọn khách hàng', 'Vui lòng chọn khách hàng hoặc thêm khách hàng trước khi thanh toán.')
-    return
-  }
-  if (currentOrder.value.isDelivery) {
-    const address = currentOrder.value.deliveryInfo
-    if (!address.recipientName.trim() || address.recipientName.trim().length > 150) {
-      notifyWarning('Thông tin người nhận không hợp lệ', 'Vui lòng nhập tên người nhận, tối đa 150 ký tự.')
-      return
-    }
-    if (!/^0\d{9,10}$/.test(address.recipientPhone.trim())) {
-      notifyWarning('Thông tin người nhận không hợp lệ', 'Số điện thoại người nhận phải gồm 10 hoặc 11 chữ số và bắt đầu bằng 0.')
-      return
-    }
-    if (!address.recipientAddress.trim() || address.recipientAddress.trim().length > 300) {
-      notifyWarning('Thiếu địa chỉ giao hàng', 'Vui lòng nhập địa chỉ cụ thể, tối đa 300 ký tự.')
-      return
-    }
-    if (!address.provinceId || !address.districtId || !address.wardCode) {
-      notifyWarning('Thiếu địa chỉ giao hàng', 'Vui lòng chọn tỉnh/thành phố, quận/huyện và phường/xã.')
-      return
-    }
-    try {
-      const shipping = await tinhPhi({
-        toDistrictId: Number(address.districtId),
-        toWardCode: String(address.wardCode),
-        items: currentOrder.value.cart.map((item) => ({
-          idSanPhamChiTiet: Number(item.idCtsp),
-          soLuong: Number(item.quantity)
-        }))
-      })
-      address.shippingFee = Number(shipping.shippingFee) || 0
-      if (address.shippingFee <= 1000) throw new Error('Phí GHN trả về không hợp lệ.')
-    } catch (err) {
-      address.shippingFee = 0
-      notifyError('Không tính được phí vận chuyển', err.message || 'Vui lòng kiểm tra địa chỉ và sản phẩm.')
-      return
-    }
-  }
-  const tuKhoaThanhToan = currentOrder.value.paymentMethod === 'TIEN_MAT'
-    ? ['tiền mặt', 'cash']
-    : currentOrder.value.paymentMethod === 'CHUYEN_KHOAN'
-      ? ['chuyển khoản', 'transfer']
-      : []
-  const phuongThuc = allPaymentMethods.value.find((p) =>
-    tuKhoaThanhToan.some((tuKhoa) => String(p.ten || '').toLowerCase().includes(tuKhoa))
-  )
-  if (!phuongThuc?.id) {
-    notifyWarning('Chưa cấu hình phương thức thanh toán', 'Không tìm thấy phương thức tương ứng trong dữ liệu hóa đơn.')
-    return
-  }
-  if (!allEmployees.value[0]?.id) {
-    notifyWarning('Thiếu nhân viên xử lý', 'Không có nhân viên hợp lệ trong dữ liệu hóa đơn.')
-    return
-  }
-  const ghiChu = String(currentOrder.value.note || '').trim()
-  if (ghiChu.length > 1000 || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(ghiChu)) {
-    notifyWarning('Ghi chú không hợp lệ', 'Ghi chú tối đa 1.000 ký tự và không được chứa ký tự điều khiển.')
-    return
-  }
-  const diaChiNhanHang = currentOrder.value.isDelivery ? [
-    currentOrder.value.deliveryInfo.recipientAddress.trim(),
-    currentOrder.value.deliveryInfo.wards.find((w) => String(w.code) === String(currentOrder.value.deliveryInfo.wardCode))?.name,
-    currentOrder.value.deliveryInfo.districts.find((d) => Number(d.id) === Number(currentOrder.value.deliveryInfo.districtId))?.name,
-    shippingProvinces.value.find((p) => Number(p.id) === Number(currentOrder.value.deliveryInfo.provinceId))?.name
-  ].filter(Boolean).join(', ') : ''
-  if (diaChiNhanHang.length > 500 || (diaChiNhanHang && !/^[\p{L}\p{N}\s.,\/-]+$/u.test(diaChiNhanHang))) {
-    notifyWarning('Địa chỉ giao hàng không hợp lệ', 'Địa chỉ tối đa 500 ký tự và chỉ được chứa chữ, số, khoảng trắng, dấu chấm, phẩy, gạch chéo hoặc gạch ngang.')
+  if (currentOrder.value.selectedVoucher && !currentOrder.value.customer) {
+    notifyWarning('Cần khách hàng', 'Vui lòng chọn hoặc thêm khách hàng để áp dụng phiếu giảm giá!')
     return
   }
 
@@ -729,25 +628,29 @@ const handleCheckout = async () => {
   isProcessingCheckout.value = true
 
   try {
+    const paymentMethodId = getPaymentMethodId(currentOrder.value.paymentMethod)
+    const employeeId = allEmployees.value.length > 0 ? allEmployees.value[0].id : 2
+
+    const customerPhone = currentOrder.value.customer && currentOrder.value.customer.soDienThoai
+      ? currentOrder.value.customer.soDienThoai
+      : '0988888888'
+
+    const customerName = currentOrder.value.customer
+      ? (currentOrder.value.customer.ten || currentOrder.value.customer.tenKhachHang)
+      : 'Khách lẻ'
+
     const payload = {
       maHoaDon: currentOrder.value.code,
       loaiDon: currentOrder.value.isDelivery ? 'Online' : 'Tại quầy',
       phiVanChuyen: currentOrder.value.isDelivery ? Number(currentOrder.value.deliveryInfo.shippingFee || 0) : 0,
-      tenKhachHang: currentOrder.value.isDelivery
-        ? currentOrder.value.deliveryInfo.recipientName.trim()
-        : (currentOrder.value.customer.ten || currentOrder.value.customer.tenKhachHang),
-      soDienThoaiKhachHang: currentOrder.value.isDelivery
-        ? currentOrder.value.deliveryInfo.recipientPhone.trim()
-        : currentOrder.value.customer.soDienThoai,
-      diaChiNhanHang,
+      tenKhachHang: customerName,
+      soDienThoaiKhachHang: customerPhone,
+      diaChiNhanHang: currentOrder.value.isDelivery ? currentOrder.value.deliveryInfo.recipientAddress : '',
       trangThai: 'Đã hoàn thành',
-      ghiChu: ghiChu || 'Bán hàng tại quầy POS',
+      ghiChu: currentOrder.value.note || 'Bán hàng tại quầy POS',
       idKhachHang: currentOrder.value.customer ? currentOrder.value.customer.id : null,
-      idNhanVien: allEmployees.value.length > 0 ? allEmployees.value[0].id : null,
-      idPhuongThucThanhToan: phuongThuc.id,
-      toProvinceId: currentOrder.value.isDelivery ? Number(currentOrder.value.deliveryInfo.provinceId) : null,
-      toDistrictId: currentOrder.value.isDelivery ? Number(currentOrder.value.deliveryInfo.districtId) : null,
-      toWardCode: currentOrder.value.isDelivery ? String(currentOrder.value.deliveryInfo.wardCode) : null,
+      idNhanVien: employeeId,
+      idPhuongThucThanhToan: paymentMethodId,
       idPhieuGiamGia: currentOrder.value.selectedVoucher ? currentOrder.value.selectedVoucher.id : null,
       chiTiet: currentOrder.value.cart.map(item => ({
         idSanPhamChiTiet: item.idCtsp,
@@ -777,9 +680,17 @@ const handleCheckout = async () => {
     }
 
     notifySuccess('Thanh toán thành công!', `Đã hoàn tất hóa đơn ${currentOrder.value.code}`)
+    fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&trangThai=true`)
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.content) allProducts.value = data.content
+      })
+      .catch(() => { })
 
     pendingOrders.value.splice(activeOrderIndex.value, 1)
-    if (activeOrderIndex.value >= pendingOrders.value.length) {
+    if (pendingOrders.value.length === 0) {
+      createNewOrder()
+    } else if (activeOrderIndex.value >= pendingOrders.value.length) {
       activeOrderIndex.value = Math.max(0, pendingOrders.value.length - 1)
     }
 
@@ -797,15 +708,9 @@ const printReceipt = () => {
   window.print()
 }
 
-// ==========================================
-// 9. INITIAL LOAD
-// ==========================================
 const loadInitialData = async () => {
   isLoadingData.value = true
   try {
-    getProvinces().then((rows) => { shippingProvinces.value = rows || [] }).catch((err) => {
-      notifyError('Không tải được danh sách tỉnh/thành phố', err.message || 'Vui lòng tải lại trang.')
-    })
     const [formRes, prodRes, brandRes, catRes, colorRes, sizeRes] = await Promise.allSettled([
       http.get('/hoa-don/form-data'),
       fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&trangThai=true`).then(r => r.json()),
@@ -818,9 +723,16 @@ const loadInitialData = async () => {
     if (formRes.status === 'fulfilled' && formRes.value.data) {
       const d = formRes.value.data
       allCustomers.value = d.khachHangs || []
-      allVouchers.value = d.phieuGiamGias || []
+      allVouchers.value = (d.phieuGiamGias || []).filter(v => v.trangThai !== false)
       allEmployees.value = d.nhanViens || []
-      allPaymentMethods.value = d.phuongThucThanhToans || []
+      allPaymentMethods.value = d.phuongThucThanhToans || d.phuongThucs || []
+    }
+
+    if (allPaymentMethods.value.length === 0) {
+      allPaymentMethods.value = [
+        { id: 1, ten: 'Tiền mặt tại quầy' },
+        { id: 2, ten: 'Chuyển khoản ngân hàng' }
+      ]
     }
 
     if (brandRes.status === 'fulfilled' && Array.isArray(brandRes.value)) brandsList.value = brandRes.value
@@ -828,8 +740,8 @@ const loadInitialData = async () => {
     if (colorRes.status === 'fulfilled' && Array.isArray(colorRes.value)) colorsList.value = colorRes.value
     if (sizeRes.status === 'fulfilled' && Array.isArray(sizeRes.value)) sizesList.value = sizeRes.value
 
-    if (prodRes.status === 'fulfilled' && prodRes.value) {
-      allProducts.value = prodRes.value.content || []
+    if (prodRes.status === 'fulfilled' && prodRes.value && prodRes.value.content) {
+      allProducts.value = prodRes.value.content
     }
 
     if (allProducts.value.length === 0) {
@@ -927,8 +839,6 @@ onMounted(() => {
 
     <div class="pos-main-grid">
       <div class="pos-col-left">
-
-        <!-- CARD 1: HÓA ĐƠN CHỜ (PENDING ORDERS) -->
         <div class="pos-card pending-orders-card">
           <div class="pending-orders-head">
             <button class="btn-add-order" @click="createNewOrder" :disabled="pendingOrders.length >= MAX_ORDERS">
@@ -956,7 +866,6 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- CARD 2: GIỎ HÀNG (CART) -->
         <div class="pos-card cart-card">
           <div class="cart-card-head">
             <div class="cart-title-wrap">
@@ -1047,7 +956,6 @@ onMounted(() => {
 
       </div>
 
-      <!-- RIGHT COLUMN: KHÁCH HÀNG & THÔNG TIN ĐƠN HÀNG -->
       <div class="pos-col-right">
         <div class="pos-card customer-card">
           <div class="customer-card-head">
@@ -1089,7 +997,7 @@ onMounted(() => {
             <div class="delivery-toggle-wrap">
               <span>Giao hàng</span>
               <label class="switch-ui">
-              <input type="checkbox" v-if="currentOrder" v-model="currentOrder.isDelivery" @change="onDeliveryToggle(currentOrder)" />
+                <input type="checkbox" v-if="currentOrder" v-model="currentOrder.isDelivery" />
                 <span class="slider-round"></span>
               </label>
             </div>
@@ -1102,19 +1010,8 @@ onMounted(() => {
               v-model="currentOrder.deliveryInfo.recipientPhone" />
             <input type="text" class="del-input" placeholder="Địa chỉ giao hàng chi tiết..."
               v-model="currentOrder.deliveryInfo.recipientAddress" />
-            <select class="del-input" v-model="currentOrder.deliveryInfo.provinceId" @change="onDeliveryProvinceChange(currentOrder)">
-              <option value="">— Chọn tỉnh/thành phố —</option>
-              <option v-for="province in shippingProvinces" :key="province.id" :value="province.id">{{ province.name }}</option>
-            </select>
-            <select class="del-input" v-model="currentOrder.deliveryInfo.districtId" :disabled="!currentOrder.deliveryInfo.provinceId" @change="onDeliveryDistrictChange(currentOrder)">
-              <option value="">— Chọn quận/huyện —</option>
-              <option v-for="district in currentOrder.deliveryInfo.districts" :key="district.id" :value="district.id">{{ district.name }}</option>
-            </select>
-            <select class="del-input" v-model="currentOrder.deliveryInfo.wardCode" :disabled="!currentOrder.deliveryInfo.districtId" @change="onDeliveryWardChange(currentOrder)">
-              <option value="">— Chọn phường/xã —</option>
-              <option v-for="ward in currentOrder.deliveryInfo.wards" :key="ward.code" :value="ward.code">{{ ward.name }}</option>
-            </select>
-            <div class="del-input">Phí vận chuyển GHN: {{ currentOrder.deliveryInfo.shippingFee > 0 ? formatVnd(currentOrder.deliveryInfo.shippingFee) : 'Sẽ tính khi thanh toán' }}</div>
+            <input type="number" class="del-input" placeholder="Phí vận chuyển (VNĐ)..."
+              v-model.number="currentOrder.deliveryInfo.shippingFee" />
           </div>
 
           <div class="summary-row">
@@ -1144,6 +1041,10 @@ onMounted(() => {
                 <input type="radio" value="CHUYEN_KHOAN" v-model="currentOrder.paymentMethod" />
                 Chuyển khoản
               </label>
+              <label class="radio-pay-label">
+                <input type="radio" value="KET_HOP" v-model="currentOrder.paymentMethod" />
+                Kết hợp
+              </label>
             </div>
           </div>
 
@@ -1158,6 +1059,12 @@ onMounted(() => {
               <button class="cash-chip" @click="setQuickCash(200000)">200k</button>
               <button class="cash-chip" @click="setQuickCash(500000)">500k</button>
             </div>
+          </div>
+
+          <div class="pay-amount-box" v-if="currentOrder && currentOrder.paymentMethod === 'KET_HOP'">
+            <div class="section-subtitle">Chuyển khoản thêm</div>
+            <input type="number" class="input-money-paid" placeholder="Nhập số tiền chuyển khoản"
+              v-model.number="currentOrder.transferGiven" />
           </div>
 
           <div class="summary-row" v-if="currentOrder && currentOrder.paymentMethod !== 'CHUYEN_KHOAN'">
@@ -1189,9 +1096,6 @@ onMounted(() => {
 
     </div>
 
-    <!-- ========================================================
-         MODAL 1: DANH SÁCH SẢN PHẨM (EXACT MATCH SCREENSHOT)
-         ======================================================== -->
     <transition name="fade">
       <div v-if="isProductModalOpen" class="pos-modal-overlay" @click.self="isProductModalOpen = false">
         <div class="pos-modal-dialog modal-xl">
@@ -1201,9 +1105,7 @@ onMounted(() => {
           </div>
 
           <div class="pos-modal-body">
-            <!-- Filter Bar -->
             <div class="pos-prod-filter-bar">
-              <!-- Search Input -->
               <div class="filter-search-wrap">
                 <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   stroke-width="2">
@@ -1213,37 +1115,31 @@ onMounted(() => {
                 <input type="text" class="filter-search-input" placeholder="Tìm kiếm mã, tên sản phẩm..."
                   v-model="modalFilters.search" />
               </div>
-
-              <!-- Brand Filter -->
               <select v-model="modalFilters.idThuongHieu" class="filter-select">
                 <option value="">Tất cả thương hiệu</option>
                 <option v-for="b in brandsList" :key="b.id" :value="b.id || b.ten">{{ b.ten || b.tenThuongHieu }}
                 </option>
               </select>
 
-              <!-- Category / Loai Giay Filter -->
               <select v-model="modalFilters.idLoaiGiay" class="filter-select">
                 <option value="">Tất cả thể loại</option>
                 <option v-for="c in categoriesList" :key="c.id" :value="c.id || c.ten">{{ c.ten || c.tenLoaiGiay }}
                 </option>
               </select>
 
-              <!-- Color Filter -->
               <select v-model="modalFilters.idMauSac" class="filter-select">
                 <option value="">Tất cả màu</option>
                 <option v-for="m in colorsList" :key="m.id" :value="m.id || m.ten || m.tenMau">{{ m.ten || m.tenMau }}
                 </option>
               </select>
 
-              <!-- Size Filter -->
               <select v-model="modalFilters.idKichCo" class="filter-select">
                 <option value="">Tất cả size</option>
                 <option v-for="s in sizesList" :key="s.id" :value="s.id || s.ten || s.tenKichCo">{{ s.ten || s.tenKichCo
-                  }}
+                }}
                 </option>
               </select>
 
-              <!-- Price Range Filter -->
               <select v-model="modalFilters.priceRange" class="filter-select">
                 <option value="">Tất cả mức giá</option>
                 <option value="<1m">Dưới 1.000.000 đ</option>
@@ -1252,7 +1148,6 @@ onMounted(() => {
                 <option value=">5m">Trên 5.000.000 đ</option>
               </select>
 
-              <!-- Refresh Button -->
               <button class="btn-refresh-filter" @click="resetModalFilters" title="Đặt lại bộ lọc">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M23 4v6h-6"></path>
@@ -1263,7 +1158,6 @@ onMounted(() => {
               </button>
             </div>
 
-            <!-- Product Table -->
             <div class="pos-prod-table-wrap">
               <table class="pos-prod-table">
                 <thead>
@@ -1317,7 +1211,6 @@ onMounted(() => {
             </div>
           </div>
 
-          <!-- Modal Pagination Footer -->
           <div class="pos-prod-footer">
             <div class="page-size-selector">
               <select v-model.number="modalPageSize">
@@ -1357,10 +1250,6 @@ onMounted(() => {
         </div>
       </div>
     </transition>
-
-    <!-- ========================================================
-         MODAL 2: QUÉT MÃ QR / BARCODE SCANNER
-         ======================================================== -->
     <transition name="fade">
       <div v-if="isQrModalOpen" class="pos-modal-overlay" @click.self="isQrModalOpen = false">
         <div class="pos-modal-dialog modal-sm">
@@ -1397,9 +1286,6 @@ onMounted(() => {
       </div>
     </transition>
 
-    <!-- ========================================================
-         MODAL 3: THÊM NHANH KHÁCH HÀNG
-         ======================================================== -->
     <transition name="fade">
       <div v-if="isAddCustomerModalOpen" class="pos-modal-overlay" @click.self="isAddCustomerModalOpen = false">
         <div class="pos-modal-dialog modal-sm">
@@ -1419,7 +1305,7 @@ onMounted(() => {
                 <input type="text" placeholder="Nhập số điện thoại..." v-model="newCustomerForm.soDienThoai" />
               </div>
               <div class="form-group-modal">
-                <label>Email <span style="color: #dc2626;">*</span></label>
+                <label>Email</label>
                 <input type="email" placeholder="Nhập địa chỉ email..." v-model="newCustomerForm.email" />
               </div>
               <div class="form-group-modal">
@@ -1432,17 +1318,13 @@ onMounted(() => {
           <div class="pos-modal-foot">
             <button class="btn-pos-cancel" style="height: 36px; padding: 0 16px;"
               @click="isAddCustomerModalOpen = false">Hủy</button>
-            <button class="btn-pos-checkout ready" style="height: 36px; padding: 0 16px;" @click="saveQuickCustomer" :disabled="isSavingQuickCustomer">
-              {{ isSavingQuickCustomer ? 'Đang lưu...' : 'Lưu khách hàng' }}
-            </button>
+            <button class="btn-pos-checkout ready" style="height: 36px; padding: 0 16px;" @click="saveQuickCustomer">Lưu
+              khách hàng</button>
           </div>
         </div>
       </div>
     </transition>
 
-    <!-- ========================================================
-         MODAL 4: QR CHUYỂN KHOẢN (VIETQR)
-         ======================================================== -->
     <transition name="fade">
       <div v-if="isBankQrModalOpen" class="pos-modal-overlay" @click.self="isBankQrModalOpen = false">
         <div class="pos-modal-dialog modal-sm">
@@ -1470,9 +1352,6 @@ onMounted(() => {
       </div>
     </transition>
 
-    <!-- ========================================================
-         MODAL 5: HÓA ĐƠN BÁN LẺ (IN RECEIPT)
-         ======================================================== -->
     <transition name="fade">
       <div v-if="isReceiptModalOpen && completedInvoiceData" class="pos-modal-overlay"
         @click.self="isReceiptModalOpen = false">

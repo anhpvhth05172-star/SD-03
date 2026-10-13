@@ -40,6 +40,9 @@ public class SanPhamResponse {
     private java.math.BigDecimal giaBan;
     private java.math.BigDecimal giaBanMin;
     private java.math.BigDecimal giaBanMax;
+    private String discount;
+    private java.math.BigDecimal giaSauGiamMin;
+    private java.math.BigDecimal giaSauGiamMax;
     private Boolean trangThai;
     private LocalDateTime ngayTao;
     private LocalDateTime ngayCapNhat;

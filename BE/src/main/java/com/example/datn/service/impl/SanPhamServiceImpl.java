@@ -18,10 +18,13 @@ import com.example.datn.repository.ChatLieuRepository;
 import com.example.datn.repository.KieuDangRepository;
 import com.example.datn.repository.LoaiGiayRepository;
 import com.example.datn.repository.SanPhamRepository;
+import com.example.datn.dto.DotGiamGia.GiaKhuyenMai;
 import com.example.datn.repository.*;
 import com.example.datn.service.SanPhamService;
+import com.example.datn.service.impls.GiaService;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +52,7 @@ public class SanPhamServiceImpl implements SanPhamService {
     private final KichCoRepository kichCoRepository;
     private final ThanGiayRepository thanGiayRepository;
     private final DeGiayRepository deGiayRepository;
+    private final GiaService giaService;
 
     @Override
     public Page<SanPhamResponse> getAll(int page, int size, String keyword, Long idThuongHieu, Long idLoaiGiay, Long idChatLieu, Long idKieuDang, Long idXuatXu, String doiTuong, Boolean trangThai) {
@@ -214,6 +218,29 @@ public class SanPhamServiceImpl implements SanPhamService {
                 .max(java.math.BigDecimal::compareTo)
                 .orElse(java.math.BigDecimal.ZERO);
 
+        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(variants);
+        java.math.BigDecimal maxPhanTram = giaMap.values().stream()
+                .map(GiaKhuyenMai::phanTramGiam)
+                .filter(java.util.Objects::nonNull)
+                .max(java.math.BigDecimal::compareTo)
+                .orElse(null);
+
+        String discountStr = "-";
+        if (maxPhanTram != null && maxPhanTram.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            discountStr = "-" + maxPhanTram.stripTrailingZeros().toPlainString() + "%";
+        }
+
+        java.math.BigDecimal minGiaSauGiam = giaMap.values().stream()
+                .map(GiaKhuyenMai::giaSauGiam)
+                .filter(java.util.Objects::nonNull)
+                .min(java.math.BigDecimal::compareTo)
+                .orElse(minPrice);
+        java.math.BigDecimal maxGiaSauGiam = giaMap.values().stream()
+                .map(GiaKhuyenMai::giaSauGiam)
+                .filter(java.util.Objects::nonNull)
+                .max(java.math.BigDecimal::compareTo)
+                .orElse(maxPrice);
+
         return SanPhamResponse.builder()
                 .id(sp.getId())
                 .maSanPham(sp.getMaSanPham())
@@ -235,6 +262,9 @@ public class SanPhamServiceImpl implements SanPhamService {
                 .giaBan(minPrice)
                 .giaBanMin(minPrice)
                 .giaBanMax(maxPrice)
+                .discount(discountStr)
+                .giaSauGiamMin(minGiaSauGiam)
+                .giaSauGiamMax(maxGiaSauGiam)
                 .trangThai(sp.getTrangThai())
                 .ngayTao(sp.getNgayTao())
                 .ngayCapNhat(sp.getNgayCapNhat())

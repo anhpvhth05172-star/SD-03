@@ -29,6 +29,8 @@ public class HoaDonDTO {
     private LocalDateTime ngayCapNhat;
     private String nguoiCapNhat;
     private String trangThai;
+    private String maTrangThai;
+    private List<String> trangThaiTiepTheo;
     private String ghiChu;
 
     private Long idKhachHang;

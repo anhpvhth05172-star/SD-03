@@ -537,6 +537,7 @@ onMounted(() => {
         <div class="form-field">
           <label class="form-label">Mã sản phẩm</label>
           <input v-model="form.code" type="text" class="form-input input-readonly" readonly />
+          <span class="field-hint">Mã tự động tạo</span>
         </div>
 
         <div class="form-field">

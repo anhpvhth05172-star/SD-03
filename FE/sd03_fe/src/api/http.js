@@ -32,14 +32,7 @@ export const refreshSession = () => {
 }
 
 const chuyenVeDangNhap = () => {
-  import('../router')
-    .then((m) => {
-      const router = m.default
-      if (router.currentRoute.value.path !== '/dang-nhap') {
-        router.push('/dang-nhap').catch(() => {})
-      }
-    })
-    .catch(() => {})
+  // Đã tạm tắt chuyển hướng về trang đăng nhập
 }
 */
 
