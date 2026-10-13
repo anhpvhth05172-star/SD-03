@@ -77,11 +77,6 @@ const resetFilter = () => {
   load()
 }
 
-const onSizeChange = () => {
-  page.value = 0
-  load()
-}
-
 const goPage = (p) => {
   if (p < 0 || p >= totalPages.value || p === page.value) return
   page.value = p
@@ -404,18 +399,10 @@ onMounted(async () => {
 
       <!-- Phân trang Footer -->
       <div class="table-pagination-row">
-        <!-- Bên giữa: Tổng số dòng theo bộ lọc -->
+        <!-- Bên trái: Tổng số dòng theo bộ lọc -->
         <div class="pagination-summary">
           Hiển thị <strong>{{ rows.length }}</strong> nhân viên trong tổng số
           <strong>{{ totalElements }}</strong> nhân viên
-        </div>
-        <!-- Bên trái: Số dòng mỗi trang -->
-        <div class="pagination-size-wrap">
-          <select v-model="size" class="pagination-select" @change="onSizeChange">
-            <option :value="5">5</option>
-            <option :value="10">10</option>
-            <option :value="20">20</option>
-          </select>
         </div>
 
         <!-- Bên phải: Các nút phân trang -->
@@ -1000,7 +987,7 @@ onMounted(async () => {
 
 .pagination-summary {
   flex: 1;
-  text-align: center;
+  text-align: left;
   font-size: 13px;
   color: #64748b;
 }
@@ -1008,26 +995,6 @@ onMounted(async () => {
 .pagination-summary strong {
   color: #1f2937;
   font-weight: 700;
-}
-
-.pagination-size-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.pagination-select {
-  height: 32px;
-  padding: 0 24px 0 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  background: #ffffff url("data:image/svg2+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 6px center;
-  background-size: 12px;
-  appearance: none;
-  font-size: 13px;
-  color: #334155;
-  cursor: pointer;
-  outline: none;
 }
 
 .pagination-nav-wrap {

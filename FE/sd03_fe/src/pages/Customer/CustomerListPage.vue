@@ -72,11 +72,6 @@ const resetFilter = () => {
   load()
 }
 
-const onSizeChange = () => {
-  page.value = 0
-  load()
-}
-
 const goPage = (p) => {
   if (p < 0 || p >= totalPages.value || p === page.value) return
   page.value = p
@@ -84,25 +79,12 @@ const goPage = (p) => {
 }
 
 const formatCustomerAddress = (row) => {
-  const ds =
-    row.danhSachDiaChi && row.danhSachDiaChi.length
-      ? row.danhSachDiaChi
-      : row.diaChiMacDinh
-        ? [row.diaChiMacDinh]
-        : []
-  if (!ds.length) return '—'
-  return ds
-    .map((d) => {
-      const parts = [d.diaChiCuThe, d.phuong, d.thanhPho].filter(Boolean)
-      const diaChi = parts.length ? parts.join(', ') : '—'
-      const ma = d.maDiaChi ? `${d.maDiaChi}: ` : ''
-      const ten = d.tenChiChi ? `${d.tenChiChi} — ` : ''
-      const nhan = []
-      if (d.macDinh) nhan.push('mặc định')
-      if (d.trangThai === false) nhan.push('ngừng dùng')
-      return `${ma}${ten}${diaChi}${nhan.length ? ` (${nhan.join(', ')})` : ''}`
-    })
-    .join('\n')
+  const d =
+    row.diaChiMacDinh ||
+    (row.danhSachDiaChi && row.danhSachDiaChi.length ? row.danhSachDiaChi[0] : null)
+  if (!d) return '—'
+  const parts = [d.diaChiCuThe, d.phuong, d.thanhPho].filter(Boolean)
+  return parts.length ? parts.join(', ') : '—'
 }
 
 const exportFile = async () => {
@@ -406,14 +388,6 @@ onMounted(() => {
         <div class="pagination-summary">
           Hiển thị <strong>{{ rows.length }}</strong> khách hàng trong tổng số
           <strong>{{ totalElements }}</strong> khách hàng
-        </div>
-        <div class="pagination-size-wrap">
-          <select v-model="size" class="pagination-select" @change="onSizeChange">
-            <option :value="5">5</option>
-            <option :value="10">10</option>
-            <option :value="20">20</option>
-            <option :value="50">50</option>
-          </select>
         </div>
 
         <div class="pagination-nav-group">
@@ -951,7 +925,7 @@ onMounted(() => {
 
 .pagination-summary {
   flex: 1;
-  text-align: center;
+  text-align: left;
   font-size: 13px;
   color: #64748b;
 }
@@ -959,26 +933,6 @@ onMounted(() => {
 .pagination-summary strong {
   color: #1f2937;
   font-weight: 700;
-}
-
-.pagination-size-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.pagination-select {
-  height: 32px;
-  padding: 0 24px 0 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #334155;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 6px center;
-  background-size: 12px;
-  appearance: none;
-  cursor: pointer;
-  outline: none;
 }
 
 .pagination-nav-group {

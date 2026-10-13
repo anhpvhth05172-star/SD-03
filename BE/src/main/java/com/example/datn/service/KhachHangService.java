@@ -338,6 +338,16 @@ public class KhachHangService {
         checkLength(req.getPhuong(), 100, "Phường");
         checkLength(req.getDiaChiCuThe(), 255, "Địa chỉ cụ thể");
         checkLength(req.getNguoiCapNhat(), 100, "Người cập nhật");
+        // Địa chỉ là bắt buộc ở cả tạo lẫn cập nhật để không sinh ra khách hàng không có nơi giao hàng.
+        if (isBlank(req.getTinhThanhPho())) {
+            throw new IllegalArgumentException("Tỉnh/Thành phố không được để trống");
+        }
+        if (isBlank(req.getPhuong())) {
+            throw new IllegalArgumentException("Phường/Xã không được để trống");
+        }
+        if (isBlank(req.getDiaChiCuThe())) {
+            throw new IllegalArgumentException("Địa chỉ cụ thể không được để trống");
+        }
         if (!isBlank(req.getTenTaiKhoan())) {
             String tk = req.getTenTaiKhoan().trim();
             boolean trung = excludeId == null
@@ -447,7 +457,7 @@ public class KhachHangService {
         boolean coTinh = !isBlank(req.getTinhThanhPho());
         boolean coPhuong = !isBlank(req.getPhuong());
         if (!coDiaChiCuThe && !coTinh && !coPhuong) {
-            return;
+            throw new IllegalArgumentException("Địa chỉ khách hàng không được để trống");
         }
 
         String diaChiCuThe = coDiaChiCuThe
