@@ -139,7 +139,7 @@ public class KhachHangService {
                     return toFullDTO(khachHang);
                 });
                 if (dto != null) {
-                    dto.setEmailGuiThanhCong(guiEmailThongTinTaiKhoan(dto));
+                    dto.setEmailGuiThanhCong(guiEmailThongTinTaiKhoan(dto, req));
                     return dto;
                 }
             } catch (DataIntegrityViolationException ex) {
@@ -153,7 +153,7 @@ public class KhachHangService {
      * Gửi email thông tin tài khoản và trả về đúng trạng thái nhà cung cấp mail trả về.
      * Trả về false khi thiếu dịch vụ email hoặc thiếu địa chỉ nhận, tuyệt đối không báo thành công giả.
      */
-    private boolean guiEmailThongTinTaiKhoan(KhachHangDTO dto) {
+    private boolean guiEmailThongTinTaiKhoan(KhachHangDTO dto, KhachHangRequest req) {
         if (emailService == null) {
             log.warn("Bỏ qua gửi email thông tin tài khoản cho khách hàng {}: chưa cấu hình dịch vụ email",
                 dto.getMaKhachHang());
@@ -164,12 +164,13 @@ public class KhachHangService {
                 dto.getMaKhachHang());
             return false;
         }
+        String matKhau = req != null && !isBlank(req.getMatKhau()) ? req.getMatKhau().trim() : MAT_KHAU_MAC_DINH;
         return emailService.guiMailDangKyThanhCong(
             dto.getEmail(),
             dto.getTenKhachHang(),
             dto.getMaKhachHang(),
             dto.getTenTaiKhoan(),
-            MAT_KHAU_MAC_DINH
+            matKhau
         );
     }
 
