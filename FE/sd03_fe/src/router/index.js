@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { getToken, getRefreshToken, isTokenExpired, dangXuat } from '../utils/auth'
-import { refreshSession } from '../api/http'
+// Tạm comment phần token/JWT của phiên đăng nhập (không xóa)
+// import { getToken, getRefreshToken, isTokenExpired, dangXuat } from '../utils/auth'
+// import { refreshSession } from '../api/http'
 import { laAdmin } from '../utils/session'
 import AdminLayout from '../layouts/AdminLayout.vue'
 import ProductListPage from '@/pages/Product/ProductListPage.vue'
@@ -17,8 +18,9 @@ import CustomerListPage from '@/pages/Customer/CustomerListPage.vue'
 import CustomerCreatePage from '@/pages/Customer/CustomerCreatePage.vue'
 import PosSalesPage from '@/pages/Pos/PosSalesPage.vue'
 import AttributeCategoryPage from '@/pages/Product/AttributeCategoryPage.vue'
-import LoginPage from '@/pages/Auth/LoginPage.vue'
-import RegisterPage from '@/pages/Auth/RegisterPage.vue'
+// Tạm comment trang đăng nhập/đăng ký (không xóa)
+// import LoginPage from '@/pages/Auth/LoginPage.vue'
+// import RegisterPage from '@/pages/Auth/RegisterPage.vue'
 import PlaceholderPage from '@/pages/Common/PlaceholderPage.vue'
 import DiscountForm from '@/pages/Discount/DiscountForm.vue'
 import VoucherForm from '@/pages/Discount/VoucherForm.vue'
@@ -28,8 +30,9 @@ import DiscountFormUpdate from '@/pages/Discount/DiscountFormUpdate.vue'
 import VoucherFormUpdate from '@/pages/Discount/VoucherFormUpdate.vue'
 
 const routes = [
-  { path: '/dang-nhap', component: LoginPage, meta: { title: 'Đăng nhập' } },
-  { path: '/dang-ky', component: RegisterPage, meta: { title: 'Đăng ký' } },
+  // Tạm comment route đăng nhập/đăng ký (không xóa)
+  // { path: '/dang-nhap', component: LoginPage, meta: { title: 'Đăng nhập' } },
+  // { path: '/dang-ky', component: RegisterPage, meta: { title: 'Đăng ký' } },
   {
     path: '/',
     component: AdminLayout,
@@ -85,6 +88,7 @@ const router = createRouter({
   routes
 })
 
+/* Tạm comment guard kiểm tra phiên đăng nhập (không xóa)
 router.beforeEach(async (to) => {
   if (!to.meta.requiresAuth) return true
 
@@ -108,6 +112,7 @@ router.beforeEach(async (to) => {
     return '/dang-nhap'
   }
 })
+*/
 
 router.beforeEach((to) => {
   if (to.path.startsWith('/nhan-vien') && !laAdmin()) {

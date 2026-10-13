@@ -1,4 +1,5 @@
 <script setup>
+/* Tạm comment logic đăng nhập (không xóa)
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { dangNhap } from '@/api/auth'
@@ -30,9 +31,11 @@ const submit = async () => {
     loading.value = false
   }
 }
+*/
 </script>
 
 <template>
+  <!-- Tạm comment giao diện trang đăng nhập (không xóa)
   <div class="auth-screen">
     <div class="auth-card">
       <div class="auth-brand">
@@ -75,6 +78,7 @@ const submit = async () => {
       </p>
     </div>
   </div>
+  -->
 </template>
 
 <style scoped>

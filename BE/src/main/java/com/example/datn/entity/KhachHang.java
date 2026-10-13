@@ -43,6 +43,9 @@ public class KhachHang {
     @Column(name = "so_dien_thoai", length = 20)
     private String soDienThoai;
 
+    @Column(name = "so_cccd", length = 20, columnDefinition = "NVARCHAR(20)")
+    private String soCccd;
+
     @Column(name = "ngay_sinh")
     private LocalDate ngaySinh;
 

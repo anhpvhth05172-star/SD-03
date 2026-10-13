@@ -43,8 +43,11 @@ export const congSo = (goc, so) => {
   return gocCat + hauTo
 }
 
-/** Mã đề xuất theo họ tên (số 01). Backend là nơi quyết định mã cuối cùng. */
-export const maDeXuat = (ten) => congSo(sinhMaTuTen(ten), 1)
+/**
+ * Mã đề xuất theo họ tên: dùng phần gốc khi chưa có mã trùng (Phạm Hà Anh -> Anhph).
+ * Khi mã gốc đã tồn tại, backend tự trả về mã kế tiếp (Anhph02, Anhph03, ...).
+ */
+export const maDeXuat = (ten) => sinhMaTuTen(ten)
 
 export const hopLeMaNhanVien = (ma) => /^[A-Za-z][A-Za-z0-9]{0,24}$/.test(String(ma || '').trim())
 

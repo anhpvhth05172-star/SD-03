@@ -251,6 +251,7 @@ onMounted(() => {
             <div class="addr-title">
               <span>{{ d.tenChiChi || d.maDiaChi }}</span>
               <span v-if="d.macDinh" class="pill pill-green">Mặc định</span>
+              <span v-if="d.trangThai === false" class="pill pill-red">Ngừng dùng</span>
             </div>
             <div class="addr-sub">{{ lineOf(d) }}</div>
             <div class="addr-code">{{ d.maDiaChi }}</div>
@@ -544,5 +545,10 @@ onMounted(() => {
 .pill-green {
   background: #e7f7ee;
   color: #137a45;
+}
+
+.pill-red {
+  background: #fdeaea;
+  color: #b91c1c;
 }
 </style>

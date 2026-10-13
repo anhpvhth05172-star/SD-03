@@ -3,10 +3,12 @@ package com.example.datn.controller;
 import com.example.datn.dto.SanPham.FormDataResponse;
 import com.example.datn.dto.HoaDon.HoaDonDTO;
 import com.example.datn.dto.HoaDon.HoaDonRequest;
+import com.example.datn.dto.HoaDon.LichSuHoaDonDTO;
 import com.example.datn.dto.Common.PageResponse;
 import com.example.datn.dto.HoaDon.TrangThaiHoaDonRequest;
 import com.example.datn.service.HoaDonService;
 import java.time.LocalDate;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -92,6 +94,11 @@ public class HoaDonController {
 
     @PutMapping("/{id}/trang-thai")
     public HoaDonDTO doiTrangThai(@PathVariable Long id, @RequestBody TrangThaiHoaDonRequest request) {
-        return hoaDonService.doiTrangThai(id, request.getTrangThai());
+        return hoaDonService.doiTrangThai(id, request.getTrangThai(), request.getGhiChu());
+    }
+
+    @GetMapping("/{id}/lich-su")
+    public List<LichSuHoaDonDTO> lichSu(@PathVariable Long id) {
+        return hoaDonService.lichSuHoaDon(id);
     }
 }

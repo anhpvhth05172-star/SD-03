@@ -22,4 +22,7 @@ IF COL_LENGTH('khach_hang', 'vai_tro') IS NULL
 
 -- 3. Du lieu: sua ten tai khoan id=3 bi loi va cap quyen ADMIN
 UPDATE khach_hang SET ten_tai_khoan = ten_khach_hang WHERE id = 3;
-UPDATE khach_hang SET vai_tro = 'ADMIN' WHERE id = 3;
+-- Cot vai_tro moi duoc ADD o buoc 2: SQL Server bien dich toan bo batch TRUOC khi chay,
+-- nen UPDATE truc tiep se loi "Invalid column name 'vai_tro'" va khong dong giua ca batch
+-- (ca buoc 2 cung khong chay). Phai chay trong EXEC de bien dich sau khi ADD cot xong.
+EXEC ('UPDATE khach_hang SET vai_tro = ''ADMIN'' WHERE id = 3');

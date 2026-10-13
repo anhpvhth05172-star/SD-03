@@ -1,6 +1,7 @@
 package com.example.datn.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -15,6 +16,7 @@ import com.example.datn.repository.DiaChiKhachHangRepository;
 import com.example.datn.repository.KhachHangRepository;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -28,11 +30,15 @@ class KhachHangServiceTest {
     private final KhachHangRepository khachHangRepository = mock(KhachHangRepository.class);
 
     private KhachHangService service() {
+        return service(null);
+    }
+
+    private KhachHangService service(EmailService emailService) {
         when(khachHangRepository.saveAndFlush(any(KhachHang.class))).thenAnswer(inv -> inv.getArgument(0));
         when(khachHangRepository.save(any(KhachHang.class))).thenAnswer(inv -> inv.getArgument(0));
         when(khachHangRepository.thongKeTheoKhachHang(any())).thenReturn(List.of());
         when(diaChiRepository.findByKhachHangIdOrderByMacDinhDescIdDesc(any())).thenReturn(List.of());
-        return new KhachHangService(khachHangRepository, diaChiRepository,
+        return new KhachHangService(khachHangRepository, diaChiRepository, emailService,
             mock(PlatformTransactionManager.class));
     }
 
@@ -50,20 +56,35 @@ class KhachHangServiceTest {
     @Test
     void maTuDongTheoQuyTacYeuCau() {
         KhachHangService service = service();
-        assertEquals("Binhnt01", service.maKhachHangTuDong("Nguyễn Thị Bình"));
-        assertEquals("Binhnv01", service.maKhachHangTuDong("Nguyễn Văn Bình"));
-        assertEquals("Anhtv01", service.maKhachHangTuDong("Trần Văn Anh"));
-        assertEquals("Anhph01", service.maKhachHangTuDong("Phạm Hà Anh"));
-        assertEquals("NV01", service.maKhachHangTuDong(null));
+        // Chưa có mã trùng -> dùng mã gốc không hậu tố số.
+        assertEquals("Binhnt", service.maKhachHangTuDong("Nguyễn Thị Bình"));
+        assertEquals("Binhnv", service.maKhachHangTuDong("Nguyễn Văn Bình"));
+        assertEquals("Anhtv", service.maKhachHangTuDong("Trần Văn Anh"));
+        assertEquals("Anhph", service.maKhachHangTuDong("Phạm Hà Anh"));
+        assertEquals("NV", service.maKhachHangTuDong(null));
     }
 
     @Test
     void maTuDongTangSoKhiMaGocDaTonTai() {
         KhachHangService service = service();
         when(khachHangRepository.existsByMaKhachHang(anyString()))
-            .thenAnswer(inv -> Set.of("Binhnt01", "Binhnt02").contains(inv.getArgument(0)));
+            .thenAnswer(inv -> Set.of("Binhnt", "Binhnt02").contains(inv.getArgument(0)));
 
+        // Mã gốc đã tồn tại -> hậu số bắt đầu từ 02 (không dùng 01).
         assertEquals("Binhnt03", service.maKhachHangTuDong("Nguyễn Thị Bình"));
+
+        when(khachHangRepository.existsByMaKhachHang(anyString()))
+            .thenAnswer(inv -> Set.of("Binhnt").contains(inv.getArgument(0)));
+        assertEquals("Binhnt02", service.maKhachHangTuDong("Nguyễn Thị Bình"));
+    }
+
+    @Test
+    void maKhachHangTangSoKhiChiMaGocDaTonTai() {
+        // Mã khách hàng chỉ kiểm tra trong bảng khách hàng, không phụ thuộc mã nhân viên.
+        KhachHangService service = service();
+        when(khachHangRepository.existsByMaKhachHang(anyString()))
+            .thenAnswer(inv -> "Anhph".equals(inv.getArgument(0)));
+        assertEquals("Anhph02", service.maKhachHangTuDong("Phạm Hà Anh"));
     }
 
     @Test
@@ -71,14 +92,14 @@ class KhachHangServiceTest {
         KhachHangService service = service();
         KhachHangDTO dto = service.create(
             yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), ""));
-        assertEquals("Binhnt01", dto.getMaKhachHang());
+        assertEquals("Binhnt", dto.getMaKhachHang());
     }
 
     @Test
     void taoKhachHangBoQuaMaTrungVaSinhMaKeTiep() {
         KhachHangService service = service();
         when(khachHangRepository.existsByMaKhachHang(anyString()))
-            .thenAnswer(inv -> Set.of("Binhnt01", "Binhnt02").contains(inv.getArgument(0)));
+            .thenAnswer(inv -> Set.of("Binhnt", "Binhnt02").contains(inv.getArgument(0)));
 
         KhachHangDTO dto = service.create(
             yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), ""));
@@ -86,7 +107,7 @@ class KhachHangServiceTest {
 
         // FE gửi sẵn mã đã tồn tại -> backend vẫn sinh mã kế tiếp.
         KhachHangDTO dto2 = service.create(
-            yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "Binhnt01"));
+            yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "Binhnt"));
         assertEquals("Binhnt03", dto2.getMaKhachHang());
     }
 
@@ -134,11 +155,11 @@ class KhachHangServiceTest {
 
         KhachHangDTO dto = service.create(
             yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(16), ""));
-        assertEquals("Binhnt01", dto.getMaKhachHang());
+        assertEquals("Binhnt", dto.getMaKhachHang());
 
         KhachHangDTO dtoCungNgay = service.create(
             yeuCau("Trần Văn Anh", LocalDate.now().minusYears(16).minusDays(1), ""));
-        assertEquals("Anhtv01", dtoCungNgay.getMaKhachHang());
+        assertEquals("Anhtv", dtoCungNgay.getMaKhachHang());
     }
 
     @Test
@@ -151,7 +172,7 @@ class KhachHangServiceTest {
 
         // Ngày sinh của khách hàng vẫn là tùy chọn như trước đây.
         KhachHangDTO dto = service.create(yeuCau("Nguyễn Thị Bình", null, ""));
-        assertEquals("Binhnt01", dto.getMaKhachHang());
+        assertEquals("Binhnt", dto.getMaKhachHang());
     }
 
     @Test
@@ -186,5 +207,77 @@ class KhachHangServiceTest {
         KhachHangRequest maSai = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "1abc");
         assertTrue(assertThrows(IllegalArgumentException.class, () -> service.create(maSai))
             .getMessage().startsWith("Mã khách hàng không hợp lệ"));
+    }
+
+    @Test
+    void luuVaTraVeSoCccdKhiTao() {
+        KhachHangService service = service();
+
+        KhachHangRequest req = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
+        req.setSoCccd("012345678901");
+
+        assertEquals("012345678901", service.create(req).getSoCccd());
+
+        KhachHangRequest khongCccd = yeuCau("Trần Văn Anh", LocalDate.now().minusYears(20), "");
+        assertNull(service.create(khongCccd).getSoCccd());
+    }
+
+    @Test
+    void capNhatVaXoaSoCccd() {
+        KhachHangService service = service();
+        KhachHang daCo = new KhachHang();
+        daCo.setId(9L);
+        daCo.setTenKhachHang("Nguyễn Thị Bình");
+        when(khachHangRepository.findById(9L)).thenReturn(Optional.of(daCo));
+
+        KhachHangRequest req = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "Binhnt01");
+        req.setSoCccd("012345678901");
+        assertEquals("012345678901", service.update(9L, req).getSoCccd());
+        assertEquals("012345678901", daCo.getSoCccd());
+
+        // Gửi chuỗi rỗng là cách FE xóa số CCCD -> không lưu chuỗi rỗng.
+        req.setSoCccd("   ");
+        assertNull(service.update(9L, req).getSoCccd());
+        assertNull(daCo.getSoCccd());
+    }
+
+    @Test
+    void tuChoiSoCccdSaiDinhDang() {
+        KhachHangService service = service();
+
+        KhachHangRequest chuChu = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
+        chuChu.setSoCccd("abc123");
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> service.create(chuChu))
+            .getMessage().startsWith("Số CCCD không hợp lệ"));
+
+        KhachHangRequest quaNgan = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
+        quaNgan.setSoCccd("123");
+        assertThrows(IllegalArgumentException.class, () -> service.create(quaNgan));
+
+        KhachHangRequest quaDai = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
+        quaDai.setSoCccd("012345678901234");
+        assertThrows(IllegalArgumentException.class, () -> service.create(quaDai));
+    }
+
+    @Test
+    void baoTrangThaiGuiEmailTheoKetQuaThucTe() {
+        EmailService emailService = mock(EmailService.class);
+        KhachHangService service = service(emailService);
+
+        // Nhà cung cấp mail chấp nhận -> DTO báo true.
+        when(emailService.guiMailDangKyThanhCong(anyString(), anyString(), anyString(), anyString(), anyString()))
+            .thenReturn(true);
+        assertEquals(Boolean.TRUE, service.create(
+            yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "")).getEmailGuiThanhCong());
+
+        // Gửi thất bại -> DTO báo false, tuyệt đối không báo thành công giả.
+        when(emailService.guiMailDangKyThanhCong(anyString(), anyString(), anyString(), anyString(), anyString()))
+            .thenReturn(false);
+        assertEquals(Boolean.FALSE, service.create(
+            yeuCau("Trần Văn Anh", LocalDate.now().minusYears(20), "")).getEmailGuiThanhCong());
+
+        // Không cấu hình dịch vụ email -> báo false.
+        assertEquals(Boolean.FALSE, service(null).create(
+            yeuCau("Võ Văn Nam", LocalDate.now().minusYears(20), "")).getEmailGuiThanhCong());
     }
 }

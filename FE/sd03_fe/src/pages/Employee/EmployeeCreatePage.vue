@@ -393,6 +393,7 @@ const submit = async () => {
   if (!ok) return
 
   saving.value = true
+  let emailThatBai = false
   try {
     const payload = buildPayload()
     let msg = ''
@@ -402,10 +403,23 @@ const submit = async () => {
       setFlash(msg)
     } else {
       const taoMoi = await createEmployee(payload)
-      msg = `Đã tạo nhân viên "${taoMoi.tenTaiKhoan}" (${taoMoi.maNhanVien}) thành công! Thông tin tài khoản đã được gửi về email.`
-      setFlash(msg)
+      const emailNhan = taoMoi.email || form.value.email || '(chưa có địa chỉ email)'
+      msg = `Đã tạo nhân viên "${taoMoi.tenTaiKhoan}" (${taoMoi.maNhanVien}) thành công!`
+      if (taoMoi.emailGuiThanhCong === true) {
+        msg += ` Email thông tin tài khoản đã được nhà cung cấp chấp nhận gửi tới ${emailNhan} — nếu chưa thấy, hãy kiểm tra thư mục Spam.`
+      } else if (taoMoi.emailGuiThanhCong === false) {
+        emailThatBai = true
+        msg += ` Hệ thống KHÔNG gửi được email thông tin tài khoản tới ${emailNhan}. Vui lòng kiểm tra lại địa chỉ email hoặc cấu hình gửi mail.`
+      } else {
+        msg += ` Hệ thống chưa xác nhận trạng thái gửi email thông tin tài khoản.`
+      }
+      setFlash(msg, emailThatBai ? 'warning' : 'success')
     }
-    notifySuccess(msg)
+    if (emailThatBai) {
+      notifyWarning('Tạo mới thành công, gửi email thất bại', msg)
+    } else {
+      notifySuccess(msg)
+    }
     setTimeout(() => {
       router.push('/nhan-vien')
     }, 600)

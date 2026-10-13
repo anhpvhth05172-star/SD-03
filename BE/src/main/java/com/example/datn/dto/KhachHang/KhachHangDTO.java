@@ -1,5 +1,6 @@
 package com.example.datn.dto.KhachHang;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -23,6 +24,13 @@ public class KhachHangDTO {
     private String tenKhachHang;
     private String email;
     private String soDienThoai;
+    private String soCccd;
+    /**
+     * Trạng thái gửi email thông tin tài khoản khi tạo mới:
+     * true = nhà cung cấp mail đã chấp nhận, false = gửi thất bại, null = không áp dụng.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Boolean emailGuiThanhCong;
     private LocalDate ngaySinh;
     private String gioiTinh;
     private Boolean trangThai;

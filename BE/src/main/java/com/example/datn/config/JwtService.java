@@ -1,3 +1,4 @@
+/*
 package com.example.datn.config;
 
 import com.example.datn.entity.KhachHang;
@@ -69,3 +70,4 @@ public class JwtService {
             .getPayload();
     }
 }
+*/
