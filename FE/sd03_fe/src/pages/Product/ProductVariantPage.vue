@@ -667,12 +667,12 @@ const saveAddVariant = async () => {
     return
   }
   const stockNum = Number(addForm.stock)
-  if (addForm.stock === null || addForm.stock === undefined || isNaN(stockNum) || stockNum < 0 || stockNum > 100000) {
+  if (addForm.stock === null || addForm.stock === undefined || !Number.isInteger(stockNum) || stockNum < 0 || stockNum > 100000) {
     addFormError.value = 'Số lượng tồn phải là số nguyên từ 0 đến 100,000!'
     return
   }
   const priceNum = Number(addForm.price)
-  if (!addForm.price || isNaN(priceNum) || priceNum < 1000 || priceNum > 1000000000) {
+  if (addForm.price === null || addForm.price === undefined || !Number.isFinite(priceNum) || priceNum < 1000 || priceNum > 1000000000) {
     addFormError.value = 'Giá bán phải từ 1,000 VNĐ đến 1,000,000,000 VNĐ!'
     return
   }
@@ -768,12 +768,12 @@ const saveEditVariant = async () => {
     return
   }
   const stockNum = Number(editForm.stock)
-  if (editForm.stock === null || editForm.stock === undefined || isNaN(stockNum) || stockNum < 0 || stockNum > 100000) {
+  if (editForm.stock === null || editForm.stock === undefined || !Number.isInteger(stockNum) || stockNum < 0 || stockNum > 100000) {
     formError.value = 'Số lượng tồn phải là số nguyên từ 0 đến 100,000!'
     return
   }
   const priceNum = Number(editForm.price)
-  if (!editForm.price || isNaN(priceNum) || priceNum < 1000 || priceNum > 1000000000) {
+  if (editForm.price === null || editForm.price === undefined || !Number.isFinite(priceNum) || priceNum < 1000 || priceNum > 1000000000) {
     formError.value = 'Giá bán phải từ 1,000 VNĐ đến 1,000,000,000 VNĐ!'
     return
   }

@@ -68,7 +68,13 @@ public class DotGiamGiaRestController {
 
     @PutMapping("/{id}/trang-thai")
     public String doiTrangThai(@PathVariable Long id, @RequestBody java.util.Map<String, Boolean> body) {
+        if (body == null || body.get("trangThai") == null) {
+            throw new IllegalArgumentException("Vui lòng chọn trạng thái");
+        }
         DotGiamGia dgg = dotGiamGiaService.detailDotGiamGia(id);
+        if (dgg == null) {
+            throw new IllegalArgumentException("Không tìm thấy đợt giảm giá");
+        }
         dgg.setTrangThai(body.get("trangThai"));
         dotGiamGiaService.updateDotGiamGia(dgg);
         return "ok";

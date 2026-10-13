@@ -31,7 +31,7 @@
             <label class="form-label required">Loại giảm giá</label>
             <select v-model="form.loaiGiamGia" class="form-select form-control">
               <option value="PERCENT">Phần trăm (%)</option>
-              <option value="CASH">Tiền mặt (đ)</option>
+              <option value="AMOUNT">Tiền mặt (đ)</option>
             </select>
           </div>
           <div class="col-6">
@@ -190,14 +190,13 @@ const form = reactive({
   soLuong: null,
   ngayBatDau: "",
   ngayKetThuc: "",
-  trangThai: true, // true: Đang hoạt động, false: Ngừng hoạt động
+  trangThai: true,
   moTa: "",
 });
 
 const soLuongDaSuDung = ref(0);
 const loading = ref(false);
 
-// "2026-05-25T08:00:00" hoặc [2026,5,25,8,0] -> "2026-05-25T08:00"
 const toInputDateTime = (v) => {
   if (!v) return "";
   if (Array.isArray(v)) {
@@ -207,11 +206,9 @@ const toInputDateTime = (v) => {
   }
   return String(v).replace(" ", "T").substring(0, 16);
 };
-// "2026-05-25T08:00" -> "2026-05-25T08:00:00" (gửi lên backend)
 const toLocalDateTime = (v) => (v && v.length === 16 ? v + ":00" : v);
 
 const toBool = (v) => v === true || v === 1 || v === "true" || v === "1";
-// Ô số bị xóa trống sẽ ra "" -> gửi null
 const numOrNull = (v) => (v === "" || v === undefined ? null : v);
 
 const showError = (text, title = "Có lỗi xảy ra") =>
@@ -223,7 +220,6 @@ const showError = (text, title = "Có lỗi xảy ra") =>
     confirmButtonColor: "#d63348",
   });
 
-// Load dữ liệu cũ
 const loadDetail = async () => {
   loading.value = true;
   try {
@@ -258,6 +254,9 @@ const loadDetail = async () => {
 onMounted(loadDetail);
 
 const submit = async () => {
+  form.maPhieuGiamGia = String(form.maPhieuGiamGia ?? '').trim();
+  form.tenPhieuGiamGia = String(form.tenPhieuGiamGia ?? '').trim();
+  form.moTa = String(form.moTa ?? '').trim();
   if (
     !form.maPhieuGiamGia ||
     !form.tenPhieuGiamGia ||
@@ -269,6 +268,12 @@ const submit = async () => {
   ) {
     return showError("Nhập đủ các trường bắt buộc", "Thiếu thông tin");
   }
+  if (form.maPhieuGiamGia.length > 50 || form.tenPhieuGiamGia.length > 200 || form.moTa.length > 500) {
+    return showError("Mã tối đa 50, tên tối đa 200 và mô tả tối đa 500 ký tự", "Dữ liệu không hợp lệ");
+  }
+  if (form.loaiGiamGia !== "PERCENT" && form.loaiGiamGia !== "AMOUNT") {
+    return showError("Loại giảm giá không hợp lệ", "Dữ liệu không hợp lệ");
+  }
   if (
     form.loaiGiamGia === "PERCENT" &&
     (form.giaTriGiam < 1 || form.giaTriGiam > 100)
@@ -278,14 +283,22 @@ const submit = async () => {
       "Dữ liệu không hợp lệ",
     );
   }
-  if (form.loaiGiamGia !== "PERCENT" && form.giaTriGiam <= 0) {
+  if (!Number.isFinite(Number(form.giaTriGiam)) || Number(form.giaTriGiam) <= 0) {
     return showError("Giá trị giảm phải lớn hơn 0", "Dữ liệu không hợp lệ");
+  }
+  for (const [value, label] of [[form.giamToiDa, "Giảm tối đa"], [form.hoaDonToiThieu, "Hóa đơn tối thiểu"]]) {
+    if (value !== null && value !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0)) {
+      return showError(`${label} phải là số không âm`, "Dữ liệu không hợp lệ");
+    }
   }
   if (form.soLuong < soLuongDaSuDung.value) {
     return showError(
       `Số lượng không được nhỏ hơn số đã sử dụng (${soLuongDaSuDung.value})`,
       "Dữ liệu không hợp lệ",
     );
+  }
+  if (!Number.isInteger(Number(form.soLuong)) || Number(form.soLuong) < 1) {
+    return showError("Số lượng phải là số nguyên từ 1 trở lên", "Dữ liệu không hợp lệ");
   }
   if (form.ngayKetThuc <= form.ngayBatDau) {
     return showError(

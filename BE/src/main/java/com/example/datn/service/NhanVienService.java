@@ -16,6 +16,7 @@ import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -26,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
+@Slf4j
 public class NhanVienService {
 
     private static final int MAX_PAGE_SIZE = 50;
@@ -102,22 +104,38 @@ public class NhanVienService {
                     return toDTO(nhanVienRepository.saveAndFlush(nhanVien));
                 });
                 if (dto != null) {
-                    if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
-                        emailService.guiMailNhanVienMoi(
-                            dto.getEmail().trim(),
-                            dto.getTenTaiKhoan(),
-                            dto.getMaNhanVien(),
-                            dto.getEmail().trim(),
-                            isBlank(req.getMatKhau()) ? MAT_KHAU_MAC_DINH : req.getMatKhau().trim(),
-                            dto.getTenVaiTro() != null ? dto.getTenVaiTro() : "Nhân viên"
-                        );
-                    }
+                    dto.setEmailGuiThanhCong(guiEmailCapTaiKhoan(dto, req));
                     return dto;
                 }
             } catch (DataIntegrityViolationException ex) {
             }
         }
         throw new IllegalArgumentException("Không tạo được mã nhân viên duy nhất, vui lòng thử lại");
+    }
+
+    /**
+     * Gửi email cấp tài khoản nhân viên và trả về đúng trạng thái nhà cung cấp mail trả về.
+     * Trả về false khi thiếu dịch vụ email hoặc thiếu địa chỉ nhận, tuyệt đối không báo thành công giả.
+     */
+    private boolean guiEmailCapTaiKhoan(NhanVienDTO dto, NhanVienRequest req) {
+        if (emailService == null) {
+            log.warn("Bỏ qua gửi email cấp tài khoản cho nhân viên {}: chưa cấu hình dịch vụ email",
+                dto.getMaNhanVien());
+            return false;
+        }
+        if (isBlank(dto.getEmail())) {
+            log.warn("Bỏ qua gửi email cấp tài khoản cho nhân viên {}: không có địa chỉ email",
+                dto.getMaNhanVien());
+            return false;
+        }
+        return emailService.guiMailNhanVienMoi(
+            dto.getEmail().trim(),
+            dto.getTenTaiKhoan(),
+            dto.getMaNhanVien(),
+            dto.getEmail().trim(),
+            isBlank(req.getMatKhau()) ? MAT_KHAU_MAC_DINH : req.getMatKhau().trim(),
+            dto.getTenVaiTro() != null ? dto.getTenVaiTro() : "Nhân viên"
+        );
     }
 
     @Transactional(readOnly = true)
@@ -343,7 +361,11 @@ public class NhanVienService {
 
     private String sinhMaNhanVien(String tenNhanVien) {
         String goc = MaNhanVien.sinh(tenNhanVien);
-        int so = 1;
+        // Chưa có mã trùng -> dùng mã gốc không hậu tố số (Phạm Hà Anh -> Anhph).
+        if (!nhanVienRepository.existsByMaNhanVien(goc)) {
+            return goc;
+        }
+        int so = 2;
         String ma = MaNhanVien.congSo(goc, so);
         while (nhanVienRepository.existsByMaNhanVien(ma)) {
             if (++so > SO_MA_TOI_DA) {

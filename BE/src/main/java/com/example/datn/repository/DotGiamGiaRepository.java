@@ -26,4 +26,6 @@ public interface DotGiamGiaRepository extends JpaRepository<DotGiamGia, Long> {
                             Pageable pageable);
 
     boolean existsByMaDotGiamGia(String maDotGiamGia);
+
+    boolean existsByMaDotGiamGiaAndIdNot(String maDotGiamGia, Long id);
 }

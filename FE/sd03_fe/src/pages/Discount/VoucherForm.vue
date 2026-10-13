@@ -381,6 +381,9 @@ const validate = () => {
 
   if (!form.code) errors.code = "Vui lòng nhập mã đợt";
   if (!form.name) errors.name = "Vui lòng nhập tên đợt";
+  if (form.code.length > 50) errors.code = "Mã đợt tối đa 50 ký tự";
+  if (form.name.trim().length > 200) errors.name = "Tên đợt tối đa 200 ký tự";
+  if ((form.description || "").length > 500) errors.description = "Mô tả tối đa 500 ký tự";
 
   if (!validPercent.value) {
     errors.percent = "Phần trăm giảm phải từ 1 đến 100";

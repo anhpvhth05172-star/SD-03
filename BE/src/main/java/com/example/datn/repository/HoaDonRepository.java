@@ -54,7 +54,8 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
               AND (:loaiDon IS NULL OR h.loai_don = :loaiDon)
               AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
               AND h.da_xoa = :daXoa
-            ORDER BY h.ngay_tao DESC, h.id DESC
+            ORDER BY CASE WHEN h.trang_thai IN ('DA_HOAN_THANH', 'DA_HOAN_TIEN') THEN 1 ELSE 0 END ASC,
+                     h.ngay_tao ASC, h.id ASC
             """,
         countQuery = """
             SELECT COUNT(*) FROM hoa_don h

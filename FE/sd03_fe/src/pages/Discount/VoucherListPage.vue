@@ -26,6 +26,7 @@ try {
     }
   }
 } catch (e) {}
+
 const getData = async (p = 0) => {
   try {
     const res = await axios.get(apiDiscount + "admin/phieu-giam-gia", {
@@ -36,6 +37,7 @@ const getData = async (p = 0) => {
       page.value = res.data.number;
       totalPages.value = res.data.totalPages;
       totalElements.value = res.data.totalElements;
+
       if (p === 0) {
         localStorage.setItem(
           "voucher_initial_list_cache",

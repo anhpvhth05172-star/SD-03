@@ -137,14 +137,12 @@ const form = reactive({
   phanTramGiam: null,
   ngayBatDau: "",
   ngayKetThuc: "",
-  trangThai: true, // true: Đang diễn ra, false: Đã kết thúc
+  trangThai: true,
   moTa: "",
 });
 
 const loading = ref(false);
 
-// Chấp nhận chuỗi ISO ("2025-09-01T08:00:00", "2025-09-01 08:00:00.000", ...)
-// hoặc mảng [2025, 9, 1, 8, 0] -> "2025-09-01T08:00" cho input datetime-local
 const toInputDateTime = (v) => {
   if (!v) return "";
   if (Array.isArray(v)) {
@@ -155,7 +153,6 @@ const toInputDateTime = (v) => {
   return String(v).replace(" ", "T").substring(0, 16);
 };
 
-// "2025-09-01T08:00" -> "2025-09-01T08:00:00" (gửi lên backend)
 const toLocalDateTime = (v) => (v && v.length === 16 ? v + ":00" : v);
 
 const toBool = (v) => v === true || v === 1 || v === "true" || v === "1";
@@ -169,14 +166,12 @@ const showError = (text, title = "Có lỗi xảy ra") =>
     confirmButtonColor: "#d63348",
   });
 
-// Load dữ liệu cũ
 const loadDetail = async () => {
   loading.value = true;
   try {
     const res = await axios.get(
       baseAPI + "admin/dot-giam-gia/detail/" + form.id,
     );
-    // Phòng trường hợp backend bọc trong { data: {...} }
     const data = res.data?.data ?? res.data;
 
     form.maDotGiamGia = data.maDotGiamGia ?? "";
@@ -200,6 +195,9 @@ const loadDetail = async () => {
 onMounted(loadDetail);
 
 const submit = async () => {
+  form.maDotGiamGia = String(form.maDotGiamGia ?? '').trim();
+  form.tenDotGiamGia = String(form.tenDotGiamGia ?? '').trim();
+  form.moTa = String(form.moTa ?? '').trim();
   if (
     !form.maDotGiamGia ||
     !form.tenDotGiamGia ||
@@ -209,7 +207,10 @@ const submit = async () => {
   ) {
     return showError("Nhập đủ các trường bắt buộc", "Thiếu thông tin");
   }
-  if (form.phanTramGiam < 1 || form.phanTramGiam > 100) {
+  if (form.maDotGiamGia.length > 50 || form.tenDotGiamGia.length > 200 || form.moTa.length > 500) {
+    return showError("Mã tối đa 50, tên tối đa 200 và mô tả tối đa 500 ký tự", "Dữ liệu không hợp lệ");
+  }
+  if (!Number.isFinite(Number(form.phanTramGiam)) || form.phanTramGiam <= 0 || form.phanTramGiam > 100) {
     return showError(
       "Phần trăm giảm phải từ 1 đến 100",
       "Dữ liệu không hợp lệ",

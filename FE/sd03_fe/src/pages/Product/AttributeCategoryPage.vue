@@ -230,11 +230,20 @@ const handleCancelConfirm = () => {
 }
 
 const isSubmitting = ref(false)
+
 const saveAttributeDirectly = async () => {
   formError.value = ''
   const tenTrimmed = (modalForm.ten || '').trim()
   if (!tenTrimmed) {
     formError.value = 'Vui lòng nhập tên thuộc tính!'
+    return
+  }
+  if (activeTab.value === 'mau_sac' && modalForm.mo_ta && !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(modalForm.mo_ta.trim())) {
+    formError.value = 'Mã màu phải đúng định dạng HEX, ví dụ #d92d20.'
+    return
+  }
+  if (tenTrimmed.length > 150 || (modalForm.mo_ta || '').trim().length > 500) {
+    formError.value = 'Tên tối đa 150 ký tự và mô tả tối đa 500 ký tự.'
     return
   }
 
@@ -250,7 +259,7 @@ const saveAttributeDirectly = async () => {
       return
     }
     const num = Number(formatted)
-    if (isNaN(num) || num <= 0 || num > 100) {
+    if (isNaN(num) || num < 10 || num > 60) {
       formError.value = 'Kích cỡ giày phải là số hợp lệ từ 10 đến 60!'
       return
     }
@@ -418,7 +427,7 @@ const executeDeleteFast = async (item) => {
               <td class="text-center text-slate">{{ getIndex(index) }}</td>
               <td>
                 <span class="code-pill">{{ item.ma || (activeTabInfo.codePrefix + String(item.id).padStart(2, '0'))
-                }}</span>
+                  }}</span>
               </td>
               <td>
                 <div class="name-col">
@@ -563,19 +572,16 @@ const executeDeleteFast = async (item) => {
 
           <div class="confirm-hero-badge" :class="`badge-${confirmModal.variant}`">
             <div class="confirm-icon-glow">
-              <svg v-if="confirmModal.variant === 'danger'" width="28" height="28" viewBox="0 0 24 24" fill="none"
-                stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-if="confirmModal.variant === 'danger'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 <line x1="10" y1="11" x2="10" y2="17"></line>
                 <line x1="14" y1="11" x2="14" y2="17"></line>
               </svg>
-              <svg v-else-if="confirmModal.variant === 'warning'" width="28" height="28" viewBox="0 0 24 24" fill="none"
-                stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-else-if="confirmModal.variant === 'warning'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
               </svg>
-              <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
+              <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                 <polyline points="17 21 17 13 7 13 7 21"></polyline>
                 <polyline points="7 3 7 8 15 8"></polyline>

@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { deleteEmployee, getEmployee, getEmployeeFormData, listEmployees, updateEmployeeStatus } from '@/api/employee'
 import { exportCsv, fetchAllPages } from '@/utils/export'
-import { takeFlash } from '@/utils/flash'
+import { takeFlashWithMeta } from '@/utils/flash'
 import { avatarColor, formatDate, formatDateTime, initialsOf } from '@/utils/format'
 import { getAvatarSrc, onAvatarError } from '@/utils/avatar'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm, notifyDeleteConfirm } from '@/utils/notify'
@@ -202,9 +202,16 @@ const removeEmployee = async (row) => {
 }
 
 onMounted(async () => {
-  flashMsg.value = takeFlash()
-  if (flashMsg.value) {
-    notifySuccess(flashMsg.value)
+  const { message, type } = takeFlashWithMeta()
+  flashMsg.value = message
+  if (message) {
+    if (type === 'warning') {
+      notifyWarning(message)
+    } else if (type === 'error') {
+      notifyError(message)
+    } else {
+      notifySuccess(message)
+    }
   }
   try {
     const formData = await getEmployeeFormData()
@@ -397,6 +404,11 @@ onMounted(async () => {
 
       <!-- Phân trang Footer -->
       <div class="table-pagination-row">
+        <!-- Bên giữa: Tổng số dòng theo bộ lọc -->
+        <div class="pagination-summary">
+          Hiển thị <strong>{{ rows.length }}</strong> nhân viên trong tổng số
+          <strong>{{ totalElements }}</strong> nhân viên
+        </div>
         <!-- Bên trái: Số dòng mỗi trang -->
         <div class="pagination-size-wrap">
           <select v-model="size" class="pagination-select" @change="onSizeChange">
@@ -475,7 +487,7 @@ onMounted(async () => {
           <button class="btn-banner-close" type="button" title="Đóng" @click="detailData = null">
             <i class="bi bi-x-lg"></i>
           </button>
-          
+
           <div class="profile-banner-content">
             <div class="profile-avatar-wrapper">
               <img
@@ -984,6 +996,18 @@ onMounted(async () => {
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid #f8fafc;
+}
+
+.pagination-summary {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.pagination-summary strong {
+  color: #1f2937;
+  font-weight: 700;
 }
 
 .pagination-size-wrap {

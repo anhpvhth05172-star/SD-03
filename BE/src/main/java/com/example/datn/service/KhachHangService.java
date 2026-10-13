@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -31,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
+@Slf4j
 public class KhachHangService {
 
     private static final int MAX_PAGE_SIZE = 50;
@@ -59,6 +61,8 @@ public class KhachHangService {
     };
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+$");
     private static final Pattern SO_DIEN_THAI_PATTERN = Pattern.compile("^0\\d{8,9}$");
+    /** CCCD có 12 chữ số, CMND cũ 9 chữ số. */
+    private static final Pattern SO_CCCD_PATTERN = Pattern.compile("^\\d{9,12}$");
     private static final Pattern MA_KHACH_HANG_PATTERN = Pattern.compile("^[A-Za-z][A-Za-z0-9]{0,24}$");
 
     private final KhachHangRepository khachHangRepository;
@@ -107,7 +111,8 @@ public class KhachHangService {
             )
         );
         Map<Long, KhachHangThongKeDTO> thongKe = thongKeTheo(result.getContent());
-        return PageResponse.from(result.map(k -> toDTO(k, thongKe)));
+        Map<Long, List<DiaChiKhachHang>> diaChi = diaChiTheoKhachHang(result.getContent());
+        return PageResponse.from(result.map(k -> toDTO(k, thongKe, diaChi.getOrDefault(k.getId(), List.of()))));
     }
 
     @Transactional(readOnly = true)
@@ -134,15 +139,7 @@ public class KhachHangService {
                     return toFullDTO(khachHang);
                 });
                 if (dto != null) {
-                    if (emailService != null && dto.getEmail() != null && !dto.getEmail().isBlank()) {
-                        emailService.guiMailDangKyThanhCong(
-                            dto.getEmail(),
-                            dto.getTenKhachHang(),
-                            dto.getMaKhachHang(),
-                            dto.getTenTaiKhoan(),
-                            MAT_KHAU_MAC_DINH
-                        );
-                    }
+                    dto.setEmailGuiThanhCong(guiEmailThongTinTaiKhoan(dto));
                     return dto;
                 }
             } catch (DataIntegrityViolationException ex) {
@@ -150,6 +147,30 @@ public class KhachHangService {
             }
         }
         throw new IllegalArgumentException("Không tạo được mã khách hàng duy nhất, vui lòng thử lại");
+    }
+
+    /**
+     * Gửi email thông tin tài khoản và trả về đúng trạng thái nhà cung cấp mail trả về.
+     * Trả về false khi thiếu dịch vụ email hoặc thiếu địa chỉ nhận, tuyệt đối không báo thành công giả.
+     */
+    private boolean guiEmailThongTinTaiKhoan(KhachHangDTO dto) {
+        if (emailService == null) {
+            log.warn("Bỏ qua gửi email thông tin tài khoản cho khách hàng {}: chưa cấu hình dịch vụ email",
+                dto.getMaKhachHang());
+            return false;
+        }
+        if (isBlank(dto.getEmail())) {
+            log.warn("Bỏ qua gửi email thông tin tài khoản cho khách hàng {}: không có địa chỉ email",
+                dto.getMaKhachHang());
+            return false;
+        }
+        return emailService.guiMailDangKyThanhCong(
+            dto.getEmail(),
+            dto.getTenKhachHang(),
+            dto.getMaKhachHang(),
+            dto.getTenTaiKhoan(),
+            MAT_KHAU_MAC_DINH
+        );
     }
 
     @Transactional(readOnly = true)
@@ -306,12 +327,13 @@ public class KhachHangService {
         if (req == null || isBlank(req.getTenKhachHang())) {
             throw new IllegalArgumentException("Họ và tên không được để trống");
         }
-        checkLength(req.getTenKhachHang(), 200, "Họ và tên");
+        checkLength(req.getTenKhachHang(), 150, "Họ và tên");
         checkLength(req.getMaKhachHang(), 50, "Mã khách hàng");
         checkLength(req.getTenTaiKhoan(), 100, "Tên đăng nhập");
         checkLength(req.getMatKhau(), 127, "Mật khẩu");
         checkLength(req.getEmail(), 150, "Email");
         checkLength(req.getSoDienThoai(), 10, "Số điện thoại");
+        checkLength(req.getSoCccd(), 20, "Số CCCD");
         checkLength(req.getTinhThanhPho(), 100, "Tỉnh thành phố");
         checkLength(req.getPhuong(), 100, "Phường");
         checkLength(req.getDiaChiCuThe(), 255, "Địa chỉ cụ thể");
@@ -357,6 +379,9 @@ public class KhachHangService {
             throw new IllegalArgumentException(
                 "Số điện thoại không hợp lệ (bắt đầu bằng 0, gồm 9-10 chữ số, không chứa chữ cái)");
         }
+        if (!isBlank(req.getSoCccd()) && !SO_CCCD_PATTERN.matcher(req.getSoCccd().trim()).matches()) {
+            throw new IllegalArgumentException("Số CCCD không hợp lệ (gồm 9-12 chữ số, không chứa chữ cái)");
+        }
         if (req.getNgaySinh() != null && req.getNgaySinh().isAfter(LocalDate.now())) {
             throw new IllegalArgumentException("Ngày sinh không được ở tương lai");
         }
@@ -393,6 +418,10 @@ public class KhachHangService {
         }
         if (taoMoi || !isBlank(req.getSoDienThoai())) {
             khachHang.setSoDienThoai(trimToNull(req.getSoDienThoai()));
+        }
+        // FE luôn gửi trường này (chuỗi rỗng khi xóa) nên khách hàng có thể xóa CCCD.
+        if (taoMoi || req.getSoCccd() != null) {
+            khachHang.setSoCccd(trimToNull(req.getSoCccd()));
         }
         if (taoMoi || req.getNgaySinh() != null) {
             khachHang.setNgaySinh(req.getNgaySinh());
@@ -464,7 +493,11 @@ public class KhachHangService {
 
     private String sinhMaKhachHang(String tenKhachHang) {
         String goc = MaNhanVien.sinh(tenKhachHang);
-        int so = 1;
+        // Chưa có mã trùng -> dùng mã gốc không hậu tố số (Phạm Hà Anh -> Anhph).
+        if (!khachHangRepository.existsByMaKhachHang(goc)) {
+            return goc;
+        }
+        int so = 2;
         String ma = MaNhanVien.congSo(goc, so);
         while (khachHangRepository.existsByMaKhachHang(ma)) {
             if (++so > SO_MA_TOI_DA) {
@@ -511,20 +544,28 @@ public class KhachHangService {
             .collect(Collectors.toMap(KhachHangThongKeDTO::khachHangId, Function.identity()));
     }
 
+    private Map<Long, List<DiaChiKhachHang>> diaChiTheoKhachHang(List<KhachHang> ds) {
+        List<Long> ids = ds.stream().map(KhachHang::getId).toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return diaChiKhachHangRepository.findByKhachHangIdInOrderByMacDinhDescIdDesc(ids).stream()
+            .collect(Collectors.groupingBy(d -> d.getKhachHang().getId()));
+    }
+
     private KhachHangDTO toFullDTO(KhachHang k) {
         List<DiaChiKhachHang> diaChis = diaChiKhachHangRepository
             .findByKhachHangIdOrderByMacDinhDescIdDesc(k.getId());
-        KhachHangDTO dto = toDTO(k, thongKeTheo(List.of(k)));
-        dto.setDanhSachDiaChi(diaChis.stream().map(KhachHangService::toDiaChiDTO).toList());
-        dto.setDiaChiMacDinh(diaChis.stream()
-            .filter(d -> Boolean.TRUE.equals(d.getMacDinh()))
-            .findFirst()
-            .map(KhachHangService::toDiaChiDTO)
-            .orElse(null));
-        return dto;
+        return toDTO(k, thongKeTheo(List.of(k)), diaChis);
     }
 
     private KhachHangDTO toDTO(KhachHang k, Map<Long, KhachHangThongKeDTO> thongKe) {
+        return toDTO(k, thongKe, diaChiKhachHangRepository.findByKhachHangIdOrderByMacDinhDescIdDesc(k.getId()));
+    }
+
+    private KhachHangDTO toDTO(
+        KhachHang k, Map<Long, KhachHangThongKeDTO> thongKe, List<DiaChiKhachHang> diaChis
+    ) {
         KhachHangThongKeDTO tk = thongKe.get(k.getId());
         BigDecimal tongChiTieu = tk != null && tk.tongChiTieu() != null ? tk.tongChiTieu() : BigDecimal.ZERO;
         String maHang = toMaHangTheoTongChiTieu(tongChiTieu);
@@ -535,6 +576,7 @@ public class KhachHangService {
             .tenKhachHang(k.getTenKhachHang())
             .email(k.getEmail())
             .soDienThoai(k.getSoDienThoai())
+            .soCccd(k.getSoCccd())
             .ngaySinh(k.getNgaySinh())
             .gioiTinh(k.getGioiTinh())
             .trangThai(k.getTrangThai())
@@ -547,11 +589,23 @@ public class KhachHangService {
             .soDon(tk != null && tk.soDon() != null ? tk.soDon() : 0L)
             .tongChiTieu(tongChiTieu)
             .build();
-        diaChiKhachHangRepository.findFirstByKhachHangIdAndMacDinhTrue(k.getId())
-            .or(() -> diaChiKhachHangRepository.findByKhachHangIdOrderByMacDinhDescIdDesc(k.getId()).stream().findFirst())
+        dto.setDanhSachDiaChi(diaChis == null ? List.of() : diaChis.stream()
             .map(KhachHangService::toDiaChiDTO)
-            .ifPresent(dto::setDiaChiMacDinh);
+            .toList());
+        dto.setDiaChiMacDinh(chonDiaChiMacDinh(diaChis));
         return dto;
+    }
+
+    private static DiaChiKhachHangDTO chonDiaChiMacDinh(List<DiaChiKhachHang> diaChis) {
+        if (diaChis == null || diaChis.isEmpty()) {
+            return null;
+        }
+        return diaChis.stream()
+            .filter(d -> Boolean.TRUE.equals(d.getMacDinh()))
+            .findFirst()
+            .or(() -> diaChis.stream().findFirst())
+            .map(KhachHangService::toDiaChiDTO)
+            .orElse(null);
     }
 
     private static DiaChiKhachHangDTO toDiaChiDTO(DiaChiKhachHang d) {

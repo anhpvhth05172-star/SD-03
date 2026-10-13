@@ -4,7 +4,7 @@ import { ref, computed } from 'vue'
 const props = defineProps({
   isOpen: Boolean,
   type: {
-    type: String, // 'color' or 'size'
+    type: String,
     default: 'color'
   }
 })
@@ -42,6 +42,14 @@ const handleSave = () => {
     modalError.value = props.type === 'color' ? 'Vui lòng nhập tên màu sắc!' : 'Vui lòng nhập kích cỡ!'
     return
   }
+  if (trimmed.length > 150 || itemDescription.value.trim().length > 500) {
+    modalError.value = 'Tên tối đa 150 ký tự, mô tả tối đa 500 ký tự.'
+    return
+  }
+  if (props.type === 'color' && !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(itemCode.value.trim())) {
+    modalError.value = 'Mã màu phải đúng định dạng HEX, ví dụ #d92d20.'
+    return
+  }
 
   if (props.type === 'size') {
     const formatted = trimmed.replace(',', '.')
@@ -50,7 +58,7 @@ const handleSave = () => {
       return
     }
     const num = Number(formatted)
-    if (isNaN(num) || num <= 0 || num > 100) {
+    if (isNaN(num) || num < 10 || num > 60) {
       modalError.value = 'Kích cỡ giày phải là số hợp lệ từ 10 đến 60!'
       return
     }

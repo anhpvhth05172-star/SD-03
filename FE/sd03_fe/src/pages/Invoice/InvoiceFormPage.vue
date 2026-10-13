@@ -1,12 +1,20 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { createInvoice, getInvoiceFormData, listInvoices } from '@/api/invoice'
+import {
+  createInvoice,
+  getInvoiceFormData,
+  listInvoices,
+} from '@/api/invoice'
+import { getDistricts, getProvinces, getWards, tinhPhi } from '@/api/shipping'
+import ProductPickerModal from '@/components/ProductPickerModal.vue'
+import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 import { formatVnd } from '@/utils/format'
 
 const router = useRouter()
 const saving = ref(false)
 const loading = ref(false)
+const pickerOpen = ref(false)
 
 const statusOptions = [
   'Chờ xác nhận',
@@ -52,6 +60,10 @@ const spctById = computed(() => {
   for (const s of options.value.sanPhamChiTiets) map[s.id] = s
   return map
 })
+
+const existingLineIds = computed(() =>
+  form.value.chiTiet.map((l) => Number(l.idSanPhamChiTiet)).filter((n) => n > 0),
+)
 
 const pggById = computed(() => {
   const map = {}
@@ -109,16 +121,13 @@ const dongLoi = computed(() =>
     .sort((a, b) => a.dong - b.dong),
 )
 
-const addLine = () => form.value.chiTiet.push(blankLine())
+const addLine = () => {
+  pickerOpen.value = true
+}
 
 const removeLine = (index) => {
   if (form.value.chiTiet.length === 1) return
   form.value.chiTiet.splice(index, 1)
-}
-
-const onProductChange = (line) => {
-  const spct = spctById.value[line.idSanPhamChiTiet]
-  if (spct) line.donGia = Number(spct.giaBan)
 }
 
 const onKhachHangChange = () => {
@@ -129,6 +138,220 @@ const onKhachHangChange = () => {
   }
 }
 
+const laOnline = computed(() => form.value.loaiDon === 'Online')
+
+const diaChi = ref({
+  tinhId: '',
+  tinhTen: '',
+  quanId: '',
+  quanTen: '',
+  phuongCode: '',
+  phuongTen: '',
+  pho: '',
+  soNha: '',
+})
+const tinhThanhs = ref([])
+const quanHuyens = ref([])
+const phuongXas = ref([])
+const diaChiLoading = ref({ tinh: false, quan: false, phuong: false })
+const diaChiLoi = ref('')
+
+const phiState = ref('none')
+const phiError = ref('')
+let phiYeuCau = 0
+let phiTimer = null
+
+const phiHienThi = computed(() => {
+  if (phiState.value === 'loading') return 'Đang tính phí...'
+  if (phiState.value === 'ok') return formatVnd(form.value.phiVanChuyen)
+  return ''
+})
+
+const chiTietSignature = computed(() =>
+  form.value.chiTiet.map((l) => `${l.idSanPhamChiTiet}x${l.soLuong}`).join('|'),
+)
+
+const taiTinhThanh = async () => {
+  if (diaChiLoading.value.tinh) return
+  diaChiLoading.value.tinh = true
+  diaChiLoi.value = ''
+  try {
+    tinhThanhs.value = await getProvinces()
+  } catch (e) {
+    tinhThanhs.value = []
+    diaChiLoi.value = e.message || 'Không tải được danh sách tỉnh/thành'
+  } finally {
+    diaChiLoading.value.tinh = false
+  }
+}
+
+const taiQuanHuyen = async (provinceId) => {
+  diaChiLoading.value.quan = true
+  diaChiLoi.value = ''
+  try {
+    quanHuyens.value = await getDistricts(provinceId)
+  } catch (e) {
+    quanHuyens.value = []
+    diaChiLoi.value = e.message || 'Không tải được danh sách quận/huyện'
+  } finally {
+    diaChiLoading.value.quan = false
+  }
+}
+
+const taiPhuongXa = async (districtId) => {
+  diaChiLoading.value.phuong = true
+  diaChiLoi.value = ''
+  try {
+    phuongXas.value = await getWards(districtId)
+  } catch (e) {
+    phuongXas.value = []
+    diaChiLoi.value = e.message || 'Không tải được danh sách phường/xã'
+  } finally {
+    diaChiLoading.value.phuong = false
+  }
+}
+
+const capNhatDiaChiText = () => {
+  if (!laOnline.value) return
+  const duongDay = [diaChi.value.soNha, diaChi.value.pho]
+    .map((s) => String(s || '').trim())
+    .filter(Boolean)
+    .join(' ')
+  const parts = [
+    duongDay,
+    diaChi.value.phuongTen,
+    diaChi.value.quanTen,
+    diaChi.value.tinhTen,
+  ]
+    .map((s) => String(s || '').trim())
+    .filter(Boolean)
+  form.value.diaChiNhanHang = parts.join(', ')
+}
+
+const xoaPhi = () => {
+  phiYeuCau++
+  clearTimeout(phiTimer)
+  form.value.phiVanChuyen = 0
+  phiState.value = 'none'
+  phiError.value = ''
+}
+
+const coTheTinhPhi = () =>
+  laOnline.value &&
+  diaChi.value.quanId &&
+  diaChi.value.phuongCode &&
+  form.value.chiTiet.length > 0 &&
+  form.value.chiTiet.every((l) => l.idSanPhamChiTiet && Number(l.soLuong) > 0)
+
+const yeuCauTinhPhi = (delay = 400) => {
+  clearTimeout(phiTimer)
+  if (!laOnline.value) {
+    phiYeuCau++
+    phiState.value = 'none'
+    phiError.value = ''
+    return
+  }
+  if (!coTheTinhPhi()) {
+    xoaPhi()
+    return
+  }
+  phiState.value = 'loading'
+  phiError.value = ''
+  form.value.phiVanChuyen = 0
+  phiTimer = setTimeout(() => tinhPhiNgay(), delay)
+}
+
+const tinhPhiNgay = async () => {
+  clearTimeout(phiTimer)
+  if (!coTheTinhPhi()) {
+    xoaPhi()
+    return
+  }
+  const yeuCauHienTai = ++phiYeuCau
+  phiState.value = 'loading'
+  phiError.value = ''
+  form.value.phiVanChuyen = 0
+  try {
+    const kq = await tinhPhi({
+      toDistrictId: Number(diaChi.value.quanId),
+      toWardCode: String(diaChi.value.phuongCode),
+      items: form.value.chiTiet.map((l) => ({
+        idSanPhamChiTiet: Number(l.idSanPhamChiTiet),
+        soLuong: Number(l.soLuong),
+      })),
+    })
+    if (yeuCauHienTai !== phiYeuCau) return
+    const phi = Number(kq.shippingFee) || 0
+    if (phi > 1000) {
+      form.value.phiVanChuyen = phi
+      phiState.value = 'ok'
+      phiError.value = ''
+    } else {
+      form.value.phiVanChuyen = 0
+      phiState.value = 'error'
+      phiError.value = kq.message || 'GHN trả về phí vận chuyển không hợp lệ'
+    }
+  } catch (e) {
+    if (yeuCauHienTai !== phiYeuCau) return
+    form.value.phiVanChuyen = 0
+    phiState.value = 'error'
+    phiError.value = e.message || 'Không tính được phí vận chuyển'
+  }
+}
+
+const onTinhChange = async () => {
+  const t = tinhThanhs.value.find((x) => x.id === Number(diaChi.value.tinhId))
+  diaChi.value.tinhTen = t ? t.name : ''
+  diaChi.value.quanId = ''
+  diaChi.value.quanTen = ''
+  diaChi.value.phuongCode = ''
+  diaChi.value.phuongTen = ''
+  quanHuyens.value = []
+  phuongXas.value = []
+  capNhatDiaChiText()
+  xoaPhi()
+  if (diaChi.value.tinhId) await taiQuanHuyen(Number(diaChi.value.tinhId))
+}
+
+const onQuanChange = async () => {
+  const q = quanHuyens.value.find((x) => x.id === Number(diaChi.value.quanId))
+  diaChi.value.quanTen = q ? q.name : ''
+  diaChi.value.phuongCode = ''
+  diaChi.value.phuongTen = ''
+  phuongXas.value = []
+  capNhatDiaChiText()
+  xoaPhi()
+  if (diaChi.value.quanId) await taiPhuongXa(Number(diaChi.value.quanId))
+}
+
+const onPhuongChange = () => {
+  const w = phuongXas.value.find((x) => String(x.code) === String(diaChi.value.phuongCode))
+  diaChi.value.phuongTen = w ? w.name : ''
+  capNhatDiaChiText()
+  yeuCauTinhPhi(0)
+}
+
+const onPhoSoNhaChange = () => capNhatDiaChiText()
+
+watch(
+  () => form.value.loaiDon,
+  (moi) => {
+    if (moi === 'Online') {
+      if (!tinhThanhs.value.length) taiTinhThanh()
+      yeuCauTinhPhi(0)
+    } else {
+      phiYeuCau++
+      clearTimeout(phiTimer)
+      phiState.value = 'none'
+      phiError.value = ''
+    }
+  },
+)
+
+watch(chiTietSignature, () => {
+  if (laOnline.value) yeuCauTinhPhi(500)
+})
+
 const toNum = (v) => (v === '' || v === null || v === undefined ? null : Number(v))
 
 const buildPayload = () => ({
@@ -138,6 +361,9 @@ const buildPayload = () => ({
   tenKhachHang: form.value.tenKhachHang.trim() || null,
   soDienThoaiKhachHang: form.value.soDienThoaiKhachHang.trim() || null,
   diaChiNhanHang: form.value.diaChiNhanHang.trim() || null,
+  toProvinceId: laOnline.value ? toNum(diaChi.value.tinhId) : null,
+  toDistrictId: laOnline.value ? toNum(diaChi.value.quanId) : null,
+  toWardCode: laOnline.value ? (diaChi.value.phuongCode || null) : null,
   trangThai: form.value.trangThai,
   ghiChu: form.value.ghiChu.trim() || null,
   idKhachHang: toNum(form.value.idKhachHang),
@@ -187,24 +413,46 @@ const validate = () => {
     e.soDienThoaiKhachHang = 'Số điện thoại phải gồm 10 hoặc 11 chữ số và bắt đầu bằng 0'
   }
 
-  const phiRaw = form.value.phiVanChuyen
-  if (phiRaw === '' || phiRaw === null || phiRaw === undefined) {
-    e.phiVanChuyen = 'Phí vận chuyển không được để trống'
+  if (laOnline.value) {
+    if (phiState.value === 'loading') {
+      e.phiVanChuyen = 'Đang tính phí vận chuyển, vui lòng chờ'
+    } else if (phiState.value === 'error') {
+      e.phiVanChuyen = phiError.value || 'Chưa tính được phí vận chuyển từ GHN'
+    } else if (phiState.value !== 'ok' || !(Number(form.value.phiVanChuyen) > 1000)) {
+      e.phiVanChuyen = 'Phí vận chuyển chưa được xác nhận'
+    }
   } else {
-    const phi = Number(phiRaw)
-    if (!Number.isFinite(phi)) e.phiVanChuyen = 'Phí vận chuyển chỉ được nhập số'
-    else if (phi < 0) e.phiVanChuyen = 'Phí vận chuyển không được âm'
-    else if (phi > 0 && phi < 1000) e.phiVanChuyen = 'Phí vận chuyển nếu có phải từ 1.000đ trở lên'
+    const phiRaw = form.value.phiVanChuyen
+    if (phiRaw === '' || phiRaw === null || phiRaw === undefined) {
+      e.phiVanChuyen = 'Phí vận chuyển không được để trống'
+    } else {
+      const phi = Number(phiRaw)
+      if (!Number.isFinite(phi)) e.phiVanChuyen = 'Phí vận chuyển chỉ được nhập số'
+      else if (phi < 0) e.phiVanChuyen = 'Phí vận chuyển không được âm'
+      else if (phi > 0 && phi < 1000) e.phiVanChuyen = 'Phí vận chuyển nếu có phải từ 1.000đ trở lên'
+    }
   }
 
-  const diaChi = String(form.value.diaChiNhanHang || '').trim()
-  if (form.value.loaiDon === 'Online' && !diaChi) {
-    e.diaChiNhanHang = 'Đơn online phải có địa chỉ nhận hàng'
-  } else if (diaChi) {
-    if (diaChi.length > 500) {
-      e.diaChiNhanHang = 'Địa chỉ nhận hàng quá độ dài tối đa (500 ký tự)'
-    } else if (!/^[\p{L}\p{N}\s.,\/-]+$/u.test(diaChi)) {
-      e.diaChiNhanHang = 'Địa chỉ nhận hàng chứa ký tự không hợp lệ'
+  if (laOnline.value) {
+    if (!diaChi.value.tinhId) e.diaChiNhanHang = 'Vui lòng chọn tỉnh/thành phố'
+    else if (!diaChi.value.quanId) e.diaChiNhanHang = 'Vui lòng chọn quận/huyện'
+    else if (!diaChi.value.phuongCode) e.diaChiNhanHang = 'Vui lòng chọn phường/xã'
+    else if (!String(diaChi.value.pho || '').trim()) {
+      e.diaChiNhanHang = 'Vui lòng nhập tên phố'
+    } else if (!String(diaChi.value.soNha || '').trim()) {
+      e.diaChiNhanHang = 'Vui lòng nhập số nhà'
+    }
+  }
+  if (!e.diaChiNhanHang) {
+    const diaChiText = String(form.value.diaChiNhanHang || '').trim()
+    if (laOnline.value && !diaChiText) {
+      e.diaChiNhanHang = 'Đơn online phải có địa chỉ nhận hàng'
+    } else if (diaChiText) {
+      if (diaChiText.length > 500) {
+        e.diaChiNhanHang = 'Địa chỉ nhận hàng quá độ dài tối đa (500 ký tự)'
+      } else if (!/^[\p{L}\p{N}\s.,\/-]+$/u.test(diaChiText)) {
+        e.diaChiNhanHang = 'Địa chỉ nhận hàng chứa ký tự không hợp lệ'
+      }
     }
   }
 
@@ -271,35 +519,85 @@ const submit = async () => {
   if (!validate()) return
   saving.value = true
   try {
+    const payload = buildPayload()
     const ma = form.value.maHoaDon.trim()
     const kiemTra = await listInvoices({ ma, size: 100 })
     if ((kiemTra.content || []).some((h) => h.maHoaDon === ma)) {
       errors.value = { ...errors.value, maHoaDon: `Mã hóa đơn "${ma}" đã tồn tại` }
+      saving.value = false
       return
     }
-    const payload = buildPayload()
     await createInvoice(payload)
     router.push('/hoa-don')
   } catch (e) {
-    alert(e.message)
+    notifyError('Không thể tạo hóa đơn', e.message || 'Có lỗi xảy ra')
   } finally {
     saving.value = false
   }
 }
 
-const optionLabel = (s) =>
-  `${s.ma} - ${s.tenSanPham} (${s.tenKichCo} / ${s.tenMau}) - ${formatVnd(s.giaBan)} - còn ${s.soLuong}` +
-  (s.trangThai === false || s.trangThaiSanPham === false ? ' - ngừng bán' : '')
+const huy = () => {
+  router.push('/hoa-don')
+}
+
+const xoaLoiDong = () => {
+  const e = { ...errors.value }
+  for (const k of Object.keys(e)) {
+    if (k.startsWith('dong') || k === 'chiTiet') delete e[k]
+  }
+  errors.value = e
+}
+
+const onPickProducts = (ids) => {
+  const daChon = new Set(
+    form.value.chiTiet
+      .filter((l) => l.idSanPhamChiTiet)
+      .map((l) => Number(l.idSanPhamChiTiet)),
+  )
+  const chiTietMoi = form.value.chiTiet.filter((l) => l.idSanPhamChiTiet)
+  let them = 0
+  let boQua = 0
+  for (const id of ids) {
+    const key = Number(id)
+    if (daChon.has(key)) {
+      boQua++
+      continue
+    }
+    const spct = spctById.value[id]
+    chiTietMoi.push({
+      idSanPhamChiTiet: id,
+      soLuong: 1,
+      donGia: spct ? Number(spct.giaBan) || 0 : 0,
+      ghiChu: '',
+    })
+    daChon.add(key)
+    them++
+  }
+  form.value.chiTiet = chiTietMoi.length ? chiTietMoi : [blankLine()]
+  pickerOpen.value = false
+  xoaLoiDong()
+  if (them && !boQua) {
+    notifySuccess('Đã thêm sản phẩm', `Đã thêm ${them} dòng sản phẩm vào hóa đơn`)
+  } else if (them && boQua) {
+    notifyWarning(
+      'Đã thêm sản phẩm',
+      `Thêm ${them} dòng, bỏ qua ${boQua} sản phẩm đã có trong hóa đơn`,
+    )
+  } else if (boQua) {
+    notifyWarning('Không có sản phẩm mới', `${boQua} sản phẩm đã có trong hóa đơn`)
+  }
+}
 
 onMounted(async () => {
   loading.value = true
   try {
     options.value = await getInvoiceFormData()
   } catch (e) {
-    alert(e.message)
-  } finally {
+    notifyError('Không tải được dữ liệu', e.message)
     loading.value = false
+    return
   }
+  loading.value = false
 })
 </script>
 
@@ -372,8 +670,39 @@ onMounted(async () => {
           <div v-if="errors.soDienThoaiKhachHang" class="field-error">{{ errors.soDienThoaiKhachHang }}</div>
         </div>
         <div class="field">
-          <label>Phí vận chuyển (₫)</label>
-          <input v-model.number="form.phiVanChuyen" type="number" min="0" placeholder="0" />
+          <label>Phí vận chuyển (₫) *</label>
+          <template v-if="laOnline">
+            <div class="phi-wrap">
+              <input
+                class="phi-input"
+                :value="phiHienThi"
+                type="text"
+                readonly
+                placeholder="Chưa xác định"
+              />
+              <button
+                v-if="phiState === 'error'"
+                class="phi-retry"
+                type="button"
+                @click="tinhPhiNgay"
+              >
+                Thử lại
+              </button>
+            </div>
+            <div v-if="phiState === 'loading'" class="phi-hint">Đang tính phí với GHN...</div>
+            <div v-else-if="phiState === 'error'" class="phi-hint is-error">{{ phiError }}</div>
+            <div v-else-if="phiState === 'ok'" class="phi-hint is-ok">
+              Phí GHN đã xác nhận
+            </div>
+            <div v-else class="phi-hint">Chọn đủ địa chỉ và sản phẩm để tính phí</div>
+          </template>
+          <input
+            v-else
+            v-model.number="form.phiVanChuyen"
+            type="number"
+            min="0"
+            placeholder="0"
+          />
           <div v-if="errors.phiVanChuyen" class="field-error">{{ errors.phiVanChuyen }}</div>
         </div>
         <div class="field">
@@ -391,7 +720,65 @@ onMounted(async () => {
           </select>
           <div v-if="errors.idPhieuGiamGia" class="field-error">{{ errors.idPhieuGiamGia }}</div>
         </div>
-        <div class="field field-wide">
+        <div v-if="laOnline" class="field field-wide">
+          <label>Địa chỉ nhận hàng *</label>
+          <div class="addr-grid">
+            <select
+              v-model="diaChi.tinhId"
+              :disabled="diaChiLoading.tinh"
+              @change="onTinhChange"
+            >
+              <option value="">
+                {{ diaChiLoading.tinh ? 'Đang tải...' : '— Tỉnh/Thành —' }}
+              </option>
+              <option v-for="t in tinhThanhs" :key="t.id" :value="t.id">{{ t.name }}</option>
+            </select>
+            <select
+              v-model="diaChi.quanId"
+              :disabled="!diaChi.tinhId || diaChiLoading.quan"
+              @change="onQuanChange"
+            >
+              <option value="">
+                {{ diaChiLoading.quan ? 'Đang tải...' : '— Quận/Huyện —' }}
+              </option>
+              <option v-for="q in quanHuyens" :key="q.id" :value="q.id">{{ q.name }}</option>
+            </select>
+            <select
+              v-model="diaChi.phuongCode"
+              :disabled="!diaChi.quanId || diaChiLoading.phuong"
+              @change="onPhuongChange"
+            >
+              <option value="">
+                {{ diaChiLoading.phuong ? 'Đang tải...' : '— Chọn Phường/Xã —' }}
+              </option>
+              <option v-for="w in phuongXas" :key="w.code" :value="w.code">{{ w.name }}</option>
+            </select>
+            <input
+              v-model="diaChi.pho"
+              class="addr-pho"
+              type="text"
+              placeholder="Tên phố (VD: Duong So 1)"
+              @input="onPhoSoNhaChange"
+            />
+            <input
+              v-model="diaChi.soNha"
+              class="addr-so-nha"
+              type="text"
+              placeholder="Số nhà (VD: 123)"
+              @input="onPhoSoNhaChange"
+            />
+          </div>
+          <div v-if="diaChiLoi" class="field-error">{{ diaChiLoi }}</div>
+          <input
+            class="diaChi-preview"
+            :value="form.diaChiNhanHang"
+            type="text"
+            readonly
+            placeholder="Địa chỉ đầy đủ hiển thị tại đây"
+          />
+          <div v-if="errors.diaChiNhanHang" class="field-error">{{ errors.diaChiNhanHang }}</div>
+        </div>
+        <div v-else class="field field-wide">
           <label>Địa chỉ nhận hàng</label>
           <input v-model="form.diaChiNhanHang" type="text" placeholder="Địa chỉ nhận hàng" />
           <div v-if="errors.diaChiNhanHang" class="field-error">{{ errors.diaChiNhanHang }}</div>
@@ -404,6 +791,12 @@ onMounted(async () => {
       </div>
 
       <div class="section-label">Chi tiết hóa đơn</div>
+      <div class="picker-toolbar">
+        <button class="line-add line-add--strong" type="button" @click="pickerOpen = true">
+          + Chọn sản phẩm (chọn nhiều)
+        </button>
+        <span class="picker-hint">Dùng checkbox để chọn nhiều biến thể cùng lúc, chống trùng SKU tự động.</span>
+      </div>
       <table class="line-table">
         <thead>
           <tr>
@@ -417,17 +810,17 @@ onMounted(async () => {
         <tbody>
           <tr v-for="(line, i) in form.chiTiet" :key="i">
             <td class="col-sp">
-              <select v-model="line.idSanPhamChiTiet" @change="onProductChange(line)">
-                <option value="">— Chọn sản phẩm —</option>
-                <option
-                  v-for="s in options.sanPhamChiTiets"
-                  :key="s.id"
-                  :value="s.id"
-                  :disabled="s.trangThai === false || s.trangThaiSanPham === false"
-                >
-                  {{ optionLabel(s) }}
-                </option>
-              </select>
+              <div class="line-product" :class="{ 'is-empty': !line.idSanPhamChiTiet }">
+                <template v-if="line.idSanPhamChiTiet && spctById[line.idSanPhamChiTiet]">
+                  <span class="line-sku">{{ spctById[line.idSanPhamChiTiet].ma }}</span>
+                  <span class="line-name">{{ spctById[line.idSanPhamChiTiet].tenSanPham }}</span>
+                  <span class="line-variant">
+                    {{ [spctById[line.idSanPhamChiTiet].tenKichCo, spctById[line.idSanPhamChiTiet].tenMau].filter(Boolean).join(' / ') }}
+                  </span>
+                  <span class="line-stock">còn {{ spctById[line.idSanPhamChiTiet].soLuong }}</span>
+                </template>
+                <span v-else class="line-placeholder">Chưa chọn sản phẩm — bấm nút ở trên để thêm</span>
+              </div>
             </td>
             <td class="col-sl"><input v-model.number="line.soLuong" type="number" min="1" /></td>
             <td class="col-gia"><input v-model.number="line.donGia" type="number" min="0" step="1000" /></td>
@@ -446,11 +839,18 @@ onMounted(async () => {
           </tr>
         </tbody>
       </table>
-      <button class="line-add" type="button" @click="addLine">+ Thêm dòng sản phẩm</button>
       <div v-if="errors.chiTiet" class="field-error">{{ errors.chiTiet }}</div>
       <ul v-if="dongLoi.length" class="line-error-list">
         <li v-for="lo in dongLoi" :key="lo.dong">Dòng {{ lo.dong }}: {{ lo.msg }}</li>
       </ul>
+
+      <ProductPickerModal
+        :is-open="pickerOpen"
+        :products="options.sanPhamChiTiets"
+        :existing-ids="existingLineIds"
+        @close="pickerOpen = false"
+        @confirm="onPickProducts"
+      />
 
       <div class="totals-box">
         <div class="t-row"><span>Tổng tiền</span><span>{{ formatVnd(tongTien) }}</span></div>
@@ -461,9 +861,9 @@ onMounted(async () => {
 
       <div class="form-actions">
         <button class="btn-primary" type="button" :disabled="saving" @click="submit">
-          {{ saving ? 'Đang lưu...' : 'Thêm' }}
+          {{ saving ? 'Đang lưu...' : 'Tạo hóa đơn' }}
         </button>
-        <button class="btn-cancel" type="button" @click="router.push('/hoa-don')">Hủy</button>
+        <button class="btn-cancel" type="button" @click="huy">Hủy</button>
       </div>
     </section>
     <section class="create-card" v-else>
@@ -562,6 +962,63 @@ onMounted(async () => {
   grid-column: span 3;
 }
 
+.addr-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.diaChi-preview {
+  background: #f7f7f9;
+  color: #4a4a52;
+  font-weight: 500;
+}
+
+.phi-wrap {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.phi-input {
+  flex: 1;
+  font-weight: 600;
+  color: #1d1d23;
+}
+
+.phi-retry {
+  height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--red);
+  background: #fff;
+  color: var(--red);
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.phi-retry:hover {
+  background: var(--red-soft);
+}
+
+.phi-hint {
+  font-size: 11.5px;
+  color: #77777f;
+  margin-top: 4px;
+  line-height: 1.35;
+}
+
+.phi-hint.is-error {
+  color: var(--red);
+}
+
+.phi-hint.is-ok {
+  color: #15803d;
+}
+
 .field-error {
   font-size: 11.5px;
   color: var(--red);
@@ -573,6 +1030,13 @@ onMounted(async () => {
   background: #f7f7f9;
   color: #6b6b73;
   cursor: default;
+}
+
+.field select:disabled {
+  background: #f7f7f9;
+  color: #6b6b73;
+  cursor: default;
+  opacity: 1;
 }
 
 .line-error-list {
@@ -690,6 +1154,70 @@ onMounted(async () => {
 
 .line-add:hover {
   background: var(--red-soft);
+}
+
+.picker-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.line-add--strong {
+  width: auto;
+  margin-bottom: 0;
+  padding: 0 16px;
+  border-style: solid;
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+
+.line-add--strong:hover {
+  background: #fdecec;
+  color: var(--red-dark);
+}
+
+.picker-hint {
+  font-size: 12px;
+  color: #8a8a94;
+}
+
+.line-product {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.line-product.is-empty .line-placeholder {
+  color: #9a9aa3;
+  font-style: italic;
+  font-size: 12.5px;
+}
+
+.line-sku {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b6b73;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.line-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d1d23;
+}
+
+.line-variant {
+  font-size: 12px;
+  color: #4a4a52;
+}
+
+.line-stock {
+  font-size: 11px;
+  color: #15803d;
+  font-weight: 600;
 }
 
 .totals-box {

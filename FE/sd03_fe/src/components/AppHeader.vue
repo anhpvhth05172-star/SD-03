@@ -1,13 +1,15 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { dangXuat, getRefreshToken, getUser } from '../utils/auth'
-import { huyPhien } from '../api/auth'
+// Tạm comment phần phiên đăng nhập/JWT (không xóa)
+// import { dangXuat, getRefreshToken, getUser } from '../utils/auth'
+// import { huyPhien } from '../api/auth'
 
 defineProps({
   title: { type: String, default: '' },
 })
 
+/* Tạm comment trạng thái người dùng + nút đăng xuất (không xóa)
 const route = useRoute()
 const router = useRouter()
 const nguoiDung = ref(getUser())
@@ -26,6 +28,7 @@ const xulyDangXuat = async () => {
   dangXuat()
   router.push('/dang-nhap')
 }
+*/
 </script>
 
 <template>

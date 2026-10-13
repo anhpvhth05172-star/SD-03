@@ -179,18 +179,14 @@ public class SanPhamServiceImpl implements SanPhamService {
         SanPham sanPham = sanPhamRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy sản phẩm với ID: " + id));
 
-        // Kiểm tra xem sản phẩm đã phát sinh hóa đơn bán hàng chưa
         if (chiTietHoaDonRepository.existsBySanPhamChiTiet_SanPham_Id(id)) {
             throw new IllegalArgumentException("Không thể xóa sản phẩm đã có lịch sử hóa đơn hoặc giao dịch bán hàng!");
         }
 
-        // Xóa ảnh của sản phẩm
         hinhAnhSanPhamRepository.deleteBySanPhamId(id);
 
-        // Xóa tất cả biến thể chi tiết của sản phẩm trước
         sanPhamChiTietRepository.deleteBySanPhamId(id);
 
-        // Xóa sản phẩm
         sanPhamRepository.delete(sanPham);
     }
 

@@ -58,6 +58,7 @@ class HoaDonServicePhieuGiamGiaTest {
     private final LichSuHoaDonRepository lichSuHoaDonRepository = mock(LichSuHoaDonRepository.class);
     private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository =
         mock(LichSuSuDungPhieuGiamGiaRepository.class);
+    private final GHNService ghnService = mock(GHNService.class);
 
     private final HoaDonService service = new HoaDonService(
         hoaDonRepository,
@@ -68,7 +69,8 @@ class HoaDonServicePhieuGiamGiaTest {
         phieuGiamGiaRepository,
         sanPhamChiTietRepository,
         lichSuHoaDonRepository,
-        lichSuSuDungRepository
+        lichSuSuDungRepository,
+        ghnService
     );
 
     private PhieuGiamGia phieu(String loai, String giaTri, int gioiHan) {

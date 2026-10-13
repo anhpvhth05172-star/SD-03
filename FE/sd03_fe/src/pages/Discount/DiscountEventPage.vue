@@ -7,7 +7,7 @@ const showFilter = ref(true);
 const apiDiscountEvent = inject("baseAPI");
 
 const listEvent = ref([]);
-const page = ref(0); // Spring bắt đầu từ 0
+const page = ref(0);
 const pageSize = 8;
 const totalPages = ref(0);
 const totalElements = ref(0);

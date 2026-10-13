@@ -21,7 +21,7 @@ public class ProductExcelImportResult {
     private int soSanPhamMoi;
     private int soBienTheMoi;
     private int soBienTheCapNhat;
-    
+
     @Builder.Default
     private List<String> danhSachLoi = new ArrayList<>();
 }

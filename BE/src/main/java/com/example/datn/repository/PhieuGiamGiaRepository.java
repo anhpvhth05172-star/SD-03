@@ -27,4 +27,6 @@ public interface PhieuGiamGiaRepository extends JpaRepository<PhieuGiamGia, Long
     Page<PhieuGiamGiaDTO> getListPageDiscount(Pageable pageable);
 
     boolean existsByMaPhieuGiamGia(String maPhieuGiamGia);
+
+    boolean existsByMaPhieuGiamGiaAndIdNot(String maPhieuGiamGia, Long id);
 }

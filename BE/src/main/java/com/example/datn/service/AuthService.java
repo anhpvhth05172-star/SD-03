@@ -1,3 +1,4 @@
+/*
 package com.example.datn.service;
 
 import com.example.datn.config.JwtService;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     private static final String EMAIL_REGEX = "^[\\w.%+-]+@[\\w.-]+\\.[A-Za-z]{2,}$";
+    private static final String PHONE_REGEX = "^0\\d{8,9}$";
 
     private final KhachHangRepository khachHangRepository;
     private final PasswordEncoder passwordEncoder;
@@ -53,23 +55,36 @@ public class AuthService {
             throw new IllegalArgumentException("Tên tài khoản không được để trống");
         }
         String tenTaiKhoan = req.getTenTaiKhoan().trim();
+        if (tenTaiKhoan.length() > 100) {
+            throw new IllegalArgumentException("Tên tài khoản không được vượt quá 100 ký tự");
+        }
         if (isBlank(req.getEmail())) {
             throw new IllegalArgumentException("Email không được để trống");
         }
         String email = req.getEmail().trim();
+        if (email.length() > 150) {
+            throw new IllegalArgumentException("Email không được vượt quá 150 ký tự");
+        }
         if (!email.matches(EMAIL_REGEX)) {
             throw new IllegalArgumentException("Email không hợp lệ");
         }
         if (isBlank(req.getSoDienThoai())) {
             throw new IllegalArgumentException("Số điện thoại không được để trống");
         }
+        String soDienThoai = req.getSoDienThoai().trim();
+        if (!soDienThoai.matches(PHONE_REGEX)) {
+            throw new IllegalArgumentException("Số điện thoại không hợp lệ (bắt đầu bằng 0, gồm 9-10 chữ số)");
+        }
         if (isBlank(req.getMatKhau())) {
             throw new IllegalArgumentException("Mật khẩu không được để trống");
         }
-        if (req.getMatKhau().length() < 6) {
-            throw new IllegalArgumentException("Mật khẩu phải có ít nhất 6 ký tự");
+        if (req.getMatKhau().length() < 6 || req.getMatKhau().length() > 127) {
+            throw new IllegalArgumentException("Mật khẩu phải có từ 6 đến 127 ký tự");
         }
-        if (!isBlank(req.getXacNhanMatKhau()) && !req.getMatKhau().equals(req.getXacNhanMatKhau())) {
+        if (isBlank(req.getXacNhanMatKhau())) {
+            throw new IllegalArgumentException("Vui lòng xác nhận mật khẩu");
+        }
+        if (!req.getMatKhau().equals(req.getXacNhanMatKhau())) {
             throw new IllegalArgumentException("Mật khẩu xác nhận không khớp");
         }
         if (khachHangRepository.existsByTenTaiKhoan(tenTaiKhoan)) {
@@ -84,7 +99,7 @@ public class AuthService {
         khachHang.setTenTaiKhoan(tenTaiKhoan);
         khachHang.setTenKhachHang(tenTaiKhoan);
         khachHang.setEmail(email);
-        khachHang.setSoDienThoai(req.getSoDienThoai().trim());
+        khachHang.setSoDienThoai(soDienThoai);
         khachHang.setMatKhau(passwordEncoder.encode(req.getMatKhau()));
         khachHang.setTrangThai(true);
         khachHang.setVaiTro("USER");
@@ -208,3 +223,4 @@ public class AuthService {
         return s == null || s.isBlank();
     }
 }
+*/

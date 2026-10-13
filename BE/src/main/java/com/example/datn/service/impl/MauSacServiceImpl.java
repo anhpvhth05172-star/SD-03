@@ -40,6 +40,7 @@ public class MauSacServiceImpl implements MauSacService {
     @Transactional
     public AttributeResponse create(AttributeRequest request) {
         String name = request.getTen().trim();
+        validateColorCode(request.getMoTa());
         if (mauSacRepository.existsByTenMauIgnoreCase(name)) {
             throw new DuplicateRecordException("Tên Màu sắc '" + name + "' đã tồn tại trong hệ thống!");
         }
@@ -61,6 +62,7 @@ public class MauSacServiceImpl implements MauSacService {
     public AttributeResponse update(Long id, AttributeRequest request) {
         MauSac entity = findById(id);
         String name = request.getTen().trim();
+        validateColorCode(request.getMoTa());
 
         if (mauSacRepository.existsByTenMauIgnoreCaseAndIdNot(name, id)) {
             throw new DuplicateRecordException("Tên Màu sắc '" + name + "' đã tồn tại ở bản ghi khác!");
@@ -99,6 +101,13 @@ public class MauSacServiceImpl implements MauSacService {
     private MauSac findById(Long id) {
         return mauSacRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy Màu sắc với ID: " + id));
+    }
+
+    private void validateColorCode(String value) {
+        if (value != null && !value.isBlank()
+            && !value.trim().matches("^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")) {
+            throw new IllegalArgumentException("Mã màu phải có định dạng HEX, ví dụ #d92d20");
+        }
     }
 
     private boolean matchesSearch(String search, String name, String code, String desc) {

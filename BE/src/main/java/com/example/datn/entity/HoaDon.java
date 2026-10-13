@@ -78,6 +78,15 @@ public class HoaDon {
     @Column(name = "dia_chi_nhan_hang", length = 500)
     private String diaChiNhanHang;
 
+    @Column(name = "to_province_id")
+    private Integer toProvinceId;
+
+    @Column(name = "to_district_id")
+    private Integer toDistrictId;
+
+    @Column(name = "to_ward_code", length = 20)
+    private String toWardCode;
+
     @Column(name = "ngay_tao", insertable = false, updatable = false)
     private LocalDateTime ngayTao;
 

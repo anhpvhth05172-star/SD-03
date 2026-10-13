@@ -27,7 +27,12 @@ import org.springframework.transaction.PlatformTransactionManager;
 class NhanVienServiceTest {
 
     private static NhanVienService service(NhanVienRepository repo, VaiTroRepository vaiTroRepo) {
-        return new NhanVienService(repo, vaiTroRepo, mock(PlatformTransactionManager.class), mock(com.example.datn.service.EmailService.class));
+        return service(repo, vaiTroRepo, mock(EmailService.class));
+    }
+
+    private static NhanVienService service(NhanVienRepository repo, VaiTroRepository vaiTroRepo,
+        EmailService emailService) {
+        return new NhanVienService(repo, vaiTroRepo, mock(PlatformTransactionManager.class), emailService);
     }
 
     private static VaiTroRepository vaiTroRepository() {
@@ -63,13 +68,14 @@ class NhanVienServiceTest {
     @Test
     void maTuDongThemSoThuTuKhiTrung() {
         NhanVienRepository repo = mock(NhanVienRepository.class);
-        Set<String> daCo = Set.of("Anhph01", "Anhph02");
+        Set<String> daCo = Set.of("Anhph", "Anhph02");
         when(repo.existsByMaNhanVien(anyString())).thenAnswer(inv -> daCo.contains(inv.getArgument(0)));
         NhanVienService service = service(repo, vaiTroRepository());
 
+        // Mã gốc đã tồn tại -> hậu số bắt đầu từ 02 và tăng dần (không dùng 01).
         assertEquals("Anhph03", service.maNhanVienTuDong("Phạm Hà Anh"));
-        assertEquals("Namvv01", service.maNhanVienTuDong("Võ Văn Nam"));
-        assertEquals("NV01", service.maNhanVienTuDong(null));
+        assertEquals("Namvv", service.maNhanVienTuDong("Võ Văn Nam"));
+        assertEquals("NV", service.maNhanVienTuDong(null));
     }
 
     @Test
@@ -77,10 +83,21 @@ class NhanVienServiceTest {
         NhanVienRepository repo = mock(NhanVienRepository.class);
         NhanVienService service = service(repo, vaiTroRepository());
 
-        assertEquals("Binhnt01", service.maNhanVienTuDong("Nguyễn Thị Bình"));
-        assertEquals("Binhnv01", service.maNhanVienTuDong("Nguyễn Văn Bình"));
-        assertEquals("Anhtv01", service.maNhanVienTuDong("Trần Văn Anh"));
-        assertEquals("Anhph01", service.maNhanVienTuDong("Phạm Hà Anh"));
+        // Chưa có mã trùng -> dùng mã gốc không hậu tố số.
+        assertEquals("Binhnt", service.maNhanVienTuDong("Nguyễn Thị Bình"));
+        assertEquals("Binhnv", service.maNhanVienTuDong("Nguyễn Văn Bình"));
+        assertEquals("Anhtv", service.maNhanVienTuDong("Trần Văn Anh"));
+        assertEquals("Anhph", service.maNhanVienTuDong("Phạm Hà Anh"));
+    }
+
+    @Test
+    void maNhanVienKiemTraTrongBangNhanVien() {
+        // Mã nhân viên chỉ kiểm tra bảng nhân viên, không phụ thuộc mã khách hàng.
+        NhanVienRepository repo = mock(NhanVienRepository.class);
+        when(repo.existsByMaNhanVien(anyString())).thenAnswer(inv -> "Anhph".equals(inv.getArgument(0)));
+        NhanVienService service = service(repo, vaiTroRepository());
+
+        assertEquals("Anhph02", service.maNhanVienTuDong("Phạm Hà Anh"));
     }
 
     @Test
@@ -89,7 +106,7 @@ class NhanVienServiceTest {
         NhanVienService service = service(repo, vaiTroRepository());
 
         NhanVienDTO dto = service.create(yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(30), ""));
-        assertEquals("Binhnt01", dto.getMaNhanVien());
+        assertEquals("Binhnt", dto.getMaNhanVien());
     }
 
     @Test
@@ -97,7 +114,7 @@ class NhanVienServiceTest {
         NhanVienRepository repo = repoSach();
         when(repo.existsByMaNhanVien(anyString())).thenAnswer(inv -> {
             String ma = inv.getArgument(0);
-            return "Binhnt01".equals(ma) || "Binhnt02".equals(ma);
+            return "Binhnt".equals(ma) || "Binhnt02".equals(ma);
         });
         NhanVienService service = service(repo, vaiTroRepository());
 
@@ -105,7 +122,7 @@ class NhanVienServiceTest {
         assertEquals("Binhnt03", dto.getMaNhanVien());
 
         // FE gửi sẵn mã đã tồn tại -> backend vẫn sinh mã kế tiếp.
-        NhanVienDTO dto2 = service.create(yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(30), "Binhnt01"));
+        NhanVienDTO dto2 = service.create(yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(30), "Binhnt"));
         assertEquals("Binhnt03", dto2.getMaNhanVien());
     }
 
@@ -153,11 +170,11 @@ class NhanVienServiceTest {
 
         NhanVienDTO dto = service.create(
             yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(18), ""));
-        assertEquals("Binhnt01", dto.getMaNhanVien());
+        assertEquals("Binhnt", dto.getMaNhanVien());
 
         NhanVienDTO dtoCungNgay = service.create(
             yeuCau("Trần Văn Anh", LocalDate.now().minusYears(18).minusDays(1), ""));
-        assertEquals("Anhtv01", dtoCungNgay.getMaNhanVien());
+        assertEquals("Anhtv", dtoCungNgay.getMaNhanVien());
     }
 
     @Test
@@ -210,5 +227,26 @@ class NhanVienServiceTest {
         NhanVienDTO dto = service.update(9L, req);
         assertEquals("Binhnt01", dto.getMaNhanVien());
         assertTrue(dto.getTenTaiKhoan().equals("Lê Thị Hoa"));
+
+        // FE gửi mã rỗng khi sửa -> mã đã lưu không bị ghi đè thành rỗng hay mã cũ khác.
+        NhanVienRequest reqMaRong = yeuCau("Lê Thị Hoa", LocalDate.now().minusYears(30), "   ");
+        assertEquals("Binhnt01", service.update(9L, reqMaRong).getMaNhanVien());
+    }
+
+    @Test
+    void baoTrangThaiGuiEmailTheoKetQuaThucTe() {
+        NhanVienRepository repo = repoSach();
+        EmailService emailService = mock(EmailService.class);
+        when(emailService.guiMailNhanVienMoi(anyString(), anyString(), anyString(), anyString(),
+            anyString(), anyString())).thenReturn(true);
+        NhanVienService service = service(repo, vaiTroRepository(), emailService);
+
+        assertEquals(Boolean.TRUE, service.create(
+            yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(30), "")).getEmailGuiThanhCong());
+
+        when(emailService.guiMailNhanVienMoi(anyString(), anyString(), anyString(), anyString(),
+            anyString(), anyString())).thenReturn(false);
+        assertEquals(Boolean.FALSE, service.create(
+            yeuCau("Trần Văn Anh", LocalDate.now().minusYears(30), "")).getEmailGuiThanhCong());
     }
 }

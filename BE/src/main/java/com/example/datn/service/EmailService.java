@@ -5,8 +5,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -16,11 +16,33 @@ public class EmailService {
 
     private final JavaMailSender mailSender;
 
-    @Value("${spring.mail.username:maninoduc123@gmail.com}")
+    /** Địa chỉ người gửi lấy từ cấu hình (không ghi cứng tài khoản trong source). */
+    @Value("${spring.mail.from:${spring.mail.username:maninoduc123@gmail.com}}")
     private String fromEmail;
 
-    @Async
-    public void guiMailDangKyThanhCong(
+    /**
+     * Địa chỉ người gửi: ưu tiên {@code spring.mail.from}, nếu trống thì dùng tài khoản SMTP
+     * đã cấu hình. Trả về {@code null} khi không có cấu hình nào (không đặt "From" rỗng vì
+     * nhà cung cấp sẽ từ chối và người dùng tưởng đã gửi thành công).
+     */
+    private String diaChiNguoiGui() {
+        if (fromEmail != null && !fromEmail.isBlank()) {
+            return fromEmail.trim();
+        }
+        if (mailSender instanceof JavaMailSenderImpl impl
+            && impl.getUsername() != null && !impl.getUsername().isBlank()) {
+            return impl.getUsername().trim();
+        }
+        return null;
+    }
+
+    /**
+     * Gửi email chào mừng khách hàng mới.
+     *
+     * @return true nếu nhà cung cấp mail xác nhận đã tiếp nhận email; false nếu gửi thất bại
+     * (lưu ý: xác nhận của nhà cung cấp không đảm bảo email đã vào hộp thư đến).
+     */
+    public boolean guiMailDangKyThanhCong(
         String toEmail,
         String tenKhachHang,
         String maKhachHang,
@@ -29,14 +51,23 @@ public class EmailService {
     ) {
         if (toEmail == null || toEmail.trim().isEmpty()) {
             log.warn("Không thể gửi email: Địa chỉ email của khách hàng trống");
-            return;
+            return false;
+        }
+
+        String tu = diaChiNguoiGui();
+        if (tu == null) {
+            log.error(
+                "Không gửi email thông tin tài khoản tới {}: chưa cấu hình người gửi (spring.mail.from / MAIL_USERNAME)",
+                toEmail
+            );
+            return false;
         }
 
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            helper.setFrom(fromEmail, "PolyShoes Shop");
+            helper.setFrom(tu, "PolyShoes Shop");
             helper.setTo(toEmail.trim());
             helper.setSubject("[PolyShoes] Chúc mừng đăng ký tài khoản thành công");
 
@@ -50,14 +81,20 @@ public class EmailService {
             helper.setText(htmlContent, true);
 
             mailSender.send(message);
-            log.info("Đã gửi email thông tin tài khoản thành công đến khách hàng: {}", toEmail);
+            log.info("Nhà cung cấp mail đã chấp nhận email thông tin tài khoản gửi tới {}", toEmail);
+            return true;
         } catch (Exception e) {
-            log.error("Lỗi khi gửi email đến {}: {}", toEmail, e.getMessage());
+            log.error("Gửi email thông tin tài khoản tới {} thất bại: {}", toEmail, e.toString(), e);
+            return false;
         }
     }
 
-    @Async
-    public void guiMailNhanVienMoi(
+    /**
+     * Gửi email cấp tài khoản cho nhân viên mới.
+     *
+     * @return true nếu nhà cung cấp mail xác nhận đã tiếp nhận email; false nếu gửi thất bại.
+     */
+    public boolean guiMailNhanVienMoi(
         String toEmail,
         String tenNhanVien,
         String maNhanVien,
@@ -67,14 +104,23 @@ public class EmailService {
     ) {
         if (toEmail == null || toEmail.trim().isEmpty()) {
             log.warn("Không thể gửi email: Địa chỉ email của nhân viên trống");
-            return;
+            return false;
+        }
+
+        String tu = diaChiNguoiGui();
+        if (tu == null) {
+            log.error(
+                "Không gửi email cấp tài khoản nhân viên tới {}: chưa cấu hình người gửi (spring.mail.from / MAIL_USERNAME)",
+                toEmail
+            );
+            return false;
         }
 
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            helper.setFrom(fromEmail, "PolyShoes System");
+            helper.setFrom(tu, "PolyShoes System");
             helper.setTo(toEmail.trim());
             helper.setSubject("[PolyShoes] Thông tin tài khoản nhân viên mới");
 
@@ -89,9 +135,11 @@ public class EmailService {
             helper.setText(htmlContent, true);
 
             mailSender.send(message);
-            log.info("Đã gửi email thông tin tài khoản thành công đến nhân viên: {}", toEmail);
+            log.info("Nhà cung cấp mail đã chấp nhận email cấp tài khoản gửi tới {}", toEmail);
+            return true;
         } catch (Exception e) {
-            log.error("Lỗi khi gửi email đến nhân viên {}: {}", toEmail, e.getMessage());
+            log.error("Gửi email cấp tài khoản nhân viên tới {} thất bại: {}", toEmail, e.toString(), e);
+            return false;
         }
     }
 
@@ -145,7 +193,9 @@ public class EmailService {
                     </div>
                     <div class="info-row">
                       <span class="info-label">Tài khoản / Email:</span>
-                      <span class="info-value">%s</span>
+                      <span class="info-value">
+                        <a href="mailto:%s" style="color:#2563eb; text-decoration:none; font-weight:700;">%s</a>
+                      </span>
                     </div>
                     <div class="info-row" style="margin-bottom: 0;">
                       <span class="info-label">Mật khẩu khởi tạo:</span>
@@ -167,7 +217,7 @@ public class EmailService {
               </div>
             </body>
             </html>
-            """.formatted(tenNhanVien, maNhanVien, vaiTro, tenTaiKhoan, matKhau);
+            """.formatted(tenNhanVien, maNhanVien, vaiTro, tenTaiKhoan, tenTaiKhoan, matKhau);
     }
 
     private String buildCustomerWelcomeTemplate(
@@ -215,7 +265,9 @@ public class EmailService {
                     </div>
                     <div class="info-row">
                       <span class="info-label">Tên tài khoản / Email:</span>
-                      <span class="info-value">%s</span>
+                      <span class="info-value">
+                        <a href="mailto:%s" style="color:#1d4ed8; text-decoration:none; font-weight:700;">%s</a>
+                      </span>
                     </div>
                     <div class="info-row" style="margin-bottom: 0;">
                       <span class="info-label">Mật khẩu đăng nhập:</span>
@@ -237,6 +289,6 @@ public class EmailService {
               </div>
             </body>
             </html>
-            """.formatted(tenKhachHang, maKhachHang, tenTaiKhoan, matKhau);
+            """.formatted(tenKhachHang, maKhachHang, tenTaiKhoan, tenTaiKhoan, matKhau);
     }
 }

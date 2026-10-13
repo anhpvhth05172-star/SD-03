@@ -1,11 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import {
-  getToken,
-  getRefreshToken,
-  isTokenExpired,
-  dangXuat,
-} from '../utils/auth'
-import { refreshSession } from '../api/http'
 import { laAdmin } from '../utils/session'
 import AdminLayout from '../layouts/AdminLayout.vue'
 import ProductListPage from '@/pages/Product/ProductListPage.vue'
@@ -22,8 +15,6 @@ import CustomerListPage from '@/pages/Customer/CustomerListPage.vue'
 import CustomerCreatePage from '@/pages/Customer/CustomerCreatePage.vue'
 import PosSalesPage from '@/pages/Pos/PosSalesPage.vue'
 import AttributeCategoryPage from '@/pages/Product/AttributeCategoryPage.vue'
-import LoginPage from '@/pages/Auth/LoginPage.vue'
-import RegisterPage from '@/pages/Auth/RegisterPage.vue'
 import PlaceholderPage from '@/pages/Common/PlaceholderPage.vue'
 import DiscountForm from '@/pages/Discount/DiscountForm.vue'
 import VoucherForm from '@/pages/Discount/VoucherForm.vue'
@@ -33,8 +24,6 @@ import DiscountFormUpdate from '@/pages/Discount/DiscountFormUpdate.vue'
 import VoucherFormUpdate from '@/pages/Discount/VoucherFormUpdate.vue'
 
 const routes = [
-  { path: '/dang-nhap', redirect: '/san-pham' },
-  { path: '/dang-ky', redirect: '/san-pham' },
   {
     path: '/',
     component: AdminLayout,
@@ -204,8 +193,7 @@ const router = createRouter({
   routes,
 })
 
-// Tạm thời comment lại phần kiểm tra đăng nhập / phân quyền
-/*
+/* Tạm comment guard kiểm tra phiên đăng nhập (không xóa)
 router.beforeEach(async (to) => {
   if (!to.meta.requiresAuth) return true
 
@@ -229,6 +217,8 @@ router.beforeEach(async (to) => {
     return '/dang-nhap'
   }
 })
+*/
+
 
 router.beforeEach((to) => {
   if (to.path.startsWith('/nhan-vien') && !laAdmin()) {
@@ -236,6 +226,6 @@ router.beforeEach((to) => {
   }
   return true
 })
-*/
+
 
 export default router
