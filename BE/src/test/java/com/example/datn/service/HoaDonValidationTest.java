@@ -315,6 +315,8 @@ class HoaDonValidationTest {
     void soDienThoaiRong_BiTuChoi() {
         chuanBi(spct(true, true));
         HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        req.setLoaiDon("Online");
+        req.setDiaChiNhanHang("123 Duong ABC, Quan 1, TP HCM");
         req.setSoDienThoaiKhachHang("  ");
 
         assertThatThrownBy(() -> service.create(req))
@@ -456,14 +458,13 @@ class HoaDonValidationTest {
     }
 
     @Test
-    void phiVanChuyenNull_BiTuChoi() {
+    void phiVanChuyenNull_MacDinhBang0_TaoDuoc() {
         chuanBi(spct(true, true));
         HoaDonRequest req = yeuCau(new BigDecimal("500000"));
         req.setPhiVanChuyen(null);
 
-        assertThatThrownBy(() -> service.create(req))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Phí vận chuyển không được để trống");
+        HoaDonDTO dto = service.create(req);
+        assertThat(dto.getId()).isEqualTo(HD_ID);
     }
 
     @Test
@@ -478,25 +479,34 @@ class HoaDonValidationTest {
     }
 
     @Test
-    void phiVanChuyenBang0_BiTuChoi() {
+    void phiVanChuyenBang0_TaoDuoc() {
         chuanBi(spct(true, true));
         HoaDonRequest req = yeuCau(new BigDecimal("500000"));
         req.setPhiVanChuyen(BigDecimal.ZERO);
 
-        assertThatThrownBy(() -> service.create(req))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Phí vận chuyển phải lớn hơn 1000");
+        HoaDonDTO dto = service.create(req);
+        assertThat(dto.getId()).isEqualTo(HD_ID);
     }
 
     @Test
-    void phiVanChuyenBang1000_BiTuChoi() {
+    void phiVanChuyenNhoHon1000_BiTuChoi() {
+        chuanBi(spct(true, true));
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        req.setPhiVanChuyen(new BigDecimal("500"));
+
+        assertThatThrownBy(() -> service.create(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Phí vận chuyển nếu có phải từ 1.000đ trở lên");
+    }
+
+    @Test
+    void phiVanChuyenBang1000_TaoDuoc() {
         chuanBi(spct(true, true));
         HoaDonRequest req = yeuCau(new BigDecimal("500000"));
         req.setPhiVanChuyen(new BigDecimal("1000"));
 
-        assertThatThrownBy(() -> service.create(req))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Phí vận chuyển phải lớn hơn 1000");
+        HoaDonDTO dto = service.create(req);
+        assertThat(dto.getId()).isEqualTo(HD_ID);
     }
 
     @Test

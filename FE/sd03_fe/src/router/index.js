@@ -33,8 +33,8 @@ import DiscountFormUpdate from '@/pages/Discount/DiscountFormUpdate.vue'
 import VoucherFormUpdate from '@/pages/Discount/VoucherFormUpdate.vue'
 
 const routes = [
-  { path: '/dang-nhap', component: LoginPage, meta: { title: 'Đăng nhập' } },
-  { path: '/dang-ky', component: RegisterPage, meta: { title: 'Đăng ký' } },
+  { path: '/dang-nhap', redirect: '/san-pham' },
+  { path: '/dang-ky', redirect: '/san-pham' },
   {
     path: '/',
     component: AdminLayout,
@@ -204,6 +204,8 @@ const router = createRouter({
   routes,
 })
 
+// Tạm thời comment lại phần kiểm tra đăng nhập / phân quyền
+/*
 router.beforeEach(async (to) => {
   if (!to.meta.requiresAuth) return true
 
@@ -234,5 +236,6 @@ router.beforeEach((to) => {
   }
   return true
 })
+*/
 
 export default router

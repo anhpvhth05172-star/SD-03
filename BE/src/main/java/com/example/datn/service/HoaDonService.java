@@ -448,13 +448,14 @@ public class HoaDonService {
             throw new IllegalArgumentException("Vui lòng chọn nhân viên");
         }
         if (req.getPhiVanChuyen() == null) {
-            throw new IllegalArgumentException("Phí vận chuyển không được để trống");
+            req.setPhiVanChuyen(BigDecimal.ZERO);
         }
         if (req.getPhiVanChuyen().compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Phí vận chuyển không được âm");
         }
-        if (req.getPhiVanChuyen().compareTo(new BigDecimal("1000")) <= 0) {
-            throw new IllegalArgumentException("Phí vận chuyển phải lớn hơn 1000");
+        if (req.getPhiVanChuyen().compareTo(BigDecimal.ZERO) > 0
+                && req.getPhiVanChuyen().compareTo(new BigDecimal("1000")) < 0) {
+            throw new IllegalArgumentException("Phí vận chuyển nếu có phải từ 1.000đ trở lên");
         }
         validateText(req);
         if (req.getChiTiet() == null || req.getChiTiet().isEmpty()) {
@@ -479,7 +480,11 @@ public class HoaDonService {
             throw new IllegalArgumentException("Tên khách hàng chứa ký tự không hợp lệ");
         }
         if (isBlank(req.getSoDienThoaiKhachHang())) {
-            throw new IllegalArgumentException("Số điện thoại không được để trống");
+            if ("TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon()))) {
+                req.setSoDienThoaiKhachHang("0988888888");
+            } else {
+                throw new IllegalArgumentException("Số điện thoại không được để trống");
+            }
         }
         String sdt = req.getSoDienThoaiKhachHang().trim();
         if (!SO_DIEN_THOAI_HOP_LE.matcher(sdt).matches()) {
@@ -732,6 +737,14 @@ public class HoaDonService {
             e.setGhiChu(blankToNull(d.req().getGhiChu()));
             e.setTrangThai(d.req().getTrangThai() == null || d.req().getTrangThai());
             entities.add(e);
+
+            // Cập nhật trừ tồn kho sản phẩm chi tiết
+            SanPhamChiTiet spct = d.spct();
+            if (spct.getSoLuong() != null) {
+                int tonConLai = Math.max(0, spct.getSoLuong() - d.req().getSoLuong());
+                spct.setSoLuong(tonConLai);
+                sanPhamChiTietRepository.save(spct);
+            }
         }
         chiTietHoaDonRepository.saveAll(entities);
     }

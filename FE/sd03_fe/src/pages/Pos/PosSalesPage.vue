@@ -1,5 +1,6 @@
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { Html5Qrcode } from 'html5-qrcode'
 import QRCode from 'qrcode'
 import http from '@/api/http'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
@@ -119,19 +120,78 @@ const totalCartQty = computed(() => {
   return currentOrder.value.cart.reduce((sum, item) => sum + item.quantity, 0)
 })
 
-const discountAmount = computed(() => {
-  if (!currentOrder.value || !currentOrder.value.selectedVoucher) return 0
-  const v = currentOrder.value.selectedVoucher
-  if (subTotal.value < (v.hoaDonToiThieu || 0)) return 0
+const calculateVoucherDiscount = (voucher, total) => {
+  if (!voucher || total <= 0) return 0
+  const minOrder = Number(voucher.hoaDonToiThieu || 0)
+  if (total < minOrder) return 0
 
   let discount = 0
-  if (v.loaiGiamGia === 'PERCENT' || v.loaiGiamGia === '%') {
-    discount = (subTotal.value * (v.giaTriGiam || 0)) / 100
-    if (v.giamToiDa && discount > v.giamToiDa) discount = v.giamToiDa
+  const val = Number(voucher.giaTriGiam || 0)
+  if (voucher.loaiGiamGia === 'PERCENT' || voucher.loaiGiamGia === '%') {
+    discount = (total * val) / 100
+    const maxDiscount = Number(voucher.giamToiDa || 0)
+    if (maxDiscount > 0 && discount > maxDiscount) {
+      discount = maxDiscount
+    }
   } else {
-    discount = v.giaTriGiam || 0
+    discount = val
   }
-  return Math.min(discount, subTotal.value)
+  return Math.min(Math.round(discount), total)
+}
+
+const discountAmount = computed(() => {
+  if (!currentOrder.value || !currentOrder.value.selectedVoucher) return 0
+  return calculateVoucherDiscount(currentOrder.value.selectedVoucher, subTotal.value)
+})
+
+// Phiếu giảm giá tối ưu nhất cho giá trị đơn hiện tại
+const bestVoucher = computed(() => {
+  if (!allVouchers.value || allVouchers.value.length === 0 || subTotal.value <= 0) return null
+
+  const eligible = allVouchers.value
+    .filter(v => v.trangThai !== false && subTotal.value >= Number(v.hoaDonToiThieu || 0))
+    .map(v => ({
+      voucher: v,
+      discount: calculateVoucherDiscount(v, subTotal.value)
+    }))
+    .filter(item => item.discount > 0)
+
+  if (eligible.length === 0) return null
+
+  // Sắp xếp giảm giá nhiều nhất lên đầu
+  eligible.sort((a, b) => {
+    if (b.discount !== a.discount) return b.discount - a.discount
+    return Number(a.voucher.hoaDonToiThieu || 0) - Number(b.voucher.hoaDonToiThieu || 0)
+  })
+
+  return eligible[0]
+})
+
+// Voucher có thể đạt được nếu mua thêm (upsell hint)
+const nextBetterVoucher = computed(() => {
+  if (!allVouchers.value || allVouchers.value.length === 0 || subTotal.value <= 0) return null
+
+  const currentBestDisc = bestVoucher.value ? bestVoucher.value.discount : 0
+
+  const pending = allVouchers.value
+    .filter(v => v.trangThai !== false && subTotal.value < Number(v.hoaDonToiThieu || 0))
+    .map(v => {
+      const minVal = Number(v.hoaDonToiThieu || 0)
+      const needed = minVal - subTotal.value
+      const potentialDisc = calculateVoucherDiscount(v, minVal)
+      return {
+        voucher: v,
+        needed,
+        potentialDiscount: potentialDisc
+      }
+    })
+    .filter(item => item.potentialDiscount > currentBestDisc)
+
+  if (pending.length === 0) return null
+
+  // Sắp xếp cần mua thêm ít nhất
+  pending.sort((a, b) => a.needed - b.needed)
+  return pending[0]
 })
 
 const finalTotal = computed(() => {
@@ -159,6 +219,9 @@ const changeDue = computed(() => {
 // 3. CART OPERATIONS
 // ==========================================
 const getEffectivePrice = (item) => {
+  if (item.giaSauGiam !== null && item.giaSauGiam !== undefined) {
+    return Number(item.giaSauGiam)
+  }
   const basePrice = Number(item.price || item.giaBan || 0)
   if (item.discount) {
     const discNum = parseFloat(item.discount.toString().replace(/[^0-9.-]+/g, ''))
@@ -330,34 +393,59 @@ const removeSelectedCustomer = () => {
   }
 }
 
-const saveQuickCustomer = () => {
+const isSavingCustomer = ref(false)
+
+const saveQuickCustomer = async () => {
   if (!newCustomerForm.tenKhachHang.trim()) {
     notifyWarning('Thiếu thông tin', 'Vui lòng nhập tên khách hàng!')
     return
   }
-  if (!newCustomerForm.soDienThoai.trim()) {
+  const phone = newCustomerForm.soDienThoai.trim()
+  if (!phone) {
     notifyWarning('Thiếu thông tin', 'Vui lòng nhập số điện thoại khách hàng!')
     return
   }
-
-  const createdCust = {
-    id: Date.now(),
-    ten: newCustomerForm.tenKhachHang.trim(),
-    soDienThoai: newCustomerForm.soDienThoai.trim(),
-    email: newCustomerForm.email.trim(),
-    diaChi: newCustomerForm.diaChi.trim()
+  if (!/^0\d{9,10}$/.test(phone)) {
+    notifyWarning('Số điện thoại không hợp lệ', 'Số điện thoại phải gồm 10 hoặc 11 chữ số và bắt đầu bằng số 0!')
+    return
   }
 
-  allCustomers.value.unshift(createdCust)
-  selectCustomer(createdCust)
-  isAddCustomerModalOpen.value = false
+  isSavingCustomer.value = true
+  try {
+    const payload = {
+      tenKhachHang: newCustomerForm.tenKhachHang.trim(),
+      soDienThoai: phone,
+      email: newCustomerForm.email.trim() || undefined,
+      diaChiCuThe: newCustomerForm.diaChi.trim() || undefined,
+      trangThai: true
+    }
 
-  newCustomerForm.tenKhachHang = ''
-  newCustomerForm.soDienThoai = ''
-  newCustomerForm.email = ''
-  newCustomerForm.diaChi = ''
+    const res = await http.post('/khach-hang', payload)
+    const newCust = res.data
+    const createdCust = {
+      id: newCust.id,
+      ten: newCust.tenKhachHang,
+      soDienThoai: newCust.soDienThoai,
+      email: newCust.email,
+      diaChi: newCust.diaChiMacDinh ? newCust.diaChiMacDinh.diaChiCuThe : (newCustomerForm.diaChi.trim() || '')
+    }
 
-  notifySuccess('Thành công', 'Đã thêm và chọn khách hàng mới!')
+    allCustomers.value.unshift(createdCust)
+    selectCustomer(createdCust)
+    isAddCustomerModalOpen.value = false
+
+    newCustomerForm.tenKhachHang = ''
+    newCustomerForm.soDienThoai = ''
+    newCustomerForm.email = ''
+    newCustomerForm.diaChi = ''
+
+    notifySuccess('Thành công', `Đã thêm khách hàng "${createdCust.ten}" thành công!`)
+  } catch (err) {
+    console.error('Error creating customer:', err)
+    notifyError('Lỗi thêm khách hàng', err.message || 'Không thể tạo khách hàng mới trên máy chủ!')
+  } finally {
+    isSavingCustomer.value = false
+  }
 }
 
 // ==========================================
@@ -479,33 +567,203 @@ const getShoeImage = (p) => {
   return 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=120&auto=format&fit=crop&q=60'
 }
 
+// ==========================================
+// QR & BARCODE CAMERA SCANNER
+// ==========================================
+let html5QrScanner = null
 const isQrModalOpen = ref(false)
+const isCameraRunning = ref(false)
+const cameraError = ref('')
 const scannedCodeInput = ref('')
+const scanTab = ref('camera') // 'camera' | 'file' | 'manual'
+const continuousScan = ref(true) // Quét liên tục nhiều sản phẩm
+const lastScannedItem = ref(null)
+let isCoolingDown = false
+let scanCooldownTimer = null
+
+const playBeep = () => {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+    const osc = audioCtx.createOscillator()
+    const gain = audioCtx.createGain()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime)
+    gain.gain.setValueAtTime(0.12, audioCtx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12)
+    osc.connect(gain)
+    gain.connect(audioCtx.destination)
+    osc.start()
+    osc.stop(audioCtx.currentTime + 0.12)
+  } catch (e) {}
+}
+
+const findProductFromCode = (rawCode) => {
+  if (!rawCode) return null
+  const codeStr = String(rawCode).trim()
+  let targetId = null
+  let targetCode = codeStr
+
+  try {
+    const parsed = JSON.parse(codeStr)
+    if (parsed && typeof parsed === 'object') {
+      if (parsed.id) targetId = Number(parsed.id)
+      if (parsed.maCtsp) targetCode = String(parsed.maCtsp).trim()
+      else if (parsed.ma) targetCode = String(parsed.ma).trim()
+    }
+  } catch {
+    // Not JSON string
+  }
+
+  return allProducts.value.find(p =>
+    (targetId && p.id === targetId) ||
+    (p.id && String(p.id) === targetCode) ||
+    (p.maCtsp && p.maCtsp.toLowerCase() === targetCode.toLowerCase()) ||
+    (p.maChiTietSanPham && p.maChiTietSanPham.toLowerCase() === targetCode.toLowerCase()) ||
+    (p.maSp && p.maSp.toLowerCase() === targetCode.toLowerCase()) ||
+    (p.barcode && p.barcode.toLowerCase() === targetCode.toLowerCase())
+  )
+}
+
+const handleScannedResult = (decodedText) => {
+  if (!decodedText) return
+  if (isCoolingDown) return
+  isCoolingDown = true
+  clearTimeout(scanCooldownTimer)
+  scanCooldownTimer = setTimeout(() => {
+    isCoolingDown = false
+  }, 1200)
+
+  playBeep()
+
+  const found = findProductFromCode(decodedText)
+  if (found) {
+    const stock = found.stock !== undefined ? found.stock : (found.soLuong || 0)
+    if (stock <= 0) {
+      notifyWarning('Hết hàng tồn kho!', `Sản phẩm "${found.tenSp || found.tenSanPham}" hiện đã hết hàng trong kho!`)
+      return
+    }
+
+    addToCart(found, 1)
+
+    // Lấy số lượng hiện có trong giỏ
+    const inCart = currentOrder.value?.cart.find(i => i.idCtsp === found.id)
+    const cartQty = inCart ? inCart.quantity : 1
+
+    lastScannedItem.value = {
+      product: found,
+      cartQty,
+      time: new Date().toLocaleTimeString('vi-VN')
+    }
+
+    if (!continuousScan.value) {
+      closeQrScanner()
+    }
+  } else {
+    notifyError('Không tìm thấy', `Mã QR/Barcode "${decodedText}" không khớp với sản phẩm nào trong kho!`)
+  }
+}
+
+const startCamera = async () => {
+  cameraError.value = ''
+  try {
+    if (html5QrScanner) {
+      await stopCamera()
+    }
+    const readerEl = document.getElementById('pos-qr-reader')
+    if (!readerEl) return
+
+    html5QrScanner = new Html5Qrcode('pos-qr-reader')
+    isCameraRunning.value = true
+    await html5QrScanner.start(
+      { facingMode: 'environment' },
+      {
+        fps: 15,
+        qrbox: { width: 240, height: 240 },
+        aspectRatio: 1.0
+      },
+      (decodedText) => {
+        handleScannedResult(decodedText)
+      },
+      () => {}
+    )
+  } catch (err) {
+    console.warn('Camera start error:', err)
+    isCameraRunning.value = false
+    cameraError.value = 'Không thể mở Camera / Webcam. Vui lòng cấp quyền camera trên trình duyệt hoặc sử dụng súng quét USB / nhập mã bên dưới.'
+    scanTab.value = 'manual'
+  }
+}
+
+const stopCamera = async () => {
+  if (html5QrScanner && isCameraRunning.value) {
+    try {
+      await html5QrScanner.stop()
+      html5QrScanner.clear()
+    } catch (e) {
+      console.warn('Camera stop error:', e)
+    }
+    isCameraRunning.value = false
+  }
+}
 
 const openQrScanner = () => {
   if (!currentOrder.value) createNewOrder()
   scannedCodeInput.value = ''
+  lastScannedItem.value = null
+  cameraError.value = ''
   isQrModalOpen.value = true
+  scanTab.value = 'camera'
+
+  nextTick(() => {
+    startCamera()
+  })
 }
 
-const handleBarcodeScan = () => {
-  const code = scannedCodeInput.value.trim()
-  if (!code) return
+const closeQrScanner = async () => {
+  await stopCamera()
+  isQrModalOpen.value = false
+}
 
-  const found = allProducts.value.find(p =>
-    (p.maCtsp && p.maCtsp.toLowerCase() === code.toLowerCase()) ||
-    (p.maChiTietSanPham && p.maChiTietSanPham.toLowerCase() === code.toLowerCase()) ||
-    (p.id && String(p.id) === code)
-  )
-
-  if (found) {
-    addToCart(found, 1)
-    scannedCodeInput.value = ''
-    isQrModalOpen.value = false
+const switchScanTab = async (tab) => {
+  scanTab.value = tab
+  if (tab === 'camera') {
+    nextTick(() => {
+      startCamera()
+    })
   } else {
-    notifyError('Không tìm thấy', `Không tìm thấy sản phẩm có mã barcode/CTSP: "${code}"`)
+    await stopCamera()
   }
 }
+
+const handleFileScan = async (e) => {
+  const file = e.target.files && e.target.files[0]
+  if (!file) return
+  try {
+    if (!html5QrScanner) {
+      html5QrScanner = new Html5Qrcode('pos-qr-reader-hidden')
+    }
+    const decodedText = await html5QrScanner.scanFile(file, true)
+    handleScannedResult(decodedText)
+  } catch (err) {
+    notifyWarning('Không tìm thấy mã QR', 'Hình ảnh tải lên không chứa mã QR hợp lệ hoặc ảnh bị mờ!')
+  } finally {
+    e.target.value = ''
+  }
+}
+
+const handleManualBarcodeSubmit = () => {
+  const code = scannedCodeInput.value.trim()
+  if (!code) {
+    notifyWarning('Chưa nhập mã', 'Vui lòng nhập mã sản phẩm hoặc barcode!')
+    return
+  }
+  handleScannedResult(code)
+  scannedCodeInput.value = ''
+}
+
+onUnmounted(() => {
+  stopCamera()
+})
 
 const isBankQrModalOpen = ref(false)
 const bankQrDataUrl = ref('')
@@ -557,10 +815,99 @@ const handleCancelOrder = async () => {
   }
 }
 
+const getPaymentMethodId = (methodType) => {
+  if (!allPaymentMethods.value || allPaymentMethods.value.length === 0) return 1
+  if (methodType === 'TIEN_MAT') {
+    const found = allPaymentMethods.value.find(p => p.ten && p.ten.toLowerCase().includes('tiền mặt'))
+    return found ? found.id : (allPaymentMethods.value[0]?.id || 1)
+  }
+  if (methodType === 'CHUYEN_KHOAN') {
+    const found = allPaymentMethods.value.find(p => p.ten && p.ten.toLowerCase().includes('chuyển khoản'))
+    return found ? found.id : (allPaymentMethods.value[1]?.id || 2)
+  }
+  return allPaymentMethods.value[0]?.id || 1
+}
+
+// ==========================================
+// VOUCHER MANAGEMENT AT POS
+// ==========================================
+const isVoucherModalOpen = ref(false)
+
+const openVoucherModal = () => {
+  if (!currentOrder.value) createNewOrder()
+  isVoucherModalOpen.value = true
+}
+
+const applyVoucher = (voucher) => {
+  if (!currentOrder.value) return
+  if (!currentOrder.value.customer) {
+    notifyWarning('Yêu cầu khách hàng', 'Vui lòng chọn hoặc thêm khách hàng để áp dụng phiếu giảm giá!')
+    return
+  }
+  if (subTotal.value < (voucher.hoaDonToiThieu || 0)) {
+    notifyWarning('Chưa đủ điều kiện', `Đơn hàng tối thiểu cần đạt ${formatVnd(voucher.hoaDonToiThieu)} để áp dụng phiếu này!`)
+    return
+  }
+  currentOrder.value.selectedVoucher = voucher
+  isVoucherModalOpen.value = false
+  notifySuccess('Đã áp dụng voucher', `Đã áp dụng mã "${voucher.ma}" (${voucher.ten})!`)
+}
+
+const applyBestVoucher = () => {
+  if (!bestVoucher.value) return
+  if (!currentOrder.value) createNewOrder()
+
+  if (!currentOrder.value.customer) {
+    notifyWarning('Yêu cầu khách hàng', 'Vui lòng chọn hoặc thêm khách hàng trước khi áp dụng phiếu giảm giá!')
+    return
+  }
+
+  currentOrder.value.selectedVoucher = bestVoucher.value.voucher
+  if (isVoucherModalOpen.value) {
+    isVoucherModalOpen.value = false
+  }
+  notifySuccess('Đã áp dụng mã tốt nhất!', `Mã "${bestVoucher.value.voucher.ma}" giảm ${formatVnd(bestVoucher.value.discount)} cho đơn hàng!`)
+}
+
+const sortedVouchers = computed(() => {
+  if (!allVouchers.value) return []
+  const list = [...allVouchers.value]
+  const curSubTotal = subTotal.value
+
+  return list.sort((a, b) => {
+    const isBestA = bestVoucher.value && bestVoucher.value.voucher.id === a.id ? 1 : 0
+    const isBestB = bestVoucher.value && bestVoucher.value.voucher.id === b.id ? 1 : 0
+    if (isBestA !== isBestB) return isBestB - isBestA
+
+    const eligibleA = curSubTotal >= Number(a.hoaDonToiThieu || 0) ? 1 : 0
+    const eligibleB = curSubTotal >= Number(b.hoaDonToiThieu || 0) ? 1 : 0
+    if (eligibleA !== eligibleB) return eligibleB - eligibleA
+
+    const discA = calculateVoucherDiscount(a, curSubTotal)
+    const discB = calculateVoucherDiscount(b, curSubTotal)
+    if (discA !== discB) return discB - discA
+
+    return Number(a.hoaDonToiThieu || 0) - Number(b.hoaDonToiThieu || 0)
+  })
+})
+
+const removeVoucher = () => {
+  if (currentOrder.value) {
+    currentOrder.value.selectedVoucher = null
+    notifySuccess('Đã hủy voucher', 'Đã hủy áp dụng phiếu giảm giá cho đơn hàng!')
+  }
+}
+
 const handleCheckout = async () => {
   if (!currentOrder.value) return
   if (currentOrder.value.cart.length === 0) {
     notifyWarning('Giỏ hàng trống', 'Vui lòng chọn ít nhất 1 sản phẩm vào giỏ hàng trước khi thanh toán!')
+    return
+  }
+
+  // Nếu áp dụng voucher mà chưa có khách hàng
+  if (currentOrder.value.selectedVoucher && !currentOrder.value.customer) {
+    notifyWarning('Cần khách hàng', 'Vui lòng chọn hoặc thêm khách hàng để áp dụng phiếu giảm giá!')
     return
   }
 
@@ -582,17 +929,29 @@ const handleCheckout = async () => {
   isProcessingCheckout.value = true
 
   try {
+    const paymentMethodId = getPaymentMethodId(currentOrder.value.paymentMethod)
+    const employeeId = allEmployees.value.length > 0 ? allEmployees.value[0].id : 2
+
+    const customerPhone = currentOrder.value.customer && currentOrder.value.customer.soDienThoai
+      ? currentOrder.value.customer.soDienThoai
+      : '0988888888'
+
+    const customerName = currentOrder.value.customer
+      ? (currentOrder.value.customer.ten || currentOrder.value.customer.tenKhachHang)
+      : 'Khách lẻ'
+
     const payload = {
       maHoaDon: currentOrder.value.code,
       loaiDon: currentOrder.value.isDelivery ? 'Online' : 'Tại quầy',
       phiVanChuyen: currentOrder.value.isDelivery ? Number(currentOrder.value.deliveryInfo.shippingFee || 0) : 0,
-      tenKhachHang: currentOrder.value.customer ? currentOrder.value.customer.ten : 'Khách lẻ',
-      soDienThoaiKhachHang: currentOrder.value.customer ? currentOrder.value.customer.soDienThoai : '',
+      tenKhachHang: customerName,
+      soDienThoaiKhachHang: customerPhone,
       diaChiNhanHang: currentOrder.value.isDelivery ? currentOrder.value.deliveryInfo.recipientAddress : '',
       trangThai: 'Đã hoàn thành',
       ghiChu: currentOrder.value.note || 'Bán hàng tại quầy POS',
       idKhachHang: currentOrder.value.customer ? currentOrder.value.customer.id : null,
-      idNhanVien: allEmployees.value.length > 0 ? allEmployees.value[0].id : null,
+      idNhanVien: employeeId,
+      idPhuongThucThanhToan: paymentMethodId,
       idPhieuGiamGia: currentOrder.value.selectedVoucher ? currentOrder.value.selectedVoucher.id : null,
       chiTiet: currentOrder.value.cart.map(item => ({
         idSanPhamChiTiet: item.idCtsp,
@@ -623,8 +982,18 @@ const handleCheckout = async () => {
 
     notifySuccess('Thanh toán thành công!', `Đã hoàn tất hóa đơn ${currentOrder.value.code}`)
 
+    // Tải lại dữ liệu sản phẩm mới nhất để đồng bộ tồn kho
+    fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&trangThai=true`)
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.content) allProducts.value = data.content
+      })
+      .catch(() => {})
+
     pendingOrders.value.splice(activeOrderIndex.value, 1)
-    if (activeOrderIndex.value >= pendingOrders.value.length) {
+    if (pendingOrders.value.length === 0) {
+      createNewOrder()
+    } else if (activeOrderIndex.value >= pendingOrders.value.length) {
       activeOrderIndex.value = Math.max(0, pendingOrders.value.length - 1)
     }
 
@@ -660,9 +1029,16 @@ const loadInitialData = async () => {
     if (formRes.status === 'fulfilled' && formRes.value.data) {
       const d = formRes.value.data
       allCustomers.value = d.khachHangs || []
-      allVouchers.value = d.phieuGiamGias || []
+      allVouchers.value = (d.phieuGiamGias || []).filter(v => v.trangThai !== false)
       allEmployees.value = d.nhanViens || []
-      allPaymentMethods.value = d.phuongThucs || []
+      allPaymentMethods.value = d.phuongThucThanhToans || d.phuongThucs || []
+    }
+
+    if (allPaymentMethods.value.length === 0) {
+      allPaymentMethods.value = [
+        { id: 1, ten: 'Tiền mặt tại quầy' },
+        { id: 2, ten: 'Chuyển khoản ngân hàng' }
+      ]
     }
 
     if (brandRes.status === 'fulfilled' && Array.isArray(brandRes.value)) brandsList.value = brandRes.value
@@ -670,8 +1046,8 @@ const loadInitialData = async () => {
     if (colorRes.status === 'fulfilled' && Array.isArray(colorRes.value)) colorsList.value = colorRes.value
     if (sizeRes.status === 'fulfilled' && Array.isArray(sizeRes.value)) sizesList.value = sizeRes.value
 
-    if (prodRes.status === 'fulfilled' && prodRes.value) {
-      allProducts.value = prodRes.value.content || []
+    if (prodRes.status === 'fulfilled' && prodRes.value && prodRes.value.content) {
+      allProducts.value = prodRes.value.content
     }
 
     if (allProducts.value.length === 0) {
@@ -953,6 +1329,58 @@ onMounted(() => {
             <span class="summary-val">{{ formatVnd(subTotal) }}</span>
           </div>
 
+          <!-- PHIẾU GIẢM GIÁ (VOUCHER) -->
+          <div class="voucher-control-row" v-if="currentOrder">
+            <div class="voucher-control-left">
+              <span class="summary-label">Phiếu giảm giá:</span>
+              <div v-if="currentOrder.selectedVoucher" class="voucher-badge-active">
+                <span class="v-code">{{ currentOrder.selectedVoucher.ma }}</span>
+                <span class="v-name">{{ currentOrder.selectedVoucher.ten }}</span>
+                <span v-if="bestVoucher && currentOrder.selectedVoucher.id === bestVoucher.voucher.id" class="badge-best-applied" title="Mã tối ưu nhất">⭐ Tối ưu nhất</span>
+                <button class="v-btn-remove" @click="removeVoucher" title="Bỏ áp dụng">✕</button>
+              </div>
+              <span v-else class="voucher-none-hint">Chưa chọn</span>
+            </div>
+            <button class="btn-open-voucher" @click="openVoucherModal" type="button">
+              {{ currentOrder.selectedVoucher ? 'Đổi phiếu' : 'Chọn phiếu' }}
+            </button>
+          </div>
+
+          <!-- GỢI Ý MÃ GIẢM GIÁ TỐT NHẤT (SMART BEST VOUCHER) -->
+          <div v-if="bestVoucher && !currentOrder.selectedVoucher" class="smart-best-voucher-card">
+            <div class="sbv-main">
+              <div class="sbv-badge-glow">
+                <span class="sbv-icon">🔥</span>
+                <span class="sbv-badge-text">Gợi ý mã giảm giá tốt nhất:</span>
+              </div>
+              <div class="sbv-body">
+                <span class="sbv-code">{{ bestVoucher.voucher.ma }}</span>
+                <span class="sbv-discount-val">-{{ formatVnd(bestVoucher.discount) }}</span>
+              </div>
+              <div class="sbv-sub">{{ bestVoucher.voucher.ten }} (Đơn từ {{ formatVnd(bestVoucher.voucher.hoaDonToiThieu || 0) }})</div>
+            </div>
+            <button class="btn-apply-best-smart" @click="applyBestVoucher" type="button" title="Áp dụng ngay mã giảm giá cao nhất cho đơn này">
+              Áp dụng ngay
+            </button>
+          </div>
+
+          <!-- THÔNG BÁO CÓ MÃ TỐT HƠN KHI ĐANG CHỌN MÃ KHÁC -->
+          <div v-if="bestVoucher && currentOrder.selectedVoucher && currentOrder.selectedVoucher.id !== bestVoucher.voucher.id && bestVoucher.discount > discountAmount" class="voucher-upgrade-alert">
+            <div class="vua-info">
+              <span class="vua-icon">💡</span>
+              <span class="vua-text">Có mã tốt hơn: <b>{{ bestVoucher.voucher.ma }}</b> (tiết kiệm thêm <b>{{ formatVnd(bestVoucher.discount - discountAmount) }}</b>)</span>
+            </div>
+            <button class="btn-vua-apply" @click="applyBestVoucher" type="button">
+              Đổi sang mã này
+            </button>
+          </div>
+
+          <!-- GỢI Ý MUA THÊM ĐỂ ĐẠT MÃ CAO HƠN (UPSELL HINT) -->
+          <div v-if="nextBetterVoucher && (!currentOrder.selectedVoucher || nextBetterVoucher.potentialDiscount > discountAmount)" class="voucher-upsell-box">
+            <span class="vub-icon">🛍️</span>
+            <span class="vub-text">Mua thêm <b>{{ formatVnd(nextBetterVoucher.needed) }}</b> để dùng mã <b>{{ nextBetterVoucher.voucher.ma }}</b> (giảm tới <b>{{ formatVnd(nextBetterVoucher.potentialDiscount) }}</b>)</span>
+          </div>
+
           <div v-if="discountAmount > 0" class="summary-row">
             <span class="summary-label">Giảm giá voucher:</span>
             <span class="summary-val" style="color: #16a34a;">- {{ formatVnd(discountAmount) }}</span>
@@ -1200,39 +1628,122 @@ onMounted(() => {
     </transition>
 
     <!-- ========================================================
-         MODAL 2: QUÉT MÃ QR / BARCODE SCANNER
+         MODAL 2: QUÉT MÃ QR / BARCODE CAMERA SCANNER
          ======================================================== -->
     <transition name="fade">
-      <div v-if="isQrModalOpen" class="pos-modal-overlay" @click.self="isQrModalOpen = false">
-        <div class="pos-modal-dialog modal-sm">
+      <div v-if="isQrModalOpen" class="pos-modal-overlay" @click.self="closeQrScanner">
+        <div class="pos-modal-dialog modal-qr-scanner">
           <div class="pos-modal-head">
-            <h3 class="pos-modal-title">Quét mã vạch / Barcode</h3>
-            <button class="pos-modal-close" @click="isQrModalOpen = false">×</button>
+            <div class="modal-head-title-wrap">
+              <span class="qr-head-icon">📷</span>
+              <h3 class="pos-modal-title">Quét mã QR sản phẩm</h3>
+            </div>
+            <button class="pos-modal-close" @click="closeQrScanner">×</button>
           </div>
 
-          <div class="pos-modal-body">
-            <div class="qr-modal-content">
-              <div class="qr-scanner-box">
-                <div class="qr-laser-line"></div>
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.5">
-                  <rect x="3" y="3" width="7" height="7"></rect>
-                  <rect x="14" y="3" width="7" height="7"></rect>
-                  <rect x="14" y="14" width="7" height="7"></rect>
-                  <rect x="3" y="14" width="7" height="7"></rect>
-                </svg>
-              </div>
-              <p class="text-muted text-sm">Đặt mã vạch hoặc mã QR của sản phẩm trước máy quét hoặc nhập mã trực tiếp
-                bên
-                dưới:</p>
+          <div class="pos-modal-body qr-modal-body">
+            <!-- Tabs chuyển đổi phương thức quét -->
+            <div class="qr-mode-tabs">
+              <button class="qr-tab-btn" :class="{ active: scanTab === 'camera' }" @click="switchScanTab('camera')" type="button">
+                <span class="tab-icon">📷</span> Camera trực tiếp
+              </button>
+              <button class="qr-tab-btn" :class="{ active: scanTab === 'file' }" @click="switchScanTab('file')" type="button">
+                <span class="tab-icon">📁</span> Tải ảnh mã QR
+              </button>
+              <button class="qr-tab-btn" :class="{ active: scanTab === 'manual' }" @click="switchScanTab('manual')" type="button">
+                <span class="tab-icon">⌨️</span> Nhập mã / Súng quét
+              </button>
+            </div>
 
-              <div style="width: 100%; display: flex; gap: 8px;">
-                <input type="text" class="picker-search-input" placeholder="Nhập mã CTSP hoặc barcode..."
-                  v-model="scannedCodeInput" @keyup.enter="handleBarcodeScan" autofocus />
-                <button class="btn-pick-add" style="padding: 0 16px; font-size: 13px;" @click="handleBarcodeScan">
-                  Tìm
+            <!-- TAB 1: CAMERA LIVE -->
+            <div v-show="scanTab === 'camera'" class="qr-camera-viewport">
+              <div class="camera-reader-box">
+                <div id="pos-qr-reader" class="pos-qr-reader-container"></div>
+                <div v-if="isCameraRunning" class="qr-scan-guide-overlay">
+                  <div class="scan-target-frame">
+                    <span class="corner tl"></span>
+                    <span class="corner tr"></span>
+                    <span class="corner bl"></span>
+                    <span class="corner br"></span>
+                    <div class="scan-laser-animated"></div>
+                  </div>
+                  <div class="scan-target-tip">Hướng camera về mã QR / Barcode trên giày hoặc tem nhãn</div>
+                </div>
+              </div>
+
+              <div v-if="cameraError" class="camera-error-banner">
+                <span class="err-icon">⚠️</span>
+                <span>{{ cameraError }}</span>
+                <button class="btn-retry-cam" @click="startCamera" type="button">Thử lại</button>
+              </div>
+
+              <!-- Thanh tùy chọn quét liên tục -->
+              <div class="qr-scan-options-bar">
+                <label class="continuous-toggle-label">
+                  <input type="checkbox" v-model="continuousScan" />
+                  <span>Quét liên tục (giữ cửa sổ để quét thêm sản phẩm)</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- TAB 2: QUÉT BẰNG FILE ẢNH -->
+            <div v-show="scanTab === 'file'" class="qr-file-upload-viewport">
+              <div id="pos-qr-reader-hidden" style="display: none;"></div>
+              <label class="qr-drop-zone">
+                <input type="file" accept="image/*" class="qr-file-hidden-input" @change="handleFileScan" />
+                <div class="drop-zone-content">
+                  <span class="drop-icon">🖼️</span>
+                  <div class="drop-title">Nhấn vào đây để tải ảnh chứa mã QR</div>
+                  <div class="drop-subtitle">Hỗ trợ các định dạng ảnh PNG, JPG, JPEG, WEBP</div>
+                </div>
+              </label>
+            </div>
+
+            <!-- TAB 3: NHẬP MÃ BẰNG TAY HOẶC SÚNG BẮN MÃ VẠCH USB -->
+            <div v-show="scanTab === 'manual'" class="qr-manual-viewport">
+              <div class="manual-input-desc">
+                Sử dụng súng quét mã vạch USB hoặc gõ trực tiếp mã CTSP/Barcode:
+              </div>
+              <div class="manual-input-row">
+                <input type="text" class="manual-barcode-input"
+                  placeholder="Nhập mã CTSP, mã SP hoặc barcode..."
+                  v-model="scannedCodeInput" @keyup.enter="handleManualBarcodeSubmit" autofocus />
+                <button class="btn-manual-submit" @click="handleManualBarcodeSubmit" type="button">
+                  Thêm vào giỏ
                 </button>
               </div>
             </div>
+
+            <!-- THÔNG BÁO SẢN PHẨM VỪA ĐƯỢC QUÉT THÀNH CÔNG -->
+            <transition name="fade">
+              <div v-if="lastScannedItem" class="scanned-success-card">
+                <div class="ssc-left">
+                  <div class="ssc-check-badge">✓ Đã thêm</div>
+                  <img :src="getShoeImage(lastScannedItem.product)" class="ssc-thumb" />
+                  <div class="ssc-info">
+                    <div class="ssc-name">{{ lastScannedItem.product.tenSp || lastScannedItem.product.tenSanPham }}</div>
+                    <div class="ssc-meta">
+                      <span>Màu: <b>{{ lastScannedItem.product.color || lastScannedItem.product.tenMau }}</b></span>
+                      <span> · Size: <b>{{ lastScannedItem.product.size || lastScannedItem.product.tenKichCo }}</b></span>
+                      <span> · Giá: <b class="ssc-price">{{ formatVnd(getEffectivePrice(lastScannedItem.product)) }}</b></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="ssc-right">
+                  <span class="ssc-qty-badge">Số lượng trong giỏ: <b>{{ lastScannedItem.cartQty }}</b></span>
+                </div>
+              </div>
+            </transition>
+
+          </div>
+
+          <div class="pos-modal-foot qr-modal-foot">
+            <span class="qr-foot-stats">
+              Giỏ hàng hiện tại: <b>{{ totalCartQty }}</b> sản phẩm
+            </span>
+            <button class="btn-pos-checkout ready" style="height: 36px; padding: 0 20px;" @click="closeQrScanner" type="button">
+              Hoàn tất quét
+            </button>
           </div>
         </div>
       </div>
@@ -1275,6 +1786,103 @@ onMounted(() => {
               @click="isAddCustomerModalOpen = false">Hủy</button>
             <button class="btn-pos-checkout ready" style="height: 36px; padding: 0 16px;" @click="saveQuickCustomer">Lưu
               khách hàng</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- ========================================================
+         MODAL: CHỌN PHIẾU GIẢM GIÁ (VOUCHER)
+         ======================================================== -->
+    <transition name="fade">
+      <div v-if="isVoucherModalOpen" class="pos-modal-overlay" @click.self="isVoucherModalOpen = false">
+        <div class="pos-modal-dialog modal-md">
+          <div class="pos-modal-head">
+            <h3 class="pos-modal-title">🎟 Chọn phiếu giảm giá (Voucher)</h3>
+            <button class="pos-modal-close" @click="isVoucherModalOpen = false">×</button>
+          </div>
+
+          <div class="pos-modal-body">
+            <div v-if="!currentOrder?.customer" class="voucher-cust-warning-banner">
+              ⚠️ <span>Phiếu giảm giá chỉ áp dụng khi có khách hàng thành viên. Vui lòng chọn hoặc thêm khách hàng trước khi áp dụng.</span>
+            </div>
+
+            <!-- Banner gợi ý mã tốt nhất -->
+            <div v-if="bestVoucher" class="modal-best-voucher-banner">
+              <div class="mbv-info-left">
+                <div class="mbv-tag-row">
+                  <span class="mbv-flame">🔥</span>
+                  <span class="mbv-title-label">MÃ GIẢM GIÁ TỐT NHẤT CHO ĐƠN HÀNG NÀY</span>
+                </div>
+                <div class="mbv-summary-row">
+                  <span class="mbv-code">{{ bestVoucher.voucher.ma }}</span>
+                  <span class="mbv-saving">Tiết kiệm: {{ formatVnd(bestVoucher.discount) }}</span>
+                </div>
+                <div class="mbv-sub-note">{{ bestVoucher.voucher.ten }} · Đơn tối thiểu: {{ formatVnd(bestVoucher.voucher.hoaDonToiThieu || 0) }}</div>
+              </div>
+              <button v-if="!currentOrder?.selectedVoucher || currentOrder.selectedVoucher.id !== bestVoucher.voucher.id"
+                class="btn-mbv-apply" @click="applyBestVoucher" type="button">
+                Áp dụng mã này
+              </button>
+              <div v-else class="mbv-already-active">
+                ✓ Đang áp dụng
+              </div>
+            </div>
+
+            <div v-if="allVouchers.length === 0" class="empty-voucher-alert">
+              Hiện tại không có phiếu giảm giá nào đang diễn ra.
+            </div>
+
+            <div v-else class="pos-voucher-grid-list">
+              <div v-for="v in sortedVouchers" :key="v.id" class="pos-voucher-card-item"
+                :class="{
+                  'active-voucher': currentOrder && currentOrder.selectedVoucher && currentOrder.selectedVoucher.id === v.id,
+                  'is-best-card': bestVoucher && bestVoucher.voucher.id === v.id,
+                  'disabled-voucher': subTotal < (v.hoaDonToiThieu || 0)
+                }">
+                <div v-if="bestVoucher && bestVoucher.voucher.id === v.id" class="best-ribbon-badge">
+                  ⭐ Tiết kiệm nhất (-{{ formatVnd(bestVoucher.discount) }})
+                </div>
+
+                <div class="v-card-tag">
+                  <span class="v-tag-code">{{ v.ma }}</span>
+                  <span class="v-tag-val">
+                    {{ v.loaiGiamGia === 'PERCENT' || v.loaiGiamGia === '%' ? `-${v.giaTriGiam}%` : `-${formatVnd(v.giaTriGiam)}` }}
+                  </span>
+                </div>
+
+                <div class="v-card-info">
+                  <div class="v-card-title">{{ v.ten || v.ma }}</div>
+                  <div class="v-card-rule">
+                    Đơn tối thiểu: <b>{{ formatVnd(v.hoaDonToiThieu || 0) }}</b>
+                    <span v-if="v.giamToiDa && v.giamToiDa > 0"> · Tối đa: <b>{{ formatVnd(v.giamToiDa) }}</b></span>
+                  </div>
+                  <div v-if="subTotal >= (v.hoaDonToiThieu || 0)" class="v-calc-saving">
+                    Tiết kiệm đơn này: <b>{{ formatVnd(calculateVoucherDiscount(v, subTotal)) }}</b>
+                  </div>
+                  <div v-else class="v-shortage-msg">
+                    Mua thêm {{ formatVnd((v.hoaDonToiThieu || 0) - subTotal) }} để dùng
+                  </div>
+                </div>
+
+                <div class="v-card-action">
+                  <button v-if="currentOrder && currentOrder.selectedVoucher && currentOrder.selectedVoucher.id === v.id"
+                    class="btn-v-apply btn-v-remove" @click="removeVoucher">
+                    Bỏ chọn
+                  </button>
+                  <button v-else class="btn-v-apply"
+                    :disabled="subTotal < (v.hoaDonToiThieu || 0)"
+                    @click="applyVoucher(v)">
+                    Áp dụng
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pos-modal-foot">
+            <button class="btn-pos-cancel" style="height: 36px; padding: 0 16px;"
+              @click="isVoucherModalOpen = false">Đóng</button>
           </div>
         </div>
       </div>

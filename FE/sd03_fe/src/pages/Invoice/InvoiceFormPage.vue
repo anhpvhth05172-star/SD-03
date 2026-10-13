@@ -194,7 +194,7 @@ const validate = () => {
     const phi = Number(phiRaw)
     if (!Number.isFinite(phi)) e.phiVanChuyen = 'Phí vận chuyển chỉ được nhập số'
     else if (phi < 0) e.phiVanChuyen = 'Phí vận chuyển không được âm'
-    else if (phi <= 1000) e.phiVanChuyen = 'Phí vận chuyển phải lớn hơn 1000'
+    else if (phi > 0 && phi < 1000) e.phiVanChuyen = 'Phí vận chuyển nếu có phải từ 1.000đ trở lên'
   }
 
   const diaChi = String(form.value.diaChiNhanHang || '').trim()
@@ -372,8 +372,8 @@ onMounted(async () => {
           <div v-if="errors.soDienThoaiKhachHang" class="field-error">{{ errors.soDienThoaiKhachHang }}</div>
         </div>
         <div class="field">
-          <label>Phí vận chuyển (₫) *</label>
-          <input v-model.number="form.phiVanChuyen" type="number" min="1001" placeholder="0" />
+          <label>Phí vận chuyển (₫)</label>
+          <input v-model.number="form.phiVanChuyen" type="number" min="0" placeholder="0" />
           <div v-if="errors.phiVanChuyen" class="field-error">{{ errors.phiVanChuyen }}</div>
         </div>
         <div class="field">
