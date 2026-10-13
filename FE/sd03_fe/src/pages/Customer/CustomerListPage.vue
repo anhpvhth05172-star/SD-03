@@ -83,27 +83,50 @@ const goPage = (p) => {
   load()
 }
 
+const getDefaultAddress = (row) => {
+  if (!row) return null
+  if (row.diaChiMacDinh) return row.diaChiMacDinh
+  if (row.danhSachDiaChi && row.danhSachDiaChi.length) {
+    const md = row.danhSachDiaChi.find((d) => d.macDinh)
+    return md || row.danhSachDiaChi[0]
+  }
+  return null
+}
+
 const formatCustomerAddress = (row) => {
+  const d = getDefaultAddress(row)
+  if (!d) return '—'
+  const parts = [d.diaChiCuThe, d.phuong, d.thanhPho].filter(Boolean)
+  return parts.length ? parts.join(', ') : '—'
+}
+
+const formatCustomerAddressTooltip = (row) => {
   const ds =
     row.danhSachDiaChi && row.danhSachDiaChi.length
       ? row.danhSachDiaChi
       : row.diaChiMacDinh
         ? [row.diaChiMacDinh]
         : []
-  if (!ds.length) return '—'
+  if (!ds.length) return 'Chưa cập nhật địa chỉ'
+  if (ds.length === 1) {
+    const parts = [ds[0].diaChiCuThe, ds[0].phuong, ds[0].thanhPho].filter(Boolean)
+    return parts.length ? parts.join(', ') : '—'
+  }
   return ds
-    .map((d) => {
+    .map((d, i) => {
       const parts = [d.diaChiCuThe, d.phuong, d.thanhPho].filter(Boolean)
-      const diaChi = parts.length ? parts.join(', ') : '—'
-      const ma = d.maDiaChi ? `${d.maDiaChi}: ` : ''
-      const ten = d.tenChiChi ? `${d.tenChiChi} — ` : ''
-      const nhan = []
-      if (d.macDinh) nhan.push('mặc định')
-      if (d.trangThai === false) nhan.push('ngừng dùng')
-      return `${ma}${ten}${diaChi}${nhan.length ? ` (${nhan.join(', ')})` : ''}`
+      const addr = parts.length ? parts.join(', ') : '—'
+      const ten = d.tenChiChi && d.tenChiChi !== row.tenKhachHang ? ` (${d.tenChiChi})` : ''
+      const def = d.macDinh ? ' [Mặc định]' : ''
+      return `${i + 1}. ${addr}${ten}${def}`
     })
     .join('\n')
 }
+
+const diaChiText = computed(() => {
+  if (!detailData.value) return ''
+  return formatCustomerAddress(detailData.value)
+})
 
 const exportFile = async () => {
   const params = buildParams()
@@ -214,23 +237,6 @@ const gioiTinhLabel = (value) => {
   return '—'
 }
 
-const diaChiLine = (d) =>
-  [d.diaChiCuThe, d.phuong, d.thanhPho].filter(Boolean).join(', ') || '—'
-
-const diaChiText = computed(() => {
-  const ds = (detailData.value && detailData.value.danhSachDiaChi) || []
-  if (!ds.length) return ''
-  return ds
-    .map((d) => {
-      const nhan = []
-      if (d.macDinh) nhan.push('mặc định')
-      if (d.trangThai === false) nhan.push('ngừng dùng')
-      return `${d.maDiaChi} — ${d.tenChiChi ? `${d.tenChiChi}: ` : ''}${diaChiLine(d)}${
-        nhan.length ? ` (${nhan.join(', ')})` : ''
-      }`
-    })
-    .join('\n')
-})
 
 onMounted(() => {
   const { message, type } = takeFlashWithMeta()
@@ -367,8 +373,15 @@ onMounted(() => {
                 <td class="cell-name">{{ row.tenKhachHang }}</td>
                 <td class="cell-email">{{ row.email || '—' }}</td>
                 <td class="cell-address">
-                  <span class="address-all" :title="formatCustomerAddress(row)">
+                  <span class="address-clamp" :title="formatCustomerAddressTooltip(row)">
                     {{ formatCustomerAddress(row) }}
+                  </span>
+                  <span
+                    v-if="row.danhSachDiaChi && row.danhSachDiaChi.length > 1"
+                    class="extra-addr-tag"
+                    :title="formatCustomerAddressTooltip(row)"
+                  >
+                    +{{ row.danhSachDiaChi.length - 1 }} địa chỉ
                   </span>
                 </td>
                 <td class="cell-phone">{{ row.soDienThoai || '—' }}</td>
@@ -859,11 +872,27 @@ onMounted(() => {
   line-height: 1.45;
 }
 
-.address-all {
-  display: block;
-  max-width: 360px;
-  white-space: pre-line;
-  word-break: break-word;
+.address-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+  line-height: 1.45;
+}
+
+.extra-addr-tag {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 7px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: default;
 }
 
 /* Avatar tròn */
