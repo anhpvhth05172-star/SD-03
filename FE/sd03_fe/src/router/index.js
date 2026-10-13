@@ -22,8 +22,12 @@ import DiscountFormDetail from '@/pages/Discount/DiscountFormDetail.vue'
 import VoucherFormDetail from '@/pages/Discount/VoucherFormDetail.vue'
 import DiscountFormUpdate from '@/pages/Discount/DiscountFormUpdate.vue'
 import VoucherFormUpdate from '@/pages/Discount/VoucherFormUpdate.vue'
+import LoginPage from '@/pages/Auth/LoginPage.vue'
+import RegisterPage from '@/pages/Auth/RegisterPage.vue'
 
 const routes = [
+  { path: '/dang-nhap', component: LoginPage, meta: { title: 'Đăng nhập' } },
+  { path: '/dang-ky', component: RegisterPage, meta: { title: 'Đăng ký' } },
   {
     path: '/',
     component: AdminLayout,

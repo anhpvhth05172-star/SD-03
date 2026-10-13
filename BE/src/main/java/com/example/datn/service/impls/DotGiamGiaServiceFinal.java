@@ -149,4 +149,25 @@ public class DotGiamGiaServiceFinal {
                 .sanPhams(sanPhams)
                 .build();
     }
+
+    @Transactional
+    public void doiTrangThai(Long id, Boolean trangThai) {
+        DotGiamGia d = dotRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy đợt giảm giá"
+                ));
+
+        if (trangThai == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Trạng thái không được để trống"
+            );
+        }
+
+        d.setTrangThai(trangThai);
+        dotRepo.save(d);
+    }
+
+
 }

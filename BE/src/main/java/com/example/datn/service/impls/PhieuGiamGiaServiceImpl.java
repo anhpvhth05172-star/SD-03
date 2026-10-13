@@ -8,20 +8,27 @@ import com.example.datn.entity.PhieuGiamGia;
 import com.example.datn.repository.KhachHangPhieuGiamGiaRepository;
 import com.example.datn.repository.KhachHangRepository;
 import com.example.datn.repository.PhieuGiamGiaRepository;
+import com.example.datn.service.EmailService;
 import com.example.datn.service.PhieuGiamGiaService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.text.NumberFormat;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -32,9 +39,13 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
     private static final String CONG_KHAI = "CONG_KHAI";
     private static final String CA_NHAN = "CA_NHAN";
 
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+    private static final NumberFormat VND = NumberFormat.getInstance(Locale.forLanguageTag("vi-VN"));
+
     private final PhieuGiamGiaRepository phieuRepo;
     private final KhachHangRepository khachHangRepo;
     private final KhachHangPhieuGiamGiaRepository khPhieuRepo;
+    private final EmailService emailService;
 
     @Override
     public Page<PhieuGiamGia> getPageList(Pageable pageable) {
@@ -56,39 +67,11 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
 
     @Override
     public void update(PhieuGiamGia req) {
-        if (req == null || req.getId() == null) {
-            throw new IllegalArgumentException("Thiếu thông tin phiếu giảm giá cần cập nhật");
-        }
         PhieuGiamGia db = phieuRepo.findById(req.getId())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy phiếu giảm giá"));
 
-        String ma = req.getMaPhieuGiamGia() == null ? "" : req.getMaPhieuGiamGia().trim();
-        String ten = req.getTenPhieuGiamGia() == null ? "" : req.getTenPhieuGiamGia().trim();
-        if (ma.isEmpty() || ma.length() > 50) throw bad("Mã phiếu không được để trống và tối đa 50 ký tự");
-        if (phieuRepo.existsByMaPhieuGiamGiaAndIdNot(ma, req.getId())) throw bad("Mã phiếu đã tồn tại");
-        if (ten.isEmpty() || ten.length() > 200) throw bad("Tên phiếu không được để trống và tối đa 200 ký tự");
-        if (!"PERCENT".equals(req.getLoaiGiamGia()) && !"AMOUNT".equals(req.getLoaiGiamGia()))
-            throw bad("Loại giảm giá không hợp lệ");
-        if (req.getGiaTriGiam() == null || req.getGiaTriGiam().signum() <= 0
-                || ("PERCENT".equals(req.getLoaiGiamGia())
-                    && req.getGiaTriGiam().compareTo(BigDecimal.valueOf(100)) > 0))
-            throw bad("Giá trị giảm không hợp lệ (phần trăm tối đa 100)");
-        if (req.getGiamToiDa() != null && req.getGiamToiDa().signum() < 0)
-            throw bad("Mức giảm tối đa không được âm");
-        if (req.getHoaDonToiThieu() != null && req.getHoaDonToiThieu().signum() < 0)
-            throw bad("Hóa đơn tối thiểu không được âm");
-        if (req.getSoLuong() == null || req.getSoLuong() < 1
-                || req.getSoLuong() < (db.getSoLuongDaSuDung() == null ? 0 : db.getSoLuongDaSuDung()))
-            throw bad("Số lượng không được nhỏ hơn 1 hoặc số lượng đã sử dụng");
-        if (req.getNgayBatDau() == null || req.getNgayKetThuc() == null
-                || !req.getNgayKetThuc().isAfter(req.getNgayBatDau()))
-            throw bad("Ngày kết thúc phải sau ngày bắt đầu");
-        if (req.getTrangThai() == null) throw bad("Vui lòng chọn trạng thái");
-        if (req.getMoTa() != null && req.getMoTa().length() > 500)
-            throw bad("Mô tả không được vượt quá 500 ký tự");
-
-        db.setMaPhieuGiamGia(ma);
-        db.setTenPhieuGiamGia(ten);
+        db.setMaPhieuGiamGia(req.getMaPhieuGiamGia());
+        db.setTenPhieuGiamGia(req.getTenPhieuGiamGia());
         db.setLoaiGiamGia(req.getLoaiGiamGia());
         db.setGiaTriGiam(req.getGiaTriGiam());
         db.setGiamToiDa(req.getGiamToiDa());
@@ -99,24 +82,120 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
         db.setTrangThai(req.getTrangThai());
         db.setMoTa(req.getMoTa());
         db.setNgayCapNhat(LocalDateTime.now());
+        // soLuongDaSuDung, ngayTao: không đụng tới, giữ nguyên giá trị trong DB
 
         phieuRepo.save(db);
     }
 
-//    @Transactional
-//    public List<KhachHangOptionResponse> layDanhSachKhachHang() {
-//        return khachHangRepo
-//                .findByVaiTroAndTrangThaiOrderByTenKhachHangAsc("USER", true)
-//                .stream()
-//                .map(KhachHangOptionResponse::from)
-//                .toList();
-//    }
+    @Transactional
+    public Long capNhatPhieuGiamGia(Long id, PhieuGiamGiaRequest req) {
+        // 1. Tìm phiếu
+        PhieuGiamGia db = phieuRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Không tìm thấy phiếu giảm giá"));
+
+        // 2. Validate dữ liệu đầu vào
+        validate(req);
+
+        // 3. Không cho phép đổi phạm vi
+        if (!db.getPhamVi().equals(req.getPhamVi())) {
+            throw bad("Không thể thay đổi phạm vi của phiếu đã tạo");
+        }
+
+        // 4. Số lượng không được nhỏ hơn số đã sử dụng
+        int daDung = db.getSoLuongDaSuDung() == null ? 0 : db.getSoLuongDaSuDung();
+        if (req.getSoLuong() < daDung) {
+            throw bad("Số lượng không được nhỏ hơn số lượng đã sử dụng (" + daDung + ")");
+        }
+
+        boolean isCaNhan = CA_NHAN.equals(db.getPhamVi());
+        boolean isPercent = "PERCENT".equals(req.getLoaiGiamGia());
+
+        // ==================== Xử lý danh sách khách hàng (chỉ phiếu cá nhân) ====================
+        List<KhachHangPhieuGiamGia> canXoa = List.of();
+        List<KhachHang> khachMoi = List.of();
+
+        if (isCaNhan) {
+            Set<Long> idMoi = Set.copyOf(req.getDanhSachKhachHangId());
+
+            // Số lượng phải >= số khách được chọn
+            if (req.getSoLuong() < idMoi.size()) {
+                throw bad("Số lượng phải ≥ số khách hàng được chọn (" + idMoi.size() + ")");
+            }
+
+            List<KhachHangPhieuGiamGia> hienTai = khPhieuRepo.findByPhieuId(id);
+            Set<Long> idHienTai = hienTai.stream()
+                    .map(row -> row.getKhachHang().getId())
+                    .collect(Collectors.toSet());
+
+            // Khách bị bỏ chọn
+            canXoa = hienTai.stream()
+                    .filter(row -> !idMoi.contains(row.getKhachHang().getId()))
+                    .toList();
+
+            // Không cho bỏ khách đã sử dụng phiếu
+            if (canXoa.stream().anyMatch(row -> row.getNgaySuDung() != null)) {
+                throw bad("Không thể bỏ khách hàng đã sử dụng phiếu này");
+            }
+
+            // Khách mới được thêm
+            Set<Long> idThem = idMoi.stream()
+                    .filter(x -> !idHienTai.contains(x))
+                    .collect(Collectors.toSet());
+
+            khachMoi = khachHangRepo.findAllById(idThem);
+            if (khachMoi.size() != idThem.size()) {
+                throw bad("Có khách hàng không tồn tại");
+            }
+        }
+
+        // ==================== Cập nhật thông tin phiếu ====================
+        db.setMaPhieuGiamGia(req.getMaPhieuGiamGia().trim());
+        db.setTenPhieuGiamGia(req.getTenPhieuGiamGia().trim());
+        db.setLoaiGiamGia(req.getLoaiGiamGia());
+        db.setGiaTriGiam(req.getGiaTriGiam());
+        db.setGiamToiDa(isPercent ? req.getGiamToiDa() : null);
+        db.setHoaDonToiThieu(req.getHoaDonToiThieu() != null ? req.getHoaDonToiThieu() : BigDecimal.ZERO);
+        db.setNgayBatDau(req.getNgayBatDau());
+        db.setNgayKetThuc(req.getNgayKetThuc());
+        db.setSoLuong(req.getSoLuong());
+        db.setTrangThai(req.getTrangThai());
+        db.setMoTa(req.getMoTa());
+        db.setNgayCapNhat(LocalDateTime.now());
+        // Giữ nguyên: soLuongDaSuDung, ngayTao, phamVi
+
+        phieuRepo.save(db);
+
+        // ==================== Đồng bộ bảng trung gian ====================
+        if (!canXoa.isEmpty()) {
+            khPhieuRepo.deleteAll(canXoa);
+        }
+
+        if (!khachMoi.isEmpty()) {
+            List<KhachHangPhieuGiamGia> rows = khachMoi.stream()
+                    .map(kh -> {
+                        KhachHangPhieuGiamGia row = new KhachHangPhieuGiamGia();
+                        row.setKhachHang(kh);
+                        row.setPhieuGiamGia(db);
+                        row.setTrangThai(true);
+                        return row;
+                    })
+                    .toList();
+            khPhieuRepo.saveAll(rows);
+
+            // Chỉ gửi mail cho khách mới được thêm
+            guiMailPhieuCaNhan(db, khachMoi);
+        }
+
+        return db.getId();
+    }
 
     @Transactional
     public Long themPhieuGiamGia(PhieuGiamGiaRequest req) {
         validate(req);
 
         boolean caNhan = CA_NHAN.equals(req.getPhamVi());
+        boolean isPercent = "PERCENT".equals(req.getLoaiGiamGia());
 
         // Với phiếu cá nhân: kiểm tra toàn bộ khách hàng tồn tại TRƯỚC khi lưu phiếu
         List<KhachHang> khachHangs = List.of();
@@ -133,7 +212,7 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
         p.setTenPhieuGiamGia(req.getTenPhieuGiamGia().trim());
         p.setLoaiGiamGia(req.getLoaiGiamGia());
         p.setGiaTriGiam(req.getGiaTriGiam());
-        p.setGiamToiDa(req.getGiamToiDa());
+        p.setGiamToiDa(isPercent ? req.getGiamToiDa() : null);
         p.setHoaDonToiThieu(req.getHoaDonToiThieu() != null ? req.getHoaDonToiThieu() : BigDecimal.ZERO);
         p.setNgayBatDau(req.getNgayBatDau());
         p.setNgayKetThuc(req.getNgayKetThuc());
@@ -142,6 +221,7 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
         p.setTrangThai(req.getTrangThai() == null || req.getTrangThai());
         p.setPhamVi(caNhan ? CA_NHAN : CONG_KHAI);
         p.setMoTa(req.getMoTa());
+        p.setNgayTao(LocalDateTime.now());
         p.setNgayCapNhat(LocalDateTime.now());
         p = phieuRepo.save(p);
 
@@ -156,29 +236,73 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
                 return row;
             }).collect(Collectors.toList());
             khPhieuRepo.saveAll(rows);
+
+            // Gửi mail cho toàn bộ khách được chọn
+            guiMailPhieuCaNhan(phieu, khachHangs);
         }
 
         return p.getId();
     }
 
+    /**
+     * Gửi mail phiếu giảm giá cá nhân cho danh sách khách hàng.
+     * Chỉ gửi SAU KHI transaction commit thành công, tránh trường hợp
+     * mail đã gửi mà dữ liệu bị rollback.
+     */
+    private void guiMailPhieuCaNhan(PhieuGiamGia p, List<KhachHang> dsKhach) {
+        if (dsKhach == null || dsKhach.isEmpty()) return;
+        if (!Boolean.TRUE.equals(p.getTrangThai())) return; // phiếu đang tắt thì chưa gửi
+
+        String giaTri = "PERCENT".equals(p.getLoaiGiamGia())
+                ? p.getGiaTriGiam().stripTrailingZeros().toPlainString() + "%"
+                : VND.format(p.getGiaTriGiam()) + "đ";
+
+        StringBuilder dk = new StringBuilder();
+        if (p.getHoaDonToiThieu() != null && p.getHoaDonToiThieu().signum() > 0) {
+            dk.append("Đơn hàng từ ").append(VND.format(p.getHoaDonToiThieu())).append("đ");
+        }
+        if (p.getGiamToiDa() != null) {
+            if (dk.length() > 0) dk.append(", ");
+            dk.append("giảm tối đa ").append(VND.format(p.getGiamToiDa())).append("đ");
+        }
+        String dieuKien = dk.length() > 0 ? dk.toString() : "Áp dụng cho mọi đơn hàng";
+
+        // Lấy dữ liệu ra biến thường trước, tránh phụ thuộc entity sau commit
+        String ma = p.getMaPhieuGiamGia();
+        String ten = p.getTenPhieuGiamGia();
+        String batDau = p.getNgayBatDau().format(DATE_FMT);
+        String ketThuc = p.getNgayKetThuc().format(DATE_FMT);
+
+        List<String[]> nguoiNhan = dsKhach.stream()
+                .map(kh -> new String[]{kh.getEmail(), kh.getTenKhachHang()})
+                .toList();
+
+        Runnable guiMail = () -> nguoiNhan.forEach(n ->
+                emailService.guiMailPhieuGiamGiaCaNhan(
+                        n[0], n[1], ma, ten, giaTri, dieuKien, batDau, ketThuc));
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    guiMail.run();
+                }
+            });
+        } else {
+            guiMail.run();
+        }
+    }
+
     private void validate(PhieuGiamGiaRequest r) {
-        if (r == null) throw bad("Thiếu thông tin phiếu giảm giá");
         if (isBlank(r.getMaPhieuGiamGia())) throw bad("Vui lòng nhập mã phiếu");
-        if (isBlank(r.getTenPhieuGiamGia())) throw bad("Vui lòng nhập tên phiếu");
-        if (r.getMaPhieuGiamGia().trim().length() > 50) throw bad("Mã phiếu tối đa 50 ký tự");
-        if (r.getTenPhieuGiamGia().trim().length() > 200) throw bad("Tên phiếu tối đa 200 ký tự");
-        if (r.getMoTa() != null && r.getMoTa().length() > 500) throw bad("Mô tả tối đa 500 ký tự");
-        if (phieuRepo.existsByMaPhieuGiamGia(r.getMaPhieuGiamGia().trim()))
-            throw bad("Mã phiếu đã tồn tại");
+//        if (isBlank(r.getTenPhieuGiamGia())) throw bad("Vui lòng nhập tên phiếu");
+//        if (phieuRepo.existsByMaPhieuGiamGia(r.getMaPhieuGiamGia().trim()))
+//            throw bad("Mã phiếu đã tồn tại");
 
         if (!"PERCENT".equals(r.getLoaiGiamGia()) && !"AMOUNT".equals(r.getLoaiGiamGia()))
             throw bad("Loại giảm giá không hợp lệ");
         if (r.getGiaTriGiam() == null || r.getGiaTriGiam().signum() <= 0)
             throw bad("Giá trị giảm phải lớn hơn 0");
-        if (r.getGiamToiDa() != null && r.getGiamToiDa().signum() < 0)
-            throw bad("Mức giảm tối đa không được âm");
-        if (r.getHoaDonToiThieu() != null && r.getHoaDonToiThieu().signum() < 0)
-            throw bad("Hóa đơn tối thiểu không được âm");
         if ("PERCENT".equals(r.getLoaiGiamGia())
                 && r.getGiaTriGiam().compareTo(BigDecimal.valueOf(100)) > 0)
             throw bad("Phần trăm giảm tối đa là 100");
@@ -195,8 +319,19 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
         if (CA_NHAN.equals(pv)
                 && (r.getDanhSachKhachHangId() == null || r.getDanhSachKhachHangId().isEmpty()))
             throw bad("Phiếu cá nhân phải chọn ít nhất 1 khách hàng");
-        if (CA_NHAN.equals(pv) && r.getDanhSachKhachHangId().stream().anyMatch(id -> id == null || id <= 0))
-            throw bad("Danh sách khách hàng chứa mã không hợp lệ");
+    }
+
+    @Transactional
+    public Boolean toggleTrangThai(Long id) {
+        PhieuGiamGia phieu = phieuRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Không tìm thấy phiếu giảm giá"));
+
+        Boolean newStatus = !Boolean.TRUE.equals(phieu.getTrangThai());
+        phieu.setTrangThai(newStatus);
+        phieu.setNgayCapNhat(LocalDateTime.now());
+        phieuRepo.save(phieu);
+        return newStatus;
     }
 
     private boolean isBlank(String s) { return s == null || s.isBlank(); }
@@ -211,7 +346,7 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy phiếu giảm giá"));
 
         List<PhieuGiamGiaDetailResponse.KhachHangItem> khachHangs = List.of();
-        if ("CA_NHAN".equals(p.getPhamVi())) {
+        if (CA_NHAN.equals(p.getPhamVi())) {
             khachHangs = khPhieuRepo.findByPhieuId(id).stream()
                     .map(r -> PhieuGiamGiaDetailResponse.KhachHangItem.builder()
                             .idKhachHang(r.getKhachHang().getId())
@@ -244,5 +379,32 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
                 .moTa(p.getMoTa())
                 .khachHangs(khachHangs)
                 .build();
+    }
+
+    public Page<PhieuGiamGia> search(
+            String keyword, String loaiGiamGia, String trangThai, String phamVi,
+            LocalDate tuNgay, LocalDate denNgay, int page, int size) {
+
+        String kw = keyword == null ? "" : keyword.trim().toLowerCase()
+                .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+
+        LocalDateTime from = tuNgay != null
+                ? tuNgay.atStartOfDay()
+                : LocalDateTime.of(1900, 1, 1, 0, 0);
+        LocalDateTime to = denNgay != null
+                ? denNgay.plusDays(1).atStartOfDay()
+                : LocalDateTime.of(2999, 12, 31, 0, 0);
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id"));
+
+        return phieuRepo.search(
+                "%" + kw + "%",
+                loaiGiamGia == null ? "" : loaiGiamGia.trim(),
+                phamVi == null ? "" : phamVi.trim(),
+                trangThai == null ? "" : trangThai.trim(),
+                LocalDateTime.now(),
+                from,
+                to,
+                pageable);
     }
 }
