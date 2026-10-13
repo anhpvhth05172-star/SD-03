@@ -35,7 +35,7 @@ public class NhanVien {
     @Column(name = "ma_nhan_vien", nullable = false, unique = true, length = 50)
     private String maNhanVien;
 
-    @Column(name = "ten_tai_khoan", nullable = false, unique = true, length = 100, columnDefinition = "NVARCHAR(100)")
+    @Column(name = "ten_tai_khoan", nullable = false, length = 100, columnDefinition = "NVARCHAR(100)")
     private String tenTaiKhoan;
 
     @Column(name = "mat_khau", nullable = false, length = 255)

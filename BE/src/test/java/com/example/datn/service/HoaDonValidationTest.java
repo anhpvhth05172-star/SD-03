@@ -142,6 +142,7 @@ class HoaDonValidationTest {
         HoaDon h = new HoaDon();
         h.setId(HD_ID);
         h.setMaHoaDon("HD001");
+        h.setLoaiDon("Online");
         h.setTrangThai(trangThai);
         h.setDaXoa(false);
         return h;
@@ -616,6 +617,7 @@ class HoaDonValidationTest {
     @Test
     void chuyenTrangThaiSai_BiTuChoi() {
         when(hoaDonRepository.findById(HD_ID)).thenReturn(Optional.of(hoaDon("CHO_XAC_NHAN")));
+        when(hoaDonRepository.findByIdForUpdate(HD_ID)).thenReturn(Optional.of(hoaDon("CHO_XAC_NHAN")));
 
         assertThatThrownBy(() -> service.doiTrangThai(HD_ID, "Đã giao hàng"))
             .isInstanceOf(IllegalArgumentException.class)
@@ -625,6 +627,7 @@ class HoaDonValidationTest {
     @Test
     void chuyenTrangThaiHopLe_ThanhCongVaGhiLichSu() {
         when(hoaDonRepository.findById(HD_ID)).thenReturn(Optional.of(hoaDon("CHO_XAC_NHAN")));
+        when(hoaDonRepository.findByIdForUpdate(HD_ID)).thenReturn(Optional.of(hoaDon("CHO_XAC_NHAN")));
         when(hoaDonRepository.save(any(HoaDon.class))).thenAnswer(inv -> inv.getArgument(0));
 
         HoaDonDTO dto = service.doiTrangThai(HD_ID, "Đã xác nhận");

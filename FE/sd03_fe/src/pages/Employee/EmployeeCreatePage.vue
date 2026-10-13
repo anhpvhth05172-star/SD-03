@@ -55,7 +55,26 @@ const diaGioiLoading = ref(false)
 
 
 const isScanModalOpen = ref(false)
-const diaChiCccdGoc = ref('')
+const maPreview = ref('')
+let maTimeout = null
+
+const capNhatMaGoiY = () => {
+  if (isEdit) return
+  const ten = form.value.tenTaiKhoan ? form.value.tenTaiKhoan.trim() : ''
+  if (!ten) {
+    maPreview.value = ''
+    return
+  }
+  clearTimeout(maTimeout)
+  maTimeout = setTimeout(async () => {
+    try {
+      const res = await suggestEmployeeCode(ten)
+      maPreview.value = res?.ma || ''
+    } catch {
+      maPreview.value = ''
+    }
+  }, 250)
+}
 
 const form = ref({
   maNhanVien: '',
@@ -217,7 +236,10 @@ const xuLyChuoiCccd = async (raw) => {
     const gioiTinhRaw = parts[4]?.trim()
     const diaChiRaw = parts[5]?.trim()
 
-    if (hoTen) form.value.tenTaiKhoan = hoTen
+    if (hoTen) {
+      form.value.tenTaiKhoan = hoTen
+      capNhatMaGoiY()
+    }
     if (dobRaw && dobRaw.length === 8) {
       const d = dobRaw.substring(0, 2)
       const m = dobRaw.substring(2, 4)
@@ -555,7 +577,10 @@ onMounted(async () => {
             <div class="form-group">
               <label class="form-label">Họ và tên <span class="req">*</span></label>
               <input v-model="form.tenTaiKhoan" type="text" class="form-input" placeholder="Nhập họ và tên"
-                maxlength="100" />
+                maxlength="100" @input="capNhatMaGoiY" />
+              <p v-if="!isEdit && maPreview" class="field-hint" style="font-size: 12px; color: #64748b; margin-top: 4px;">
+                Mã nhân viên (tự động tạo): <b style="color: #4f46e5;">{{ maPreview }}</b>
+              </p>
               <p v-if="daNopForm && !form.tenTaiKhoan.trim()" class="input-error">Vui lòng nhập họ và tên</p>
             </div>
 
