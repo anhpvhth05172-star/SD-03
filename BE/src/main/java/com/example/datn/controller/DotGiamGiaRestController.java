@@ -59,20 +59,20 @@ public class DotGiamGiaRestController {
 //        return dotGiamGiaService.detailDotGiamGia(id);
 //    }
 
-    @PutMapping("/update")
-    public String updateDGG(@RequestBody DotGiamGia dotGiamGia) {
-        dotGiamGiaService.updateDotGiamGia(dotGiamGia);
+//    @PutMapping("/update")
+//    public String updateDGG(@RequestBody DotGiamGia dotGiamGia) {
+//        dotGiamGiaService.updateDotGiamGia(dotGiamGia);
+//
+//        return "Sua thanh cong";
+//    }
 
-        return "Sua thanh cong";
-    }
-
-    @PutMapping("/{id}/trang-thai")
-    public String doiTrangThai(@PathVariable Long id, @RequestBody java.util.Map<String, Boolean> body) {
-        DotGiamGia dgg = dotGiamGiaService.detailDotGiamGia(id);
-        dgg.setTrangThai(body.get("trangThai"));
-        dotGiamGiaService.updateDotGiamGia(dgg);
-        return "ok";
-    }
+//    @PutMapping("/{id}/trang-thai")
+//    public String doiTrangThai(@PathVariable Long id, @RequestBody java.util.Map<String, Boolean> body) {
+//        DotGiamGia dgg = dotGiamGiaService.detailDotGiamGia(id);
+//        dgg.setTrangThai(body.get("trangThai"));
+//        dotGiamGiaService.updateDotGiamGia(dgg);
+//        return "ok";
+//    }
 
     @GetMapping("/san-pham-chi-tiet/for-discount")
     public List<SanPhamChiTietOptionResponse> danhSachSanPham() {
@@ -88,5 +88,22 @@ public class DotGiamGiaRestController {
     @GetMapping("/detail/{id}")
     public DotGiamGiaDetailResponse chiTiet(@PathVariable Long id) {
         return serviceFinal.chiTiet(id);
+    }
+
+    @PutMapping("/change-status/{id}")
+    public ResponseEntity<?> doiTrangThai(
+            @PathVariable Long id,
+            @RequestBody Map<String, Boolean> request
+    ) {
+        Boolean trangThai = request.get("trangThai");
+
+        serviceFinal.doiTrangThai(id, trangThai);
+
+        return ResponseEntity.ok(
+                Map.of(
+                        "message", "Cập nhật trạng thái thành công",
+                        "trangThai", trangThai
+                )
+        );
     }
 }
