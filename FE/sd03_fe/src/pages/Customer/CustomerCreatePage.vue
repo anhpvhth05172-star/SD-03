@@ -110,6 +110,15 @@ const hienThiLoiNgaySinh = computed(() =>
 
 const loiGioiTinh = computed(() => (isBlank(form.value.gioiTinh) ? 'Vui lòng chọn giới tính' : ''))
 
+/** Ba cấp địa chỉ form đang dùng (theo cấu trúc 3 cấp mới: Tỉnh -> Phường/Xã -> Số nhà). */
+const loiTinhThanhPho = computed(() => (isBlank(form.value.tinhThanhPho) ? 'Vui lòng chọn tỉnh/thành phố' : ''))
+
+const loiPhuong = computed(() => (isBlank(form.value.phuong) ? 'Vui lòng chọn phường/xã' : ''))
+
+const loiDiaChiCuThe = computed(() =>
+  isBlank(form.value.diaChiCuThe) ? 'Vui lòng nhập địa chỉ cụ thể (số nhà, đường...)' : '',
+)
+
 const loiSoCccd = computed(() =>
   kiemTra([
     toiDa(form.value.soCccd, 20, 'Số CCCD'),
@@ -143,6 +152,9 @@ const validate = () =>
     khongDuocTuongLai(form.value.ngaySinh, 'Ngày sinh'),
     duTuoiToiThieu(form.value.ngaySinh, TUOI_TOI_THIEU, THONG_BAO_TUOI),
     loiGioiTinh.value,
+    loiTinhThanhPho.value,
+    loiPhuong.value,
+    loiDiaChiCuThe.value,
     toiDa(form.value.tinhThanhPho, 100, 'Tỉnh/Thành phố'),
     toiDa(form.value.phuong, 100, 'Phường/Xã'),
     toiDa(form.value.diaChiCuThe, 255, 'Địa chỉ cụ thể'),
@@ -643,13 +655,14 @@ onMounted(async () => {
 
           <div class="form-fields">
             <div class="field">
-              <label class="field-label">Tỉnh/Thành phố</label>
+              <label class="field-label">Tỉnh/Thành phố <b class="req">*</b></label>
               <select v-model="form.tinhThanhPho" :disabled="diaGioiLoading" @change="chonTinh($event.target.value)">
                 <option value="">
                   {{ diaGioiLoading ? 'Đang tải danh sách tỉnh/thành...' : 'Chọn tỉnh/thành phố' }}
                 </option>
                 <option v-for="t in tinhThanhs" :key="t.code" :value="t.ten">{{ t.ten }}</option>
               </select>
+              <p v-if="daNopForm && loiTinhThanhPho" class="field-hint is-error">{{ loiTinhThanhPho }}</p>
               <p v-if="diaGioiError" class="field-hint is-error">
                 {{ diaGioiError }}
                 <button type="button" class="link-retry" @click="napDiaGioi(form.tinhThanhPho, form.phuong)">Thử lại</button>
@@ -657,18 +670,20 @@ onMounted(async () => {
             </div>
 
             <div class="field">
-              <label class="field-label">Phường/Xã</label>
+              <label class="field-label">Phường/Xã <b class="req">*</b></label>
               <select v-model="form.phuong" :disabled="diaGioiLoading || !form.tinhThanhPho">
                 <option value="">
                   {{ diaGioiLoading ? 'Đang tải...' : form.tinhThanhPho ? 'Chọn phường/xã' : 'Chọn tỉnh trước' }}
                 </option>
                 <option v-for="p in phuongXas" :key="p.code" :value="p.ten">{{ p.ten }}</option>
               </select>
+              <p v-if="daNopForm && loiPhuong" class="field-hint is-error">{{ loiPhuong }}</p>
             </div>
 
             <div class="field field-wide">
-              <label class="field-label">Địa chỉ cụ thể</label>
+              <label class="field-label">Địa chỉ cụ thể <b class="req">*</b></label>
               <textarea v-model="form.diaChiCuThe" maxlength="255" placeholder="Số nhà, đường..." rows="3"></textarea>
+              <p v-if="daNopForm && loiDiaChiCuThe" class="field-hint is-error">{{ loiDiaChiCuThe }}</p>
             </div>
           </div>
         </section>
