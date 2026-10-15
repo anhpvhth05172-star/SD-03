@@ -29,6 +29,7 @@ public class HoaDonDTO {
     private LocalDateTime ngayCapNhat;
     private String nguoiCapNhat;
     private String trangThai;
+    private String maTrangThai;
     private String ghiChu;
 
     private Long idKhachHang;
@@ -48,4 +49,5 @@ public class HoaDonDTO {
     private String toWardCode;
 
     private List<ChiTietHoaDonDTO> chiTiet;
+    private List<String> trangThaiTiepTheo;
 }

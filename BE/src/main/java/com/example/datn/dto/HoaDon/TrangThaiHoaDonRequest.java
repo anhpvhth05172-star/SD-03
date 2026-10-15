@@ -12,4 +12,5 @@ import lombok.Setter;
 public class TrangThaiHoaDonRequest {
 
     private String trangThai;
+    private String ghiChu;
 }

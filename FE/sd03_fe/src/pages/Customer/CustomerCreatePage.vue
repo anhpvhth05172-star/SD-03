@@ -10,7 +10,6 @@ import { hopLeMa, maDeXuat } from '@/utils/maNhanVien'
 import { datVaiTro, layNguoiDung, vaiTroHienTai } from '@/utils/session'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import {
-  batBuoc,
   duTuoiToiThieu,
   emailHopLe,
   isBlank,
@@ -60,7 +59,6 @@ const form = ref({
   matKhau: '',
   email: '',
   soDienThoai: '',
-  soCccd: '',
   ngaySinh: '',
   gioiTinh: '',
   trangThai: 'true',
@@ -110,14 +108,48 @@ const hienThiLoiNgaySinh = computed(() =>
 
 const loiGioiTinh = computed(() => (isBlank(form.value.gioiTinh) ? 'Vui lòng chọn giới tính' : ''))
 
-const loiSoCccd = computed(() =>
+const loiSoDienThoai = computed(() =>
   kiemTra([
-    toiDa(form.value.soCccd, 20, 'Số CCCD'),
-    !isBlank(form.value.soCccd) && !/^\d{9,12}$/.test(form.value.soCccd.trim())
-      ? 'Số CCCD không hợp lệ (gồm 9-12 chữ số, không chứa chữ cái)'
+    toiDa(form.value.soDienThoai, 10, 'Số điện thoại'),
+    soDienThoaiHopLe(form.value.soDienThoai),
+  ]),
+)
+
+/** Đánh dấu người dùng đã thao tác với trường (blur/change) để hiện lỗi ngay tại chỗ. */
+const chamTruong = ref({})
+const cham = (ten) => {
+  chamTruong.value[ten] = true
+}
+/** Chỉ hiện lỗi khi trường đã được thao tác hoặc sau lần gửi form đầu tiên. */
+const hienLoi = (ten, loi) => (daNopForm.value || chamTruong.value[ten] ? loi : '')
+
+const loiTen = computed(() =>
+  kiemTra([
+    isBlank(form.value.tenKhachHang) ? 'Vui lòng nhập họ và tên' : '',
+    toiDa(form.value.tenKhachHang, 150, 'Họ và tên'),
+  ]),
+)
+
+const loiEmail = computed(() =>
+  kiemTra([
+    isBlank(form.value.email) ? 'Vui lòng nhập email' : '',
+    toiDa(form.value.email, 150, 'Email'),
+    emailHopLe(form.value.email),
+  ]),
+)
+
+const loiMaKhachHang = computed(() =>
+  kiemTra([
+    toiDa(form.value.maKhachHang, 25, 'Mã khách hàng'),
+    form.value.maKhachHang.trim() && !hopLeMa(form.value.maKhachHang)
+      ? 'Mã khách hàng không hợp lệ (bắt đầu bằng chữ cái, chỉ chữ cái và số, tối đa 25 ký tự)'
       : '',
   ]),
 )
+
+const loiTinhThanhPho = computed(() => toiDa(form.value.tinhThanhPho, 100, 'Tỉnh/Thành phố'))
+const loiPhuong = computed(() => toiDa(form.value.phuong, 100, 'Phường/Xã'))
+const loiDiaChiCuThe = computed(() => toiDa(form.value.diaChiCuThe, 255, 'Địa chỉ cụ thể'))
 
 const chonVaiTro = (e) => {
   const id = e.target.value
@@ -127,25 +159,16 @@ const chonVaiTro = (e) => {
 
 const validate = () =>
   kiemTra([
-    batBuoc(form.value.tenKhachHang, 'Họ và tên'),
-    toiDa(form.value.tenKhachHang, 150, 'Họ và tên'),
-    toiDa(form.value.maKhachHang, 25, 'Mã khách hàng'),
-    form.value.maKhachHang.trim() && !hopLeMa(form.value.maKhachHang)
-      ? 'Mã khách hàng không hợp lệ (bắt đầu bằng chữ cái, chỉ chữ cái và số, tối đa 25 ký tự)'
-      : '',
-    batBuoc(form.value.email, 'Email'),
-    toiDa(form.value.email, 150, 'Email'),
-    emailHopLe(form.value.email),
+    loiMaKhachHang.value,
+    loiTen.value,
+    loiEmail.value,
     emailTrungLoi.value,
-    toiDa(form.value.soDienThoai, 10, 'Số điện thoại'),
-    soDienThoaiHopLe(form.value.soDienThoai),
-    loiSoCccd.value,
-    khongDuocTuongLai(form.value.ngaySinh, 'Ngày sinh'),
-    duTuoiToiThieu(form.value.ngaySinh, TUOI_TOI_THIEU, THONG_BAO_TUOI),
+    loiSoDienThoai.value,
+    loiNgaySinh.value,
     loiGioiTinh.value,
-    toiDa(form.value.tinhThanhPho, 100, 'Tỉnh/Thành phố'),
-    toiDa(form.value.phuong, 100, 'Phường/Xã'),
-    toiDa(form.value.diaChiCuThe, 255, 'Địa chỉ cụ thể'),
+    loiTinhThanhPho.value,
+    loiPhuong.value,
+    loiDiaChiCuThe.value,
   ])
 
 const buildPayload = () => ({
@@ -154,7 +177,6 @@ const buildPayload = () => ({
   matKhau: form.value.matKhau ? form.value.matKhau : null,
   email: form.value.email.trim(),
   soDienThoai: form.value.soDienThoai.trim() || null,
-  soCccd: form.value.soCccd.trim(),
   ngaySinh: form.value.ngaySinh || null,
   gioiTinh: form.value.gioiTinh || null,
   trangThai: form.value.trangThai === 'true',
@@ -384,8 +406,7 @@ const submit = async () => {
   }
   const error = validate()
   if (error) {
-    errorMsg.value = error
-    notifyWarning('Vui lòng kiểm tra lại thông tin', error)
+    errorMsg.value = ''
     return
   }
   errorMsg.value = ''
@@ -402,7 +423,6 @@ const submit = async () => {
     await chonMaTuDong(true)
   }
   saving.value = true
-  let emailThatBai = false
   try {
     const payload = buildPayload()
     let msg = ''
@@ -412,23 +432,10 @@ const submit = async () => {
       setFlash(msg)
     } else {
       const taoMoi = await createCustomer(payload)
-      const emailNhan = taoMoi.email || form.value.email || '(chưa có địa chỉ email)'
       msg = `Đã thêm khách hàng "${taoMoi.tenKhachHang}" (${taoMoi.maKhachHang}) thành công!`
-      if (taoMoi.emailGuiThanhCong === true) {
-        msg += ` Email thông tin tài khoản đã được nhà cung cấp chấp nhận gửi tới ${emailNhan} — nếu chưa thấy, hãy kiểm tra thư mục Spam.`
-      } else if (taoMoi.emailGuiThanhCong === false) {
-        emailThatBai = true
-        msg += ` Hệ thống KHÔNG gửi được email thông tin tài khoản tới ${emailNhan}. Vui lòng kiểm tra lại địa chỉ email hoặc cấu hình gửi mail.`
-      } else {
-        msg += ` Hệ thống chưa xác nhận trạng thái gửi email thông tin tài khoản.`
-      }
-      setFlash(msg, emailThatBai ? 'warning' : 'success')
+      setFlash(msg)
     }
-    if (emailThatBai) {
-      notifyWarning('Thêm mới thành công, gửi email thất bại', msg)
-    } else {
-      notifySuccess(msg)
-    }
+    notifySuccess(msg)
     setTimeout(() => {
       router.push('/khach-hang')
     }, 500)
@@ -490,7 +497,6 @@ onMounted(async () => {
       matKhau: '',
       email: kh.email || '',
       soDienThoai: kh.soDienThoai || '',
-      soCccd: kh.soCccd || '',
       ngaySinh: kh.ngaySinh || '',
       gioiTinh: kh.gioiTinh || '',
       trangThai: kh.trangThai === false ? 'false' : 'true',
@@ -551,13 +557,17 @@ onMounted(async () => {
                 maxlength="25"
                 placeholder="Để trống sẽ tự sinh theo họ tên"
                 @input="maTuDong = false"
+                @blur="cham('maKhachHang')"
               />
               <p v-if="!isEdit && maPreview" class="field-hint">Mã gợi ý theo họ tên: <b>{{ maPreview }}</b></p>
+              <p v-if="hienLoi('maKhachHang', loiMaKhachHang)" class="field-hint is-error">{{ loiMaKhachHang }}</p>
             </div>
 
             <div class="field">
               <label class="field-label">Họ và tên <b class="req">*</b></label>
-              <input v-model="form.tenKhachHang" type="text" maxlength="200" placeholder="Nguyễn Thị Bình" @blur="chonMaTuDong()" />
+              <input v-model="form.tenKhachHang" type="text" maxlength="200" placeholder="Nguyễn Thị Bình"
+                @blur="cham('tenKhachHang'); chonMaTuDong()" />
+              <p v-if="hienLoi('tenKhachHang', loiTen)" class="field-hint is-error">{{ loiTen }}</p>
             </div>
 
             <div class="field">
@@ -567,26 +577,17 @@ onMounted(async () => {
                 type="email"
                 maxlength="150"
                 placeholder="khachhang@gmail.com"
-                @blur="kiemTraEmailTrung"
+                @blur="cham('email'); kiemTraEmailTrung"
               />
-              <p v-if="emailTrungLoi" class="field-hint is-error">{{ emailTrungLoi }}</p>
+              <p v-if="hienLoi('email', loiEmail)" class="field-hint is-error">{{ loiEmail }}</p>
+              <p v-else-if="emailTrungLoi" class="field-hint is-error">{{ emailTrungLoi }}</p>
             </div>
 
             <div class="field">
               <label class="field-label">Số điện thoại</label>
-              <input v-model="form.soDienThoai" type="tel" maxlength="10" placeholder="0901234567" />
-            </div>
-
-            <div class="field">
-              <label class="field-label">Số CCCD/CMND</label>
-              <input
-                v-model="form.soCccd"
-                type="text"
-                inputmode="numeric"
-                maxlength="20"
-                placeholder="012345678901"
-              />
-              <p v-if="daNopForm && loiSoCccd" class="field-hint is-error">{{ loiSoCccd }}</p>
+              <input v-model="form.soDienThoai" type="tel" maxlength="10" placeholder="0901234567"
+                @blur="cham('soDienThoai')" />
+              <p v-if="hienLoi('soDienThoai', loiSoDienThoai)" class="field-hint is-error">{{ loiSoDienThoai }}</p>
             </div>
 
             <div class="field">
@@ -601,14 +602,14 @@ onMounted(async () => {
 
             <div class="field">
               <label class="field-label">Giới tính <b class="req">*</b></label>
-              <div class="radio-row" role="radiogroup" aria-label="Giới tính">
+              <div class="radio-row" role="radiogroup" aria-label="Giới tính" @change="cham('gioiTinh')">
                 <label v-for="item in gioiTinhOptions" :key="item.value" class="radio-item">
                   <input v-model="form.gioiTinh" type="radio" name="gioiTinh" :value="item.value" />
                   <span class="radio-dot"></span>
                   <span>{{ item.label }}</span>
                 </label>
               </div>
-              <p v-if="daNopForm && loiGioiTinh" class="field-hint is-error">{{ loiGioiTinh }}</p>
+              <p v-if="hienLoi('gioiTinh', loiGioiTinh)" class="field-hint is-error">{{ loiGioiTinh }}</p>
             </div>
 
             <div v-if="isEdit" class="field">
@@ -644,7 +645,8 @@ onMounted(async () => {
           <div class="form-fields">
             <div class="field">
               <label class="field-label">Tỉnh/Thành phố</label>
-              <select v-model="form.tinhThanhPho" :disabled="diaGioiLoading" @change="chonTinh($event.target.value)">
+              <select v-model="form.tinhThanhPho" :disabled="diaGioiLoading"
+                @change="cham('tinhThanhPho'); chonTinh($event.target.value)">
                 <option value="">
                   {{ diaGioiLoading ? 'Đang tải danh sách tỉnh/thành...' : 'Chọn tỉnh/thành phố' }}
                 </option>
@@ -654,21 +656,26 @@ onMounted(async () => {
                 {{ diaGioiError }}
                 <button type="button" class="link-retry" @click="napDiaGioi(form.tinhThanhPho, form.phuong)">Thử lại</button>
               </p>
+              <p v-if="hienLoi('tinhThanhPho', loiTinhThanhPho)" class="field-hint is-error">{{ loiTinhThanhPho }}</p>
             </div>
 
             <div class="field">
               <label class="field-label">Phường/Xã</label>
-              <select v-model="form.phuong" :disabled="diaGioiLoading || !form.tinhThanhPho">
+              <select v-model="form.phuong" :disabled="diaGioiLoading || !form.tinhThanhPho"
+                @change="cham('phuong')">
                 <option value="">
                   {{ diaGioiLoading ? 'Đang tải...' : form.tinhThanhPho ? 'Chọn phường/xã' : 'Chọn tỉnh trước' }}
                 </option>
                 <option v-for="p in phuongXas" :key="p.code" :value="p.ten">{{ p.ten }}</option>
               </select>
+              <p v-if="hienLoi('phuong', loiPhuong)" class="field-hint is-error">{{ loiPhuong }}</p>
             </div>
 
             <div class="field field-wide">
               <label class="field-label">Địa chỉ cụ thể</label>
-              <textarea v-model="form.diaChiCuThe" maxlength="255" placeholder="Số nhà, đường..." rows="3"></textarea>
+              <textarea v-model="form.diaChiCuThe" maxlength="255" placeholder="Số nhà, đường..." rows="3"
+                @blur="cham('diaChiCuThe')"></textarea>
+              <p v-if="hienLoi('diaChiCuThe', loiDiaChiCuThe)" class="field-hint is-error">{{ loiDiaChiCuThe }}</p>
             </div>
           </div>
         </section>

@@ -191,6 +191,37 @@ class NhanVienServiceTest {
     }
 
     @Test
+    void tuChoiSoDienThoaiKhongDung10ChuSo() {
+        NhanVienService service = service(repoSach(), vaiTroRepository());
+
+        String thongBao = "Số điện thoại phải bắt đầu bằng số 0 và gồm đúng 10 chữ số";
+
+        NhanVienRequest sdt9So = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(30), "");
+        sdt9So.setSoDienThoai("090123456");
+        assertEquals(thongBao,
+            assertThrows(IllegalArgumentException.class, () -> service.create(sdt9So)).getMessage());
+
+        NhanVienRequest sdtKhongDau0 = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(30), "");
+        sdtKhongDau0.setSoDienThoai("9012345678");
+        assertEquals(thongBao,
+            assertThrows(IllegalArgumentException.class, () -> service.create(sdtKhongDau0)).getMessage());
+
+        NhanVienRequest sdtChuCai = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(30), "");
+        sdtChuCai.setSoDienThoai("0901a23456");
+        assertEquals(thongBao,
+            assertThrows(IllegalArgumentException.class, () -> service.create(sdtChuCai)).getMessage());
+
+        NhanVienRequest sdtKhoangTrang = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(30), "");
+        sdtKhoangTrang.setSoDienThoai("0901 23456");
+        assertEquals(thongBao,
+            assertThrows(IllegalArgumentException.class, () -> service.create(sdtKhoangTrang)).getMessage());
+
+        NhanVienRequest sdtHopLe = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(30), "");
+        sdtHopLe.setSoDienThoai("0901234567");
+        assertEquals("0901234567", service.create(sdtHopLe).getSoDienThoai());
+    }
+
+    @Test
     void tuChoiSuaNgaySinhThanhChuaDu18Tuoi() {
         NhanVienService service = service(repoSach(), vaiTroRepository());
 
