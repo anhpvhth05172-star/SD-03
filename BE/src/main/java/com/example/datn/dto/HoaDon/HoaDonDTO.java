@@ -53,4 +53,5 @@ public class HoaDonDTO {
     private String toWardCode;
 
     private List<ChiTietHoaDonDTO> chiTiet;
+    private List<String> trangThaiTiepTheo;
 }

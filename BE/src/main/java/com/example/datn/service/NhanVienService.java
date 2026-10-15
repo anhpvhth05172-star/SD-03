@@ -44,7 +44,7 @@ public class NhanVienService {
         {"KHAC", "Khác"}
     };
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+$");
-    private static final Pattern SO_DIEN_THAI_PATTERN = Pattern.compile("^0\\d{8,9}$");
+    private static final Pattern SO_DIEN_THAI_PATTERN = Pattern.compile("^0\\d{9}$");
     private static final Pattern MA_NHAN_VIEN_PATTERN = Pattern.compile("^[A-Za-z][A-Za-z0-9]{0,24}$");
     private static final String[] MA_VAI_TRO_HOP_LE = {"ADMIN", "STAFF"};
 
@@ -270,8 +270,7 @@ public class NhanVienService {
         if (!isBlank(req.getSoDienThoai())) {
             String sdt = req.getSoDienThoai().trim();
             if (!SO_DIEN_THAI_PATTERN.matcher(sdt).matches()) {
-                throw new IllegalArgumentException(
-                    "Số điện thoại không hợp lệ (bắt đầu bằng 0, gồm 9-10 chữ số, không chứa chữ cái)");
+                throw new IllegalArgumentException("Số điện thoại phải bắt đầu bằng số 0 và gồm đúng 10 chữ số");
             }
         }
         if (taoMoi && req.getNgaySinh() == null) {

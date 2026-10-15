@@ -61,7 +61,7 @@ public class KhachHangService {
         {"KHAC", "Khác"}
     };
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+$");
-    private static final Pattern SO_DIEN_THAI_PATTERN = Pattern.compile("^0\\d{8,9}$");
+    private static final Pattern SO_DIEN_THAI_PATTERN = Pattern.compile("^0\\d{9}$");
     /** CCCD có 12 chữ số, CMND cũ 9 chữ số. */
     private static final Pattern SO_CCCD_PATTERN = Pattern.compile("^\\d{9,12}$");
     private static final Pattern MA_KHACH_HANG_PATTERN = Pattern.compile("^[A-Za-z][A-Za-z0-9]{0,24}$");
@@ -415,8 +415,7 @@ public class KhachHangService {
             }
         }
         if (!isBlank(req.getSoDienThoai()) && !SO_DIEN_THAI_PATTERN.matcher(req.getSoDienThoai().trim()).matches()) {
-            throw new IllegalArgumentException(
-                "Số điện thoại không hợp lệ (bắt đầu bằng 0, gồm 9-10 chữ số, không chứa chữ cái)");
+            throw new IllegalArgumentException("Số điện thoại phải bắt đầu bằng số 0 và gồm đúng 10 chữ số");
         }
         if (!isBlank(req.getSoCccd()) && !SO_CCCD_PATTERN.matcher(req.getSoCccd().trim()).matches()) {
             throw new IllegalArgumentException("Số CCCD không hợp lệ (gồm 9-12 chữ số, không chứa chữ cái)");
@@ -428,6 +427,9 @@ public class KhachHangService {
         String loiTuoi = DoTuoi.kiemTra(req.getNgaySinh(), TUOI_TOI_THIEU, THONG_BAO_TUOI);
         if (loiTuoi != null) {
             throw new IllegalArgumentException(loiTuoi);
+        }
+        if (taoMoi && isBlank(req.getGioiTinh())) {
+            throw new IllegalArgumentException("Giới tính không được để trống");
         }
         if (!isBlank(req.getGioiTinh())) {
             toMaGioiTinh(req.getGioiTinh());

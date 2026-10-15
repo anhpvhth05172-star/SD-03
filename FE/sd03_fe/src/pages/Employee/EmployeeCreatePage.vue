@@ -440,25 +440,65 @@ const hienThiLoiNgaySinh = computed(() =>
     : '',
 )
 
-const validate = () =>
+/** Đánh dấu người dùng đã thao tác với trường (blur/change) để hiện lỗi ngay tại chỗ. */
+const chamTruong = ref({})
+const cham = (ten) => {
+  chamTruong.value[ten] = true
+}
+/** Chỉ hiện lỗi khi trường đã được thao tác hoặc sau lần gửi form đầu tiên. */
+const hienLoi = (ten, loi) => (daNopForm.value || chamTruong.value[ten] ? loi : '')
+
+const loiTen = computed(() =>
   kiemTra([
-    batBuoc(form.value.tenTaiKhoan, 'Họ và tên'),
+    isBlank(form.value.tenTaiKhoan) ? 'Vui lòng nhập họ và tên' : '',
     toiDa(form.value.tenTaiKhoan, 100, 'Họ và tên'),
-    batBuoc(form.value.email, 'Email'),
+  ]),
+)
+
+const loiEmail = computed(() =>
+  kiemTra([
+    isBlank(form.value.email) ? 'Vui lòng nhập email' : '',
     toiDa(form.value.email, 150, 'Email'),
     emailHopLe(form.value.email),
-    emailTrungLoi.value,
-    batBuoc(form.value.soDienThoai, 'Số điện thoại'),
+  ]),
+)
+
+const loiSdt = computed(() =>
+  kiemTra([
+    isBlank(form.value.soDienThoai) ? 'Vui lòng nhập số điện thoại' : '',
     toiDa(form.value.soDienThoai, 10, 'Số điện thoại'),
     soDienThoaiHopLe(form.value.soDienThoai),
-    chonBatBuoc(form.value.idVaiTro, 'vai trò'),
-    batBuoc(form.value.gioiTinh, 'Giới tính'),
-    batBuoc(form.value.ngaySinh, 'Ngày sinh'),
-    khongDuocTuongLai(form.value.ngaySinh, 'Ngày sinh'),
-    duTuoiToiThieu(form.value.ngaySinh, TUOI_TOI_THIEU, THONG_BAO_TUOI),
+  ]),
+)
+
+const loiVaiTro = computed(() => chonBatBuoc(form.value.idVaiTro, 'vai trò'))
+const loiGioiTinh = computed(() => batBuoc(form.value.gioiTinh, 'Giới tính'))
+const loiQueQuan = computed(() =>
+  kiemTra([
+    isBlank(form.value.queQuan) ? 'Vui lòng chọn tỉnh/thành phố' : '',
     toiDa(form.value.queQuan, 150, 'Tỉnh/Thành phố'),
+  ]),
+)
+const loiPhuong = computed(() =>
+  kiemTra([
+    isBlank(form.value.phuong) ? 'Vui lòng chọn xã/phường/thị trấn' : '',
     toiDa(form.value.phuong, 100, 'Phường/Xã'),
-    toiDa(form.value.diaChiCuThe, 255, 'Địa chỉ cụ thể'),
+  ]),
+)
+const loiDiaChiCuThe = computed(() => toiDa(form.value.diaChiCuThe, 255, 'Địa chỉ cụ thể'))
+
+const validate = () =>
+  kiemTra([
+    loiTen.value,
+    loiEmail.value,
+    emailTrungLoi.value,
+    loiSdt.value,
+    loiVaiTro.value,
+    loiGioiTinh.value,
+    loiNgaySinh.value,
+    loiQueQuan.value,
+    loiPhuong.value,
+    loiDiaChiCuThe.value,
   ])
 
 const buildPayload = () => ({
@@ -485,8 +525,7 @@ const submit = async () => {
   }
   const error = validate()
   if (error) {
-    errorMsg.value = error
-    notifyWarning('Vui lòng kiểm tra lại thông tin', error)
+    errorMsg.value = ''
     return
   }
   errorMsg.value = ''
@@ -661,48 +700,50 @@ onMounted(async () => {
             <div class="form-group">
               <label class="form-label">Họ và tên <span class="req">*</span></label>
               <input v-model="form.tenTaiKhoan" type="text" class="form-input" placeholder="Nhập họ và tên"
-                maxlength="100" @input="capNhatMaGoiY" />
+                maxlength="100" @input="capNhatMaGoiY" @blur="cham('tenTaiKhoan')" />
               <p v-if="!isEdit && maPreview" class="field-hint" style="font-size: 12px; color: #64748b; margin-top: 4px;">
                 Mã nhân viên (tự động tạo): <b style="color: #4f46e5;">{{ maPreview }}</b>
               </p>
-              <p v-if="daNopForm && !form.tenTaiKhoan.trim()" class="input-error">Vui lòng nhập họ và tên</p>
+              <p v-if="hienLoi('tenTaiKhoan', loiTen)" class="input-error">{{ loiTen }}</p>
             </div>
 
             <div class="form-group">
               <label class="form-label">Email <span class="req">*</span></label>
-              <input v-model="form.email" type="email" class="form-input" :class="{ 'has-error': emailTrungLoi }"
-                placeholder="Nhập email" maxlength="150" @blur="kiemTraEmailTrung" />
-              <p v-if="emailTrungLoi" class="input-error">{{ emailTrungLoi }}</p>
-              <p v-else-if="daNopForm && !form.email.trim()" class="input-error">Vui lòng nhập email</p>
+              <input v-model="form.email" type="email" class="form-input"
+                :class="{ 'has-error': emailTrungLoi || hienLoi('email', loiEmail) }"
+                placeholder="Nhập email" maxlength="150" @blur="cham('email'); kiemTraEmailTrung()" />
+              <p v-if="hienLoi('email', loiEmail)" class="input-error">{{ loiEmail }}</p>
+              <p v-else-if="emailTrungLoi" class="input-error">{{ emailTrungLoi }}</p>
             </div>
 
             <div class="form-group">
               <label class="form-label">Số điện thoại <span class="req">*</span></label>
               <input v-model="form.soDienThoai" type="tel" class="form-input" placeholder="Nhập số điện thoại"
-                maxlength="10" />
-              <p v-if="daNopForm && !form.soDienThoai.trim()" class="input-error">Vui lòng nhập số điện thoại</p>
+                maxlength="10" @blur="cham('soDienThoai')" />
+              <p v-if="hienLoi('soDienThoai', loiSdt)" class="input-error">{{ loiSdt }}</p>
             </div>
 
             <div class="form-group">
               <label class="form-label">Vai trò <span class="req">*</span></label>
               <div class="select-wrapper">
-                <select v-model="form.idVaiTro" class="form-select">
+                <select v-model="form.idVaiTro" class="form-select" @change="cham('idVaiTro')">
                   <option value="" disabled>Chọn vai trò</option>
                   <option v-for="v in vaiTros" :key="v.id" :value="v.id">{{ v.ten }}</option>
                 </select>
                 <i class="bi bi-chevron-down select-arrow"></i>
               </div>
-              <p v-if="daNopForm && !form.idVaiTro" class="input-error">Vui lòng chọn vai trò</p>
+              <p v-if="hienLoi('idVaiTro', loiVaiTro)" class="input-error">{{ loiVaiTro }}</p>
             </div>
 
             <div class="form-group">
               <label class="form-label">Giới tính <span class="req">*</span></label>
               <div class="select-wrapper">
-                <select v-model="form.gioiTinh" class="form-select">
+                <select v-model="form.gioiTinh" class="form-select" @change="cham('gioiTinh')">
                   <option v-for="g in gioiTinhOptions" :key="g.value" :value="g.value">{{ g.label }}</option>
                 </select>
                 <i class="bi bi-chevron-down select-arrow"></i>
               </div>
+              <p v-if="hienLoi('gioiTinh', loiGioiTinh)" class="input-error">{{ loiGioiTinh }}</p>
             </div>
 
             <div class="form-group">
@@ -743,18 +784,20 @@ onMounted(async () => {
               <label class="form-label">Tỉnh/Thành phố <span class="req">*</span></label>
               <div class="select-wrapper">
                 <select v-model="form.queQuan" class="form-select" :disabled="diaGioiLoading"
-                  @change="chonTinh($event.target.value)">
+                  @change="cham('queQuan'); chonTinh($event.target.value)">
                   <option value="">{{ diaGioiLoading ? 'Đang tải tỉnh thành...' : 'Chọn tỉnh thành' }}</option>
                   <option v-for="t in tinhThanhs" :key="t.code" :value="t.ten">{{ t.ten }}</option>
                 </select>
                 <i class="bi bi-chevron-down select-arrow"></i>
               </div>
+              <p v-if="hienLoi('queQuan', loiQueQuan)" class="input-error">{{ loiQueQuan }}</p>
             </div>
 
             <div class="form-group">
               <label class="form-label">Xã/Phường/Thị trấn <span class="req">*</span></label>
               <div class="select-wrapper">
-                <select v-model="form.phuong" class="form-select" :disabled="diaGioiLoading || !form.queQuan">
+                <select v-model="form.phuong" class="form-select" :disabled="diaGioiLoading || !form.queQuan"
+                  @change="cham('phuong')">
                   <option value="">
                     {{ diaGioiLoading ? 'Đang tải...' : form.queQuan ? 'Chọn xã phường' : 'Chọn xã phường' }}
                   </option>
@@ -762,13 +805,15 @@ onMounted(async () => {
                 </select>
                 <i class="bi bi-chevron-down select-arrow"></i>
               </div>
+              <p v-if="hienLoi('phuong', loiPhuong)" class="input-error">{{ loiPhuong }}</p>
             </div>
           </div>
 
           <div class="form-group" style="margin-top: 16px;">
             <label class="form-label">Địa chỉ cụ thể</label>
             <input v-model="form.diaChiCuThe" type="text" class="form-input" placeholder="Nhập địa chỉ cụ thể"
-              maxlength="255" />
+              maxlength="255" @blur="cham('diaChiCuThe')" />
+            <p v-if="hienLoi('diaChiCuThe', loiDiaChiCuThe)" class="input-error">{{ loiDiaChiCuThe }}</p>
           </div>
 
           <div class="action-buttons-group">

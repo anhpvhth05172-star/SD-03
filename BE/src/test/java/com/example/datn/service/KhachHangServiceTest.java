@@ -208,7 +208,16 @@ class KhachHangServiceTest {
         KhachHangRequest sdtSai = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
         sdtSai.setSoDienThoai("12345");
         assertTrue(assertThrows(IllegalArgumentException.class, () -> service.create(sdtSai))
-            .getMessage().startsWith("Số điện thoại không hợp lệ"));
+            .getMessage().startsWith("Số điện thoại phải bắt đầu bằng số 0"));
+
+        KhachHangRequest sdt9So = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
+        sdt9So.setSoDienThoai("090123456");
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> service.create(sdt9So))
+            .getMessage().startsWith("Số điện thoại phải bắt đầu bằng số 0"));
+
+        KhachHangRequest sdt10So = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
+        sdt10So.setSoDienThoai("0901234567");
+        assertEquals("0901234567", service.create(sdt10So).getSoDienThoai());
 
         KhachHangRequest maSai = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "1abc");
         assertTrue(assertThrows(IllegalArgumentException.class, () -> service.create(maSai))
@@ -244,6 +253,16 @@ class KhachHangServiceTest {
         suaKhongSoNha.setDiaChiCuThe(null);
         assertEquals("Địa chỉ cụ thể không được để trống",
             assertThrows(IllegalArgumentException.class, () -> service.update(9L, suaKhongSoNha)).getMessage());
+    }
+
+    @Test
+    void tuChoiTaoKhachHangThieuGioiTinh() {
+        KhachHangService service = service();
+
+        KhachHangRequest req = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
+        req.setGioiTinh("  ");
+        assertEquals("Giới tính không được để trống",
+            assertThrows(IllegalArgumentException.class, () -> service.create(req)).getMessage());
     }
 
     @Test
