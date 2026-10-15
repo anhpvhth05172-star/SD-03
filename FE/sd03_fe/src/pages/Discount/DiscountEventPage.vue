@@ -12,6 +12,7 @@ const page = ref(0);
 const pageSize = 8;
 const totalPages = ref(0);
 const totalElements = ref(0);
+const togglingId = ref(null); // id đợt đang đổi trạng thái (khóa switch)
 
 const getData = async (p = 0) => {
   try {
@@ -36,6 +37,9 @@ const goToPage = (p) => {
 
 const formatDate = (s) => (s ? new Date(s).toLocaleDateString("vi-VN") : "");
 
+const isEnded = (d) => !!d.ngayKetThuc && new Date() > new Date(d.ngayKetThuc);
+const isOn = (d) => !!d.trangThai && !isEnded(d);
+
 const getStatus = (d) => {
   if (!d.trangThai) return "Ngừng hoạt động";
   const now = new Date();
@@ -47,12 +51,13 @@ const getStatus = (d) => {
 const statusPill = (value) => {
   if (value === "Đang diễn ra") return "pill-green";
   if (value === "Sắp diễn ra") return "pill-amber";
-  if (value === "Ngừng hoạt động") return "pill-gray";
   return "pill-gray";
 };
 
-// ========== Đổi trạng thái bằng switch ==========
+// ========== Đổi trạng thái bằng switch (đồng bộ với back-end) ==========
 const toggleStatus = async (item) => {
+  if (togglingId.value !== null) return;
+
   const newStatus = !item.trangThai;
 
   const result = await Swal.fire({
@@ -68,17 +73,23 @@ const toggleStatus = async (item) => {
     cancelButtonText: "Hủy",
   });
 
+  // Bấm Hủy: không làm gì, switch vẫn theo dữ liệu cũ
   if (!result.isConfirmed) return;
 
+  togglingId.value = item.id;
   try {
-    // ⚠️ Đổi endpoint cho khớp backend của bạn
-    await axios.put(
+    const res = await axios.put(
       apiDiscountEvent + `admin/dot-giam-gia/change-status/${item.id}`,
       { trangThai: newStatus },
     );
 
-    // Cập nhật ngay trên UI
-    item.trangThai = newStatus;
+    // Lấy trạng thái thật từ back-end
+    if (typeof res.data?.trangThai === "boolean") {
+      item.trangThai = res.data.trangThai;
+    }
+
+    // Tải lại trang hiện tại để đồng bộ toàn bộ dữ liệu
+    await getData(page.value);
 
     await Swal.fire({
       icon: "success",
@@ -87,12 +98,16 @@ const toggleStatus = async (item) => {
       showConfirmButton: false,
     });
   } catch (error) {
+    // Lỗi: tải lại để switch quay về đúng trạng thái trong DB
+    await getData(page.value);
     Swal.fire({
       icon: "error",
       title: "Thất bại",
       text: error.response?.data?.message || "Không thể đổi trạng thái",
       confirmButtonColor: "#cc0000",
     });
+  } finally {
+    togglingId.value = null;
   }
 };
 
@@ -171,38 +186,14 @@ onMounted(() => getData(0));
         <div class="f-item">
           <label>Từ ngày</label>
           <div class="date-box">
-            <input type="text" placeholder="dd/mm/yyyy" />
-            <svg
-              class="date-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.7"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect x="3.8" y="5.5" width="16.4" height="14.5" rx="2" />
-              <path d="M8 3.2v4.2M16 3.2v4.2M3.8 10h16.4" />
-            </svg>
+            <input type="date" />
           </div>
         </div>
 
         <div class="f-item">
           <label>Đến ngày</label>
           <div class="date-box">
-            <input type="text" placeholder="dd/mm/yyyy" />
-            <svg
-              class="date-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.7"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect x="3.8" y="5.5" width="16.4" height="14.5" rx="2" />
-              <path d="M8 3.2v4.2M16 3.2v4.2M3.8 10h16.4" />
-            </svg>
+            <input type="date" />
           </div>
         </div>
 
@@ -267,8 +258,8 @@ onMounted(() => getData(0));
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(d, i) in listEvent" :key="i.index">
-              <td>{{ i + 1 }}</td>
+            <tr v-for="(d, i) in listEvent" :key="d.id">
+              <td>{{ page * pageSize + i + 1 }}</td>
               <td>{{ d.maDotGiamGia }}</td>
               <td>{{ d.tenDotGiamGia }}</td>
               <td class="cell-strong">{{ d.phanTramGiam }}%</td>
@@ -281,20 +272,30 @@ onMounted(() => getData(0));
               </td>
               <td>
                 <div class="act-group">
-                  <!-- SWITCH TRẠNG THÁI -->
+                  <!-- SWITCH TRẠNG THÁI: hiển thị theo dữ liệu back-end -->
                   <label
                     class="switch"
-                    :title="d.trangThai ? 'Đang bật' : 'Đang tắt'"
+                    :class="{
+                      'is-disabled': isEnded(d) || togglingId === d.id,
+                    }"
+                    :title="
+                      isEnded(d)
+                        ? 'Đợt đã kết thúc'
+                        : d.trangThai
+                          ? 'Đang bật'
+                          : 'Đang tắt'
+                    "
                   >
                     <input
                       type="checkbox"
-                      :checked="d.trangThai"
-                      @change="toggleStatus(d)"
+                      :checked="isOn(d)"
+                      :disabled="isEnded(d) || togglingId === d.id"
+                      @click.prevent="toggleStatus(d)"
                     />
                     <span class="slider"></span>
                   </label>
 
-                  <!-- NÚT SỬA (giữ nguyên) -->
+                  <!-- NÚT SỬA -->
                   <RouterLink
                     :to="`/admin/dot-giam-gia/update/${d.id}`"
                     class="act-btn is-red"
@@ -318,7 +319,7 @@ onMounted(() => getData(0));
               </td>
             </tr>
             <tr v-if="!listEvent.length">
-              <td colspan="7" style="text-align: center">Không có dữ liệu</td>
+              <td colspan="8" style="text-align: center">Không có dữ liệu</td>
             </tr>
           </tbody>
         </table>
@@ -432,5 +433,16 @@ onMounted(() => getData(0));
 
 .switch input:focus-visible + .slider {
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.25);
+}
+
+/* Khóa switch khi đợt đã kết thúc hoặc đang gọi API */
+.switch.is-disabled .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch.is-disabled .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

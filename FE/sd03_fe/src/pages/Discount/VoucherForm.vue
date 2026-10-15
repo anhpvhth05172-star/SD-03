@@ -532,8 +532,8 @@ const submit = async () => {
                   />
                 </th>
                 <th class="dg-center dg-w-stt">STT</th>
-                <th class="dg-center dg-w-img">Ảnh</th>
                 <th>Sản phẩm</th>
+                <th class="dg-center dg-w-img">Ảnh</th>
                 <th>Mã chi tiết</th>
                 <th class="dg-center">Kích cỡ</th>
                 <th class="dg-center">Màu sắc</th>
@@ -565,6 +565,8 @@ const submit = async () => {
                   />
                 </td>
                 <td class="dg-center">{{ i + 1 }}</td>
+
+                <td class="dg-strong">{{ v.tenSanPham }}</td>
                 <td class="dg-center">
                   <img
                     :src="logo"
@@ -574,7 +576,6 @@ const submit = async () => {
                     @error="onImgError"
                   />
                 </td>
-                <td class="dg-strong">{{ v.tenSanPham }}</td>
                 <td class="dg-muted">{{ v.maChiTiet }}</td>
                 <td class="dg-center">{{ v.kichCo }}</td>
                 <td class="dg-center">{{ v.mauSac }}</td>
