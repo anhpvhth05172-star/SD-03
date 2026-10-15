@@ -3,6 +3,7 @@ import { reactive, computed, inject, ref, onMounted } from "vue";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { useRouter, useRoute } from "vue-router";
+import logo from "@/assets/logo.png";
 
 const router = useRouter();
 const route = useRoute();
@@ -29,6 +30,30 @@ const afterDiscount = (giaBan) =>
   Math.round((Number(giaBan) * (100 - form.percent)) / 100);
 
 const money = (v) => Number(v ?? 0).toLocaleString("vi-VN") + "đ";
+
+/* ---------------- Ảnh ---------------- */
+const PLACEHOLDER_IMG =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><rect width='24' height='24' fill='%23f3f4f6' stroke='none'/><rect x='4' y='5' width='16' height='14' rx='2'/><circle cx='9' cy='10' r='1.5'/><path d='M20 16l-4.5-4.5L8 19'/></svg>`,
+  );
+
+// Lấy đường dẫn ảnh từ nhiều tên field có thể có của backend
+const rawImage = (p) =>
+  p?.hinhAnh ?? p?.anh ?? p?.urlAnh ?? p?.duongDanAnh ?? p?.image ?? null;
+
+const imgSrc = (p) => {
+  const raw = rawImage(p);
+  if (!raw) return PLACEHOLDER_IMG;
+  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+  return (
+    String(baseAPI).replace(/\/+$/, "") + "/" + String(raw).replace(/^\/+/, "")
+  );
+};
+
+const onImgError = (e) => {
+  if (e.target.src !== PLACEHOLDER_IMG) e.target.src = PLACEHOLDER_IMG;
+};
 
 /* ---------------- Validate ---------------- */
 const submitted = ref(false);
@@ -145,10 +170,14 @@ const productList = computed(() => {
         name: p.tenSanPham,
         brand: p.tenThuongHieu ?? p.thuongHieu ?? "—",
         material: p.tenChatLieu ?? p.chatLieu ?? "—",
+        image: rawImage(p),
         variantIds: [],
       });
     }
-    map.get(p.sanPhamId).variantIds.push(p.id);
+    const group = map.get(p.sanPhamId);
+    // Lấy ảnh của biến thể đầu tiên có ảnh làm ảnh đại diện sản phẩm
+    if (!group.image) group.image = rawImage(p);
+    group.variantIds.push(p.id);
   }
   return [...map.values()];
 });
@@ -460,17 +489,15 @@ const submit = async () => {
                       />
                     </th>
                     <th class="dg-center dg-w-stt">STT</th>
-                    <th>Tên sản phẩm</th>
-                    <th class="dg-center">Thương hiệu</th>
-                    <th class="dg-center">Chất liệu</th>
+                    <th class="dg-center">Tên sản phẩm</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="loadingProducts">
-                    <td colspan="5" class="dg-empty">Đang tải sản phẩm...</td>
+                    <td colspan="6" class="dg-empty">Đang tải sản phẩm...</td>
                   </tr>
                   <tr v-else-if="!filteredProductList.length">
-                    <td colspan="5" class="dg-empty">
+                    <td colspan="6" class="dg-empty">
                       Không có sản phẩm phù hợp
                     </td>
                   </tr>
@@ -490,9 +517,9 @@ const submit = async () => {
                       />
                     </td>
                     <td class="dg-center">{{ i + 1 }}</td>
-                    <td class="dg-strong">{{ g.name }}</td>
-                    <td class="dg-center dg-muted">{{ g.brand }}</td>
-                    <td class="dg-center dg-muted">{{ g.material }}</td>
+                    <td class="dg-center dg-strong" :title="g.name">
+                      {{ g.name }}
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -565,7 +592,7 @@ const submit = async () => {
           </div>
 
           <div class="dg-table-wrap dg-table-variants">
-            <table class="dg-table">
+            <table class="dg-table dg-table-wide">
               <thead>
                 <tr>
                   <th class="dg-w-check">
@@ -578,23 +605,24 @@ const submit = async () => {
                     />
                   </th>
                   <th class="dg-center dg-w-stt">STT</th>
-                  <th>Sản phẩm</th>
-                  <th>Mã chi tiết</th>
+                  <th class="dg-center">Sản phẩm</th>
+                  <th class="dg-center dg-w-img">Ảnh</th>
+                  <th class="dg-center">Mã chi tiết</th>
                   <th class="dg-center">Kích cỡ</th>
                   <th class="dg-center">Màu sắc</th>
-                  <th class="dg-right">Giá bán</th>
-                  <th class="dg-right">Giá sau giảm</th>
-                  <th class="dg-right">Tồn</th>
+                  <th class="dg-center">Giá bán</th>
+                  <th class="dg-center">Giá sau giảm</th>
+                  <th class="dg-center">Tồn</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-if="!variants.length">
-                  <td colspan="9" class="dg-empty">
+                  <td colspan="10" class="dg-empty">
                     Chọn sản phẩm ở trên để xem các biến thể.
                   </td>
                 </tr>
                 <tr v-else-if="!filteredVariants.length">
-                  <td colspan="9" class="dg-empty">
+                  <td colspan="10" class="dg-empty">
                     Không có biến thể phù hợp
                   </td>
                 </tr>
@@ -612,18 +640,30 @@ const submit = async () => {
                     />
                   </td>
                   <td class="dg-center">{{ i + 1 }}</td>
-                  <td class="dg-strong">{{ v.tenSanPham }}</td>
-                  <td class="dg-muted">{{ v.maChiTiet }}</td>
+
+                  <td class="dg-center dg-strong" :title="v.tenSanPham">
+                    {{ v.tenSanPham }}
+                  </td>
+                  <td class="dg-center">
+                    <img
+                      class="dg-img"
+                      :src="logo"
+                      :alt="v.tenSanPham"
+                      loading="lazy"
+                      @error="onImgError"
+                    />
+                  </td>
+                  <td class="dg-center dg-muted">{{ v.maChiTiet }}</td>
                   <td class="dg-center">{{ v.kichCo }}</td>
                   <td class="dg-center">{{ v.mauSac }}</td>
-                  <td class="dg-right">{{ money(v.giaBan) }}</td>
-                  <td class="dg-right">
+                  <td class="dg-center">{{ money(v.giaBan) }}</td>
+                  <td class="dg-center">
                     <span v-if="validPercent" class="dg-sale">
                       {{ money(afterDiscount(v.giaBan)) }}
                     </span>
                     <span v-else class="dg-muted">—</span>
                   </td>
-                  <td class="dg-right">{{ v.soLuong }}</td>
+                  <td class="dg-center">{{ v.soLuong }}</td>
                 </tr>
               </tbody>
             </table>
@@ -643,8 +683,6 @@ const submit = async () => {
 </template>
 
 <style scoped>
-/* Giữ nguyên toàn bộ style của form Add, chỉ thêm 2 class mới */
-
 .dg-loading {
   padding: 3rem;
   text-align: center;
@@ -658,7 +696,6 @@ const submit = async () => {
   cursor: not-allowed;
 }
 
-/* ===== Copy toàn bộ CSS cũ từ form Add vào đây ===== */
 .dg-screen {
   --red: #cc0000;
   --red-soft: #fdecec;
@@ -873,6 +910,7 @@ const submit = async () => {
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
 }
 
+/* ===== Bảng: chia đều các cột, căn giữa ===== */
 .dg-table-wrap {
   overflow: auto;
   border: 1px solid var(--line);
@@ -887,24 +925,34 @@ const submit = async () => {
 }
 .dg-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.92rem;
+}
+.dg-table-wide {
+  min-width: 960px;
 }
 .dg-table th {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 0.8rem 1rem;
+  padding: 0.8rem 0.75rem;
   background: #fff;
   border-bottom: 1px solid var(--line);
-  text-align: left;
+  text-align: center;
   font-weight: 700;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dg-table td {
-  padding: 0.8rem 1rem;
+  padding: 0.7rem 0.75rem;
   border-bottom: 1px solid #f1f2f4;
+  text-align: center;
+  vertical-align: middle;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dg-table tbody tr:last-child td {
   border-bottom: 0;
@@ -927,6 +975,9 @@ const submit = async () => {
 .dg-w-stt {
   width: 64px;
 }
+.dg-w-img {
+  width: 84px;
+}
 .dg-center {
   text-align: center !important;
 }
@@ -947,6 +998,18 @@ const submit = async () => {
   padding: 2rem 1rem !important;
   text-align: center;
   color: var(--muted);
+}
+
+/* Ảnh sản phẩm */
+.dg-img {
+  display: block;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f3f4f6;
 }
 
 .dg-filter-row {
