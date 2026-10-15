@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -290,5 +291,123 @@ public class EmailService {
             </body>
             </html>
             """.formatted(tenKhachHang, maKhachHang, tenTaiKhoan, tenTaiKhoan, matKhau);
+    }
+
+    @Async
+    public void guiMailPhieuGiamGiaCaNhan(
+            String toEmail,
+            String tenKhachHang,
+            String maPhieu,
+            String tenPhieu,
+            String giaTriGiam,      // ví dụ: "10%" hoặc "50.000đ"
+            String dieuKienApDung,  // ví dụ: "Đơn hàng từ 500.000đ, giảm tối đa 100.000đ"
+            String ngayBatDau,      // ví dụ: "13/10/2026"
+            String ngayKetThuc
+    ) {
+        if (toEmail == null || toEmail.trim().isEmpty()) {
+            log.warn("Không thể gửi email phiếu giảm giá: Địa chỉ email của khách hàng trống");
+            return;
+        }
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail, "PolyShoes Shop");
+            helper.setTo(toEmail.trim());
+            helper.setSubject("[PolyShoes] Bạn nhận được phiếu giảm giá dành riêng cho bạn");
+
+            String htmlContent = buildCouponTemplate(
+                    tenKhachHang != null ? tenKhachHang.trim() : "Quý khách",
+                    maPhieu != null ? maPhieu.trim() : "",
+                    tenPhieu != null ? tenPhieu.trim() : "",
+                    giaTriGiam != null ? giaTriGiam : "",
+                    dieuKienApDung != null ? dieuKienApDung : "Không có",
+                    ngayBatDau != null ? ngayBatDau : "",
+                    ngayKetThuc != null ? ngayKetThuc : ""
+            );
+
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            log.info("Đã gửi email phiếu giảm giá {} đến khách hàng: {}", maPhieu, toEmail);
+        } catch (Exception e) {
+            log.error("Lỗi khi gửi email phiếu giảm giá đến {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    private String buildCouponTemplate(
+            String tenKhachHang,
+            String maPhieu,
+            String tenPhieu,
+            String giaTriGiam,
+            String dieuKienApDung,
+            String ngayBatDau,
+            String ngayKetThuc
+    ) {
+        return """
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px; color: #333; }
+            .email-container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #e1e8ed; }
+            .email-header { background: linear-gradient(135deg, #059669, #10b981); color: #ffffff; padding: 28px 24px; text-align: center; }
+            .email-header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+            .email-header p { margin: 8px 0 0; opacity: 0.9; font-size: 14px; }
+            .email-body { padding: 32px 28px; line-height: 1.6; }
+            .greeting { font-size: 16px; margin-bottom: 16px; }
+            .coupon-box { border: 2px dashed #10b981; background: #ecfdf5; border-radius: 12px; padding: 20px; margin: 24px 0; text-align: center; }
+            .coupon-value { font-size: 32px; font-weight: 800; color: #047857; margin: 4px 0; }
+            .coupon-code { display: inline-block; background: #d1fae5; color: #065f46; padding: 8px 18px; border-radius: 8px; font-family: monospace; font-size: 20px; font-weight: 700; letter-spacing: 2px; margin-top: 8px; }
+            .card-info { background: #f8fafc; border-left: 4px solid #10b981; border-radius: 8px; padding: 16px 20px; margin: 20px 0; }
+            .info-row { display: flex; margin-bottom: 8px; font-size: 14.5px; }
+            .info-label { font-weight: 600; width: 130px; color: #475569; }
+            .info-value { font-weight: 700; color: #0f172a; }
+            .email-footer { background: #f8fafc; padding: 20px 24px; text-align: center; font-size: 12.5px; color: #64748b; border-top: 1px solid #e2e8f0; }
+          </style>
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <h1>🎁 Quà tặng từ PolyShoes</h1>
+              <p>Phiếu giảm giá dành riêng cho bạn</p>
+            </div>
+            <div class="email-body">
+              <div class="greeting">Xin chào <b>%s</b>,</div>
+              <p>PolyShoes gửi tặng bạn một phiếu giảm giá cá nhân. Hãy dùng mã dưới đây khi thanh toán nhé:</p>
+
+              <div class="coupon-box">
+                <div>%s</div>
+                <div class="coupon-value">Giảm %s</div>
+                <div class="coupon-code">%s</div>
+              </div>
+
+              <div class="card-info">
+                <div class="info-row">
+                  <span class="info-label">Điều kiện:</span>
+                  <span class="info-value">%s</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Hiệu lực từ:</span>
+                  <span class="info-value">%s</span>
+                </div>
+                <div class="info-row" style="margin-bottom: 0;">
+                  <span class="info-label">Hết hạn:</span>
+                  <span class="info-value">%s</span>
+                </div>
+              </div>
+
+              <p>Phiếu giảm giá chỉ áp dụng cho tài khoản của bạn. Chúc bạn mua sắm vui vẻ!</p>
+              <p style="margin-top: 24px;">Trân trọng,<br/><b>Đội ngũ PolyShoes</b></p>
+            </div>
+            <div class="email-footer">
+              <p>© 2026 PolyShoes. Mọi quyền được bảo lưu.</p>
+              <p>Email này được gửi tự động, vui lòng không chia sẻ mã giảm giá cho người khác.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+        """.formatted(tenKhachHang, tenPhieu, giaTriGiam, maPhieu, dieuKienApDung, ngayBatDau, ngayKetThuc);
     }
 }

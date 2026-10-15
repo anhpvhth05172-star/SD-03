@@ -22,8 +22,12 @@ import DiscountFormDetail from '@/pages/Discount/DiscountFormDetail.vue'
 import VoucherFormDetail from '@/pages/Discount/VoucherFormDetail.vue'
 import DiscountFormUpdate from '@/pages/Discount/DiscountFormUpdate.vue'
 import VoucherFormUpdate from '@/pages/Discount/VoucherFormUpdate.vue'
+import LoginPage from '@/pages/Auth/LoginPage.vue'
+import RegisterPage from '@/pages/Auth/RegisterPage.vue'
 
 const routes = [
+  { path: '/dang-nhap', component: LoginPage, meta: { title: 'Đăng nhập' } },
+  { path: '/dang-ky', component: RegisterPage, meta: { title: 'Đăng ký' } },
   {
     path: '/',
     component: AdminLayout,
@@ -193,39 +197,31 @@ const router = createRouter({
   routes,
 })
 
-/* Tạm comment guard kiểm tra phiên đăng nhập (không xóa)
-router.beforeEach(async (to) => {
-  if (!to.meta.requiresAuth) return true
+// Tạm comment guard kiểm tra phiên đăng nhập (không xóa)
+// router.beforeEach(async (to) => {
+//   if (!to.meta.requiresAuth) return true
+//   const token = getToken()
+//   const refreshToken = getRefreshToken()
+//   if (!token && !refreshToken) return '/dang-nhap'
+//   if (token && !isTokenExpired(token)) return true
+//   if (!refreshToken) {
+//     dangXuat()
+//     return '/dang-nhap'
+//   }
+//   try {
+//     await refreshSession()
+//     return true
+//   } catch {
+//     dangXuat()
+//     return '/dang-nhap'
+//   }
+// })
 
-  const token = getToken()
-  const refreshToken = getRefreshToken()
-
-  if (!token && !refreshToken) return '/dang-nhap'
-
-  if (token && !isTokenExpired(token)) return true
-
-  if (!refreshToken) {
-    dangXuat()
-    return '/dang-nhap'
-  }
-
-  try {
-    await refreshSession()
-    return true
-  } catch {
-    dangXuat()
-    return '/dang-nhap'
-  }
-})
-*/
-
-
-router.beforeEach((to) => {
-  if (to.path.startsWith('/nhan-vien') && !laAdmin()) {
-    return '/khach-hang'
-  }
-  return true
-})
-
+// router.beforeEach((to) => {
+//   if (to.path.startsWith('/nhan-vien') && !laAdmin()) {
+//     return '/khach-hang'
+//   }
+//   return true
+// })
 
 export default router

@@ -3,7 +3,8 @@ import axios from 'axios'
 // import { getToken, getRefreshToken, isTokenExpired, luuPhien, dangXuat } from '../utils/auth'
 import { vaiTroHienTai } from '../utils/session'
 
-export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api'
+export const API_BASE =
+  import.meta.env.VITE_API_BASE || 'http://localhost:8080/api'
 
 const http = axios.create({
   baseURL: API_BASE,
@@ -74,19 +75,26 @@ http.interceptors.response.use(
       if (config._retried) {
         dangXuat()
         chuyenVeDangNhap()
-        return Promise.reject(new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại'))
+        return Promise.reject(
+          new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại')
+        )
       }
       config._retried = true
 
       if (getRefreshToken()) {
         try {
           await refreshSession()
-          config.headers = { ...config.headers, Authorization: `Bearer ${getToken()}` }
+          config.headers = {
+            ...config.headers,
+            Authorization: `Bearer ${getToken()}`,
+          }
           return http.request(config)
         } catch {
           dangXuat()
           chuyenVeDangNhap()
-          return Promise.reject(new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại'))
+          return Promise.reject(
+            new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại')
+          )
         }
       }
       if (getToken()) {
@@ -106,7 +114,7 @@ http.interceptors.response.use(
     }
     const msg = data?.message || data?.detail || 'Không kết nối được máy chủ'
     return Promise.reject(new Error(msg))
-  },
+  }
 )
 
 export default http

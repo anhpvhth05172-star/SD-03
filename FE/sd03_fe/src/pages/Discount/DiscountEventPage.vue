@@ -1,9 +1,10 @@
 <script setup>
+import { formatDateTime } from "@/utils/format";
 import axios from "axios";
 import { inject, onMounted, ref } from "vue";
+import Swal from "sweetalert2";
 
 const showFilter = ref(true);
-
 const apiDiscountEvent = inject("baseAPI");
 
 const listEvent = ref([]);
@@ -36,7 +37,7 @@ const goToPage = (p) => {
 const formatDate = (s) => (s ? new Date(s).toLocaleDateString("vi-VN") : "");
 
 const getStatus = (d) => {
-  if (!d.trangThai) return "Đã kết thúc";
+  if (!d.trangThai) return "Ngừng hoạt động";
   const now = new Date();
   if (now < new Date(d.ngayBatDau)) return "Sắp diễn ra";
   if (now > new Date(d.ngayKetThuc)) return "Đã kết thúc";
@@ -46,18 +47,54 @@ const getStatus = (d) => {
 const statusPill = (value) => {
   if (value === "Đang diễn ra") return "pill-green";
   if (value === "Sắp diễn ra") return "pill-amber";
+  if (value === "Ngừng hoạt động") return "pill-gray";
   return "pill-gray";
 };
 
-const colors = [
-  "#cc0000",
-  "#3b82f6",
-  "#f59e0b",
-  "#8b5cf6",
-  "#14b8a6",
-  "#22c55e",
-];
-const avatarColor = (id) => colors[id % colors.length];
+// ========== Đổi trạng thái bằng switch ==========
+const toggleStatus = async (item) => {
+  const newStatus = !item.trangThai;
+
+  const result = await Swal.fire({
+    title: newStatus ? "Bật đợt giảm giá?" : "Tắt đợt giảm giá?",
+    text: newStatus
+      ? `Bạn muốn kích hoạt đợt "${item.tenDotGiamGia}"?`
+      : `Bạn muốn ngừng đợt "${item.tenDotGiamGia}"?`,
+    icon: "question",
+    showCancelButton: true,
+    confirmButtonColor: "#cc0000",
+    cancelButtonColor: "#6b7280",
+    confirmButtonText: newStatus ? "Bật" : "Tắt",
+    cancelButtonText: "Hủy",
+  });
+
+  if (!result.isConfirmed) return;
+
+  try {
+    // ⚠️ Đổi endpoint cho khớp backend của bạn
+    await axios.put(
+      apiDiscountEvent + `admin/dot-giam-gia/change-status/${item.id}`,
+      { trangThai: newStatus },
+    );
+
+    // Cập nhật ngay trên UI
+    item.trangThai = newStatus;
+
+    await Swal.fire({
+      icon: "success",
+      title: newStatus ? "Đã bật đợt giảm giá" : "Đã tắt đợt giảm giá",
+      timer: 1200,
+      showConfirmButton: false,
+    });
+  } catch (error) {
+    Swal.fire({
+      icon: "error",
+      title: "Thất bại",
+      text: error.response?.data?.message || "Không thể đổi trạng thái",
+      confirmButtonColor: "#cc0000",
+    });
+  }
+};
 
 onMounted(() => getData(0));
 </script>
@@ -219,39 +256,24 @@ onMounted(() => getData(0));
         <table class="data-table">
           <thead>
             <tr>
-              <th>Đợt giảm giá</th>
-              <th>Thời gian áp dụng</th>
-              <th>Mức giảm</th>
-              <th>Mô tả</th>
+              <th>STT</th>
+              <th>Mã ĐGG</th>
+              <th>Tên ĐGG</th>
+              <th>Giá trị giảm</th>
+              <th>Ngày bắt đầu</th>
+              <th>Ngày kết thúc</th>
               <th>Trạng thái</th>
               <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="d in listEvent" :key="d.id">
-              <td>
-                <div class="entity">
-                  <span
-                    class="entity-avatar"
-                    :style="{ background: avatarColor(d.id) }"
-                    >{{ d.maDotGiamGia.slice(-2) }}</span
-                  >
-                  <div class="entity-info">
-                    <div class="entity-line">
-                      <span class="entity-name">{{ d.tenDotGiamGia }}</span>
-                      <span class="entity-code">{{ d.maDotGiamGia }}</span>
-                    </div>
-                    <div class="entity-sub">
-                      Tạo ngày {{ formatDate(d.ngayTao) }}
-                    </div>
-                  </div>
-                </div>
-              </td>
-              <td>
-                {{ formatDate(d.ngayBatDau) }} - {{ formatDate(d.ngayKetThuc) }}
-              </td>
+            <tr v-for="(d, i) in listEvent" :key="i.index">
+              <td>{{ i + 1 }}</td>
+              <td>{{ d.maDotGiamGia }}</td>
+              <td>{{ d.tenDotGiamGia }}</td>
               <td class="cell-strong">{{ d.phanTramGiam }}%</td>
-              <td>{{ d.moTa }}</td>
+              <td>{{ formatDate(d.ngayBatDau) }}</td>
+              <td>{{ formatDate(d.ngayKetThuc) }}</td>
               <td>
                 <span class="pill" :class="statusPill(getStatus(d))">{{
                   getStatus(d)
@@ -259,26 +281,20 @@ onMounted(() => getData(0));
               </td>
               <td>
                 <div class="act-group">
-                  <RouterLink
-                    :to="`/admin/dot-giam-gia/detail/${d.id}`"
-                    class="act-btn"
-                    type="button"
-                    aria-label="Chi tiết"
+                  <!-- SWITCH TRẠNG THÁI -->
+                  <label
+                    class="switch"
+                    :title="d.trangThai ? 'Đang bật' : 'Đang tắt'"
                   >
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <path
-                        d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"
-                      />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  </RouterLink>
+                    <input
+                      type="checkbox"
+                      :checked="d.trangThai"
+                      @change="toggleStatus(d)"
+                    />
+                    <span class="slider"></span>
+                  </label>
+
+                  <!-- NÚT SỬA (giữ nguyên) -->
                   <RouterLink
                     :to="`/admin/dot-giam-gia/update/${d.id}`"
                     class="act-btn is-red"
@@ -368,4 +384,53 @@ onMounted(() => getData(0));
   </div>
 </template>
 
-<style scoped></style>
+<style scoped>
+/* ===== Switch ===== */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #d1d5db;
+  border-radius: 999px;
+  transition: 0.25s;
+}
+
+.slider::before {
+  content: "";
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.25s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.switch input:checked + .slider {
+  background-color: green;
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(20px);
+}
+
+.switch input:focus-visible + .slider {
+  box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.25);
+}
+</style>

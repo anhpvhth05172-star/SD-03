@@ -226,7 +226,7 @@ export const layPhuongXa = async (ds, tinh) => {
     for (const subCode of subCodes) {
       if (typeof subCode === 'number' || !isNaN(Number(subCode))) {
         try {
-          const res = await fetch(`https://provinces.open-api.vn/api/p/${subCode}?depth=3`)
+          const res = await fetch(`https://provinces.open-api.vn/api/v1/p/${subCode}?depth=3`)
           if (res.ok) {
             const data = await res.json()
             if (data.districts && Array.isArray(data.districts)) {
@@ -334,7 +334,12 @@ export const phanTichDiaChiCccd = (raw) => {
     return { tinh: '', tinhGoc: '', phuong: '', huyen: '', diaChiCuThe: '', diaChiDayDu: '', daDoiTinh: false }
   }
 
-  const diaChiDayDu = raw.trim()
+  let diaChiDayDu = raw.trim()
+  // Chuẩn hóa dấu phân cách nếu dùng gạch ngang hoặc dấu gạch chéo
+  if (!diaChiDayDu.includes(',') && (diaChiDayDu.includes(' - ') || diaChiDayDu.includes('/') || diaChiDayDu.includes(' -'))) {
+    diaChiDayDu = diaChiDayDu.replace(/\s*-\s*|\s*\/\s*/g, ', ')
+  }
+
   const parts = diaChiDayDu.split(',').map((s) => s.trim()).filter(Boolean)
 
   if (parts.length === 0) {
@@ -355,7 +360,7 @@ export const phanTichDiaChiCccd = (raw) => {
     const phan = cacPhanConLai[0]
     if (/^(xã|phường|thị trấn)\s+/i.test(phan)) {
       xa = phan
-      diaChiCuThe = ''
+      diaChiCuThe = phan
     } else {
       diaChiCuThe = phan
     }
@@ -386,37 +391,147 @@ export const phanTichDiaChiCccd = (raw) => {
     diaChiCuThe = phanDau || phanKeSatTinh
   }
 
-  // 2. Tự động kiểm tra ánh xạ xã sáp nhập và đổi tên thôn mới nhất
+  // 2. Tự động kiểm tra ánh xạ xã sáp nhập và đổi tên thôn mới nhất (chỉ chạy khi cleanXa có giá trị)
   const cleanXa = (xa || '').toLowerCase().replace(/^(xã|phường|thị trấn)\s+/i, '').trim()
   const cleanHuyen = (huyen || '').toLowerCase().replace(/^(huyện|quận|thị xã|tp|thành phố)\s+/i, '').trim()
 
-  for (const rule of BAN_DO_SAP_NHAP_XA) {
-    const hopHuyen = !rule.tuKhoaHuyen || rule.tuKhoaHuyen.some((h) => cleanHuyen.includes(h) || h.includes(cleanHuyen))
-    const hopXa = rule.tuKhoaXa && rule.tuKhoaXa.some((x) => cleanXa.includes(x) || x.includes(cleanXa))
+  if (cleanXa) {
+    for (const rule of BAN_DO_SAP_NHAP_XA) {
+      const hopHuyen = !rule.tuKhoaHuyen || (Boolean(cleanHuyen) && rule.tuKhoaHuyen.some((h) => cleanHuyen.includes(h) || h.includes(cleanHuyen)))
+      const hopXa = rule.tuKhoaXa && rule.tuKhoaXa.some((x) => cleanXa.includes(x) || x.includes(cleanXa))
 
-    if (hopXa && hopHuyen) {
-      const xaGoc = xa
-      xa = rule.xaMoi
-      if (rule.chuanHoaThon && diaChiCuThe) {
-        diaChiCuThe = rule.chuanHoaThon(diaChiCuThe, xaGoc)
+      if (hopXa && hopHuyen) {
+        const xaGoc = xa
+        xa = rule.xaMoi
+        if (rule.chuanHoaThon && diaChiCuThe) {
+          diaChiCuThe = rule.chuanHoaThon(diaChiCuThe, xaGoc)
+        }
+        break
       }
-      break
     }
   }
 
-  // 3. Chuẩn hóa và ánh xạ sang 34 Tỉnh/TP mới nhất
-  const objTinhMoi = timTinh(DS_34_TINH_THANH, tinhGoc)
-  const tinhMoi = objTinhMoi ? objTinhMoi.ten : tinhGoc
-  const daDoiTinh = objTinhMoi && loaiBoTienTo(tinhMoi) !== loaiBoTienTo(tinhGoc)
-
+  // Giữ nguyên địa chỉ gốc theo đúng chữ ghi trên CCCD
   return {
-    tinh: tinhMoi,
+    tinh: tinhGoc,
     tinhGoc,
     phuong: xa,
     huyen,
-    diaChiCuThe,
+    diaChiCuThe: diaChiCuThe || diaChiDayDu,
     diaChiDayDu,
-    daDoiTinh,
-    tinhObj: objTinhMoi,
+    daDoiTinh: false,
+    tinhObj: null,
+  }
+}
+
+/**
+ * Phân tích chuỗi QR trên thẻ CCCD theo mọi định dạng (7 phần, 6 phần, 5 phần)
+ * Format chuẩn: Số CCCD|Số CMND cũ|Họ và tên|Ngày sinh (ddMMyyyy)|Giới tính|Địa chỉ thường trú|Ngày cấp
+ */
+export const phanTichChuoiCccd = (raw) => {
+  if (!raw || typeof raw !== 'string') return null
+  const clean = raw.replace(/^["'\s]+|["'\s]+$/g, '').trim()
+  if (!clean.includes('|')) return null
+
+  const parts = clean.split('|').map((p) => p.trim())
+  if (parts.length < 4) return null
+
+  let soCccd = ''
+  let hoTen = ''
+  let dobRaw = ''
+  let gioiTinhRaw = ''
+  let diaChiRaw = ''
+  let ngayCapRaw = ''
+
+  // Tìm số CCCD (12 chữ số)
+  if (/^\d{12}$/.test(parts[0])) {
+    soCccd = parts[0]
+  } else {
+    const cccdIdx = parts.findIndex((p) => /^\d{12}$/.test(p))
+    if (cccdIdx !== -1) soCccd = parts[cccdIdx]
+  }
+
+  // Tìm ngày sinh: 8 chữ số (ddMMyyyy)
+  const dobIndex = parts.findIndex((p, idx) => idx > 0 && /^\d{8}$/.test(p))
+
+  if (dobIndex !== -1) {
+    dobRaw = parts[dobIndex]
+    // Họ tên nằm ngay trước ngày sinh
+    if (dobIndex > 0) {
+      hoTen = parts[dobIndex - 1]
+    }
+    // Giới tính nằm ngay sau ngày sinh
+    if (dobIndex + 1 < parts.length) {
+      gioiTinhRaw = parts[dobIndex + 1]
+    }
+  } else {
+    // Trường hợp không tìm thấy ngày sinh dạng 8 số
+    if (parts.length >= 7) {
+      soCccd = soCccd || parts[0]
+      hoTen = parts[2]
+      dobRaw = parts[3]
+      gioiTinhRaw = parts[4]
+    } else if (parts.length === 6) {
+      soCccd = soCccd || parts[0]
+      hoTen = parts[1]
+      dobRaw = parts[2]
+      gioiTinhRaw = parts[3]
+    } else {
+      soCccd = soCccd || parts[0]
+      hoTen = parts[1]
+      dobRaw = parts[2]
+      gioiTinhRaw = parts[3]
+    }
+  }
+
+  // Lọc tìm địa chỉ thường trú chuẩn xác nhất:
+  // Loại trừ số CCCD, ngày tháng, tên công dân, giới tính và quốc tịch "Việt Nam"
+  const candidates = parts.filter((p, idx) => {
+    if (idx === 0) return false
+    if (/^\d{8,12}$/.test(p)) return false
+    if (['nam', 'nữ', 'nu', 'male', 'female', 'm', 'f', 'việt nam', 'viet nam'].includes(p.toLowerCase())) return false
+    if (p === hoTen) return false
+    return true
+  })
+
+  const withCommas = candidates.filter((c) => c.includes(','))
+  if (withCommas.length > 0) {
+    diaChiRaw = withCommas.sort((a, b) => b.length - a.length)[0]
+  } else {
+    const withKeyword = candidates.find((c) =>
+      /(tỉnh|thành phố|tp|huyện|quận|thị xã|xã|phường|thị trấn|thôn|tổ|đường|phố|số)/i.test(c),
+    )
+    diaChiRaw = withKeyword || candidates.sort((a, b) => b.length - a.length)[0] || ''
+  }
+
+  // Chuẩn hóa ngày sinh sang yyyy-MM-dd
+  let ngaySinh = ''
+  if (dobRaw && dobRaw.length === 8 && /^\d{8}$/.test(dobRaw)) {
+    const d = dobRaw.substring(0, 2)
+    const m = dobRaw.substring(2, 4)
+    const y = dobRaw.substring(4, 8)
+    ngaySinh = `${y}-${m}-${d}`
+  }
+
+  // Chuẩn hóa giới tính
+  let gioiTinh = 'NAM'
+  if (gioiTinhRaw) {
+    const gLower = gioiTinhRaw.toLowerCase()
+    if (gLower.includes('nữ') || gLower.includes('nu') || gLower === 'female' || gLower === 'f') {
+      gioiTinh = 'NU'
+    } else {
+      gioiTinh = 'NAM'
+    }
+  }
+
+  return {
+    soCccd,
+    hoTen: (hoTen || '').trim(),
+    dobRaw,
+    ngaySinh,
+    gioiTinhRaw,
+    gioiTinh,
+    diaChiRaw: (diaChiRaw || '').trim(),
+    ngayCapRaw,
   }
 }

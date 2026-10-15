@@ -2,13 +2,16 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import QuickAddModal from '@/components/QuickAddModal.vue'
+import SearchableSelect from '@/components/SearchableSelect.vue'
+import CurrencyInput from '@/components/CurrencyInput.vue'
 import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
+import { formatNumber, formatVnd } from '@/utils/format'
 
 const router = useRouter()
 const API_BASE = 'http://localhost:8080/api/v1'
 
 const form = reactive({
-  code: '423305',
+  code: '',
   name: '',
   brand: '',
   category: '',
@@ -54,8 +57,8 @@ const genderOptions = [
 
 const selectedColors = ref([])
 const selectedSizes = ref([])
-const tempColorSelect = ref('')
-const tempSizeSelect = ref('')
+const tempColorSelect = ref(null)
+const tempSizeSelect = ref(null)
 
 const isAllChecked = ref(true)
 const defaultQty = ref(10)
@@ -105,31 +108,31 @@ const fetchOptions = async () => {
 
 const generateCode = () => {
   const num = Math.floor(100000 + Math.random() * 900000)
-  form.code = `${num}`
+  form.code = `SP${num}`
 }
 
-const handleSelectColor = (e) => {
-  const val = e.target.value
+const handleSelectColor = (valOrEvent) => {
+  const val = valOrEvent && valOrEvent.target ? valOrEvent.target.value : valOrEvent
   if (!val) return
-  const col = colorOptions.value.find(c => c.id === Number(val) || c.ten === val)
+  const col = colorOptions.value.find(c => c.id === Number(val) || c.id === val || c.ten === val)
   if (col && !selectedColors.value.some(c => c.id === col.id)) {
     selectedColors.value.push(col)
   }
-  tempColorSelect.value = ''
+  tempColorSelect.value = null
 }
 
 const removeColor = (id) => {
   selectedColors.value = selectedColors.value.filter(c => c.id !== id)
 }
 
-const handleSelectSize = (e) => {
-  const val = e.target.value
+const handleSelectSize = (valOrEvent) => {
+  const val = valOrEvent && valOrEvent.target ? valOrEvent.target.value : valOrEvent
   if (!val) return
-  const sz = sizeOptions.value.find(s => s.id === Number(val) || s.ten === val)
+  const sz = sizeOptions.value.find(s => s.id === Number(val) || s.id === val || s.ten === val)
   if (sz && !selectedSizes.value.some(s => s.id === sz.id)) {
     selectedSizes.value.push(sz)
   }
-  tempSizeSelect.value = ''
+  tempSizeSelect.value = null
 }
 
 const removeSize = (id) => {
@@ -549,53 +552,73 @@ onMounted(() => {
 
         <div class="form-field">
           <label class="form-label required">Thương hiệu</label>
-          <select v-model="form.brand" class="form-select" :class="{ 'input-err': errors.brand }">
-            <option value="" disabled selected>Chọn thương hiệu...</option>
-            <option v-for="b in brandOptions" :key="b.id" :value="b.id">{{ b.ten }}</option>
-          </select>
+          <SearchableSelect
+            v-model="form.brand"
+            :options="brandOptions"
+            placeholder="Chọn thương hiệu..."
+            search-placeholder="Tìm thương hiệu..."
+            :has-error="!!errors.brand"
+          />
           <span v-if="errors.brand" class="err-txt">{{ errors.brand }}</span>
         </div>
 
         <div class="form-field">
           <label class="form-label required">Loại giày</label>
-          <select v-model="form.category" class="form-select" :class="{ 'input-err': errors.category }">
-            <option value="" disabled selected>Chọn loại giày...</option>
-            <option v-for="c in categoryOptions" :key="c.id" :value="c.id">{{ c.ten }}</option>
-          </select>
+          <SearchableSelect
+            v-model="form.category"
+            :options="categoryOptions"
+            placeholder="Chọn loại giày..."
+            search-placeholder="Tìm loại giày..."
+            :has-error="!!errors.category"
+          />
           <span v-if="errors.category" class="err-txt">{{ errors.category }}</span>
         </div>
 
         <div class="form-field">
           <label class="form-label required">Giới tính / Đối tượng</label>
-          <select v-model="form.gender" class="form-select">
-            <option v-for="g in genderOptions" :key="g.value" :value="g.value">{{ g.label }}</option>
-          </select>
+          <SearchableSelect
+            v-model="form.gender"
+            :options="genderOptions"
+            value-key="value"
+            label-key="label"
+            placeholder="Chọn đối tượng..."
+            :allow-clear="false"
+          />
         </div>
 
         <div class="form-field">
           <label class="form-label required">Chất liệu</label>
-          <select v-model="form.material" class="form-select" :class="{ 'input-err': errors.material }">
-            <option value="" disabled selected>Chọn chất liệu...</option>
-            <option v-for="m in materialOptions" :key="m.id" :value="m.id">{{ m.ten }}</option>
-          </select>
+          <SearchableSelect
+            v-model="form.material"
+            :options="materialOptions"
+            placeholder="Chọn chất liệu..."
+            search-placeholder="Tìm chất liệu..."
+            :has-error="!!errors.material"
+          />
           <span v-if="errors.material" class="err-txt">{{ errors.material }}</span>
         </div>
 
         <div class="form-field">
           <label class="form-label required">Kiểu dáng</label>
-          <select v-model="form.style" class="form-select" :class="{ 'input-err': errors.style }">
-            <option value="" disabled selected>Chọn kiểu dáng...</option>
-            <option v-for="s in styleOptions" :key="s.id" :value="s.id">{{ s.ten }}</option>
-          </select>
+          <SearchableSelect
+            v-model="form.style"
+            :options="styleOptions"
+            placeholder="Chọn kiểu dáng..."
+            search-placeholder="Tìm kiểu dáng..."
+            :has-error="!!errors.style"
+          />
           <span v-if="errors.style" class="err-txt">{{ errors.style }}</span>
         </div>
 
         <div class="form-field">
           <label class="form-label required">Xuất xứ</label>
-          <select v-model="form.origin" class="form-select" :class="{ 'input-err': errors.origin }">
-            <option value="" disabled selected>Chọn xuất xứ...</option>
-            <option v-for="o in originOptions" :key="o.id" :value="o.id">{{ o.ten }}</option>
-          </select>
+          <SearchableSelect
+            v-model="form.origin"
+            :options="originOptions"
+            placeholder="Chọn xuất xứ..."
+            search-placeholder="Tìm xuất xứ..."
+            :has-error="!!errors.origin"
+          />
           <span v-if="errors.origin" class="err-txt">{{ errors.origin }}</span>
         </div>
 
@@ -611,10 +634,16 @@ onMounted(() => {
       <div class="attr-row">
         <label class="attr-label required">Màu sắc</label>
         <div class="attr-input-wrap">
-          <select v-model="tempColorSelect" class="form-select attr-select" @change="handleSelectColor">
-            <option value="" disabled selected>Chọn màu</option>
-            <option v-for="col in colorOptions" :key="col.id" :value="col.id">{{ col.ten }}</option>
-          </select>
+          <div style="flex: 1;">
+            <SearchableSelect
+              v-model="tempColorSelect"
+              :options="colorOptions"
+              color-key="ma"
+              placeholder="Chọn màu sắc..."
+              search-placeholder="Tìm kiếm màu..."
+              @change="handleSelectColor"
+            />
+          </div>
           <button class="btn btn-quick-add" @click="openQuickAdd('color')">+ Thêm nhanh</button>
         </div>
       </div>
@@ -630,10 +659,16 @@ onMounted(() => {
       <div class="attr-row margin-top">
         <label class="attr-label required">Kích cỡ</label>
         <div class="attr-input-wrap">
-          <select v-model="tempSizeSelect" class="form-select attr-select" @change="handleSelectSize">
-            <option value="" disabled selected>Chọn size</option>
-            <option v-for="sz in sizeOptions" :key="sz.id" :value="sz.id">Size {{ sz.ten }}</option>
-          </select>
+          <div style="flex: 1;">
+            <SearchableSelect
+              v-model="tempSizeSelect"
+              :options="sizeOptions"
+              prefix="Size "
+              placeholder="Chọn kích cỡ..."
+              search-placeholder="Tìm size..."
+              @change="handleSelectSize"
+            />
+          </div>
           <button class="btn btn-quick-add" @click="openQuickAdd('size')">+ Thêm nhanh</button>
         </div>
       </div>
@@ -670,9 +705,9 @@ onMounted(() => {
             <input v-model.number="defaultQty" type="number" class="bulk-num-input" placeholder="0" min="0" />
           </div>
 
-          <div class="bulk-field">
+          <div class="bulk-field" style="min-width: 200px;">
             <label class="bulk-lbl required">Giá bán mặc định</label>
-            <input v-model.number="defaultPrice" type="number" class="bulk-num-input" placeholder="0" min="0" />
+            <CurrencyInput v-model="defaultPrice" placeholder="Nhập giá mặc định..." />
           </div>
 
           <button class="btn btn-outline-red" @click="applyBulkValues">Áp dụng</button>
@@ -694,8 +729,8 @@ onMounted(() => {
               <th width="40"></th>
               <th width="60">STT</th>
               <th>Kích cỡ</th>
-              <th width="220">Số lượng</th>
-              <th width="240">Giá bán</th>
+              <th width="200">Số lượng</th>
+              <th width="260">Giá bán</th>
               <th width="80" class="text-center">Xóa</th>
             </tr>
           </thead>
@@ -710,7 +745,7 @@ onMounted(() => {
                 <input v-model.number="item.qty" type="number" class="table-num-input" min="0" />
               </td>
               <td>
-                <input v-model.number="item.price" type="number" class="table-num-input" min="0" />
+                <CurrencyInput v-model="item.price" placeholder="Nhập giá..." />
               </td>
               <td class="text-center">
                 <button class="btn-icon-trash" @click="removeItem(gIdx, iIdx)" title="Xóa">

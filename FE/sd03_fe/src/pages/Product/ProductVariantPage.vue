@@ -2,7 +2,10 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import QRCode from 'qrcode'
+import SearchableSelect from '@/components/SearchableSelect.vue'
+import CurrencyInput from '@/components/CurrencyInput.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
+import { formatNumber, formatVnd } from '@/utils/format'
 
 const router = useRouter()
 const route = useRoute()
@@ -1017,16 +1020,25 @@ onUnmounted(() => {
             Đặt lại bộ lọc
           </button>
 
-          <button class="btn-card-action" @click="openBatchQrModal" :disabled="isGeneratingQr" title="Tải hoặc xem mã QR của biến thể">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            {{ isGeneratingQr ? 'Đang tạo...' : (selectedIds.length > 0 ? `Tải QR (${selectedIds.length})` : 'Tải QR') }}
-          </button>
+          <transition name="fade">
+            <button
+              v-if="selectedIds.length > 0"
+              class="btn-card-action btn-card-qr"
+              @click="openBatchQrModal"
+              :disabled="isGeneratingQr"
+              title="Xem và tải mã QR cho các biến thể đã chọn"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+              {{ isGeneratingQr ? 'Đang tạo QR...' : `Tải QR (${selectedIds.length})` }}
+            </button>
+          </transition>
 
-          <button class="btn-card-action" @click="exportVariantsToExcel" :disabled="isExporting" title="Xuất danh sách biến thể ra file Excel">
+          <button class="btn-card-action btn-card-excel" @click="exportVariantsToExcel" :disabled="isExporting" title="Xuất danh sách biến thể ra file Excel">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
@@ -1039,37 +1051,49 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Row 2: 3 Filter Select Columns -->
+      <!-- Row 2: 3 Filter Select Columns with SearchableSelect (Select2 style) -->
       <div class="filter-row-bottom">
         <div class="filter-col">
           <label class="filter-lbl">Màu sắc</label>
-          <div class="select-wrapper">
-            <select v-model="filters.idMauSac" class="form-select" @change="onFilterChange">
-              <option value="">Tất cả màu sắc</option>
-              <option v-for="c in colorsList" :key="c.id" :value="c.id">{{ c.ten || c.tenMau }}</option>
-            </select>
-          </div>
+          <SearchableSelect
+            v-model="filters.idMauSac"
+            :options="colorsList"
+            label-key="ten"
+            value-key="id"
+            color-key="ma"
+            placeholder="Tất cả màu sắc"
+            search-placeholder="Tìm màu sắc..."
+            @change="onFilterChange"
+          />
         </div>
 
         <div class="filter-col">
           <label class="filter-lbl">Kích cỡ</label>
-          <div class="select-wrapper">
-            <select v-model="filters.idKichCo" class="form-select" @change="onFilterChange">
-              <option value="">Tất cả kích cỡ</option>
-              <option v-for="s in sizesList" :key="s.id" :value="s.id">{{ s.ten || s.tenKichCo }}</option>
-            </select>
-          </div>
+          <SearchableSelect
+            v-model="filters.idKichCo"
+            :options="sizesList"
+            label-key="ten"
+            value-key="id"
+            prefix="Size "
+            placeholder="Tất cả kích cỡ"
+            search-placeholder="Tìm size..."
+            @change="onFilterChange"
+          />
         </div>
 
         <div class="filter-col">
           <label class="filter-lbl">Trạng thái</label>
-          <div class="select-wrapper">
-            <select v-model="filters.trangThai" class="form-select" @change="onFilterChange">
-              <option value="">Tất cả trạng thái</option>
-              <option :value="true">Kinh doanh</option>
-              <option :value="false">Ngưng kinh doanh</option>
-            </select>
-          </div>
+          <SearchableSelect
+            v-model="filters.trangThai"
+            :options="[
+              { value: true, label: 'Kinh doanh' },
+              { value: false, label: 'Ngưng kinh doanh' }
+            ]"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả trạng thái"
+            @change="onFilterChange"
+          />
         </div>
       </div>
     </div>
@@ -1081,6 +1105,21 @@ onUnmounted(() => {
           <h2 class="card-title">Danh sách biến thể chi tiết</h2>
           <span class="items-count-pill">{{ variants.length }}/{{ totalElements }} biến thể</span>
           <span v-if="selectedIds.length > 0" class="selected-badge">Đã chọn: {{ selectedIds.length }}</span>
+          <button
+            v-if="selectedIds.length > 0"
+            class="btn-table-head-qr"
+            @click="openBatchQrModal"
+            :disabled="isGeneratingQr"
+            title="Tải mã QR cho các biến thể đã chọn"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            Tải QR ({{ selectedIds.length }})
+          </button>
         </div>
         <div class="head-right">
           <span class="page-size-label">Hiển thị:</span>
@@ -1157,7 +1196,7 @@ onUnmounted(() => {
                 </td>
                 <td class="text-center stock-col">
                   <span class="stock-badge" :class="getVariantStatusClass(item)">
-                    {{ item.stock !== undefined ? item.stock : 0 }}
+                    {{ formatNumber(item.stock !== undefined ? item.stock : 0) }}
                   </span>
                 </td>
                 <td class="text-end price-val">
@@ -1364,15 +1403,21 @@ onUnmounted(() => {
 
               <div class="form-group">
                 <label class="form-lbl">Giá bán (VNĐ) <span class="required">*</span></label>
-                <input v-model.number="editForm.price" type="number" min="0" step="10000" class="modal-input" placeholder="Nhập giá bán..." />
+                <CurrencyInput v-model="editForm.price" placeholder="Nhập giá bán..." />
               </div>
 
               <div class="form-group span-2">
                 <label class="form-lbl">Trạng thái</label>
-                <select v-model="editForm.trangThai" class="modal-select">
-                  <option :value="true">Kinh doanh</option>
-                  <option :value="false">Ngưng kinh doanh</option>
-                </select>
+                <SearchableSelect
+                  v-model="editForm.trangThai"
+                  :options="[
+                    { value: true, label: 'Kinh doanh' },
+                    { value: false, label: 'Ngưng kinh doanh' }
+                  ]"
+                  label-key="label"
+                  value-key="value"
+                  :allow-clear="false"
+                />
               </div>
             </div>
           </div>
@@ -1411,32 +1456,41 @@ onUnmounted(() => {
               <!-- Nếu chưa lọc theo sản phẩm thì cho chọn sản phẩm -->
               <div v-if="!isFilteredByProduct" class="form-group span-2">
                 <label class="form-lbl">Chọn sản phẩm <span class="required">*</span></label>
-                <select v-model="addForm.idSanPham" class="modal-select">
-                  <option value="" disabled selected>-- Chọn sản phẩm --</option>
-                  <option v-for="p in productsList" :key="p.id" :value="p.id">
-                    {{ p.tenSanPham }} ({{ p.maSanPham }})
-                  </option>
-                </select>
+                <SearchableSelect
+                  v-model="addForm.idSanPham"
+                  :options="productsList"
+                  label-key="tenSanPham"
+                  value-key="id"
+                  placeholder="-- Chọn sản phẩm --"
+                  search-placeholder="Tìm sản phẩm..."
+                />
               </div>
 
               <div class="form-group">
                 <label class="form-lbl">Màu sắc <span class="required">*</span></label>
-                <select v-model="addForm.idMauSac" class="modal-select" @change="onAddColorChange">
-                  <option value="" disabled selected>-- Chọn màu sắc --</option>
-                  <option v-for="c in colorsList" :key="c.id" :value="c.id">
-                    {{ c.ten || c.tenMau }}
-                  </option>
-                </select>
+                <SearchableSelect
+                  v-model="addForm.idMauSac"
+                  :options="colorsList"
+                  label-key="ten"
+                  value-key="id"
+                  color-key="ma"
+                  placeholder="-- Chọn màu sắc --"
+                  search-placeholder="Tìm màu..."
+                  @change="onAddColorChange"
+                />
               </div>
 
               <div class="form-group">
                 <label class="form-lbl">Kích cỡ <span class="required">*</span></label>
-                <select v-model="addForm.idKichCo" class="modal-select">
-                  <option value="" disabled selected>-- Chọn kích cỡ --</option>
-                  <option v-for="s in sizesList" :key="s.id" :value="s.id">
-                    {{ s.ten || s.tenKichCo }}
-                  </option>
-                </select>
+                <SearchableSelect
+                  v-model="addForm.idKichCo"
+                  :options="sizesList"
+                  label-key="ten"
+                  value-key="id"
+                  prefix="Size "
+                  placeholder="-- Chọn kích cỡ --"
+                  search-placeholder="Tìm size..."
+                />
               </div>
 
               <div class="form-group">
@@ -1446,15 +1500,21 @@ onUnmounted(() => {
 
               <div class="form-group">
                 <label class="form-lbl">Giá bán (VNĐ) <span class="required">*</span></label>
-                <input v-model.number="addForm.price" type="number" min="1000" step="10000" class="modal-input" placeholder="Nhập giá bán..." />
+                <CurrencyInput v-model="addForm.price" placeholder="Nhập giá bán..." />
               </div>
 
               <div class="form-group span-2">
                 <label class="form-lbl">Trạng thái</label>
-                <select v-model="addForm.trangThai" class="modal-select">
-                  <option :value="true">Kinh doanh</option>
-                  <option :value="false">Ngưng kinh doanh</option>
-                </select>
+                <SearchableSelect
+                  v-model="addForm.trangThai"
+                  :options="[
+                    { value: true, label: 'Kinh doanh' },
+                    { value: false, label: 'Ngưng kinh doanh' }
+                  ]"
+                  label-key="label"
+                  value-key="value"
+                  :allow-clear="false"
+                />
               </div>
 
               <!-- PHẦN HÌNH ẢNH BIẾN THỂ -->
