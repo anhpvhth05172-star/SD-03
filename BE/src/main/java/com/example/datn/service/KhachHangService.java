@@ -10,6 +10,7 @@ import com.example.datn.entity.DiaChiKhachHang;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.repository.DiaChiKhachHangRepository;
 import com.example.datn.repository.KhachHangRepository;
+import com.example.datn.repository.PhienDangNhapRepository;
 import com.example.datn.util.DoTuoi;
 import com.example.datn.util.MaNhanVien;
 import java.math.BigDecimal;
@@ -69,13 +70,23 @@ public class KhachHangService {
     private final DiaChiKhachHangRepository diaChiKhachHangRepository;
     private final EmailService emailService;
     private final TransactionTemplate transactionTemplate;
+    private final PhienDangNhapRepository phienDangNhapRepository;
 
     public KhachHangService(
         KhachHangRepository khachHangRepository,
         DiaChiKhachHangRepository diaChiKhachHangRepository,
         PlatformTransactionManager transactionManager
     ) {
-        this(khachHangRepository, diaChiKhachHangRepository, null, transactionManager);
+        this(khachHangRepository, diaChiKhachHangRepository, null, null, transactionManager);
+    }
+
+    public KhachHangService(
+        KhachHangRepository khachHangRepository,
+        DiaChiKhachHangRepository diaChiKhachHangRepository,
+        EmailService emailService,
+        PlatformTransactionManager transactionManager
+    ) {
+        this(khachHangRepository, diaChiKhachHangRepository, emailService, null, transactionManager);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -83,11 +94,13 @@ public class KhachHangService {
         KhachHangRepository khachHangRepository,
         DiaChiKhachHangRepository diaChiKhachHangRepository,
         EmailService emailService,
+        PhienDangNhapRepository phienDangNhapRepository,
         PlatformTransactionManager transactionManager
     ) {
         this.khachHangRepository = khachHangRepository;
         this.diaChiKhachHangRepository = diaChiKhachHangRepository;
         this.emailService = emailService;
+        this.phienDangNhapRepository = phienDangNhapRepository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         // Mỗi lần thử là một transaction riêng để có thể thử lại sau khi rollback.
         this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -206,10 +219,25 @@ public class KhachHangService {
     @Transactional
     public KhachHangDTO capNhatTrangThai(Long id, String trangThaiMoi) {
         KhachHang khachHang = findOrThrow(id);
-        khachHang.setTrangThai(toTrangThai(trangThaiMoi));
+        Boolean parsedStatus = toTrangThai(trangThaiMoi);
+        if (parsedStatus == null) {
+            throw new IllegalArgumentException("Vui lòng chọn trạng thái tài khoản");
+        }
+        boolean active = parsedStatus;
+        khachHang.setTrangThai(active);
         khachHang.setNgayCapNhat(LocalDateTime.now());
         khachHang.setNguoiCapNhat("admin");
-        return toFullDTO(khachHangRepository.save(khachHang));
+        KhachHang saved = khachHangRepository.save(khachHang);
+        if (!active && phienDangNhapRepository != null) {
+            var phienDangNhaps = phienDangNhapRepository.findByIdKhachHangAndRevokedFalse(id);
+            LocalDateTime now = LocalDateTime.now();
+            phienDangNhaps.forEach(phien -> {
+                phien.setRevoked(true);
+                phien.setNgayDangXuat(now);
+            });
+            phienDangNhapRepository.saveAll(phienDangNhaps);
+        }
+        return toFullDTO(saved);
     }
 
     /** Mã khách hàng đề xuất theo họ tên (chưa tính các mã đã tồn tại trên FE). */

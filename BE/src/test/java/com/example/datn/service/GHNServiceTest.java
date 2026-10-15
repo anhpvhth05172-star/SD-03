@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.example.datn.config.GHNConfig;
 import com.example.datn.dto.ShippingAddressDTO;
 import com.example.datn.dto.ShippingFeeRequest;
+import com.example.datn.dto.ShippingServiceDTO;
 import com.example.datn.dto.ShippingWardDTO;
 import com.example.datn.entity.SanPham;
 import com.example.datn.entity.SanPhamChiTiet;
@@ -289,5 +290,125 @@ class GHNServiceTest {
         assertThatThrownBy(() -> service.getPhuongXa(null))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Thiếu mã quận/huyện");
+    }
+
+    @Test
+    void tinhThanhMoi_MapDungIdVaTenTheoBoChuViet() {
+        when(ghnApiClient.get(contains("v3/master-data/province/all")))
+            .thenReturn("{\"code\":200,\"message\":\"Success\",\"data\":["
+                + "{\"_id\":1000001,\"name\":\"Hồ Chí Minh\",\"type\":\"province\"},"
+                + "{\"_id\":1000000,\"name\":\"Hà Nội\",\"type\":\"province\"}]}");
+
+        List<ShippingAddressDTO> ds = service.getTinhThanhMoi();
+
+        assertThat(ds).hasSize(2);
+        assertThat(ds.get(0).getId()).isEqualTo(1000000);
+        assertThat(ds.get(0).getName()).isEqualTo("Hà Nội");
+        assertThat(ds.get(1).getName()).isEqualTo("Hồ Chí Minh");
+    }
+
+    @Test
+    void phuongXaMoi_MapTheoTinhIdVaSapXep() {
+        when(ghnApiClient.get(contains("v3/master-data/ward/all-by-province-id?province_id=1000000")))
+            .thenReturn("{\"code\":200,\"message\":\"Success\",\"data\":["
+                + "{\"_id\":1003472,\"name\":\"Phường Kim Liên\",\"parent_id\":1000000},"
+                + "{\"_id\":1003476,\"name\":\"Phường Đống Đa\",\"parent_id\":1000000}]}");
+
+        List<ShippingAddressDTO> ds = service.getPhuongXaMoi(1000000);
+
+        assertThat(ds).hasSize(2);
+        assertThat(ds.get(0).getId()).isEqualTo(1003476);
+        assertThat(ds.get(0).getName()).isEqualTo("Phường Đống Đa");
+        assertThat(ds.get(1).getName()).isEqualTo("Phường Kim Liên");
+    }
+
+    @Test
+    void phuongXaMoi_ThieuTinhId_BiTuChoi() {
+        assertThatThrownBy(() -> service.getPhuongXaMoi(null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Thiếu mã tỉnh/thành");
+
+        verifyNoInteractions(ghnApiClient);
+    }
+
+    @Test
+    void phuongXaMoi_GhnTraMaLoi_BaoLoiCoNghia() {
+        when(ghnApiClient.get(contains("ward/all-by-province-id")))
+            .thenReturn("{\"code\":400,\"message\":\"Province not found\",\"data\":null}");
+
+        assertThatThrownBy(() -> service.getPhuongXaMoi(1000000))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Province not found");
+    }
+
+    @Test
+    void dichVu_GuiDiaChiGuiTuCauHinhVaParseDanhSach() {
+        cauHinh.setFromDistrictId(1486);
+        cauHinh.setFromWardCode("910012");
+        when(ghnApiClient.post(contains("available-services"), anyString()))
+            .thenReturn("{\"code\":200,\"message\":\"Success\",\"data\":["
+                + "{\"service_id\":53320,\"short_name\":\"Hàng nhẹ\",\"service_type_id\":2},"
+                + "{\"service_id\":100039,\"short_name\":\"Hàng nặng\",\"service_type_id\":5}]}");
+
+        List<ShippingServiceDTO> ds = service.getDichVu(1442);
+
+        assertThat(ds).hasSize(2);
+        assertThat(ds.get(0).getServiceTypeId()).isEqualTo(2);
+        assertThat(ds.get(0).getShortName()).isEqualTo("Hàng nhẹ");
+        assertThat(ds.get(1).getServiceTypeId()).isEqualTo(5);
+        ArgumentCaptor<String> bodyCap = ArgumentCaptor.forClass(String.class);
+        verify(ghnApiClient).post(contains("available-services"), bodyCap.capture());
+        String body = bodyCap.getValue();
+        assertThat(body).contains("\"shop_id\":885");
+        assertThat(body).contains("\"from_district\":1486");
+        assertThat(body).contains("\"to_district\":1442");
+    }
+
+    @Test
+    void dichVu_ThieuToDistrict_BiTuChoi() {
+        assertThatThrownBy(() -> service.getDichVu(null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Thiếu mã quận/huyện đích");
+
+        verifyNoInteractions(ghnApiClient);
+    }
+
+    @Test
+    void dichVu_ThieuDiaChiGui_BaoLoiCauHinh() {
+        cauHinh.setFromDistrictId(null);
+
+        assertThatThrownBy(() -> service.getDichVu(1442))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("GHN_FROM_DISTRICT_ID");
+
+        verifyNoInteractions(ghnApiClient);
+    }
+
+    @Test
+    void dichVu_ThieuToken_BaoLoiCauHinh() {
+        cauHinh.setToken("");
+
+        assertThatThrownBy(() -> service.getDichVu(1442))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("GHN_TOKEN");
+
+        verifyNoInteractions(ghnApiClient);
+    }
+
+    @Test
+    void tinhPhi_DungServiceTypeIdTuYeuCau() {
+        when(sanPhamChiTietRepository.findById(SPCT_ID))
+            .thenReturn(Optional.of(spct(new BigDecimal("800"), new BigDecimal("500000"))));
+        when(ghnApiClient.post(contains("shipping-order/fee"), anyString()))
+            .thenReturn("{\"code\":200,\"message\":\"Success\",\"data\":{\"total\":41000}}");
+
+        ShippingFeeRequest req = yeuCau(1);
+        req.setServiceTypeId(5);
+        int phi = service.tinhPhi(req);
+
+        assertThat(phi).isEqualTo(41000);
+        ArgumentCaptor<String> bodyCap = ArgumentCaptor.forClass(String.class);
+        verify(ghnApiClient).post(contains("shipping-order/fee"), bodyCap.capture());
+        assertThat(bodyCap.getValue()).contains("\"service_type_id\":5");
     }
 }

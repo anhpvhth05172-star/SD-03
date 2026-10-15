@@ -1,4 +1,3 @@
-/*
 package com.example.datn.service;
 
 import com.example.datn.config.JwtService;
@@ -6,9 +5,11 @@ import com.example.datn.dto.Auth.AuthResponse;
 import com.example.datn.dto.Auth.DangKyRequest;
 import com.example.datn.dto.Auth.DangNhapRequest;
 import com.example.datn.entity.KhachHang;
+import com.example.datn.entity.NhanVien;
 import com.example.datn.entity.PhienDangNhap;
 import com.example.datn.exception.DangNhapThatBaiException;
 import com.example.datn.repository.KhachHangRepository;
+import com.example.datn.repository.NhanVienRepository;
 import com.example.datn.repository.PhienDangNhapRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -29,6 +30,7 @@ public class AuthService {
     private static final String PHONE_REGEX = "^0\\d{8,9}$";
 
     private final KhachHangRepository khachHangRepository;
+    private final NhanVienRepository nhanVienRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final PhienDangNhapRepository phienDangNhapRepository;
@@ -37,12 +39,14 @@ public class AuthService {
 
     public AuthService(
         KhachHangRepository khachHangRepository,
+        NhanVienRepository nhanVienRepository,
         PasswordEncoder passwordEncoder,
         JwtService jwtService,
         PhienDangNhapRepository phienDangNhapRepository,
         @Value("${app.auth.session-inactivity-ms:1800000}") long thoiGianPhienMs
     ) {
         this.khachHangRepository = khachHangRepository;
+        this.nhanVienRepository = nhanVienRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.phienDangNhapRepository = phienDangNhapRepository;
@@ -143,6 +147,46 @@ public class AuthService {
         );
     }
 
+    /**
+     * Đăng nhập nhân viên: mật khẩu trong DB có thể là BCrypt hoặc văn bản thuần
+     * (dữ liệu cũ do NhanVienService tạo). Hỗ trợ cả hai cách so khớp.
+     */
+    @Transactional
+    public AuthResponse dangNhapNhanVien(DangNhapRequest req) {
+        if (req == null || isBlank(req.getTaiKhoan()) || isBlank(req.getMatKhau())) {
+            throw new DangNhapThatBaiException("Vui lòng nhập tài khoản và mật khẩu");
+        }
+        NhanVien nhanVien = nhanVienRepository
+            .findByEmailOrTenTaiKhoan(req.getTaiKhoan().trim())
+            .orElseThrow(() -> new DangNhapThatBaiException("Sai tài khoản hoặc mật khẩu"));
+        if (!kiemTraMatKhauNhanVien(req.getMatKhau(), nhanVien.getMatKhau())) {
+            throw new DangNhapThatBaiException("Sai tài khoản hoặc mật khẩu");
+        }
+        if (Boolean.FALSE.equals(nhanVien.getTrangThai())) {
+            throw new DangNhapThatBaiException("Tài khoản đã bị khóa");
+        }
+
+        AuthResponse resp = new AuthResponse();
+        resp.setToken(jwtService.taoTokenNhanVien(nhanVien));
+        resp.setIdNhanVien(nhanVien.getId());
+        resp.setLoaiTaiKhoan(JwtService.LOAI_NHAN_VIEN);
+        resp.setTenTaiKhoan(nhanVien.getTenTaiKhoan());
+        resp.setEmail(nhanVien.getEmail());
+        resp.setTenKhachHang(nhanVien.getTenTaiKhoan());
+        resp.setVaiTro(nhanVien.getVaiTro() != null ? nhanVien.getVaiTro().getMaVaiTro() : "STAFF");
+        return resp;
+    }
+
+    private boolean kiemTraMatKhauNhanVien(String nhapVao, String daLuu) {
+        if (isBlank(daLuu)) {
+            return false;
+        }
+        if (daLuu.startsWith("$2a$") || daLuu.startsWith("$2b$") || daLuu.startsWith("$2y$")) {
+            return passwordEncoder.matches(nhapVao, daLuu);
+        }
+        return daLuu.equals(nhapVao);
+    }
+
     @Transactional
     public AuthResponse refresh(String refreshToken) {
         if (isBlank(refreshToken)) {
@@ -223,4 +267,3 @@ public class AuthService {
         return s == null || s.isBlank();
     }
 }
-*/

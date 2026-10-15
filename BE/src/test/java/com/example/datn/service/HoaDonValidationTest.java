@@ -142,7 +142,7 @@ class HoaDonValidationTest {
         HoaDon h = new HoaDon();
         h.setId(HD_ID);
         h.setMaHoaDon("HD001");
-        h.setLoaiDon("Online");
+        h.setLoaiDon("ONLINE");
         h.setTrangThai(trangThai);
         h.setDaXoa(false);
         return h;
@@ -482,28 +482,41 @@ class HoaDonValidationTest {
     }
 
     @Test
-    void phiVanChuyenNhoHon1000_BiTuChoi() {
+    void phiVanChuyenTaiQuay500_VanTaoDuocPhiBiDongBang0() {
         chuanBi(spct(true, true));
         HoaDonRequest req = yeuCau(new BigDecimal("500000"));
         req.setPhiVanChuyen(new BigDecimal("500"));
 
-        assertThatThrownBy(() -> service.create(req))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Phí vận chuyển nếu có phải từ 1.000đ trở lên");
+        HoaDonDTO dto = service.create(req);
+
+        assertThat(dto.getId()).isEqualTo(HD_ID);
+        assertThat(dto.getPhiVanChuyen()).isEqualByComparingTo("0");
     }
 
     @Test
-    void phiVanChuyenBang1000_TaoDuoc() {
+    void phiVanChuyenTaiQuay50000_BiDongBang0() {
+        chuanBi(spct(true, true));
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+
+        HoaDonDTO dto = service.create(req);
+
+        assertThat(dto.getPhiVanChuyen()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void phiVanChuyenBang1000_TaiQuayBiDongBang0() {
         chuanBi(spct(true, true));
         HoaDonRequest req = yeuCau(new BigDecimal("500000"));
         req.setPhiVanChuyen(new BigDecimal("1000"));
 
         HoaDonDTO dto = service.create(req);
+
         assertThat(dto.getId()).isEqualTo(HD_ID);
+        assertThat(dto.getPhiVanChuyen()).isEqualByComparingTo("0");
     }
 
     @Test
-    void phiVanChuyen1001_TaoDuoc() {
+    void phiVanChuyen1001_TaiQuayBiDongBang0() {
         chuanBi(spct(true, true));
         HoaDonRequest req = yeuCau(new BigDecimal("500000"));
         req.setPhiVanChuyen(new BigDecimal("1001"));
@@ -511,6 +524,7 @@ class HoaDonValidationTest {
         HoaDonDTO dto = service.create(req);
 
         assertThat(dto.getId()).isEqualTo(HD_ID);
+        assertThat(dto.getPhiVanChuyen()).isEqualByComparingTo("0");
     }
 
     @Test
@@ -616,7 +630,6 @@ class HoaDonValidationTest {
 
     @Test
     void chuyenTrangThaiSai_BiTuChoi() {
-        when(hoaDonRepository.findById(HD_ID)).thenReturn(Optional.of(hoaDon("CHO_XAC_NHAN")));
         when(hoaDonRepository.findByIdForUpdate(HD_ID)).thenReturn(Optional.of(hoaDon("CHO_XAC_NHAN")));
 
         assertThatThrownBy(() -> service.doiTrangThai(HD_ID, "Đã giao hàng"))
@@ -626,8 +639,13 @@ class HoaDonValidationTest {
 
     @Test
     void chuyenTrangThaiHopLe_ThanhCongVaGhiLichSu() {
-        when(hoaDonRepository.findById(HD_ID)).thenReturn(Optional.of(hoaDon("CHO_XAC_NHAN")));
-        when(hoaDonRepository.findByIdForUpdate(HD_ID)).thenReturn(Optional.of(hoaDon("CHO_XAC_NHAN")));
+        HoaDon hd = hoaDon("CHO_XAC_NHAN");
+        hd.setDiaChiNhanHang("12 Le Loi, Phuong Ben Nghe, Quan 1");
+        hd.setToProvinceId(202);
+        hd.setToDistrictId(1442);
+        hd.setToWardCode("20107");
+        hd.setPhiVanChuyen(new BigDecimal("36300"));
+        when(hoaDonRepository.findByIdForUpdate(HD_ID)).thenReturn(Optional.of(hd));
         when(hoaDonRepository.save(any(HoaDon.class))).thenAnswer(inv -> inv.getArgument(0));
 
         HoaDonDTO dto = service.doiTrangThai(HD_ID, "Đã xác nhận");

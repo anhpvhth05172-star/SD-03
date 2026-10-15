@@ -1,9 +1,7 @@
 <script setup>
-/* Tạm comment logic đăng ký (không xóa)
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { dangKy } from '@/api/auth'
-import { emailHopLe, matKhauHopLe, soDienThoaiHopLe, toiDa } from '@/utils/validate'
 
 const router = useRouter()
 
@@ -20,32 +18,26 @@ const loading = ref(false)
 const submit = async () => {
   error.value = ''
   const f = form.value
-  if (!f.tenTaiKhoan.trim()) error.value = 'Tên tài khoản không được để trống'
-  else if (toiDa(f.tenTaiKhoan, 100, 'Tên tài khoản')) error.value = toiDa(f.tenTaiKhoan, 100, 'Tên tài khoản')
-  if (error.value) return
+  if (!f.tenTaiKhoan.trim()) {
+    error.value = 'Tên tài khoản không được để trống'
+    return
+  }
   if (!f.email.trim()) {
     error.value = 'Email không được để trống'
     return
   }
-  error.value = emailHopLe(f.email) || toiDa(f.email, 150, 'Email')
-  if (error.value) return
   if (!f.soDienThoai.trim()) {
     error.value = 'Số điện thoại không được để trống'
     return
   }
-  error.value = soDienThoaiHopLe(f.soDienThoai)
-  if (error.value) return
-  error.value = matKhauHopLe(f.matKhau, true)
-  if (error.value) return
-  if (!f.xacNhanMatKhau) {
-    error.value = 'Vui lòng xác nhận mật khẩu'
+  if (!f.matKhau || f.matKhau.length < 6) {
+    error.value = 'Mật khẩu phải có ít nhất 6 ký tự'
     return
   }
   if (f.matKhau !== f.xacNhanMatKhau) {
     error.value = 'Mật khẩu xác nhận không khớp'
     return
   }
-
   loading.value = true
   try {
     await dangKy({
@@ -55,7 +47,6 @@ const submit = async () => {
       matKhau: f.matKhau,
       xacNhanMatKhau: f.xacNhanMatKhau,
     })
-    alert('Đăng ký thành công. Vui lòng đăng nhập.')
     router.push('/dang-nhap')
   } catch (e) {
     error.value = e.message || 'Đăng ký thất bại'
@@ -63,53 +54,37 @@ const submit = async () => {
     loading.value = false
   }
 }
-*/
 </script>
 
 <template>
-  <!-- Tạm comment giao diện trang đăng ký (không xóa)
   <div class="auth-screen">
     <div class="auth-card">
       <div class="auth-brand">
         <img src="/images/logo_polyshoes_final.png" alt="PolyShoes" />
       </div>
-      <h1 class="auth-title">Đăng ký tài khoản</h1>
-      <p class="auth-sub">Tạo tài khoản khách hàng để lưu trữ và theo dõi phiếu giảm giá</p>
+      <h1 class="auth-title">Đăng ký</h1>
+      <p class="auth-sub">Tạo tài khoản khách hàng để theo dõi đơn và phiếu giảm giá</p>
 
       <form class="auth-form" @submit.prevent="submit">
         <div class="field">
-          <label>Tên tài khoản</label>
-          <input v-model="form.tenTaiKhoan" type="text" placeholder="nguyenvana" autocomplete="username" />
+          <label>Tài khoản</label>
+          <input v-model="form.tenTaiKhoan" type="text" placeholder="Tên tài khoản" />
         </div>
-
         <div class="field">
           <label>Email</label>
-          <input v-model="form.email" type="email" placeholder="user@example.com" autocomplete="email" />
+          <input v-model="form.email" type="email" placeholder="user@example.com" />
         </div>
-
         <div class="field">
           <label>Số điện thoại</label>
-          <input v-model="form.soDienThoai" type="tel" placeholder="0912345678" autocomplete="tel" />
+          <input v-model="form.soDienThoai" type="tel" placeholder="09xxxxxxxx" />
         </div>
-
         <div class="field">
           <label>Mật khẩu</label>
-          <input
-            v-model="form.matKhau"
-            type="password"
-            placeholder="Tối thiểu 6 ký tự"
-            autocomplete="new-password"
-          />
+          <input v-model="form.matKhau" type="password" placeholder="Tối thiểu 6 ký tự" />
         </div>
-
         <div class="field">
           <label>Xác nhận mật khẩu</label>
-          <input
-            v-model="form.xacNhanMatKhau"
-            type="password"
-            placeholder="Nhập lại mật khẩu"
-            autocomplete="new-password"
-          />
+          <input v-model="form.xacNhanMatKhau" type="password" placeholder="Nhập lại mật khẩu" />
         </div>
 
         <p v-if="error" class="auth-error">{{ error }}</p>
@@ -125,7 +100,6 @@ const submit = async () => {
       </p>
     </div>
   </div>
-  -->
 </template>
 
 <style scoped>
@@ -134,114 +108,81 @@ const submit = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f5f5f7;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
   padding: 24px;
 }
-
 .auth-card {
-  width: min(420px, 100%);
-  background: var(--white);
-  border-radius: 14px;
-  padding: 26px 30px 24px;
-  box-shadow: 0 10px 34px rgba(20, 20, 30, 0.08);
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
 }
-
 .auth-brand {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 6px;
+  text-align: center;
+  margin-bottom: 12px;
 }
-
 .auth-brand img {
-  width: 100px;
-  height: 70px;
-  object-fit: contain;
+  height: 48px;
 }
-
 .auth-title {
   text-align: center;
-  font-size: 19px;
-  font-weight: 700;
-  color: #22222a;
-  margin: 0;
+  margin: 0 0 4px;
+  font-size: 24px;
+  color: #0f172a;
 }
-
 .auth-sub {
   text-align: center;
-  font-size: 12.5px;
-  color: #9a9aa3;
-  margin: 6px 0 16px;
+  color: #64748b;
+  font-size: 14px;
+  margin: 0 0 20px;
 }
-
-.auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.field {
+  margin-bottom: 14px;
 }
-
 .field label {
   display: block;
-  font-size: 12.5px;
-  color: #55555e;
-  margin-bottom: 5px;
+  font-size: 13px;
   font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
 }
-
 .field input {
   width: 100%;
-  height: 39px;
-  border: 1px solid #dcdce2;
+  padding: 11px 12px;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
-  padding: 0 12px;
-  font-size: 13.5px;
-  color: #2c2c33;
-  background: #fbfbfc;
-  outline: none;
-  transition: border-color 0.15s ease;
+  font-size: 14px;
+  box-sizing: border-box;
 }
-
-.field input:focus {
-  border-color: var(--red);
-}
-
 .auth-error {
-  margin: 0;
-  font-size: 13px;
   color: #dc2626;
-  font-weight: 600;
+  font-size: 13px;
+  margin: 0 0 12px;
 }
-
 .auth-btn {
-  height: 42px;
+  width: 100%;
+  padding: 12px;
   border: none;
-  border-radius: 9px;
-  background: var(--red);
+  border-radius: 8px;
+  background: #2563eb;
   color: #fff;
-  font-size: 14.5px;
   font-weight: 700;
+  font-size: 15px;
   cursor: pointer;
-  transition: opacity 0.15s ease;
 }
-
 .auth-btn:disabled {
   opacity: 0.6;
-  cursor: default;
 }
-
 .auth-switch {
   text-align: center;
   font-size: 13px;
-  color: #6a6a73;
-  margin: 14px 0 0;
+  color: #64748b;
+  margin: 16px 0 0;
 }
-
 .auth-switch a {
-  color: var(--red);
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.auth-switch a:hover {
-  text-decoration: underline;
+  color: #2563eb;
+  font-weight: 600;
 }
 </style>

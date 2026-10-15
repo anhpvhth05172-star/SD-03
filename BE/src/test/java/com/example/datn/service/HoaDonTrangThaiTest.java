@@ -67,7 +67,21 @@ class HoaDonTrangThaiTest {
     }
 
     private HoaDon online(String trangThai) {
-        return hoaDon(trangThai, "ONLINE");
+        HoaDon h = hoaDon(trangThai, "ONLINE");
+        h.setDiaChiNhanHang("12 Le Loi, Phuong Ben Nghe, Quan 1, TP Ho Chi Minh");
+        h.setToProvinceId(202);
+        h.setToDistrictId(1442);
+        h.setToWardCode("20107");
+        h.setPhiVanChuyen(new java.math.BigDecimal("36300"));
+        return h;
+    }
+
+    private HoaDon onlineThieuDieuKienXacNhan(String trangThai, java.math.BigDecimal phi) {
+        HoaDon h = hoaDon(trangThai, "ONLINE");
+        if (phi != null) {
+            h.setPhiVanChuyen(phi);
+        }
+        return h;
     }
 
     private HoaDon pos(String trangThai) {
@@ -151,6 +165,40 @@ class HoaDonTrangThaiTest {
         assertThat(lichSu.getHanhDong()).isEqualTo("CHUYEN_TRANG_THAI");
         assertThat(lichSu.getGhiChu()).contains("Chuyển từ Chờ xác nhận sang Đã xác nhận");
         assertThat(lichSu.getGhiChu()).contains("Khách yêu cầu");
+    }
+
+    @Test
+    void onlineXacNhanKhongDiaChiNhanHang_BiChan() {
+        coTheLuu(onlineThieuDieuKienXacNhan("CHO_XAC_NHAN", new java.math.BigDecimal("36300")));
+
+        assertThatThrownBy(() -> service.doiTrangThai(HD_ID, "Đã xác nhận", null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("chưa đủ địa chỉ nhận hàng/phí vận chuyển");
+
+        verify(hoaDonRepository, never()).save(any(HoaDon.class));
+        verify(lichSuHoaDonRepository, never()).save(any());
+    }
+
+    @Test
+    void onlineXacNhanKhongMaPhuongXa_BiChan() {
+        HoaDon h = online("CHO_XAC_NHAN");
+        h.setToWardCode(null);
+        coTheLuu(h);
+
+        assertThatThrownBy(() -> service.doiTrangThai(HD_ID, "Đã xác nhận", null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("chưa đủ địa chỉ nhận hàng/phí vận chuyển");
+    }
+
+    @Test
+    void onlineXacNhanPhiBang0_BiChan() {
+        coTheLuu(onlineThieuDieuKienXacNhan("CHO_XAC_NHAN", java.math.BigDecimal.ZERO));
+
+        assertThatThrownBy(() -> service.doiTrangThai(HD_ID, "Đã xác nhận", null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("chưa đủ địa chỉ nhận hàng/phí vận chuyển");
+
+        verify(hoaDonRepository, never()).save(any(HoaDon.class));
     }
 
     @Test

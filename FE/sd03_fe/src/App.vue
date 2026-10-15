@@ -1,5 +1,6 @@
 <script setup>
 import { provide } from 'vue'
+import ChatWidget from './components/ChatWidget.vue'
 
 const baseAPI = 'http://localhost:8080/'
 provide('baseAPI', baseAPI)
@@ -7,6 +8,7 @@ provide('baseAPI', baseAPI)
 
 <template>
   <router-view />
+  <ChatWidget />
 </template>
 
 <style scoped></style>

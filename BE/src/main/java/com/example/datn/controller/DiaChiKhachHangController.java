@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -33,43 +32,39 @@ public class DiaChiKhachHangController {
 
     @PostMapping
     public ResponseEntity<DiaChiKhachHangDTO> create(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
         @PathVariable Long idKhachHang,
         @RequestBody DiaChiKhachHangRequest request
     ) {
-        quyenGuard.canQuanLyKhachHang(vaiTro);
+        quyenGuard.canQuanLyKhachHang();
         return ResponseEntity.status(HttpStatus.CREATED)
             .body(khachHangService.themDiaChi(idKhachHang, request));
     }
 
     @PutMapping("/{id}")
     public DiaChiKhachHangDTO update(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
         @PathVariable Long idKhachHang,
         @PathVariable("id") Long id,
         @RequestBody DiaChiKhachHangRequest request
     ) {
-        quyenGuard.canQuanLyKhachHang(vaiTro);
+        quyenGuard.canQuanLyKhachHang();
         return khachHangService.capNhatDiaChi(idKhachHang, id, request);
     }
 
     @PutMapping("/{id}/mac-dinh")
     public DiaChiKhachHangDTO datMacDinh(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
         @PathVariable Long idKhachHang,
         @PathVariable("id") Long id
     ) {
-        quyenGuard.canQuanLyKhachHang(vaiTro);
+        quyenGuard.canQuanLyKhachHang();
         return khachHangService.datMacDinh(idKhachHang, id);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
         @PathVariable Long idKhachHang,
         @PathVariable("id") Long id
     ) {
-        quyenGuard.canQuanLyKhachHang(vaiTro);
+        quyenGuard.canQuanLyKhachHang();
         khachHangService.xoaDiaChi(idKhachHang, id);
         return ResponseEntity.noContent().build();
     }

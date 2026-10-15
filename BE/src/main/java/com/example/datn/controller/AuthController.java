@@ -1,4 +1,3 @@
-/*
 package com.example.datn.controller;
 
 import com.example.datn.dto.Auth.AuthResponse;
@@ -10,6 +9,7 @@ import com.example.datn.dto.Auth.ThongTinResponse;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.exception.DangNhapThatBaiException;
 import com.example.datn.repository.KhachHangRepository;
+import com.example.datn.repository.NhanVienRepository;
 import com.example.datn.service.AuthService;
 import java.util.HashMap;
 import java.util.Map;
@@ -31,6 +31,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final KhachHangRepository khachHangRepository;
+    private final NhanVienRepository nhanVienRepository;
 
     @PostMapping("/dang-ky")
     public ResponseEntity<Map<String, Object>> dangKy(@RequestBody DangKyRequest req) {
@@ -46,6 +47,11 @@ public class AuthController {
     @PostMapping("/dang-nhap")
     public AuthResponse dangNhap(@RequestBody DangNhapRequest req) {
         return authService.dangNhap(req);
+    }
+
+    @PostMapping("/nhan-vien/dang-nhap")
+    public AuthResponse dangNhapNhanVien(@RequestBody DangNhapRequest req) {
+        return authService.dangNhapNhanVien(req);
     }
 
     @PostMapping("/refresh")
@@ -64,10 +70,25 @@ public class AuthController {
     @GetMapping("/thong-tin")
     public ThongTinResponse thongTin() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !(auth.getPrincipal() instanceof Long idKhachHang)) {
+        if (auth == null || !(auth.getPrincipal() instanceof Long idNguoiDung)) {
             throw new DangNhapThatBaiException("Chưa đăng nhập");
         }
-        KhachHang khachHang = khachHangRepository.findById(idKhachHang)
+        boolean laNhanVien = auth.getAuthorities().stream()
+            .anyMatch(a -> "ROLE_NHAN_VIEN".equals(a.getAuthority()));
+        if (laNhanVien) {
+            var nhanVien = nhanVienRepository.findById(idNguoiDung)
+                .orElseThrow(() -> new DangNhapThatBaiException("Không tìm thấy tài khoản"));
+            String vaiTro = nhanVien.getVaiTro() != null ? nhanVien.getVaiTro().getMaVaiTro() : "STAFF";
+            return new ThongTinResponse(
+                nhanVien.getId(),
+                nhanVien.getTenTaiKhoan(),
+                nhanVien.getTenTaiKhoan(),
+                nhanVien.getEmail(),
+                nhanVien.getSoDienThoai(),
+                vaiTro
+            );
+        }
+        KhachHang khachHang = khachHangRepository.findById(idNguoiDung)
             .orElseThrow(() -> new DangNhapThatBaiException("Không tìm thấy tài khoản"));
         return new ThongTinResponse(
             khachHang.getId(),
@@ -79,4 +100,3 @@ public class AuthController {
         );
     }
 }
-*/

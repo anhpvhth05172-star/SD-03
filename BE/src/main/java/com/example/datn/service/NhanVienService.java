@@ -175,7 +175,11 @@ public class NhanVienService {
         if (nhanVien.getVaiTro() != null && "ADMIN".equalsIgnoreCase(nhanVien.getVaiTro().getMaVaiTro())) {
             throw new IllegalArgumentException("Không được phép thay đổi trạng thái của tài khoản Quản trị viên");
         }
-        boolean moi = toTrangThai(trangThaiMoi);
+        Boolean parsedStatus = toTrangThai(trangThaiMoi);
+        if (parsedStatus == null) {
+            throw new IllegalArgumentException("Vui lòng chọn trạng thái tài khoản");
+        }
+        boolean moi = parsedStatus;
         nhanVien.setTrangThai(moi);
         nhanVien.setNgayCapNhat(LocalDateTime.now());
         nhanVien.setNguoiCapNhat("admin");

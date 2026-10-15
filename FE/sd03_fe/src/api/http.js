@@ -1,7 +1,5 @@
 import axios from 'axios'
-// Tạm comment phần token/JWT của phiên đăng nhập (không xóa)
-// import { getToken, getRefreshToken, isTokenExpired, luuPhien, dangXuat } from '../utils/auth'
-import { vaiTroHienTai } from '../utils/session'
+import { getToken, getRefreshToken, isTokenExpired, luuPhien, dangXuat } from '../utils/auth'
 
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api'
 
@@ -10,7 +8,6 @@ const http = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-/* Tạm comment refreshToken + chuyển về trang đăng nhập (không xóa)
 let refreshPromise = null
 
 export const refreshSession = () => {
@@ -32,13 +29,10 @@ export const refreshSession = () => {
 }
 
 const chuyenVeDangNhap = () => {
-  // Đã tạm tắt chuyển hướng về trang đăng nhập
+  window.location.href = '/dang-nhap'
 }
-*/
 
 http.interceptors.request.use(async (config) => {
-  config.headers['X-Vai-Tro'] = vaiTroHienTai.value || 'ADMIN'
-  /* Tạm comment gắn JWT vào header (không xóa)
   if (String(config.url || '').includes('/auth/refresh')) {
     return config
   }
@@ -58,14 +52,12 @@ http.interceptors.request.use(async (config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
-  */
   return config
 })
 
 http.interceptors.response.use(
   (res) => res,
   async (err) => {
-    /* Tạm comment tự refresh / đăng xuất khi 401 (không xóa)
     const config = err.config
     const la401 = err.response?.status === 401
     const laRefreshUrl = String(config?.url || '').includes('/auth/refresh')
@@ -94,7 +86,6 @@ http.interceptors.response.use(
         chuyenVeDangNhap()
       }
     }
-    */
 
     let data = err.response?.data
     if (typeof Blob !== 'undefined' && data instanceof Blob) {
