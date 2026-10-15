@@ -67,11 +67,39 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
 
     @Override
     public void update(PhieuGiamGia req) {
+        if (req == null || req.getId() == null) {
+            throw new IllegalArgumentException("Thiếu thông tin phiếu giảm giá cần cập nhật");
+        }
         PhieuGiamGia db = phieuRepo.findById(req.getId())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy phiếu giảm giá"));
 
-        db.setMaPhieuGiamGia(req.getMaPhieuGiamGia());
-        db.setTenPhieuGiamGia(req.getTenPhieuGiamGia());
+        String ma = req.getMaPhieuGiamGia() == null ? "" : req.getMaPhieuGiamGia().trim();
+        String ten = req.getTenPhieuGiamGia() == null ? "" : req.getTenPhieuGiamGia().trim();
+        if (ma.isEmpty() || ma.length() > 50) throw bad("Mã phiếu không được để trống và tối đa 50 ký tự");
+        if (phieuRepo.existsByMaPhieuGiamGiaAndIdNot(ma, req.getId())) throw bad("Mã phiếu đã tồn tại");
+        if (ten.isEmpty() || ten.length() > 200) throw bad("Tên phiếu không được để trống và tối đa 200 ký tự");
+        if (!"PERCENT".equals(req.getLoaiGiamGia()) && !"AMOUNT".equals(req.getLoaiGiamGia()))
+            throw bad("Loại giảm giá không hợp lệ");
+        if (req.getGiaTriGiam() == null || req.getGiaTriGiam().signum() <= 0
+                || ("PERCENT".equals(req.getLoaiGiamGia())
+                    && req.getGiaTriGiam().compareTo(BigDecimal.valueOf(100)) > 0))
+            throw bad("Giá trị giảm không hợp lệ (phần trăm tối đa 100)");
+        if (req.getGiamToiDa() != null && req.getGiamToiDa().signum() < 0)
+            throw bad("Mức giảm tối đa không được âm");
+        if (req.getHoaDonToiThieu() != null && req.getHoaDonToiThieu().signum() < 0)
+            throw bad("Hóa đơn tối thiểu không được âm");
+        if (req.getSoLuong() == null || req.getSoLuong() < 1
+                || req.getSoLuong() < (db.getSoLuongDaSuDung() == null ? 0 : db.getSoLuongDaSuDung()))
+            throw bad("Số lượng không được nhỏ hơn 1 hoặc số lượng đã sử dụng");
+        if (req.getNgayBatDau() == null || req.getNgayKetThuc() == null
+                || !req.getNgayKetThuc().isAfter(req.getNgayBatDau()))
+            throw bad("Ngày kết thúc phải sau ngày bắt đầu");
+        if (req.getTrangThai() == null) throw bad("Vui lòng chọn trạng thái");
+        if (req.getMoTa() != null && req.getMoTa().length() > 500)
+            throw bad("Mô tả không được vượt quá 500 ký tự");
+
+        db.setMaPhieuGiamGia(ma);
+        db.setTenPhieuGiamGia(ten);
         db.setLoaiGiamGia(req.getLoaiGiamGia());
         db.setGiaTriGiam(req.getGiaTriGiam());
         db.setGiamToiDa(req.getGiamToiDa());
@@ -82,7 +110,6 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
         db.setTrangThai(req.getTrangThai());
         db.setMoTa(req.getMoTa());
         db.setNgayCapNhat(LocalDateTime.now());
-        // soLuongDaSuDung, ngayTao: không đụng tới, giữ nguyên giá trị trong DB
 
         phieuRepo.save(db);
     }
@@ -96,6 +123,9 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
 
         // 2. Validate dữ liệu đầu vào
         validate(req);
+        if (phieuRepo.existsByMaPhieuGiamGiaAndIdNot(req.getMaPhieuGiamGia().trim(), id)) {
+            throw bad("Mã phiếu đã tồn tại");
+        }
 
         // 3. Không cho phép đổi phạm vi
         if (!db.getPhamVi().equals(req.getPhamVi())) {
@@ -193,6 +223,9 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
     @Transactional
     public Long themPhieuGiamGia(PhieuGiamGiaRequest req) {
         validate(req);
+        if (phieuRepo.existsByMaPhieuGiamGia(req.getMaPhieuGiamGia().trim())) {
+            throw bad("Mã phiếu đã tồn tại");
+        }
 
         boolean caNhan = CA_NHAN.equals(req.getPhamVi());
         boolean isPercent = "PERCENT".equals(req.getLoaiGiamGia());
@@ -294,15 +327,21 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
     }
 
     private void validate(PhieuGiamGiaRequest r) {
+        if (r == null) throw bad("Thiếu thông tin phiếu giảm giá");
         if (isBlank(r.getMaPhieuGiamGia())) throw bad("Vui lòng nhập mã phiếu");
-//        if (isBlank(r.getTenPhieuGiamGia())) throw bad("Vui lòng nhập tên phiếu");
-//        if (phieuRepo.existsByMaPhieuGiamGia(r.getMaPhieuGiamGia().trim()))
-//            throw bad("Mã phiếu đã tồn tại");
+        if (isBlank(r.getTenPhieuGiamGia())) throw bad("Vui lòng nhập tên phiếu");
+        if (r.getMaPhieuGiamGia().trim().length() > 50) throw bad("Mã phiếu tối đa 50 ký tự");
+        if (r.getTenPhieuGiamGia().trim().length() > 200) throw bad("Tên phiếu tối đa 200 ký tự");
+        if (r.getMoTa() != null && r.getMoTa().length() > 500) throw bad("Mô tả tối đa 500 ký tự");
 
         if (!"PERCENT".equals(r.getLoaiGiamGia()) && !"AMOUNT".equals(r.getLoaiGiamGia()))
             throw bad("Loại giảm giá không hợp lệ");
         if (r.getGiaTriGiam() == null || r.getGiaTriGiam().signum() <= 0)
             throw bad("Giá trị giảm phải lớn hơn 0");
+        if (r.getGiamToiDa() != null && r.getGiamToiDa().signum() < 0)
+            throw bad("Mức giảm tối đa không được âm");
+        if (r.getHoaDonToiThieu() != null && r.getHoaDonToiThieu().signum() < 0)
+            throw bad("Hóa đơn tối thiểu không được âm");
         if ("PERCENT".equals(r.getLoaiGiamGia())
                 && r.getGiaTriGiam().compareTo(BigDecimal.valueOf(100)) > 0)
             throw bad("Phần trăm giảm tối đa là 100");
@@ -319,6 +358,8 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
         if (CA_NHAN.equals(pv)
                 && (r.getDanhSachKhachHangId() == null || r.getDanhSachKhachHangId().isEmpty()))
             throw bad("Phiếu cá nhân phải chọn ít nhất 1 khách hàng");
+        if (CA_NHAN.equals(pv) && r.getDanhSachKhachHangId().stream().anyMatch(id -> id == null || id <= 0))
+            throw bad("Danh sách khách hàng chứa mã không hợp lệ");
     }
 
     @Transactional

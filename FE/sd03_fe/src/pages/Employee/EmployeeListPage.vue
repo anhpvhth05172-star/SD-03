@@ -77,6 +77,11 @@ const resetFilter = () => {
   load()
 }
 
+const onSizeChange = () => {
+  page.value = 0
+  load()
+}
+
 const goPage = (p) => {
   if (p < 0 || p >= totalPages.value || p === page.value) return
   page.value = p
@@ -303,15 +308,27 @@ onMounted(async () => {
     <!-- Card 2: DANH SÁCH NHÂN VIÊN -->
     <div class="table-card">
       <div class="card-title-row">
-        <div class="icon-circle icon-users">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-            <circle cx="9" cy="7" r="4"></circle>
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-          </svg>
+        <div class="card-title-left">
+          <div class="icon-circle icon-users">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+          </div>
+          <span class="card-title-text">Danh sách nhân viên</span>
+          <span class="items-count-pill">{{ rows.length }}/{{ totalElements }} nhân viên</span>
         </div>
-        <span class="card-title-text">Danh sách nhân viên</span>
+        <div class="card-title-right">
+          <span class="page-size-label">Hiển thị:</span>
+          <select v-model="size" class="page-size-select" @change="onSizeChange">
+            <option :value="5">5 bản ghi/trang</option>
+            <option :value="10">10 bản ghi/trang</option>
+            <option :value="20">20 bản ghi/trang</option>
+            <option :value="50">50 bản ghi/trang</option>
+          </select>
+        </div>
       </div>
 
       <div class="table-container">
@@ -398,69 +415,32 @@ onMounted(async () => {
       </div>
 
       <!-- Phân trang Footer -->
-      <div class="table-pagination-row">
-        <!-- Bên trái: Tổng số dòng theo bộ lọc -->
-        <div class="pagination-summary">
-          Hiển thị <strong>{{ rows.length }}</strong> nhân viên trong tổng số
+      <div v-if="totalElements > 0" class="table-card-foot">
+        <span class="foot-info">
+          Hiển thị <strong>{{ rows.length ? page * size + 1 : 0 }} - {{ page * size + rows.length }}</strong> trong tổng số
           <strong>{{ totalElements }}</strong> nhân viên
-        </div>
-
-        <!-- Bên phải: Các nút phân trang -->
-        <div class="pagination-nav-wrap">
-          <!-- Đầu trang -->
-          <button
-            class="pagination-nav-btn"
-            type="button"
-            title="Đầu trang"
-            :disabled="page === 0"
-            @click="goPage(0)"
-          >
-            K
+        </span>
+        <div v-if="totalPages > 1" class="foot-pager">
+          <button class="pager-btn" type="button" :disabled="page === 0" @click="goPage(page - 1)">
+            ‹ Trước
           </button>
-
-          <!-- Trang trước -->
-          <button
-            class="pagination-nav-btn"
-            type="button"
-            title="Trang trước"
-            :disabled="page === 0"
-            @click="goPage(page - 1)"
-          >
-            &lt;
-          </button>
-
-          <!-- Các nút số trang -->
           <button
             v-for="p in pageList"
             :key="p"
-            class="pagination-num-btn"
-            :class="{ 'is-active': p === page + 1 }"
             type="button"
+            class="pager-btn num-btn"
+            :class="{ active: p === page + 1 }"
             @click="goPage(p - 1)"
           >
             {{ p }}
           </button>
-
-          <!-- Trang sau -->
           <button
-            class="pagination-nav-btn"
+            class="pager-btn"
             type="button"
-            title="Trang sau"
             :disabled="page + 1 >= totalPages"
             @click="goPage(page + 1)"
           >
-            &gt;
-          </button>
-
-          <!-- Cuối trang -->
-          <button
-            class="pagination-nav-btn"
-            type="button"
-            title="Cuối trang"
-            :disabled="page + 1 >= totalPages"
-            @click="goPage(totalPages - 1)"
-          >
-            &gt;|
+            Sau ›
           </button>
         </div>
       </div>
@@ -592,8 +572,55 @@ onMounted(async () => {
 .card-title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
   margin-bottom: 18px;
+}
+
+.card-title-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-title-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.items-count-pill {
+  font-size: 12px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-weight: 600;
+}
+
+.page-size-label {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.page-size-select {
+  padding: 6px 30px 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 8px center;
+  background-size: 14px;
+  font-size: 13px;
+  color: #1e293b;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  transition: all 0.2s ease;
+}
+
+.page-size-select:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .icon-circle {
@@ -975,67 +1002,70 @@ onMounted(async () => {
   transform: scale(1.08);
 }
 
-/* Phân trang Footer */
-.table-pagination-row {
+/* Phân trang Footer (chuẩn hóa giống trang Quản lý sản phẩm) */
+.table-card-foot {
+  padding: 14px 4px 6px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid #f8fafc;
+  border-top: 1px solid #f1f5f9;
+  background: #ffffff;
+  margin-top: 16px;
 }
 
-.pagination-summary {
-  flex: 1;
-  text-align: left;
-  font-size: 13px;
+.foot-info {
+  font-size: 12.5px;
   color: #64748b;
 }
 
-.pagination-summary strong {
-  color: #1f2937;
+.foot-info strong {
+  color: #1e293b;
   font-weight: 700;
 }
 
-.pagination-nav-wrap {
+.foot-pager {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
-.pagination-nav-btn,
-.pagination-num-btn {
-  height: 30px;
-  min-width: 30px;
-  padding: 0 6px;
+.pager-btn {
+  padding: 5px 12px;
   border-radius: 6px;
-  border: 1px solid #f1f5f9;
+  border: 1px solid #e2e8f0;
   background: #ffffff;
   color: #475569;
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  line-height: 1.4;
 }
 
-.pagination-nav-btn:disabled {
-  opacity: 0.4;
+.pager-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.pager-btn:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-.pagination-num-btn.is-active {
-  background: #e11d48;
-  color: #ffffff;
-  border-color: #e11d48;
-  font-weight: 600;
+.pager-btn.num-btn {
+  min-width: 32px;
+  text-align: center;
+  padding: 5px 0;
 }
 
-.pagination-num-btn:hover:not(.is-active),
-.pagination-nav-btn:hover:not(:disabled) {
-  background: #f8fafc;
-  border-color: #cbd5e1;
+.pager-btn.active {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #dc2626;
 }
 
 /* ==========================================================================

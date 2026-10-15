@@ -30,9 +30,11 @@ public interface PhieuGiamGiaRepository extends JpaRepository<PhieuGiamGia, Long
     @Query("SELECT new com.example.datn.dto.PhieuGiamGia.PhieuGiamGiaDTO(pgg.id, pgg.maPhieuGiamGia, pgg.tenPhieuGiamGia, pgg.giaTriGiam, pgg.moTa, pgg.soLuongDaSuDung, pgg.ngayKetThuc, pgg.trangThai) FROM PhieuGiamGia pgg")
     Page<PhieuGiamGiaDTO> getListPageDiscount(Pageable pageable);
 
-    boolean existsByMaPhieuGiamGiaAndIdNot(String ma, Long id);
+    boolean existsByMaPhieuGiamGia(String maPhieuGiamGia);
 
-        @Query("""
+    boolean existsByMaPhieuGiamGiaAndIdNot(String maPhieuGiamGia, Long id);
+
+    @Query("""
         SELECT p FROM PhieuGiamGia p
         WHERE (LOWER(p.maPhieuGiamGia) LIKE :pattern
                OR LOWER(p.tenPhieuGiamGia) LIKE :pattern)
@@ -47,13 +49,13 @@ public interface PhieuGiamGiaRepository extends JpaRepository<PhieuGiamGia, Long
           AND p.ngayBatDau >= :tuNgay
           AND p.ngayKetThuc < :denNgay
         """)
-        Page<PhieuGiamGia> search(
-                @Param("pattern") String pattern,
-                @Param("loaiGiamGia") String loaiGiamGia,
-                @Param("phamVi") String phamVi,
-                @Param("trangThai") String trangThai,
-                @Param("now") LocalDateTime now,
-                @Param("tuNgay") LocalDateTime tuNgay,
-                @Param("denNgay") LocalDateTime denNgay,
-                Pageable pageable);
+    Page<PhieuGiamGia> search(
+            @Param("pattern") String pattern,
+            @Param("loaiGiamGia") String loaiGiamGia,
+            @Param("phamVi") String phamVi,
+            @Param("trangThai") String trangThai,
+            @Param("now") LocalDateTime now,
+            @Param("tuNgay") LocalDateTime tuNgay,
+            @Param("denNgay") LocalDateTime denNgay,
+            Pageable pageable);
 }

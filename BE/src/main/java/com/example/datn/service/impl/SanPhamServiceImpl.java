@@ -241,6 +241,15 @@ public class SanPhamServiceImpl implements SanPhamService {
                 .max(java.math.BigDecimal::compareTo)
                 .orElse(maxPrice);
 
+        String hinhAnhDaiDien = null;
+        try {
+            List<com.example.datn.entity.HinhAnhSanPham> images = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
+            if (images != null && !images.isEmpty()) {
+                hinhAnhDaiDien = images.get(0).getDuongDan();
+            }
+        } catch (Exception ignored) {
+        }
+
         return SanPhamResponse.builder()
                 .id(sp.getId())
                 .maSanPham(sp.getMaSanPham())
@@ -265,6 +274,7 @@ public class SanPhamServiceImpl implements SanPhamService {
                 .discount(discountStr)
                 .giaSauGiamMin(minGiaSauGiam)
                 .giaSauGiamMax(maxGiaSauGiam)
+                .hinhAnhDaiDien(hinhAnhDaiDien)
                 .trangThai(sp.getTrangThai())
                 .ngayTao(sp.getNgayTao())
                 .ngayCapNhat(sp.getNgayCapNhat())

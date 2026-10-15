@@ -1,8 +1,8 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue'
 import { Html5Qrcode } from 'html5-qrcode'
 import { useRoute, useRouter } from 'vue-router'
-import { layDiaGioi, layPhuongXa, phanTichDiaChiCccd, timTinh } from '@/api/diaGioi'
+import { DS_34_TINH_THANH, layDiaGioi, layPhuongXa, phanTichChuoiCccd, phanTichDiaChiCccd, timTinh } from '@/api/diaGioi'
 import {
   checkEmployeeEmail,
   createEmployee,
@@ -52,9 +52,12 @@ let yeuCauHienTai = 0
 const tinhThanhs = ref([])
 const phuongXas = ref([])
 const diaGioiLoading = ref(false)
-
+const diaChiCccdGoc = ref('')
 
 const isScanModalOpen = ref(false)
+const isProcessingScan = ref(false)
+const scanSuccessAnim = ref(false)
+const scannedName = ref('')
 const maPreview = ref('')
 let maTimeout = null
 
@@ -187,89 +190,112 @@ const playBeep = () => {
   } catch { }
 }
 
-const apDungDiaChiCccd = async (diaChiRaw) => {
+const apDungDiaChiCccd = (diaChiRaw) => {
   if (!diaChiRaw) return
   diaChiCccdGoc.value = diaChiRaw
   const parsed = phanTichDiaChiCccd(diaChiRaw)
 
+  // 1. Áp dụng ngay địa chỉ cụ thể
+  form.value.diaChiCuThe = parsed.diaChiCuThe || diaChiRaw
+
+  // 2. Áp dụng ngay Tỉnh/Thành phố gốc từ CCCD vào dropdown và form
   if (parsed.tinh) {
-    const ds = tinhThanhs.value.length ? tinhThanhs.value : await layDiaGioi()
-    tinhThanhs.value = ds
-    let tinh = timTinh(ds, parsed.tinh)
-    if (tinh) {
-      form.value.queQuan = tinh.ten
-    } else {
-      tinh = { code: 'cccd_tinh', ten: parsed.tinh }
+    const tenTinh = parsed.tinh
+    let tinh = tinhThanhs.value.find((t) => t.ten.toLowerCase() === tenTinh.toLowerCase())
+    if (!tinh) {
+      tinh = timTinh(tinhThanhs.value, tenTinh)
+    }
+    if (!tinh) {
+      tinh = { code: 'cccd_tinh_' + Date.now(), ten: tenTinh }
       tinhThanhs.value.unshift(tinh)
-      form.value.queQuan = parsed.tinh
     }
+    // Gán trực tiếp tên tỉnh khớp với option trong combobox
+    form.value.queQuan = tinh.ten
 
-    const listCon = await layPhuongXa(tinhThanhs.value, tinh)
-    phuongXas.value = listCon || []
-
+    // 3. Đưa ngay Phường/Xã gốc vào danh sách để dropdown hiển thị tức thì (0ms)
     if (parsed.phuong) {
-      const pxMatch = phuongXas.value.find((p) => {
-        const rawP = p.ten.toLowerCase()
-        const targetP = parsed.phuong.toLowerCase()
-        return rawP.includes(targetP) || targetP.includes(rawP)
-      })
-      if (pxMatch) {
-        form.value.phuong = pxMatch.ten
-      } else {
-        phuongXas.value.unshift({ code: 'cccd_px', ten: parsed.phuong })
-        form.value.phuong = parsed.phuong
+      const tenPx = parsed.phuong
+      if (!phuongXas.value.some((p) => p.ten.toLowerCase() === tenPx.toLowerCase())) {
+        phuongXas.value = [{ code: 'cccd_px_' + Date.now(), ten: tenPx }, ...phuongXas.value]
       }
+      form.value.phuong = tenPx
     }
-  }
 
-  if (parsed.diaChiCuThe) {
-    form.value.diaChiCuThe = parsed.diaChiCuThe
+    // Đảm bảo combobox không bị khóa loading
+    diaGioiLoading.value = false
+
+    // 4. Tải ngầm danh sách phường/xã của tỉnh trong nền để người dùng có thể đổi nếu muốn
+    if (tinh) {
+      layPhuongXa(tinhThanhs.value, tinh).then((listCon) => {
+        if (listCon && listCon.length) {
+          const curPx = form.value.phuong
+          const merged = [...listCon]
+          if (curPx && !merged.some((p) => p.ten.toLowerCase() === curPx.toLowerCase())) {
+            merged.unshift({ code: 'cccd_px_' + Date.now(), ten: curPx })
+          }
+          phuongXas.value = merged
+        }
+      }).catch((e) => console.warn('Tải ngầm phường/xã:', e))
+    }
   }
 }
 
 const xuLyChuoiCccd = async (raw) => {
-  if (!raw || !raw.trim()) return false
-  const parts = raw.trim().split('|')
-  if (parts.length >= 5) {
-    const hoTen = parts[2]?.trim()
-    const dobRaw = parts[3]?.trim()
-    const gioiTinhRaw = parts[4]?.trim()
-    const diaChiRaw = parts[5]?.trim()
-
-    if (hoTen) {
-      form.value.tenTaiKhoan = hoTen
-      capNhatMaGoiY()
-    }
-    if (dobRaw && dobRaw.length === 8) {
-      const d = dobRaw.substring(0, 2)
-      const m = dobRaw.substring(2, 4)
-      const y = dobRaw.substring(4, 8)
-      form.value.ngaySinh = `${y}-${m}-${d}`
-    }
-    if (gioiTinhRaw) {
-      form.value.gioiTinh = gioiTinhRaw.toLowerCase().includes('nữ') ? 'NU' : 'NAM'
-    }
-    if (diaChiRaw) {
-      await apDungDiaChiCccd(diaChiRaw)
-    }
-
-    playBeep()
-    dongModalQuet()
-    const parsed = phanTichDiaChiCccd(diaChiRaw)
-    if (parsed.daDoiTinh) {
-      notifySuccess(`Đã trích xuất CCCD thành công! Tỉnh ${parsed.tinhGoc} được chuẩn hóa thành "${parsed.tinh}" (theo danh mục 34 Tỉnh/TP mới nhất).`)
-    } else {
-      notifySuccess('Đã trích xuất thông tin từ CCCD thành công!')
-    }
-    return true
-  } else {
-    notifyWarning('Mã QR không đúng định dạng CCCD chuẩn (cần phân tách bằng dấu |)')
+  if (!raw || !raw.trim()) {
+    isProcessingScan.value = false
     return false
   }
+
+  const info = phanTichChuoiCccd(raw)
+  if (!info || !info.hoTen) {
+    notifyWarning('Mã QR không đúng định dạng CCCD chuẩn (cần phân tách bằng dấu |)')
+    isProcessingScan.value = false
+    return false
+  }
+
+  try {
+    // 1. Phát âm thanh beep & hiển thị hiệu ứng thành công trực tiếp trên camera
+    playBeep()
+    scanSuccessAnim.value = true
+    scannedName.value = info.hoTen
+
+    // 2. Điền thông tin vào form ngay lập tức (Họ tên, ngày sinh, giới tính, địa chỉ)
+    if (info.hoTen) {
+      form.value.tenTaiKhoan = info.hoTen
+      capNhatMaGoiY()
+    }
+    if (info.ngaySinh) {
+      form.value.ngaySinh = info.ngaySinh
+    }
+    if (info.gioiTinh) {
+      form.value.gioiTinh = info.gioiTinh
+    }
+    if (info.diaChiRaw) {
+      apDungDiaChiCccd(info.diaChiRaw)
+    }
+
+    // 3. Cho người dùng nhìn thấy thông báo quét thành công trên camera trong 0.6s
+    await new Promise((resolve) => setTimeout(resolve, 600))
+  } catch (err) {
+    console.warn('Lỗi xử lý quét CCCD:', err)
+  } finally {
+    // Luôn luôn tắt camera triệt để và đóng modal
+    await stopCamera()
+    isScanModalOpen.value = false
+    scanSuccessAnim.value = false
+  }
+
+  // 4. Hiển thị thông báo SweetAlert2
+  notifySuccess(`Quét CCCD thành công!`, `Đã nhận diện nhân viên: ${info.hoTen}`, 2000)
+
+  isProcessingScan.value = false
+  return true
 }
+
 
 const startCamera = async () => {
   cameraError.value = ''
+  scanSuccessAnim.value = false
   try {
     const devices = await Html5Qrcode.getCameras()
     if (!devices || devices.length === 0) {
@@ -281,14 +307,25 @@ const startCamera = async () => {
     }
     html5QrCode = new Html5Qrcode('cccd-reader')
     isCameraRunning.value = true
+
+    // Ưu tiên camera sau nếu có, hoặc dùng camera mặc định
+    const cameraId = devices.length > 1
+      ? (devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'))?.id || devices[0].id)
+      : devices[0].id
+
     await html5QrCode.start(
-      { facingMode: 'environment' },
+      cameraId,
       {
-        fps: 15,
-        qrbox: { width: 260, height: 260 },
-        aspectRatio: 1.0,
+        fps: 20,
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const minEdge = Math.min(viewfinderWidth, viewfinderHeight)
+          const edge = Math.max(180, Math.floor(minEdge * 0.8))
+          return { width: edge, height: edge }
+        },
       },
       (decodedText) => {
+        if (isProcessingScan.value) return
+        isProcessingScan.value = true
         xuLyChuoiCccd(decodedText)
       },
       () => { }
@@ -301,16 +338,55 @@ const startCamera = async () => {
 }
 
 const stopCamera = async () => {
-  if (html5QrCode && isCameraRunning.value) {
-    try {
-      await html5QrCode.stop()
-      html5QrCode.clear()
-    } catch { }
-    isCameraRunning.value = false
+  // 1. Dừng trực tiếp tất cả MediaStream tracks trên mọi thẻ video để đèn camera phần cứng tắt ngay lập tức
+  try {
+    const videoEls = document.querySelectorAll('#cccd-reader video, video')
+    videoEls.forEach((v) => {
+      if (v.srcObject && typeof v.srcObject.getTracks === 'function') {
+        v.srcObject.getTracks().forEach((track) => {
+          try {
+            track.stop()
+            track.enabled = false
+          } catch {}
+        })
+        v.srcObject = null
+      }
+      try {
+        v.pause()
+        v.removeAttribute('src')
+        v.load()
+      } catch {}
+    })
+  } catch (err) {
+    console.warn('Lỗi giải phóng media tracks:', err)
   }
+
+  // 2. Dừng scanner của html5QrCode an toàn với Promise.race (không bao giờ bị treo promise)
+  if (html5QrCode) {
+    try {
+      if (html5QrCode.isScanning) {
+        await Promise.race([
+          html5QrCode.stop().catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 400)),
+        ])
+      }
+    } catch (e) {
+      console.warn('html5QrCode.stop error:', e)
+    }
+
+    try {
+      html5QrCode.clear()
+    } catch {}
+    html5QrCode = null
+  }
+
+  isCameraRunning.value = false
 }
 
 const moModalQuetCccd = () => {
+  isProcessingScan.value = false
+  scanSuccessAnim.value = false
+  scannedName.value = ''
   isScanModalOpen.value = true
   nextTick(() => {
     startCamera()
@@ -319,6 +395,8 @@ const moModalQuetCccd = () => {
 
 const dongModalQuet = async () => {
   await stopCamera()
+  isProcessingScan.value = false
+  scanSuccessAnim.value = false
   isScanModalOpen.value = false
 }
 
@@ -329,17 +407,23 @@ const onScanFileChange = async (e) => {
     if (!html5QrCode) {
       html5QrCode = new Html5Qrcode('cccd-reader')
     }
+    isProcessingScan.value = true
     const decodedText = await html5QrCode.scanFile(file, true)
-    xuLyChuoiCccd(decodedText)
+    await xuLyChuoiCccd(decodedText)
   } catch (err) {
+    isProcessingScan.value = false
     notifyWarning('Không tìm thấy mã QR hợp lệ trong hình ảnh tải lên')
   } finally {
     e.target.value = ''
   }
 }
 
-onUnmounted(() => {
-  stopCamera()
+onUnmounted(async () => {
+  await stopCamera()
+})
+
+onBeforeUnmount(async () => {
+  await stopCamera()
 })
 
 const loiNgaySinh = computed(() =>
@@ -704,15 +788,13 @@ onMounted(async () => {
     <div v-if="isScanModalOpen" class="modal-backdrop" @click.self="dongModalQuet">
       <div class="scan-modal-card">
         <div class="scan-modal-header">
-          <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="scan-header-left">
             <div class="scan-header-icon">
               <i class="bi bi-qr-code-scan"></i>
             </div>
             <div>
-              <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #1e293b;">Quét thẻ Căn cước công dân
-                (CCCD)</h3>
-              <p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">Tự động nhận diện và trích xuất thông tin
-                công dân</p>
+              <h3 class="scan-header-title">Quét thẻ Căn cước công dân (CCCD)</h3>
+              <p class="scan-header-subtitle">Tự động nhận diện và trích xuất thông tin công dân</p>
             </div>
           </div>
           <button type="button" class="btn-close-modal" title="Đóng" @click="dongModalQuet">×</button>
@@ -723,18 +805,30 @@ onMounted(async () => {
             <div class="camera-viewport-box">
               <div id="cccd-reader" class="camera-stream-el"></div>
 
-              <div v-if="isCameraRunning" class="scanner-laser-line"></div>
+              <!-- Tia laser quét -->
+              <div v-if="isCameraRunning && !scanSuccessAnim" class="scanner-laser-line"></div>
+
+              <!-- 4 góc khung quét -->
               <div class="scanner-frame-overlay">
                 <span class="corner top-left"></span>
                 <span class="corner top-right"></span>
                 <span class="corner bottom-left"></span>
                 <span class="corner bottom-right"></span>
               </div>
+
+              <!-- Lớp phủ báo Quét Thành Công trực tiếp trên camera -->
+              <div v-if="scanSuccessAnim" class="scan-success-overlay">
+                <div class="success-icon-circle">
+                  <i class="bi bi-check-lg"></i>
+                </div>
+                <span class="success-text-bold">Quét thành công!</span>
+                <span class="success-sub-text">{{ scannedName }}</span>
+              </div>
             </div>
 
             <p class="scan-instruction-text">
-              <i class="bi bi-info-circle-fill text-primary"></i> Đưa <b>mã QR góc phải</b> trên thẻ CCCD vào giữa khung
-              hình để camera tự nhận diện.
+              <i class="bi bi-info-circle-fill text-primary"></i>
+              <span>Đưa <b>mã QR góc phải</b> trên thẻ CCCD vào khung hình để camera tự nhận diện.</span>
             </p>
 
             <div v-if="cameraError" class="camera-alert-error">
@@ -1179,62 +1273,49 @@ onMounted(async () => {
 /* ==========================================================================
    CAMERA SCANNER & CCCD MODAL STYLES
    ========================================================================== */
+.scan-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scan-header-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.scan-header-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
 .scan-header-icon {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border-radius: 10px;
   background: #fff1f2;
   color: #e11d48;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-}
-
-.scan-tab-bar {
-  display: flex;
-  border-bottom: 1px solid #f1f5f9;
-  background: #f8fafc;
-  padding: 0 20px;
-  gap: 8px;
-}
-
-.scan-tab-btn {
-  padding: 10px 16px;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  font-size: 13px;
-  font-weight: 600;
-  color: #64748b;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.2s ease;
-}
-
-.scan-tab-btn:hover {
-  color: #1e293b;
-}
-
-.scan-tab-btn.active {
-  color: #e11d48;
-  border-bottom-color: #e11d48;
-  background: #ffffff;
+  font-size: 20px;
+  flex-shrink: 0;
 }
 
 .camera-scan-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .camera-viewport-box {
   width: 100%;
-  max-width: 380px;
-  height: 280px;
+  max-width: 400px;
+  height: 290px;
   background: #0f172a;
   border-radius: 16px;
   overflow: hidden;
@@ -1255,6 +1336,52 @@ onMounted(async () => {
   height: 100% !important;
   object-fit: cover !important;
   border-radius: 14px;
+}
+
+/* Lớp phủ báo Quét Thành Công trực tiếp trên camera */
+.scan-success-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(16, 185, 129, 0.94);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #ffffff;
+  z-index: 25;
+  animation: modalScale 0.2s ease-out;
+}
+
+.success-icon-circle {
+  width: 60px;
+  height: 60px;
+  background: #ffffff;
+  color: #10b981;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+}
+
+.success-text-bold {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.success-sub-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 4px 14px;
+  border-radius: 9999px;
+  max-width: 85%;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 /* Tia laser quét chạy lên xuống */
@@ -1283,16 +1410,16 @@ onMounted(async () => {
 /* 4 góc khung quét */
 .scanner-frame-overlay {
   position: absolute;
-  width: 200px;
-  height: 200px;
+  width: 220px;
+  height: 220px;
   pointer-events: none;
   z-index: 5;
 }
 
 .scanner-frame-overlay .corner {
   position: absolute;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-color: #ffffff;
   border-style: solid;
 }
@@ -1300,39 +1427,42 @@ onMounted(async () => {
 .corner.top-left {
   top: 0;
   left: 0;
-  border-width: 3px 0 0 3px;
+  border-width: 3.5px 0 0 3.5px;
   border-top-left-radius: 6px;
 }
 
 .corner.top-right {
   top: 0;
   right: 0;
-  border-width: 3px 3px 0 0;
+  border-width: 3.5px 3.5px 0 0;
   border-top-right-radius: 6px;
 }
 
 .corner.bottom-left {
   bottom: 0;
   left: 0;
-  border-width: 0 0 3px 3px;
+  border-width: 0 0 3.5px 3.5px;
   border-bottom-left-radius: 6px;
 }
 
 .corner.bottom-right {
   bottom: 0;
   right: 0;
-  border-width: 0 3px 3px 0;
+  border-width: 0 3.5px 3.5px 0;
   border-bottom-right-radius: 6px;
 }
 
 .scan-instruction-text {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: #475569;
   text-align: center;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  line-height: 1.5;
+  padding: 0 10px;
+}
+
+.scan-instruction-text i {
+  margin-right: 5px;
 }
 
 .camera-alert-error {
@@ -1356,7 +1486,7 @@ onMounted(async () => {
   color: #2563eb;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
-  padding: 6px 14px;
+  padding: 7px 16px;
   border-radius: 20px;
   cursor: pointer;
   transition: all 0.2s ease;

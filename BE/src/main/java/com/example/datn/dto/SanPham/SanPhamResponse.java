@@ -43,6 +43,7 @@ public class SanPhamResponse {
     private String discount;
     private java.math.BigDecimal giaSauGiamMin;
     private java.math.BigDecimal giaSauGiamMax;
+    private String hinhAnhDaiDien;
     private Boolean trangThai;
     private LocalDateTime ngayTao;
     private LocalDateTime ngayCapNhat;
