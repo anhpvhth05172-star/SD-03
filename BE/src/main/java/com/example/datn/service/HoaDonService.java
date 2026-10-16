@@ -380,6 +380,17 @@ public class HoaDonService {
                 "Không được chuyển từ " + toTenTrangThai(maHienTai) + " sang " + toTenTrangThai(maMoi)
             );
         }
+        if ("DA_XAC_NHAN".equals(maMoi) && "ONLINE".equals(hoaDon.getLoaiDon())) {
+            boolean duDiaChi = !isBlank(hoaDon.getDiaChiNhanHang())
+                && hoaDon.getToDistrictId() != null
+                && !isBlank(hoaDon.getToWardCode());
+            boolean duPhi = hoaDon.getPhiVanChuyen() != null
+                && hoaDon.getPhiVanChuyen().compareTo(BigDecimal.ZERO) > 0;
+            if (!duDiaChi || !duPhi) {
+                throw new IllegalArgumentException(
+                    "Đơn online chưa đủ địa chỉ nhận hàng/phí vận chuyển để xác nhận");
+            }
+        }
         hoaDon.setTrangThai(maMoi);
         hoaDon.setNguoiCapNhat("admin");
         hoaDon.setNgayCapNhat(LocalDateTime.now());
@@ -546,9 +557,8 @@ public class HoaDonService {
         if (req.getPhiVanChuyen().compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Phí vận chuyển không được âm");
         }
-        if (req.getPhiVanChuyen().compareTo(BigDecimal.ZERO) > 0
-                && req.getPhiVanChuyen().compareTo(new BigDecimal("1000")) < 0) {
-            throw new IllegalArgumentException("Phí vận chuyển nếu có phải từ 1.000đ trở lên");
+        if ("TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon()))) {
+            req.setPhiVanChuyen(BigDecimal.ZERO);
         }
         validateText(req);
         if (req.getChiTiet() == null || req.getChiTiet().isEmpty()) {
@@ -908,9 +918,12 @@ public class HoaDonService {
             .idPhuongThucThanhToan(h.getPhuongThucThanhToan() != null ? h.getPhuongThucThanhToan().getId() : null)
             .tenPhuongThucThanhToan(h.getPhuongThucThanhToan() != null ? h.getPhuongThucThanhToan().getTenPhuongThuc() : null)
             .idPhieuGiamGia(h.getPhieuGiamGia() != null ? h.getPhieuGiamGia().getId() : null)
+            .maPhieuGiamGia(h.getPhieuGiamGia() != null ? h.getPhieuGiamGia().getMaPhieuGiamGia() : null)
             .tenPhieuGiamGia(h.getTenGiamGiaUngDung() != null
                 ? h.getTenGiamGiaUngDung()
                 : (h.getPhieuGiamGia() != null ? h.getPhieuGiamGia().getTenPhieuGiamGia() : null))
+            .loaiGiamGia(h.getPhieuGiamGia() != null ? h.getPhieuGiamGia().getLoaiGiamGia() : null)
+            .giaTriGiam(h.getPhieuGiamGia() != null ? h.getPhieuGiamGia().getGiaTriGiam() : null)
             .idDotGiamGia(h.getDotGiamGia() != null ? h.getDotGiamGia().getId() : null)
             .tenDotGiamGia(h.getDotGiamGia() != null ? h.getDotGiamGia().getTenDotGiamGia() : null)
             .tienGiam(h.getTienGiam())

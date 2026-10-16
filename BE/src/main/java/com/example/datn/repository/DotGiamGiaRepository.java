@@ -27,5 +27,7 @@ public interface DotGiamGiaRepository extends JpaRepository<DotGiamGia, Long> {
 
     boolean existsByMaDotGiamGia(String maDotGiamGia);
 
-    boolean existsByMaDotGiamGiaAndIdNot(String maDotGiamGia, Long id);
+    boolean existsByMaDotGiamGiaAndIdNot(String ma, Long id);
+
+
 }

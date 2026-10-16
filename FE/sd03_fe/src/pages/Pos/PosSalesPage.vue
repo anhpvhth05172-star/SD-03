@@ -1,13 +1,11 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import QRCode from 'qrcode'
 import { Html5Qrcode } from 'html5-qrcode'
 import http from '@/api/http'
+import { getProvinces, getWards, getServices, tinhPhi } from '@/api/shipping'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
-import { formatVnd, formatCurrency, formatNumber, removeVietnameseTones } from '@/utils/format'
-import { layNguoiDung, tenVaiTro } from '@/utils/session'
-import SearchableSelect from '@/components/SearchableSelect.vue'
-import CurrencyInput from '@/components/CurrencyInput.vue'
+import { formatVnd } from '@/utils/format'
 
 const API_BASE = 'http://localhost:8080/api/v1'
 
@@ -26,41 +24,6 @@ const brandsList = ref([])
 const categoriesList = ref([])
 const colorsList = ref([])
 const sizesList = ref([])
-
-// Current staff info
-const staffName = computed(() => layNguoiDung() || 'Nhân viên 01')
-const staffRole = computed(() => tenVaiTro() || 'Thu ngân')
-
-// Live Clock
-const currentTimeString = ref('')
-const currentDateString = ref('')
-let clockTimer = null
-
-const updateClock = () => {
-  const now = new Date()
-  currentTimeString.value = now.toLocaleTimeString('vi-VN', { hour12: false })
-  currentDateString.value = now.toLocaleDateString('vi-VN', {
-    weekday: 'short',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  })
-}
-
-// Fullscreen mode
-const isFullscreen = ref(false)
-const toggleFullscreen = () => {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(() => {})
-    isFullscreen.value = true
-  } else {
-    document.exitFullscreen().catch(() => {})
-    isFullscreen.value = false
-  }
-}
-
-// Shortcuts modal
-const isShortcutsModalOpen = ref(false)
 
 const currentOrder = computed(() => {
   if (pendingOrders.value.length === 0) return null
@@ -93,7 +56,16 @@ const createNewOrder = () => {
       recipientName: '',
       recipientPhone: '',
       recipientAddress: '',
-      shippingFee: 0
+      province: null,
+      ward: null,
+      wardsLoading: false,
+      services: [],
+      servicesDistrictId: null,
+      serviceTypeId: null,
+      shippingFee: 0,
+      feeLoading: false,
+      feeError: '',
+      legacy: null
     },
     paymentMethod: 'TIEN_MAT',
     selectedVoucher: null,
@@ -104,7 +76,7 @@ const createNewOrder = () => {
 
   pendingOrders.value.push(newOrder)
   activeOrderIndex.value = pendingOrders.value.length - 1
-  notifySuccess('Hóa đơn mới', `Đã tạo "${newOrder.title}" (${newOrder.code})`, 1000)
+  notifySuccess('Đã thêm hóa đơn chờ mới', newOrder.title, 1200)
 }
 
 const selectOrderTab = (index) => {
@@ -119,8 +91,8 @@ const closeOrderTab = async (index, event) => {
   if (target.cart.length > 0) {
     const ok = await notifyConfirm(
       'Hủy hóa đơn chờ?',
-      `Hóa đơn "${target.title}" đang có ${target.cart.length} sản phẩm. Toàn bộ sản phẩm sẽ được hoàn trả lại tồn kho. Bạn có chắc muốn đóng?`,
-      'Đóng hóa đơn',
+      `Hóa đơn "${target.title}" đang có ${target.cart.length} sản phẩm. Toàn bộ sản phẩm sẽ được hoàn trả lại tồn kho. Bạn có chắc muốn xóa?`,
+      'Xóa hóa đơn',
       'Giữ lại'
     )
     if (!ok) return
@@ -140,7 +112,6 @@ const closeOrderTab = async (index, event) => {
   }
 }
 
-// Financial calculations
 const subTotal = computed(() => {
   if (!currentOrder.value) return 0
   return currentOrder.value.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
@@ -247,7 +218,7 @@ const addToCart = (productVariant, qtyToAdd = 1) => {
     })
   }
 
-  notifySuccess('Đã thêm sản phẩm', `${productVariant.tenSp || productVariant.tenSanPham || 'Sản phẩm'} (+${qtyToAdd})`, 900)
+  notifySuccess('Đã thêm vào giỏ hàng', `${productVariant.tenSp || productVariant.tenSanPham || 'Sản phẩm'} (+${qtyToAdd})`, 1000)
 }
 
 const updateCartItemQty = (item, newQty) => {
@@ -304,56 +275,11 @@ const removeCartItem = (item) => {
   }
 }
 
-const clearCurrentCart = async () => {
-  if (!currentOrder.value || currentOrder.value.cart.length === 0) return
-  const ok = await notifyConfirm(
-    'Làm trống giỏ hàng?',
-    'Toàn bộ sản phẩm sẽ được trả lại kho hàng.',
-    'Làm trống',
-    'Hủy'
-  )
-  if (!ok) return
-
-  currentOrder.value.cart.forEach(item => {
-    const targetProd = allProducts.value.find(p => p.id === item.idCtsp)
-    if (targetProd) {
-      if (targetProd.stock !== undefined) targetProd.stock += item.quantity
-      if (targetProd.soLuong !== undefined) targetProd.soLuong += item.quantity
-    }
-  })
-  currentOrder.value.cart = []
-  notifySuccess('Đã làm trống giỏ hàng')
-}
-
 const getRemainingStock = (idCtsp) => {
   const prod = allProducts.value.find(p => p.id === idCtsp)
   return prod ? (prod.stock !== undefined ? prod.stock : (prod.soLuong || 0)) : 0
 }
 
-// Fast inline barcode / CTSP scanner
-const inlineScanCode = ref('')
-const handleInlineScan = () => {
-  const code = inlineScanCode.value.trim()
-  if (!code) return
-
-  const normCode = code.toLowerCase()
-  const found = allProducts.value.find(p =>
-    (p.maCtsp && p.maCtsp.toLowerCase() === normCode) ||
-    (p.maChiTietSanPham && p.maChiTietSanPham.toLowerCase() === normCode) ||
-    (p.maSp && p.maSp.toLowerCase() === normCode) ||
-    (p.id && String(p.id) === normCode) ||
-    ((p.tenSp || p.tenSanPham) && (p.tenSp || p.tenSanPham).toLowerCase() === normCode)
-  )
-
-  if (found) {
-    addToCart(found, 1)
-    inlineScanCode.value = ''
-  } else {
-    notifyWarning('Không tìm thấy', `Không tìm thấy mã sản phẩm / barcode "${code}"`)
-  }
-}
-
-// Quick cash chips
 const setQuickCash = (amount) => {
   if (!currentOrder.value) return
   if (amount === 'EXACT') {
@@ -363,12 +289,6 @@ const setQuickCash = (amount) => {
   }
 }
 
-const addQuickCash = (amount) => {
-  if (!currentOrder.value) return
-  currentOrder.value.cashGiven = Number(currentOrder.value.cashGiven || 0) + Number(amount)
-}
-
-// Customer Management
 const customerSearchQuery = ref('')
 const showCustomerDropdown = ref(false)
 const isAddCustomerModalOpen = ref(false)
@@ -382,12 +302,10 @@ const newCustomerForm = reactive({
 const filteredCustomers = computed(() => {
   const q = customerSearchQuery.value.trim().toLowerCase()
   if (!q) return allCustomers.value.slice(0, 8)
-  const normQ = removeVietnameseTones(q)
-  return allCustomers.value.filter(c => {
-    const name = removeVietnameseTones((c.ten || c.tenKhachHang || '').toLowerCase())
-    const phone = (c.soDienThoai || '')
-    return name.includes(normQ) || phone.includes(q)
-  }).slice(0, 8)
+  return allCustomers.value.filter(c =>
+    (c.ten && c.ten.toLowerCase().includes(q)) ||
+    (c.soDienThoai && c.soDienThoai.includes(q))
+  ).slice(0, 8)
 })
 
 const selectCustomer = (cust) => {
@@ -396,19 +314,14 @@ const selectCustomer = (cust) => {
   customerSearchQuery.value = ''
   showCustomerDropdown.value = false
   if (currentOrder.value.isDelivery && cust) {
-    currentOrder.value.deliveryInfo.recipientName = cust.ten || cust.tenKhachHang || ''
-    currentOrder.value.deliveryInfo.recipientPhone = cust.soDienThoai || ''
-    currentOrder.value.deliveryInfo.recipientAddress = cust.diaChi || ''
+    currentOrder.value.deliveryInfo.recipientName = cust.ten
+    currentOrder.value.deliveryInfo.recipientPhone = cust.soDienThoai
   }
 }
 
 const removeSelectedCustomer = () => {
   if (currentOrder.value) {
     currentOrder.value.customer = null
-    if (currentOrder.value.selectedVoucher) {
-      currentOrder.value.selectedVoucher = null
-      notifyWarning('Đã gỡ voucher', 'Phiếu giảm giá yêu cầu thông tin khách hàng nên đã được tự động gỡ bỏ.')
-    }
   }
 }
 
@@ -467,7 +380,6 @@ const saveQuickCustomer = async () => {
   }
 }
 
-// Product Selector Modal
 const isProductModalOpen = ref(false)
 const modalFilters = reactive({
   search: '',
@@ -478,9 +390,9 @@ const modalFilters = reactive({
   priceRange: ''
 })
 
-const modalPageSize = ref(6)
+const modalPageSize = ref(5)
 const modalCurrentPage = ref(0)
-const pageSizeOptions = [6, 12, 24, 48]
+const pageSizeOptions = [5, 10, 20, 50]
 
 const resetModalFilters = () => {
   modalFilters.search = ''
@@ -496,15 +408,15 @@ const filteredModalVariants = computed(() => {
   let list = allProducts.value || []
   const term = modalFilters.search.trim().toLowerCase()
   if (term) {
-    const norm = removeVietnameseTones(term)
-    list = list.filter(p => {
-      const name = removeVietnameseTones((p.tenSp || p.tenSanPham || '').toLowerCase())
-      const maCtsp = (p.maCtsp || p.maChiTietSanPham || '').toLowerCase()
-      const maSp = (p.maSp || '').toLowerCase()
-      const color = removeVietnameseTones((p.color || p.tenMau || '').toLowerCase())
-      const size = String(p.size || p.tenKichCo || '').toLowerCase()
-      return name.includes(norm) || maCtsp.includes(term) || maSp.includes(term) || color.includes(norm) || size.includes(term)
-    })
+    list = list.filter(p =>
+      (p.tenSp && p.tenSp.toLowerCase().includes(term)) ||
+      (p.tenSanPham && p.tenSanPham.toLowerCase().includes(term)) ||
+      (p.maCtsp && p.maCtsp.toLowerCase().includes(term)) ||
+      (p.maSp && p.maSp.toLowerCase().includes(term)) ||
+      (p.maChiTietSanPham && p.maChiTietSanPham.toLowerCase().includes(term)) ||
+      (p.color && p.color.toLowerCase().includes(term)) ||
+      (p.size && p.size.toLowerCase().includes(term))
+    )
   }
 
   if (modalFilters.idThuongHieu) {
@@ -555,12 +467,56 @@ watch([modalFilters, modalPageSize], () => {
   modalCurrentPage.value = 0
 }, { deep: true })
 
+const modalSelectedIds = ref([])
+
 const openProductPicker = () => {
   if (!currentOrder.value) {
     createNewOrder()
   }
   resetModalFilters()
+  modalSelectedIds.value = []
   isProductModalOpen.value = true
+}
+
+const isModalRowSelected = (id) => modalSelectedIds.value.includes(id)
+
+const isAllPageSelected = computed(() => {
+  const selectable = paginatedModalVariants.value.filter(p => (p.stock ?? p.soLuong ?? 0) > 0)
+  if (selectable.length === 0) return false
+  return selectable.every(p => modalSelectedIds.value.includes(p.id))
+})
+
+const isIndeterminatePage = computed(() => {
+  const selectable = paginatedModalVariants.value.filter(p => (p.stock ?? p.soLuong ?? 0) > 0)
+  const selected = selectable.filter(p => modalSelectedIds.value.includes(p.id))
+  return selected.length > 0 && selected.length < selectable.length
+})
+
+const toggleModalRow = (product, event) => {
+  if (event) event.stopPropagation()
+  const stock = product.stock !== undefined ? product.stock : (product.soLuong || 0)
+  if (stock <= 0) {
+    notifyWarning('Hết hàng', 'Sản phẩm này hiện đã hết tồn kho!')
+    return
+  }
+  toggleModalSelect(product.id)
+}
+
+const toggleModalSelect = (id) => {
+  const i = modalSelectedIds.value.indexOf(id)
+  if (i >= 0) modalSelectedIds.value.splice(i, 1)
+  else modalSelectedIds.value.push(id)
+}
+
+const toggleSelectAllPage = () => {
+  const selectable = paginatedModalVariants.value.filter(p => (p.stock ?? p.soLuong ?? 0) > 0)
+  if (isAllPageSelected.value) {
+    const pageIds = selectable.map(p => p.id)
+    modalSelectedIds.value = modalSelectedIds.value.filter(id => !pageIds.includes(id))
+  } else {
+    const toAdd = selectable.filter(p => !modalSelectedIds.value.includes(p.id)).map(p => p.id)
+    modalSelectedIds.value = [...modalSelectedIds.value, ...toAdd]
+  }
 }
 
 const handleSelectProductFromModal = (product) => {
@@ -569,7 +525,48 @@ const handleSelectProductFromModal = (product) => {
     notifyWarning('Hết hàng', 'Sản phẩm này hiện đã hết tồn kho!')
     return
   }
-  addToCart(product, 1)
+  toggleModalSelect(product.id)
+}
+
+const closeProductPicker = () => {
+  isProductModalOpen.value = false
+  modalSelectedIds.value = []
+}
+
+const confirmModalSelection = () => {
+  const products = modalSelectedIds.value
+    .map(id => allProducts.value.find(p => p.id === id))
+    .filter(Boolean)
+
+  if (products.length === 0) {
+    notifyWarning('Chưa chọn sản phẩm', 'Vui lòng chọn ít nhất 1 sản phẩm để thêm vào giỏ hàng.')
+    return
+  }
+
+  let added = 0
+  let outOfStock = 0
+
+  products.forEach(p => {
+    const stock = p.stock !== undefined ? p.stock : (p.soLuong || 0)
+    if (stock <= 0) {
+      outOfStock++
+      return
+    }
+    addToCart(p, 1)
+    added++
+  })
+
+  isProductModalOpen.value = false
+  modalSelectedIds.value = []
+
+  if (outOfStock > 0) {
+    notifyWarning(
+      'Thêm vào giỏ hàng',
+      `Đã thêm ${added} dòng sản phẩm. Bỏ qua ${outOfStock} sản phẩm hết hàng.`
+    )
+  } else if (added > 0) {
+    notifySuccess('Thêm vào giỏ hàng', `Đã thêm ${added} dòng sản phẩm vào giỏ hàng.`)
+  }
 }
 
 const getShoeImage = (p) => {
@@ -778,7 +775,6 @@ const handleManualCodeSubmit = () => {
   scannedCodeInput.value = ''
 }
 
-// Bank transfer VietQR modal
 const isBankQrModalOpen = ref(false)
 const bankQrDataUrl = ref('')
 
@@ -799,50 +795,138 @@ watch(() => currentOrder.value?.paymentMethod, (newMethod) => {
   }
 })
 
-// Voucher management
+const provincesList = ref([])
+const wardsList = ref([])
+
+const loadProvinces = async () => {
+  try {
+    provincesList.value = await getProvinces()
+  } catch {
+    provincesList.value = []
+  }
+}
+
+const onProvinceChange = async () => {
+  const d = currentOrder.value?.deliveryInfo
+  if (!d) return
+  d.ward = null
+  wardsList.value = []
+  d.shippingFee = 0
+  d.legacy = null
+  d.feeError = ''
+  d.services = []
+  d.servicesDistrictId = null
+  d.serviceTypeId = null
+  if (d.province) {
+    d.wardsLoading = true
+    try {
+      wardsList.value = await getWards(d.province.id)
+    } catch (e) {
+      notifyError('Lỗi tải phường/xã', e?.response?.data?.message || e?.message || 'Không tải được danh sách phường/xã')
+    } finally {
+      d.wardsLoading = false
+    }
+  }
+}
+
+const tinhPhiVanChuyen = async () => {
+  const d = currentOrder.value?.deliveryInfo
+  if (!d || !d.province || !d.ward) return
+  if (!currentOrder.value.cart || currentOrder.value.cart.length === 0) {
+    d.feeError = 'Cần thêm sản phẩm vào giỏ để tính phí vận chuyển'
+    d.shippingFee = 0
+    d.legacy = null
+    return
+  }
+  d.feeLoading = true
+  d.feeError = ''
+  try {
+    const res = await tinhPhi({
+      toProvinceName: d.province.name,
+      toWardName: d.ward.name,
+      serviceTypeId: d.serviceTypeId || undefined
+    })
+    d.shippingFee = res.shippingFee || 0
+    d.legacy = {
+      toProvinceId: res.toProvinceId,
+      toDistrictId: res.toDistrictId,
+      toWardCode: res.toWardCode
+    }
+    if (res.toDistrictId && d.servicesDistrictId !== res.toDistrictId) {
+      try {
+        d.services = await getServices(res.toDistrictId)
+        d.servicesDistrictId = res.toDistrictId
+      } catch {
+        d.services = []
+      }
+    }
+  } catch (e) {
+    d.feeError = e?.response?.data?.message || e?.message || 'Không tính được phí vận chuyển'
+    d.shippingFee = 0
+    d.legacy = null
+  } finally {
+    d.feeLoading = false
+  }
+}
+
+const onWardChange = () => { tinhPhiVanChuyen() }
+const onServiceChange = () => { tinhPhiVanChuyen() }
+
+watch(() => currentOrder.value?.cart?.length, () => {
+  const d = currentOrder.value?.deliveryInfo
+  if (d && d.province && d.ward && !d.feeLoading) {
+    tinhPhiVanChuyen()
+  }
+})
+
+
+const isReceiptModalOpen = ref(false)
+const completedInvoiceData = ref(null)
+const isProcessingCheckout = ref(false)
+
+const handleCancelOrder = async () => {
+  if (!currentOrder.value) return
+  const ok = await notifyConfirm(
+    'Hủy đơn hàng này?',
+    'Toàn bộ sản phẩm trong giỏ hàng hiện tại sẽ được hoàn trả lại tồn kho!',
+    'Đồng ý hủy',
+    'Không'
+  )
+  if (ok) {
+    currentOrder.value.cart.forEach(item => {
+      const targetProd = allProducts.value.find(p => p.id === item.idCtsp)
+      if (targetProd) {
+        if (targetProd.stock !== undefined) targetProd.stock += item.quantity
+        if (targetProd.soLuong !== undefined) targetProd.soLuong += item.quantity
+      }
+    })
+    currentOrder.value.cart = []
+    currentOrder.value.customer = null
+    currentOrder.value.cashGiven = 0
+    currentOrder.value.transferGiven = 0
+    currentOrder.value.note = ''
+    notifySuccess('Đã làm mới giỏ hàng và hoàn trả tồn kho')
+  }
+}
+
+const getPaymentMethodId = (methodType) => {
+  if (!allPaymentMethods.value || allPaymentMethods.value.length === 0) return 1
+  if (methodType === 'TIEN_MAT') {
+    const found = allPaymentMethods.value.find(p => p.ten && p.ten.toLowerCase().includes('tiền mặt'))
+    return found ? found.id : (allPaymentMethods.value[0]?.id || 1)
+  }
+  if (methodType === 'CHUYEN_KHOAN') {
+    const found = allPaymentMethods.value.find(p => p.ten && p.ten.toLowerCase().includes('chuyển khoản'))
+    return found ? found.id : (allPaymentMethods.value[1]?.id || 2)
+  }
+  return allPaymentMethods.value[0]?.id || 1
+}
+
 const isVoucherModalOpen = ref(false)
-const voucherSearchQuery = ref('')
 
 const openVoucherModal = () => {
   if (!currentOrder.value) createNewOrder()
-  voucherSearchQuery.value = ''
   isVoucherModalOpen.value = true
-}
-
-const filteredVouchers = computed(() => {
-  let list = allVouchers.value || []
-  const q = voucherSearchQuery.value.trim().toLowerCase()
-  if (q) {
-    list = list.filter(v =>
-      (v.ma && v.ma.toLowerCase().includes(q)) ||
-      (v.ten && v.ten.toLowerCase().includes(q))
-    )
-  }
-  return list
-})
-
-const isVoucherEligible = (voucher) => {
-  if (!currentOrder.value) return false
-  if (!currentOrder.value.customer) return false
-  if (subTotal.value < (voucher.hoaDonToiThieu || 0)) return false
-  if (voucher.soLuong !== undefined && voucher.soLuongDaSuDung !== undefined) {
-    if (voucher.soLuongDaSuDung >= voucher.soLuong) return false
-  }
-  return true
-}
-
-const getVoucherIneligibilityReason = (voucher) => {
-  if (!currentOrder.value || !currentOrder.value.customer) {
-    return 'Cần chọn thông tin khách hàng'
-  }
-  if (subTotal.value < (voucher.hoaDonToiThieu || 0)) {
-    const needMore = (voucher.hoaDonToiThieu || 0) - subTotal.value
-    return `Mua thêm ${formatVnd(needMore)} để áp dụng`
-  }
-  if (voucher.soLuong !== undefined && voucher.soLuongDaSuDung !== undefined) {
-    if (voucher.soLuongDaSuDung >= voucher.soLuong) return 'Hết số lượt áp dụng'
-  }
-  return ''
 }
 
 const applyVoucher = (voucher) => {
@@ -865,50 +949,6 @@ const removeVoucher = () => {
     currentOrder.value.selectedVoucher = null
     notifySuccess('Đã hủy voucher', 'Đã hủy áp dụng phiếu giảm giá cho đơn hàng!')
   }
-}
-
-// Checkout & Print Receipt
-const isReceiptModalOpen = ref(false)
-const completedInvoiceData = ref(null)
-const isProcessingCheckout = ref(false)
-
-const handleCancelOrder = async () => {
-  if (!currentOrder.value) return
-  const ok = await notifyConfirm(
-    'Hủy đơn hàng này?',
-    'Toàn bộ sản phẩm trong giỏ hàng hiện tại sẽ được hoàn trả lại kho hàng.',
-    'Đồng ý hủy',
-    'Không'
-  )
-  if (ok) {
-    currentOrder.value.cart.forEach(item => {
-      const targetProd = allProducts.value.find(p => p.id === item.idCtsp)
-      if (targetProd) {
-        if (targetProd.stock !== undefined) targetProd.stock += item.quantity
-        if (targetProd.soLuong !== undefined) targetProd.soLuong += item.quantity
-      }
-    })
-    currentOrder.value.cart = []
-    currentOrder.value.customer = null
-    currentOrder.value.selectedVoucher = null
-    currentOrder.value.cashGiven = 0
-    currentOrder.value.transferGiven = 0
-    currentOrder.value.note = ''
-    notifySuccess('Đã làm mới giỏ hàng và hoàn trả tồn kho')
-  }
-}
-
-const getPaymentMethodId = (methodType) => {
-  if (!allPaymentMethods.value || allPaymentMethods.value.length === 0) return 1
-  if (methodType === 'TIEN_MAT') {
-    const found = allPaymentMethods.value.find(p => p.ten && p.ten.toLowerCase().includes('tiền mặt'))
-    return found ? found.id : (allPaymentMethods.value[0]?.id || 1)
-  }
-  if (methodType === 'CHUYEN_KHOAN') {
-    const found = allPaymentMethods.value.find(p => p.ten && p.ten.toLowerCase().includes('chuyển khoản'))
-    return found ? found.id : (allPaymentMethods.value[1]?.id || 2)
-  }
-  return allPaymentMethods.value[0]?.id || 1
 }
 
 const handleCheckout = async () => {
@@ -938,6 +978,18 @@ const handleCheckout = async () => {
   )
   if (!ok) return
 
+  if (currentOrder.value.isDelivery) {
+    const d = currentOrder.value.deliveryInfo
+    if (d.feeLoading) {
+      notifyWarning('Phí vận chuyển', 'Đang tính phí vận chuyển, vui lòng đợi trong giây lát...')
+      return
+    }
+    if (!d.legacy || !d.shippingFee || d.shippingFee <= 0) {
+      notifyWarning('Phí vận chuyển', 'Chưa tính được phí vận chuyển. Vui lòng chọn địa chỉ giao hàng hợp lệ và thử lại.')
+      return
+    }
+  }
+
   isProcessingCheckout.value = true
 
   try {
@@ -952,13 +1004,19 @@ const handleCheckout = async () => {
       ? (currentOrder.value.customer.ten || currentOrder.value.customer.tenKhachHang)
       : 'Khách lẻ'
 
+    const delivery = currentOrder.value.isDelivery ? currentOrder.value.deliveryInfo : null
     const payload = {
       maHoaDon: currentOrder.value.code,
       loaiDon: currentOrder.value.isDelivery ? 'Online' : 'Tại quầy',
-      phiVanChuyen: currentOrder.value.isDelivery ? Number(currentOrder.value.deliveryInfo.shippingFee || 0) : 0,
+      phiVanChuyen: currentOrder.value.isDelivery ? Number(delivery.shippingFee || 0) : 0,
       tenKhachHang: customerName,
       soDienThoaiKhachHang: customerPhone,
-      diaChiNhanHang: currentOrder.value.isDelivery ? currentOrder.value.deliveryInfo.recipientAddress : '',
+      diaChiNhanHang: delivery
+        ? [delivery.recipientAddress, delivery.ward?.name, delivery.province?.name].filter(Boolean).join(', ')
+        : '',
+      toProvinceId: delivery?.legacy?.toProvinceId ?? null,
+      toDistrictId: delivery?.legacy?.toDistrictId ?? null,
+      toWardCode: delivery?.legacy?.toWardCode ?? null,
       trangThai: 'Đã hoàn thành',
       ghiChu: currentOrder.value.note || 'Bán hàng tại quầy POS',
       idKhachHang: currentOrder.value.customer ? currentOrder.value.customer.id : null,
@@ -993,13 +1051,12 @@ const handleCheckout = async () => {
     }
 
     notifySuccess('Thanh toán thành công!', `Đã hoàn tất hóa đơn ${currentOrder.value.code}`)
-
     fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&trangThai=true`)
       .then(r => r.json())
       .then(data => {
         if (data && data.content) allProducts.value = data.content
       })
-      .catch(() => {})
+      .catch(() => { })
 
     pendingOrders.value.splice(activeOrderIndex.value, 1)
     if (pendingOrders.value.length === 0) {
@@ -1038,7 +1095,6 @@ const handleKeyDown = (e) => {
 // Initial Data Loading
 const loadInitialData = async () => {
   isLoadingData.value = true
-
   try {
     const [formRes, prodRes, brandRes, catRes, colorRes, sizeRes] = await Promise.allSettled([
       http.get('/hoa-don/form-data'),
@@ -1149,9 +1205,6 @@ const loadInitialData = async () => {
 }
 
 onMounted(() => {
-  updateClock()
-  clockTimer = setInterval(updateClock, 1000)
-  window.addEventListener('keydown', handleKeyDown)
   loadInitialData()
 })
 
@@ -1164,26 +1217,16 @@ onUnmounted(() => {
 
 <template>
   <div class="pos-page">
-    <!-- Header Station Bar -->
-    <header class="pos-top-bar">
-      <div class="pos-station-info">
-        <div class="pos-brand-pill">
-          <span class="brand-store-name">POLYSHOES STORE</span>
-          <span class="station-divider">/</span>
-          <span class="station-num">Quầy POS #01</span>
-        </div>
-        <div class="pos-status-indicator">
-          <span class="pulse-dot"></span>
-          <span class="status-text">Hệ thống sẵn sàng</span>
-        </div>
+    <div class="pos-top-bar">
+      <div class="pos-breadcrumbs">
+        <span>Trang chủ</span> / <span class="active">Bán hàng tại quầy</span>
       </div>
-
-      <div class="pos-header-center">
-        <div class="pos-clock-box">
-          <span class="clock-time">{{ currentTimeString }}</span>
-          <span class="clock-date">{{ currentDateString }}</span>
-        </div>
+      <div class="pos-title-badge">
+        <span class="pos-badge-live">
+          <span class="pulse-dot"></span> Quầy POS đang hoạt động
+        </span>
       </div>
+    </div>
 
       <div class="pos-header-actions">
         <button class="pos-hdr-btn" @click="toggleFullscreen" title="Bật/Tắt toàn màn hình">
@@ -1206,71 +1249,39 @@ onUnmounted(() => {
 
     <!-- Main Workspace Grid -->
     <div class="pos-main-grid">
-      <!-- Left Column: Pending Tabs & Cart -->
       <div class="pos-col-left">
-        <!-- Pending Orders Card -->
         <div class="pos-card pending-orders-card">
           <div class="pending-orders-head">
-            <div class="pending-left-actions">
-              <button class="btn-add-order" @click="createNewOrder" :disabled="pendingOrders.length >= MAX_ORDERS">
-                <span class="plus-icon">+</span>
-                <span>Thêm hóa đơn</span>
-                <span class="kbd-hint">F1</span>
-              </button>
-            </div>
+            <button class="btn-add-order" @click="createNewOrder" :disabled="pendingOrders.length >= MAX_ORDERS">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              Thêm hóa đơn chờ
+            </button>
             <div class="pending-counter">
-              <span>Đang mở: <strong>{{ pendingOrders.length }}</strong>/{{ MAX_ORDERS }} đơn</span>
+              {{ pendingOrders.length }}/{{ MAX_ORDERS }} hóa đơn
             </div>
           </div>
 
           <div v-if="pendingOrders.length === 0" class="empty-pending-box">
-            Chưa có hóa đơn chờ nào. Bấm <strong>Thêm hóa đơn (F1)</strong> để bắt đầu bán hàng.
+            Chưa có hóa đơn chờ nào.
           </div>
           <div v-else class="pending-tabs-list">
-            <div
-              v-for="(order, idx) in pendingOrders"
-              :key="order.id"
-              class="pending-tab-item"
-              :class="{ active: activeOrderIndex === idx }"
-              @click="selectOrderTab(idx)"
-            >
-              <div class="tab-title-wrap">
-                <span class="tab-title-text">{{ order.title }}</span>
-                <span class="tab-code-sub">{{ order.code }}</span>
-              </div>
-
-              <div class="tab-metrics">
-                <span class="tab-badge-count" v-if="order.cart.length > 0">
-                  {{ order.cart.reduce((s, i) => s + i.quantity, 0) }} SP
-                </span>
-                <span class="tab-money-pill" v-if="order.cart.length > 0">
-                  {{ formatCurrency(order.cart.reduce((s, i) => s + i.price * i.quantity, 0)) }}
-                </span>
-              </div>
-
+            <div v-for="(order, idx) in pendingOrders" :key="order.id" class="pending-tab-item"
+              :class="{ active: activeOrderIndex === idx }" @click="selectOrderTab(idx)">
+              <span>{{ order.title }}</span>
+              <span class="tab-badge-count" v-if="order.cart.length > 0">{{ order.cart.length }}</span>
               <button class="tab-close-btn" @click="closeOrderTab(idx, $event)" title="Đóng hóa đơn này">×</button>
             </div>
           </div>
         </div>
 
-        <!-- Cart Card -->
         <div class="pos-card cart-card">
-          <!-- Fast Scanner & Action Bar -->
-          <div class="cart-action-toolbar">
-            <div class="cart-fast-search-box">
-              <svg class="search-lens-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-              <input
-                v-model="inlineScanCode"
-                type="text"
-                class="fast-scan-input"
-                placeholder="Quét mã vạch hoặc nhập mã CTSP / tên sản phẩm rồi Enter..."
-                @keyup.enter="handleInlineScan"
-              />
-              <button v-if="inlineScanCode" class="btn-clear-inline" @click="inlineScanCode = ''">×</button>
-              <button class="btn-submit-scan" @click="handleInlineScan" title="Thêm ngay">Thêm</button>
+          <div class="cart-card-head">
+            <div class="cart-title-wrap">
+              <h3 class="cart-title">Giỏ hàng</h3>
+              <span class="cart-qty-pill">{{ totalCartQty }} sản phẩm</span>
             </div>
 
             <div class="cart-action-buttons">
@@ -1302,371 +1313,219 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Cart Table -->
           <div class="cart-table-wrapper">
             <table class="cart-table">
               <thead>
                 <tr>
-                  <th width="45" class="text-center">STT</th>
-                  <th>Sản phẩm</th>
-                  <th width="90">Phân loại</th>
-                  <th width="125" class="text-center">Số lượng</th>
-                  <th width="120" class="text-end">Đơn giá</th>
-                  <th width="130" class="text-end">Thành tiền</th>
-                  <th width="55" class="text-center">Xóa</th>
+                  <th width="50" class="text-center">STT</th>
+                  <th width="120">Mã sản phẩm</th>
+                  <th>Tên sản phẩm</th>
+                  <th width="100">Màu sắc</th>
+                  <th width="90">Kích cỡ</th>
+                  <th width="120" class="text-center">Số lượng</th>
+                  <th width="130" class="text-end">Đơn giá</th>
+                  <th width="70" class="text-center">Thao tác</th>
                 </tr>
               </thead>
               <tbody>
                 <template v-if="currentOrder && currentOrder.cart.length > 0">
-                  <tr v-for="(item, idx) in currentOrder.cart" :key="item.idCtsp" class="cart-item-row">
+                  <tr v-for="(item, idx) in currentOrder.cart" :key="item.idCtsp">
                     <td class="cell-stt">{{ idx + 1 }}</td>
-                    <td class="cell-product-info">
-                      <div class="product-item-wrap">
-                        <img :src="item.img || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=100&auto=format&fit=crop&q=60'" class="prod-thumb-mini" alt="product" />
-                        <div class="prod-details">
-                          <span class="prod-name-title" :title="item.name">{{ item.name }}</span>
-                          <span class="prod-code-pill">{{ item.maCtsp || item.maSp }}</span>
-                        </div>
-                      </div>
+                    <td class="cell-code">{{ item.maCtsp || item.maSp }}</td>
+                    <td class="cell-name" :title="item.name">{{ item.name }}</td>
+                    <td>
+                      <span class="badge-color-tag">{{ item.color }}</span>
                     </td>
                     <td>
-                      <div class="variant-tags-stack">
-                        <span class="badge-size-pill">Size {{ item.size }}</span>
-                        <span class="badge-color-pill">{{ item.color }}</span>
-                      </div>
+                      <span class="badge-size-tag">{{ item.size }}</span>
                     </td>
                     <td class="text-center">
-                      <div class="qty-stepper-modern">
-                        <button class="step-btn" @click="updateCartItemQty(item, item.quantity - 1)" :disabled="item.quantity <= 1">−</button>
-                        <input
-                          v-model.number="item.quantity"
-                          type="number"
-                          class="step-input"
-                          min="1"
-                          @change="updateCartItemQty(item, item.quantity)"
-                        />
-                        <button class="step-btn" @click="updateCartItemQty(item, item.quantity + 1)" :disabled="getRemainingStock(item.idCtsp) <= 0">+</button>
-                      </div>
-                      <div class="stock-hint-txt">Còn lại: {{ getRemainingStock(item.idCtsp) }}</div>
-                    </td>
-                    <td class="text-end cell-unit-price">
-                      <div class="price-stack">
-                        <span class="price-active">{{ formatVnd(item.price) }}</span>
-                        <span v-if="item.originalPrice > item.price" class="price-strikethrough">{{ formatVnd(item.originalPrice) }}</span>
+                      <div class="qty-stepper">
+                        <button class="stepper-btn" @click="updateCartItemQty(item, item.quantity - 1)"
+                          :disabled="item.quantity <= 1">−</button>
+                        <input type="number" class="stepper-input" v-model.number="item.quantity"
+                          @change="updateCartItemQty(item, item.quantity)" min="1" />
+                        <button class="stepper-btn" @click="updateCartItemQty(item, item.quantity + 1)"
+                          :disabled="getRemainingStock(item.idCtsp) <= 0">+</button>
                       </div>
                     </td>
-                    <td class="text-end cell-total-price">
-                      {{ formatVnd(item.price * item.quantity) }}
-                    </td>
+                    <td class="text-end cell-price">{{ formatVnd(item.price * item.quantity) }}</td>
                     <td class="text-center">
-                      <button class="btn-del-item" @click="removeCartItem(item)" title="Xóa khỏi giỏ hàng">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <button class="btn-del-cart-item" @click="removeCartItem(item)" title="Xóa khỏi giỏ hàng">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2">
                           <polyline points="3 6 5 6 21 6"></polyline>
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                          </path>
                         </svg>
                       </button>
                     </td>
                   </tr>
                 </template>
                 <tr v-else>
-                  <td colspan="7" class="empty-cart-state">
-                    <div class="empty-cart-content">
-                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5">
-                        <circle cx="9" cy="21" r="1"></circle>
-                        <circle cx="20" cy="21" r="1"></circle>
-                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-                      </svg>
-                      <p class="empty-cart-title">Giỏ hàng hiện đang trống</p>
-                      <p class="empty-cart-sub">Quét mã vạch hoặc bấm "Chọn sản phẩm (F2)" để thêm vào đơn hàng</p>
-                      <button class="btn-empty-add-prod" @click="openProductPicker">
-                        + Chọn sản phẩm ngay (F2)
-                      </button>
-                    </div>
-                  </td>
+                  <td colspan="8" class="empty-cart-row">Giỏ hàng trống.</td>
                 </tr>
               </tbody>
             </table>
           </div>
-
-          <div v-if="currentOrder && currentOrder.cart.length > 0" class="cart-footer-summary">
-            <span class="cart-total-badge">
-              Tổng số lượng: <strong>{{ totalCartQty }}</strong> sản phẩm
-            </span>
-            <span class="cart-subtotal-badge">
-              Tạm tính: <strong>{{ formatVnd(subTotal) }}</strong>
-            </span>
-          </div>
         </div>
+
       </div>
 
-      <!-- Right Column: Customer & Checkout Panel -->
       <div class="pos-col-right">
-        <!-- Customer Card -->
-        <div class="pos-card customer-panel-card">
-          <div class="panel-card-head">
-            <div class="head-title-wrap">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
-              </svg>
-              <h4 class="panel-title">Khách hàng</h4>
-            </div>
-            <button class="btn-quick-add-cust" @click="isAddCustomerModalOpen = true" title="Thêm khách hàng mới">
-              + Thêm mới
-            </button>
+        <div class="pos-card customer-card">
+          <div class="customer-card-head">
+            <h4 class="card-title-sm">Khách hàng</h4>
           </div>
 
-          <!-- Customer Search Autocomplete -->
-          <div class="customer-search-area">
-            <div class="customer-input-wrap">
-              <input
-                id="pos-customer-input"
-                v-model="customerSearchQuery"
-                type="text"
-                class="input-cust-search"
-                placeholder="Tìm khách hàng (tên, SĐT)... (F4)"
-                @focus="showCustomerDropdown = true"
-              />
-              <button v-if="customerSearchQuery" class="btn-clear-cust" @click="customerSearchQuery = ''">×</button>
-            </div>
+          <div class="customer-search-box">
+            <input type="text" class="input-customer-search" placeholder="Nhập tên hoặc số điện thoại khách hàng"
+              v-model="customerSearchQuery" @focus="showCustomerDropdown = true" />
+            <button class="btn-add-customer-quick" @click="isAddCustomerModalOpen = true"
+              title="Thêm nhanh khách hàng">+</button>
 
-            <!-- Dropdown suggestions -->
-            <ul v-if="showCustomerDropdown && filteredCustomers.length > 0" class="customer-dropdown-menu">
-              <li
-                v-for="c in filteredCustomers"
-                :key="c.id"
-                class="cust-drop-item"
-                @click="selectCustomer(c)"
-              >
-                <div class="cust-drop-avatar">{{ (c.ten || c.tenKhachHang || 'K')[0].toUpperCase() }}</div>
-                <div class="cust-drop-info">
-                  <div class="cust-drop-name">{{ c.ten || c.tenKhachHang }}</div>
-                  <div class="cust-drop-sub">{{ c.soDienThoai || 'Chưa có SĐT' }}</div>
-                </div>
+            <ul v-if="showCustomerDropdown && filteredCustomers.length > 0" class="customer-autocomplete-list">
+              <li v-for="c in filteredCustomers" :key="c.id" class="customer-auto-item" @click="selectCustomer(c)">
+                <span class="cust-auto-name">{{ c.ten || c.tenKhachHang }}</span>
+                <span class="cust-auto-phone">{{ c.soDienThoai }}</span>
               </li>
             </ul>
           </div>
 
-          <!-- Selected Customer Profile Card -->
-          <div v-if="currentOrder && currentOrder.customer" class="selected-customer-box">
-            <div class="cust-box-left">
-              <div class="cust-badge-avatar">
-                {{ (currentOrder.customer.ten || currentOrder.customer.tenKhachHang || 'K')[0].toUpperCase() }}
+          <div v-if="currentOrder && currentOrder.customer" class="selected-customer-info">
+            <div class="cust-profile-left">
+              <div class="cust-avatar-icon">
+                {{ (currentOrder.customer.ten || 'K')[0].toUpperCase() }}
               </div>
-              <div class="cust-box-details">
-                <div class="cust-box-name">{{ currentOrder.customer.ten || currentOrder.customer.tenKhachHang }}</div>
-                <div class="cust-box-phone">{{ currentOrder.customer.soDienThoai }}</div>
-                <div v-if="currentOrder.customer.diaChi" class="cust-box-address">{{ currentOrder.customer.diaChi }}</div>
+              <div class="cust-details">
+                <span class="cust-name">{{ currentOrder.customer.ten || currentOrder.customer.tenKhachHang }}</span>
+                <span class="cust-phone">{{ currentOrder.customer.soDienThoai }}</span>
               </div>
             </div>
-            <button class="btn-unselect-cust" @click="removeSelectedCustomer" title="Chuyển về khách lẻ">
-              Đổi
-            </button>
-          </div>
-          <div v-else class="retail-guest-badge">
-            <span class="retail-dot"></span>
-            <span>Khách lẻ (Không lưu thông tin)</span>
+            <button class="btn-remove-cust" @click="removeSelectedCustomer"
+              title="Bỏ chọn (chuyển về khách lẻ)">×</button>
           </div>
         </div>
 
-        <!-- Checkout Card -->
-        <div class="pos-card checkout-panel-card">
-          <div class="panel-card-head">
-            <div class="head-title-wrap">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-                <line x1="2" y1="10" x2="22" y2="10"></line>
-              </svg>
-              <h4 class="panel-title">Thanh toán</h4>
-            </div>
-
-            <div class="delivery-switch-wrap">
-              <span class="delivery-switch-lbl">Giao hàng</span>
-              <label class="toggle-switch">
-                <input v-if="currentOrder" v-model="currentOrder.isDelivery" type="checkbox" />
-                <span class="toggle-slider"></span>
+        <div class="pos-card order-checkout-card">
+          <div class="order-info-head">
+            <h4 class="order-info-title">Thông tin đơn hàng</h4>
+            <div class="delivery-toggle-wrap">
+              <span>Giao hàng</span>
+              <label class="switch-ui">
+                <input type="checkbox" v-if="currentOrder" v-model="currentOrder.isDelivery" />
+                <span class="slider-round"></span>
               </label>
             </div>
           </div>
 
-          <!-- Delivery Address Form (If Delivery Active) -->
-          <transition name="slide-fade">
-            <div v-if="currentOrder && currentOrder.isDelivery" class="delivery-drawer-box">
-              <div class="drawer-title">Thông tin giao hàng tận nơi</div>
-              <input
-                v-model="currentOrder.deliveryInfo.recipientName"
-                type="text"
-                class="del-input"
-                placeholder="Tên người nhận hàng..."
-              />
-              <input
-                v-model="currentOrder.deliveryInfo.recipientPhone"
-                type="text"
-                class="del-input"
-                placeholder="Số điện thoại nhận hàng..."
-              />
-              <input
-                v-model="currentOrder.deliveryInfo.recipientAddress"
-                type="text"
-                class="del-input"
-                placeholder="Địa chỉ giao hàng chi tiết..."
-              />
-              <div class="shipping-fee-input-wrap">
-                <label class="fee-lbl">Phí ship:</label>
-                <CurrencyInput
-                  v-model="currentOrder.deliveryInfo.shippingFee"
-                  placeholder="0"
-                />
-              </div>
+          <div v-if="currentOrder && currentOrder.isDelivery" class="delivery-form-box">
+            <input type="text" class="del-input" placeholder="Tên người nhận hàng..."
+              v-model="currentOrder.deliveryInfo.recipientName" />
+            <input type="text" class="del-input" placeholder="Số điện thoại người nhận..."
+              v-model="currentOrder.deliveryInfo.recipientPhone" />
+            <select class="del-input" v-model="currentOrder.deliveryInfo.province" @change="onProvinceChange">
+              <option :value="null" disabled>Chọn Tỉnh / Thành phố...</option>
+              <option v-for="p in provincesList" :key="p.id" :value="p">{{ p.name }}</option>
+            </select>
+            <select class="del-input" v-model="currentOrder.deliveryInfo.ward" @change="onWardChange"
+              :disabled="!currentOrder.deliveryInfo.province || currentOrder.deliveryInfo.wardsLoading">
+              <option :value="null" disabled>
+                {{ currentOrder.deliveryInfo.wardsLoading ? 'Đang tải phường/xã...' : 'Chọn Phường / Xã...' }}
+              </option>
+              <option v-for="w in wardsList" :key="w.id" :value="w">{{ w.name }}</option>
+            </select>
+            <input type="text" class="del-input" placeholder="Số nhà, đường (giao hàng chi tiết)..."
+              v-model="currentOrder.deliveryInfo.recipientAddress" />
+            <select v-if="currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length"
+              class="del-input" v-model="currentOrder.deliveryInfo.serviceTypeId" @change="onServiceChange">
+              <option v-for="s in currentOrder.deliveryInfo.services" :key="s.serviceTypeId" :value="s.serviceTypeId">
+                {{ s.shortName || ('Dịch vụ ' + s.serviceTypeId) }}
+              </option>
+            </select>
+            <div v-if="currentOrder.deliveryInfo.feeLoading" class="fee-info">
+              Đang tính phí vận chuyển với GHN...
             </div>
-          </transition>
-
-          <!-- Voucher Row Section -->
-          <div class="checkout-voucher-section">
-            <div v-if="currentOrder && currentOrder.selectedVoucher" class="selected-voucher-pill">
-              <div class="voucher-info-left">
-                <span class="voucher-tag-code">{{ currentOrder.selectedVoucher.ma }}</span>
-                <span class="voucher-discount-val">-{{ formatVnd(discountAmount) }}</span>
-              </div>
-              <button class="btn-remove-voucher" @click="removeVoucher" title="Hủy voucher">×</button>
+            <div v-else-if="currentOrder.deliveryInfo.feeError" class="fee-error">
+              <span>{{ currentOrder.deliveryInfo.feeError }}</span>
+              <button type="button" class="fee-retry" @click="tinhPhiVanChuyen">Thử lại</button>
             </div>
+            <div v-else-if="currentOrder.deliveryInfo.shippingFee > 0" class="fee-info">
+              Phí vận chuyển (GHN): <strong>{{ formatVnd(currentOrder.deliveryInfo.shippingFee) }}</strong>
+            </div>
+          </div>
 
-            <button
-              v-else
-              class="btn-open-voucher-modal"
-              @click="openVoucherModal"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 10V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v5a2 2 0 0 1 0 4v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 1 0-4z"></path>
-              </svg>
-              <span>Phiếu giảm giá / Voucher</span>
-              <span class="voucher-count-avail" v-if="allVouchers.length > 0">{{ allVouchers.length }}</span>
+          <div class="summary-row">
+            <span class="summary-label">Tổng tiền hàng ({{ totalCartQty }} sản phẩm):</span>
+            <span class="summary-val">{{ formatVnd(subTotal) }}</span>
+          </div>
+
+          <div v-if="discountAmount > 0" class="summary-row">
+            <span class="summary-label">Giảm giá voucher:</span>
+            <span class="summary-val" style="color: #16a34a;">- {{ formatVnd(discountAmount) }}</span>
+          </div>
+
+          <div v-if="currentOrder && currentOrder.isDelivery && currentOrder.deliveryInfo.shippingFee > 0"
+            class="summary-row">
+            <span class="summary-label">Phí vận chuyển:</span>
+            <span class="summary-val">+ {{ formatVnd(currentOrder.deliveryInfo.shippingFee) }}</span>
+          </div>
+
+          <div class="payment-section" v-if="currentOrder">
+            <div class="section-subtitle">Hình thức thanh toán</div>
+            <div class="radio-group-pay">
+              <label class="radio-pay-label">
+                <input type="radio" value="TIEN_MAT" v-model="currentOrder.paymentMethod" />
+                Tiền mặt
+              </label>
+              <label class="radio-pay-label">
+                <input type="radio" value="CHUYEN_KHOAN" v-model="currentOrder.paymentMethod" />
+                Chuyển khoản
+              </label>
+              <label class="radio-pay-label">
+                <input type="radio" value="KET_HOP" v-model="currentOrder.paymentMethod" />
+                Kết hợp
+              </label>
+            </div>
+          </div>
+
+          <div class="pay-amount-box" v-if="currentOrder && currentOrder.paymentMethod !== 'CHUYEN_KHOAN'">
+            <div class="section-subtitle">Khách thanh toán</div>
+            <input type="number" class="input-money-paid" placeholder="Nhập số tiền khách đưa"
+              v-model.number="currentOrder.cashGiven" />
+            <div class="quick-cash-chips">
+              <button class="cash-chip" @click="setQuickCash('EXACT')">Đủ tiền</button>
+              <button class="cash-chip" @click="setQuickCash(50000)">50k</button>
+              <button class="cash-chip" @click="setQuickCash(100000)">100k</button>
+              <button class="cash-chip" @click="setQuickCash(200000)">200k</button>
+              <button class="cash-chip" @click="setQuickCash(500000)">500k</button>
+            </div>
+          </div>
+
+          <div class="pay-amount-box" v-if="currentOrder && currentOrder.paymentMethod === 'KET_HOP'">
+            <div class="section-subtitle">Chuyển khoản thêm</div>
+            <input type="number" class="input-money-paid" placeholder="Nhập số tiền chuyển khoản"
+              v-model.number="currentOrder.transferGiven" />
+          </div>
+
+          <div class="summary-row" v-if="currentOrder && currentOrder.paymentMethod !== 'CHUYEN_KHOAN'">
+            <span class="summary-label">Tiền thừa trả khách</span>
+            <span class="summary-val" :style="{ color: changeDue < 0 ? '#dc2626' : '#0f172a' }">
+              {{ changeDue >= 0 ? formatVnd(changeDue) : `Thiếu ${formatVnd(Math.abs(changeDue))}` }}
+            </span>
+          </div>
+
+          <div class="notes-section" v-if="currentOrder">
+            <div class="section-subtitle">Ghi chú thanh toán</div>
+            <textarea class="textarea-notes" placeholder="Ghi chú thêm nếu cần" v-model="currentOrder.note"></textarea>
+          </div>
+
+          <div class="order-action-btns">
+            <button class="btn-pos-cancel" @click="handleCancelOrder"
+              :disabled="!currentOrder || currentOrder.cart.length === 0">
+              Hủy hóa đơn
             </button>
-          </div>
-
-          <!-- Financial Calculation Breakdown -->
-          <div class="billing-summary-block">
-            <div class="bill-row">
-              <span class="bill-label">Tiền hàng ({{ totalCartQty }} SP):</span>
-              <span class="bill-val">{{ formatVnd(subTotal) }}</span>
-            </div>
-
-            <div v-if="discountAmount > 0" class="bill-row row-discount">
-              <span class="bill-label">Giảm giá voucher:</span>
-              <span class="bill-val">- {{ formatVnd(discountAmount) }}</span>
-            </div>
-
-            <div v-if="currentOrder && currentOrder.isDelivery && currentOrder.deliveryInfo.shippingFee > 0" class="bill-row">
-              <span class="bill-label">Phí vận chuyển:</span>
-              <span class="bill-val">+ {{ formatVnd(currentOrder.deliveryInfo.shippingFee) }}</span>
-            </div>
-
-            <div class="bill-row row-grand-total">
-              <span class="grand-label">KHÁCH PHẢI TRẢ:</span>
-              <span class="grand-val">{{ formatVnd(finalTotal) }}</span>
-            </div>
-          </div>
-
-          <!-- Payment Methods Selection -->
-          <div class="payment-methods-block" v-if="currentOrder">
-            <label class="pay-method-lbl">Phương thức thanh toán:</label>
-            <div class="pay-method-grid">
-              <label class="method-card" :class="{ active: currentOrder.paymentMethod === 'TIEN_MAT' }">
-                <input v-model="currentOrder.paymentMethod" type="radio" value="TIEN_MAT" />
-                <span class="method-title">Tiền mặt</span>
-              </label>
-
-              <label class="method-card" :class="{ active: currentOrder.paymentMethod === 'CHUYEN_KHOAN' }">
-                <input v-model="currentOrder.paymentMethod" type="radio" value="CHUYEN_KHOAN" />
-                <span class="method-title">Chuyển khoản</span>
-              </label>
-
-              <label class="method-card" :class="{ active: currentOrder.paymentMethod === 'KET_HOP' }">
-                <input v-model="currentOrder.paymentMethod" type="radio" value="KET_HOP" />
-                <span class="method-title">Kết hợp</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Cash Payment Inputs -->
-          <div v-if="currentOrder && currentOrder.paymentMethod !== 'CHUYEN_KHOAN'" class="cash-settlement-box">
-            <div class="cash-input-field">
-              <label class="cash-label">Tiền khách đưa:</label>
-              <CurrencyInput
-                v-model="currentOrder.cashGiven"
-                placeholder="Nhập số tiền..."
-              />
-            </div>
-
-            <div class="quick-cash-row">
-              <button class="quick-chip chip-exact" @click="setQuickCash('EXACT')">Đủ tiền</button>
-              <button class="quick-chip" @click="setQuickCash(100000)">100k</button>
-              <button class="quick-chip" @click="setQuickCash(200000)">200k</button>
-              <button class="quick-chip" @click="setQuickCash(500000)">500k</button>
-              <button class="quick-chip" @click="setQuickCash(1000000)">1tr</button>
-              <button class="quick-chip" @click="setQuickCash(2000000)">2tr</button>
-            </div>
-          </div>
-
-          <!-- Combined Transfer Input (If Combined Active) -->
-          <div v-if="currentOrder && currentOrder.paymentMethod === 'KET_HOP'" class="cash-settlement-box combined-transfer">
-            <div class="cash-input-field">
-              <label class="cash-label">Số tiền chuyển khoản:</label>
-              <CurrencyInput
-                v-model="currentOrder.transferGiven"
-                placeholder="Nhập tiền chuyển khoản..."
-              />
-            </div>
-          </div>
-
-          <!-- Change Due Box -->
-          <div
-            v-if="currentOrder && currentOrder.paymentMethod !== 'CHUYEN_KHOAN'"
-            class="change-due-box"
-            :class="{ negative: changeDue < 0, positive: changeDue >= 0 }"
-          >
-            <span class="change-label">{{ changeDue >= 0 ? 'Tiền thừa trả khách:' : 'Khách còn thiếu:' }}</span>
-            <span class="change-value">{{ formatVnd(Math.abs(changeDue)) }}</span>
-          </div>
-
-          <!-- Bank QR Quick Trigger (If Transfer Active) -->
-          <div v-if="currentOrder && currentOrder.paymentMethod === 'CHUYEN_KHOAN'" class="bank-qr-trigger-box">
-            <button class="btn-show-bank-qr" @click="generateBankTransferQr">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="7" height="7"></rect>
-                <rect x="14" y="3" width="7" height="7"></rect>
-                <rect x="14" y="14" width="7" height="7"></rect>
-                <rect x="3" y="14" width="7" height="7"></rect>
-              </svg>
-              <span>Xem mã VietQR chuyển khoản</span>
-            </button>
-          </div>
-
-          <!-- Order Note -->
-          <div class="order-note-wrap" v-if="currentOrder">
-            <label class="note-label">Ghi chú đơn hàng:</label>
-            <input
-              v-model="currentOrder.note"
-              type="text"
-              class="input-order-note"
-              placeholder="Ghi chú thêm nếu cần..."
-            />
-          </div>
-
-          <!-- Final Checkout Action Buttons -->
-          <div class="pos-final-actions">
-            <button
-              class="btn-cancel-bill"
-              :disabled="!currentOrder || currentOrder.cart.length === 0"
-              @click="handleCancelOrder"
-              title="Hủy đơn này"
-            >
-              Hủy đơn
-            </button>
-            <button
-              class="btn-checkout-primary"
-              :class="{ ready: currentOrder && currentOrder.cart.length > 0 }"
-              :disabled="!currentOrder || currentOrder.cart.length === 0 || isProcessingCheckout"
+            <button class="btn-pos-checkout" :class="{ ready: currentOrder && currentOrder.cart.length > 0 }"
               @click="handleCheckout"
             >
               <span v-if="isProcessingCheckout">Đang xử lý...</span>
@@ -1677,12 +1536,13 @@ onUnmounted(() => {
             </button>
           </div>
         </div>
+
       </div>
+
     </div>
 
-    <!-- Product Picker Modal (F2) -->
     <transition name="fade">
-      <div v-if="isProductModalOpen" class="pos-modal-overlay" @click.self="isProductModalOpen = false">
+      <div v-if="isProductModalOpen" class="pos-modal-overlay" @click.self="closeProductPicker">
         <div class="pos-modal-dialog modal-xl">
           <div class="pos-modal-head">
             <div class="modal-head-title">
@@ -1717,36 +1577,30 @@ onUnmounted(() => {
                 />
                 <button v-if="modalFilters.search" class="modal-clear-search-btn" @click="modalFilters.search = ''">×</button>
               </div>
+              <select v-model="modalFilters.idThuongHieu" class="filter-select">
+                <option value="">Tất cả thương hiệu</option>
+                <option v-for="b in brandsList" :key="b.id" :value="b.id || b.ten">{{ b.ten || b.tenThuongHieu }}
+                </option>
+              </select>
 
-              <div class="modal-select-item">
-                <SearchableSelect
-                  v-model="modalFilters.idThuongHieu"
-                  :options="brandsList"
-                  label-key="ten"
-                  value-key="id"
-                  placeholder="Thương hiệu"
-                />
-              </div>
+              <select v-model="modalFilters.idLoaiGiay" class="filter-select">
+                <option value="">Tất cả thể loại</option>
+                <option v-for="c in categoriesList" :key="c.id" :value="c.id || c.ten">{{ c.ten || c.tenLoaiGiay }}
+                </option>
+              </select>
 
-              <div class="modal-select-item">
-                <SearchableSelect
-                  v-model="modalFilters.idLoaiGiay"
-                  :options="categoriesList"
-                  label-key="ten"
-                  value-key="id"
-                  placeholder="Loại giày"
-                />
-              </div>
+              <select v-model="modalFilters.idMauSac" class="filter-select">
+                <option value="">Tất cả màu</option>
+                <option v-for="m in colorsList" :key="m.id" :value="m.id || m.ten || m.tenMau">{{ m.ten || m.tenMau }}
+                </option>
+              </select>
 
-              <div class="modal-select-item">
-                <SearchableSelect
-                  v-model="modalFilters.idMauSac"
-                  :options="colorsList"
-                  label-key="ten"
-                  value-key="id"
-                  placeholder="Màu sắc"
-                />
-              </div>
+              <select v-model="modalFilters.idKichCo" class="filter-select">
+                <option value="">Tất cả size</option>
+                <option v-for="s in sizesList" :key="s.id" :value="s.id || s.ten || s.tenKichCo">{{ s.ten || s.tenKichCo
+                }}
+                </option>
+              </select>
 
               <div class="modal-select-item item-sm">
                 <SearchableSelect
@@ -1782,9 +1636,19 @@ onUnmounted(() => {
               </button>
             </div>
 
-            <!-- Modal Products Table -->
-            <div class="modal-table-wrap">
-              <table class="modal-prod-table">
+            <!-- Selection summary -->
+            <div class="pos-prod-select-summary">
+              <span class="select-summary-text">
+                Đã chọn <strong>{{ modalSelectedIds.length }}</strong> sản phẩm
+                <template v-if="filteredModalVariants.length === 0">(không có kết quả khớp bộ lọc)</template>
+              </span>
+              <button v-if="modalSelectedIds.length > 0" class="btn-clear-selection"
+                @click="modalSelectedIds = []">Bỏ chọn tất cả</button>
+            </div>
+
+            <!-- Product Table -->
+            <div class="pos-prod-table-wrap">
+              <table class="pos-prod-table">
                 <thead>
                   <tr>
                     <th width="45" class="text-center">STT</th>
@@ -1799,14 +1663,20 @@ onUnmounted(() => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr
-                    v-for="(item, idx) in paginatedModalVariants"
-                    :key="item.id"
-                    class="modal-prod-row"
-                    :class="{ 'out-of-stock': (item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0 }"
-                    @click="handleSelectProductFromModal(item)"
-                  >
-                    <td class="text-center text-slate">{{ modalCurrentPage * modalPageSize + idx + 1 }}</td>
+                  <tr v-for="(item, idx) in paginatedModalVariants" :key="item.id"
+                    :class="{ 'row-selected': isModalRowSelected(item.id) }"
+                    @click="handleSelectProductFromModal(item)" title="Click để chọn/bỏ chọn sản phẩm">
+                    <td class="text-center" @click.stop>
+                      <input type="checkbox" class="custom-chk pos-chk" :checked="isModalRowSelected(item.id)"
+                        :disabled="(item.stock ?? item.soLuong ?? 0) <= 0" @change="toggleModalRow(item, $event)" />
+                    </td>
+                    <td class="prod-stt">{{ modalCurrentPage * modalPageSize + idx + 1 }}</td>
+                    <td class="prod-code">{{ item.maCtsp || item.maChiTietSanPham || item.maSp }}</td>
+                    <td class="prod-name" :class="{ plain: !item.discount }">
+                      {{ item.tenSp || item.tenSanPham }}
+                    </td>
+                    <td class="prod-color">{{ item.color || item.tenMau || '---' }}</td>
+                    <td class="prod-size">{{ item.size || item.tenKichCo || '---' }}</td>
                     <td class="text-center">
                       <div class="modal-thumb-box">
                         <img :src="getShoeImage(item)" class="modal-thumb-img" alt="shoe" />
@@ -1873,29 +1743,49 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Modal Pagination -->
-          <div class="pos-modal-footer">
+          <!-- Modal Footer: selection + confirm + pagination -->
+          <div class="pos-prod-footer pos-prod-footer-with-action">
             <div class="page-size-selector">
-              <label>Hiển thị:</label>
               <select v-model.number="modalPageSize">
-                <option v-for="sz in pageSizeOptions" :key="sz" :value="sz">{{ sz }} mục / trang</option>
+                <option v-for="sz in pageSizeOptions" :key="sz" :value="sz">{{ sz }}</option>
               </select>
             </div>
 
-            <div class="modal-pager-controls">
-              <button class="pager-btn" :disabled="modalCurrentPage === 0" @click="changeModalPage(0)">«</button>
-              <button class="pager-btn" :disabled="modalCurrentPage === 0" @click="changeModalPage(modalCurrentPage - 1)">‹</button>
-              <button
-                v-for="p in Math.min(modalTotalPages, 8)"
-                :key="p"
-                class="pager-btn page-num"
-                :class="{ active: modalCurrentPage === p - 1 }"
-                @click="changeModalPage(p - 1)"
-              >
+            <div class="pager-nav-group">
+              <button class="pager-nav-btn" :disabled="modalCurrentPage === 0" @click="changeModalPage(0)"
+                title="Trang đầu">
+                «
+              </button>
+              <button class="pager-nav-btn" :disabled="modalCurrentPage === 0"
+                @click="changeModalPage(modalCurrentPage - 1)" title="Trang trước">
+                ‹
+              </button>
+              <button v-for="p in Math.min(modalTotalPages, 10)" :key="p" class="pager-nav-btn"
+                :class="{ active: modalCurrentPage === p - 1 }" @click="changeModalPage(p - 1)">
                 {{ p }}
               </button>
-              <button class="pager-btn" :disabled="modalCurrentPage >= modalTotalPages - 1" @click="changeModalPage(modalCurrentPage + 1)">›</button>
-              <button class="pager-btn" :disabled="modalCurrentPage >= modalTotalPages - 1" @click="changeModalPage(modalTotalPages - 1)">»</button>
+              <span v-if="modalTotalPages > 10" style="padding: 0 4px; color: #94a3b8;">...</span>
+              <button v-if="modalTotalPages > 10" class="pager-nav-btn"
+                :class="{ active: modalCurrentPage === modalTotalPages - 1 }"
+                @click="changeModalPage(modalTotalPages - 1)">
+                {{ modalTotalPages }}
+              </button>
+              <button class="pager-nav-btn" :disabled="modalCurrentPage >= modalTotalPages - 1"
+                @click="changeModalPage(modalCurrentPage + 1)" title="Trang sau">
+                ›
+              </button>
+              <button class="pager-nav-btn" :disabled="modalCurrentPage >= modalTotalPages - 1"
+                @click="changeModalPage(modalTotalPages - 1)" title="Trang cuối">
+                »
+              </button>
+            </div>
+
+            <div class="pos-prod-action-group">
+              <span class="pos-prod-selected-count">Đã chọn: <strong>{{ modalSelectedIds.length }}</strong></span>
+              <button class="btn-pos-secondary" @click="closeProductPicker">Hủy</button>
+              <button class="btn-pos-primary" :disabled="modalSelectedIds.length === 0" @click="confirmModalSelection">
+                Thêm vào giỏ hàng ({{ modalSelectedIds.length }})
+              </button>
             </div>
           </div>
         </div>
@@ -2074,7 +1964,6 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- Quick Add Customer Modal -->
     <transition name="fade">
       <div v-if="isAddCustomerModalOpen" class="pos-modal-overlay" @click.self="isAddCustomerModalOpen = false">
         <div class="pos-modal-dialog modal-sm">
@@ -2084,90 +1973,91 @@ onUnmounted(() => {
           </div>
 
           <div class="pos-modal-body">
-            <div class="modal-form-vertical">
-              <div class="form-field-item">
-                <label>Họ và tên <span class="required-star">*</span></label>
-                <input v-model="newCustomerForm.tenKhachHang" type="text" placeholder="Nhập họ tên khách hàng..." />
+            <div class="modal-form-grid">
+              <div class="form-group-modal">
+                <label>Họ và tên <span style="color: #dc2626;">*</span></label>
+                <input type="text" placeholder="Nhập tên khách hàng..." v-model="newCustomerForm.tenKhachHang" />
               </div>
-              <div class="form-field-item">
-                <label>Số điện thoại <span class="required-star">*</span></label>
-                <input v-model="newCustomerForm.soDienThoai" type="text" placeholder="Nhập số điện thoại (10 số)..." />
+              <div class="form-group-modal">
+                <label>Số điện thoại <span style="color: #dc2626;">*</span></label>
+                <input type="text" placeholder="Nhập số điện thoại..." v-model="newCustomerForm.soDienThoai" />
               </div>
-              <div class="form-field-item">
+              <div class="form-group-modal">
                 <label>Email</label>
-                <input v-model="newCustomerForm.email" type="email" placeholder="Nhập địa chỉ email..." />
+                <input type="email" placeholder="Nhập địa chỉ email..." v-model="newCustomerForm.email" />
               </div>
-              <div class="form-field-item">
+              <div class="form-group-modal">
                 <label>Địa chỉ</label>
-                <textarea v-model="newCustomerForm.diaChi" rows="2" placeholder="Nhập địa chỉ cụ thể..."></textarea>
+                <textarea rows="2" placeholder="Nhập địa chỉ..." v-model="newCustomerForm.diaChi"></textarea>
               </div>
             </div>
           </div>
 
-          <div class="pos-modal-footer">
-            <button class="btn-modal-cancel" @click="isAddCustomerModalOpen = false">Hủy</button>
-            <button class="btn-modal-submit" :disabled="isSavingCustomer" @click="saveQuickCustomer">
-              {{ isSavingCustomer ? 'Đang lưu...' : 'Lưu khách hàng' }}
-            </button>
+          <div class="pos-modal-foot">
+            <button class="btn-pos-cancel" style="height: 36px; padding: 0 16px;"
+              @click="isAddCustomerModalOpen = false">Hủy</button>
+            <button class="btn-pos-checkout ready" style="height: 36px; padding: 0 16px;" @click="saveQuickCustomer">Lưu
+              khách hàng</button>
           </div>
         </div>
       </div>
     </transition>
 
-    <!-- Bank VietQR Modal -->
     <transition name="fade">
       <div v-if="isBankQrModalOpen" class="pos-modal-overlay" @click.self="isBankQrModalOpen = false">
         <div class="pos-modal-dialog modal-sm">
           <div class="pos-modal-head">
-            <h3 class="pos-modal-title">Mã QR Chuyển khoản VietQR</h3>
+            <h3 class="pos-modal-title">Quét mã thanh toán ngân hàng</h3>
             <button class="pos-modal-close" @click="isBankQrModalOpen = false">×</button>
           </div>
 
           <div class="pos-modal-body text-center">
-            <div class="vietqr-wrap">
-              <img v-if="bankQrDataUrl" :src="bankQrDataUrl" class="vietqr-img" alt="VietQR" />
-              <div class="vietqr-amount">{{ formatVnd(finalTotal) }}</div>
-              <div class="vietqr-memo">
-                Nội dung: <strong>Thanh toan don hang {{ currentOrder?.code }}</strong>
-              </div>
+            <img v-if="bankQrDataUrl" :src="bankQrDataUrl"
+              style="max-width: 220px; margin: 0 auto; border-radius: 8px; border: 1px solid #e2e8f0;" />
+            <div style="margin-top: 12px; font-weight: 700; color: #dc2626; font-size: 16px;">
+              Số tiền: {{ formatVnd(finalTotal) }}
+            </div>
+            <div style="font-size: 12.5px; color: #64748b; margin-top: 4px;">
+              Nội dung CK: <strong>Thanh toan don hang {{ currentOrder?.code }}</strong>
             </div>
           </div>
 
-          <div class="pos-modal-footer">
-            <button class="btn-modal-submit" @click="isBankQrModalOpen = false">Đã nhận tiền thành công</button>
+          <div class="pos-modal-foot">
+            <button class="btn-pos-checkout ready" style="height: 36px; padding: 0 16px;"
+              @click="isBankQrModalOpen = false">Đã nhận tiền</button>
           </div>
         </div>
       </div>
     </transition>
 
-    <!-- Printable Thermal Receipt Modal -->
     <transition name="fade">
-      <div v-if="isReceiptModalOpen && completedInvoiceData" class="pos-modal-overlay" @click.self="isReceiptModalOpen = false">
-        <div class="pos-modal-dialog modal-sm printable-dialog">
+      <div v-if="isReceiptModalOpen && completedInvoiceData" class="pos-modal-overlay"
+        @click.self="isReceiptModalOpen = false">
+        <div class="pos-modal-dialog modal-sm">
           <div class="pos-modal-head">
-            <h3 class="pos-modal-title">Hóa đơn thanh toán</h3>
+            <h3 class="pos-modal-title">Hóa đơn bán hàng</h3>
             <button class="pos-modal-close" @click="isReceiptModalOpen = false">×</button>
           </div>
 
           <div class="pos-modal-body">
-            <div class="thermal-receipt-box">
-              <div class="receipt-header-center">
-                <h2 class="receipt-brand-title">POLYSHOES STORE</h2>
-                <p class="receipt-sub-line">Đ/C: Trịnh Văn Bô, Nam Từ Liêm, Hà Nội</p>
-                <p class="receipt-sub-line">Hotline: 0987.654.321</p>
+            <div class="receipt-printable-box">
+              <div class="receipt-header">
+                <h2 class="receipt-store-title">POLYSHOES STORE</h2>
+                <p class="receipt-sub">Đ/C: Trịnh Văn Bô, Nam Từ Liêm, Hà Nội</p>
+                <p class="receipt-sub">Hotline: 0987.654.321</p>
               </div>
 
-              <div class="receipt-meta-info">
+              <div class="receipt-meta">
                 <div>Mã HĐ: <strong>{{ completedInvoiceData.code }}</strong></div>
                 <div>Thời gian: {{ completedInvoiceData.date }}</div>
                 <div>Khách hàng: <strong>{{ completedInvoiceData.customerName }}</strong></div>
                 <div v-if="completedInvoiceData.customerPhone">SĐT: {{ completedInvoiceData.customerPhone }}</div>
               </div>
 
-              <table class="receipt-items-table">
+              <table class="receipt-table">
                 <thead>
                   <tr>
-                    <th>Sản phẩm</th>
+                    <th>Tên hàng</th>
                     <th class="text-center">SL</th>
                     <th class="text-end">T.Tiền</th>
                   </tr>
@@ -2181,42 +2071,44 @@ onUnmounted(() => {
                 </tbody>
               </table>
 
-              <div class="receipt-totals-block">
-                <div class="receipt-sum-row">
-                  <span>Tổng tiền hàng:</span>
+              <div class="receipt-total-block">
+                <div class="summary-row">
+                  <span>Tổng tiền:</span>
                   <strong>{{ formatVnd(completedInvoiceData.subTotal) }}</strong>
                 </div>
-                <div v-if="completedInvoiceData.discount > 0" class="receipt-sum-row">
+                <div class="summary-row" v-if="completedInvoiceData.discount > 0">
                   <span>Giảm giá:</span>
                   <strong>- {{ formatVnd(completedInvoiceData.discount) }}</strong>
                 </div>
-                <div v-if="completedInvoiceData.shippingFee > 0" class="receipt-sum-row">
-                  <span>Phí vận chuyển:</span>
+                <div class="summary-row" v-if="completedInvoiceData.shippingFee > 0">
+                  <span>Phí ship:</span>
                   <strong>+ {{ formatVnd(completedInvoiceData.shippingFee) }}</strong>
                 </div>
-                <div class="receipt-sum-row grand-sum">
-                  <span>TỔNG THANH TOÁN:</span>
+                <div class="summary-row"
+                  style="font-size: 15px; font-weight: 800; border-top: 1px solid #000; padding-top: 6px;">
+                  <span>THANH TOÁN:</span>
                   <span>{{ formatVnd(completedInvoiceData.finalTotal) }}</span>
                 </div>
-                <div v-if="completedInvoiceData.paymentMethod === 'TIEN_MAT'" class="receipt-sum-row">
+                <div class="summary-row" v-if="completedInvoiceData.paymentMethod === 'TIEN_MAT'">
                   <span>Tiền khách đưa:</span>
                   <span>{{ formatVnd(completedInvoiceData.cashGiven) }}</span>
                 </div>
-                <div v-if="completedInvoiceData.paymentMethod === 'TIEN_MAT'" class="receipt-sum-row">
+                <div class="summary-row" v-if="completedInvoiceData.paymentMethod === 'TIEN_MAT'">
                   <span>Tiền thừa:</span>
                   <span>{{ formatVnd(completedInvoiceData.changeDue) }}</span>
                 </div>
               </div>
 
-              <div class="receipt-thank-msg">
+              <div class="receipt-foot-msg">
                 Cảm ơn quý khách và hẹn gặp lại!
               </div>
             </div>
           </div>
 
-          <div class="pos-modal-footer">
-            <button class="btn-modal-cancel" @click="isReceiptModalOpen = false">Đóng</button>
-            <button class="btn-modal-submit" @click="printReceipt">
+          <div class="pos-modal-foot">
+            <button class="btn-pos-cancel" style="height: 36px; padding: 0 16px;"
+              @click="isReceiptModalOpen = false">Đóng</button>
+            <button class="btn-pos-checkout ready" style="height: 36px; padding: 0 16px;" @click="printReceipt">
               In hóa đơn
             </button>
           </div>

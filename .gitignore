@@ -27,3 +27,14 @@ yarn-error.log*
 *.log
 .DS_Store
 Thumbs.db
+
+# Secrets / local environment (KHONG commit mat khau)
+.env
+.env.*
+*.env
+
+# Tooling rieng (khong lien quan du an)
+.superpowers/
+/package.json
+/package-lock.json
+

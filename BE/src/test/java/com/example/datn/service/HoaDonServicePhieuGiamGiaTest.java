@@ -167,15 +167,18 @@ class HoaDonServicePhieuGiamGiaTest {
 
         HoaDonDTO dto = service.create(yeuCau(PGG_ID, KH_A));
 
-        assertThat(dto.getTongTien()).isEqualByComparingTo("1050000");
-        assertThat(dto.getTienGiam()).isEqualByComparingTo("210000");
-        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("840000");
+        assertThat(dto.getTongTien()).isEqualByComparingTo("1000000");
+        assertThat(dto.getTienGiam()).isEqualByComparingTo("200000");
+        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("800000");
         assertThat(dto.getTenGiamGiaUngDung()).isEqualTo("Giảm 20%");
+        assertThat(dto.getMaPhieuGiamGia()).isEqualTo("GG001");
+        assertThat(dto.getLoaiGiamGia()).isEqualTo("PERCENT");
+        assertThat(dto.getGiaTriGiam()).isEqualByComparingTo("20");
 
         ArgumentCaptor<HoaDon> capHd = ArgumentCaptor.forClass(HoaDon.class);
         verify(hoaDonRepository).save(capHd.capture());
-        assertThat(capHd.getValue().getTienGiam()).isEqualByComparingTo("210000");
-        assertThat(capHd.getValue().getTienSauGiamGia()).isEqualByComparingTo("840000");
+        assertThat(capHd.getValue().getTienGiam()).isEqualByComparingTo("200000");
+        assertThat(capHd.getValue().getTienSauGiamGia()).isEqualByComparingTo("800000");
         assertThat(capHd.getValue().getTenGiamGiaUngDung()).isEqualTo("Giảm 20%");
 
         ArgumentCaptor<LichSuSuDungPhieuGiamGia> capLs = ArgumentCaptor.forClass(LichSuSuDungPhieuGiamGia.class);
@@ -183,7 +186,7 @@ class HoaDonServicePhieuGiamGiaTest {
         assertThat(capLs.getValue().getKhachHang().getId()).isEqualTo(KH_A);
         assertThat(capLs.getValue().getPhieuGiamGia().getId()).isEqualTo(PGG_ID);
         assertThat(capLs.getValue().getHoaDon().getId()).isEqualTo(10L);
-        assertThat(capLs.getValue().getSoTienGiam()).isEqualByComparingTo("210000");
+        assertThat(capLs.getValue().getSoTienGiam()).isEqualByComparingTo("200000");
         assertThat(capLs.getValue().getThoiGian()).isNotNull();
     }
 
@@ -200,8 +203,8 @@ class HoaDonServicePhieuGiamGiaTest {
 
         HoaDonDTO dto = service.create(yeuCau(PGG_ID, KH_A));
 
-        assertThat(dto.getTienGiam()).isEqualByComparingTo("210000");
-        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("840000");
+        assertThat(dto.getTienGiam()).isEqualByComparingTo("200000");
+        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("800000");
         assertThat(dto.getIdDotGiamGia()).isEqualTo(5L);
         assertThat(dto.getTenDotGiamGia()).isEqualTo("Sale tháng 10");
     }
@@ -307,7 +310,7 @@ class HoaDonServicePhieuGiamGiaTest {
         HoaDonDTO dto = service.create(yeuCau(PGG_ID, KH_A));
 
         assertThat(dto.getTienGiam()).isEqualByComparingTo("60000");
-        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("990000");
+        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("940000");
         assertThat(dto.getTenGiamGiaUngDung()).isEqualTo("Giảm 60.000đ");
     }
 
@@ -331,7 +334,7 @@ class HoaDonServicePhieuGiamGiaTest {
         HoaDonDTO dto = service.create(yeuCau(null, KH_A));
 
         assertThat(dto.getTienGiam()).isEqualByComparingTo("0");
-        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("1050000");
+        assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("1000000");
         assertThat(dto.getTenGiamGiaUngDung()).isNull();
         verify(lichSuSuDungRepository, org.mockito.Mockito.never())
             .save(any(LichSuSuDungPhieuGiamGia.class));
@@ -351,5 +354,28 @@ class HoaDonServicePhieuGiamGiaTest {
         assertThatThrownBy(() -> service.create(req))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("bị trùng ở nhiều dòng");
+    }
+
+    @Test
+    void get_VanHienThiVoucherDayDuKhiPhieuSauDoBiVoHieu() {
+        PhieuGiamGia pgg = phieu("PERCENT", "20", 1);
+        chuanBi(pgg);
+
+        service.create(yeuCau(PGG_ID, KH_A));
+
+        ArgumentCaptor<HoaDon> capHd = ArgumentCaptor.forClass(HoaDon.class);
+        verify(hoaDonRepository).save(capHd.capture());
+        HoaDon luu = capHd.getValue();
+        pgg.setTrangThai(false);
+        when(hoaDonRepository.findById(luu.getId())).thenReturn(Optional.of(luu));
+        when(chiTietHoaDonRepository.findByHoaDonId(luu.getId())).thenReturn(List.of());
+
+        HoaDonDTO dto = service.get(luu.getId());
+
+        assertThat(dto.getMaPhieuGiamGia()).isEqualTo("GG001");
+        assertThat(dto.getTenPhieuGiamGia()).isEqualTo("Giảm 20%");
+        assertThat(dto.getLoaiGiamGia()).isEqualTo("PERCENT");
+        assertThat(dto.getGiaTriGiam()).isEqualByComparingTo("20");
+        assertThat(dto.getTienGiam()).isEqualByComparingTo("200000");
     }
 }

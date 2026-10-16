@@ -1,7 +1,7 @@
-/*
 const TOKEN_KEY = 'polyshoes_token'
 const REFRESH_KEY = 'polyshoes_refresh'
 const USER_KEY = 'polyshoes_user'
+const MA_AN_DANH_KEY = 'polyshoes_ma_an_danh'
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY)
 
@@ -25,7 +25,9 @@ export const luuPhien = (resp) => {
   localStorage.setItem(
     USER_KEY,
     JSON.stringify({
-      idKhachHang: resp.idKhachHang,
+      idKhachHang: resp.idKhachHang ?? null,
+      idNhanVien: resp.idNhanVien ?? null,
+      loaiTaiKhoan: resp.loaiTaiKhoan || 'KHACH_HANG',
       tenTaiKhoan: resp.tenTaiKhoan,
       email: resp.email,
       tenKhachHang: resp.tenKhachHang,
@@ -50,4 +52,26 @@ export const isTokenExpired = (token) => {
     return true
   }
 }
-*/
+
+/** UUID ẩn danh cho khách chưa đăng nhập (chat). */
+export const getMaAnDanh = () => {
+  let ma = localStorage.getItem(MA_AN_DANH_KEY)
+  if (!ma) {
+    ma =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    localStorage.setItem(MA_AN_DANH_KEY, ma)
+  }
+  return ma
+}
+
+export const isNhanVienDangNhap = () => {
+  const u = getUser()
+  return u?.loaiTaiKhoan === 'NHAN_VIEN'
+}
+
+export const isKhachHangDangNhap = () => {
+  const u = getUser()
+  return !!getToken() && u?.loaiTaiKhoan !== 'NHAN_VIEN'
+}

@@ -41,7 +41,7 @@ const form = reactive({
   endDate: "",
   description: "",
   scope: "public",
-  status: true,
+  status: true, // không hiển thị trên giao diện, giữ nguyên giá trị cũ khi gửi lên
   customerIds: [],
 });
 
@@ -73,10 +73,15 @@ const errors = computed(() => {
   const e = {};
   if (!form.name) e.name = "Vui lòng nhập tên phiếu giảm giá.";
 
-  if (!form.quantity || form.quantity < 1)
+  // Cá nhân: số lượng tự theo khách đã chọn, lỗi thiếu khách báo ở customerIds
+  if (isPrivate.value) {
+    if (form.quantity && form.quantity < form.usedCount)
+      e.quantity = `Số lượng không được nhỏ hơn số đã sử dụng (${form.usedCount}).`;
+  } else if (!form.quantity || form.quantity < 1) {
     e.quantity = "Số lượng phải lớn hơn hoặc bằng 1.";
-  else if (form.quantity < form.usedCount)
+  } else if (form.quantity < form.usedCount) {
     e.quantity = `Số lượng không được nhỏ hơn số đã sử dụng (${form.usedCount}).`;
+  }
 
   if (!form.limitPerUser || form.limitPerUser < 1)
     e.limitPerUser = "Giới hạn mỗi tài khoản phải lớn hơn hoặc bằng 1.";
@@ -342,23 +347,13 @@ const submit = async () => {
         </h2>
 
         <div class="grid">
-          <!-- Mã phiếu (chỉ đọc) -->
+          <!-- Hàng 1: Mã phiếu | Tên phiếu -->
           <div class="field">
             <label>Mã phiếu giảm giá</label>
             <input :value="form.code" type="text" readonly class="readonly" />
           </div>
 
-          <!-- Trạng thái -->
           <div class="field">
-            <label>Trạng thái</label>
-            <select v-model="form.status">
-              <option :value="true">Đang hoạt động</option>
-              <option :value="false">Ngừng hoạt động</option>
-            </select>
-          </div>
-
-          <!-- Tên phiếu -->
-          <div class="field span-2">
             <label>Tên phiếu giảm giá <b class="req">*</b></label>
             <input
               v-model.trim="form.name"
@@ -372,7 +367,7 @@ const submit = async () => {
             </p>
           </div>
 
-          <!-- Số lượng -->
+          <!-- Hàng 2: Số lượng | Giới hạn mỗi tài khoản -->
           <div class="field">
             <label>
               Số lượng <b class="req">*</b>
@@ -395,7 +390,6 @@ const submit = async () => {
             </p>
           </div>
 
-          <!-- Giới hạn mỗi tài khoản -->
           <div class="field">
             <label>Giới hạn mỗi tài khoản <b class="req">*</b></label>
             <input
@@ -411,23 +405,7 @@ const submit = async () => {
             </p>
           </div>
 
-          <!-- Đơn hàng tối thiểu -->
-          <div class="field">
-            <label>Đơn hàng tối thiểu <b class="req">*</b></label>
-            <input
-              :value="fmtMoney(form.minOrder)"
-              type="text"
-              inputmode="numeric"
-              :class="{ invalid: err('minOrder') }"
-              @input="onMoneyInput('minOrder', $event)"
-              @blur="touch('minOrder')"
-            />
-            <p v-if="err('minOrder')" class="err">
-              <i class="err-ico">!</i>{{ errors.minOrder }}
-            </p>
-          </div>
-
-          <!-- Loại giảm -->
+          <!-- Hàng 3: Loại giảm | Giá trị giảm -->
           <div class="field">
             <label>Loại giảm <b class="req">*</b></label>
             <select v-model="form.discountType">
@@ -436,7 +414,6 @@ const submit = async () => {
             </select>
           </div>
 
-          <!-- Giá trị giảm -->
           <div class="field">
             <label>Giá trị giảm <b class="req">*</b></label>
             <div class="affix" :class="{ invalid: err('discountValue') }">
@@ -463,7 +440,22 @@ const submit = async () => {
             </p>
           </div>
 
-          <!-- Giảm tối đa (chỉ khi giảm theo %) -->
+          <!-- Hàng 4: Đơn tối thiểu | Giảm tối đa (chỉ khi giảm %) -->
+          <div class="field">
+            <label>Đơn hàng tối thiểu <b class="req">*</b></label>
+            <input
+              :value="fmtMoney(form.minOrder)"
+              type="text"
+              inputmode="numeric"
+              :class="{ invalid: err('minOrder') }"
+              @input="onMoneyInput('minOrder', $event)"
+              @blur="touch('minOrder')"
+            />
+            <p v-if="err('minOrder')" class="err">
+              <i class="err-ico">!</i>{{ errors.minOrder }}
+            </p>
+          </div>
+
           <div v-if="isPercent" class="field">
             <label>Giảm tối đa (VNĐ)</label>
             <input
@@ -475,7 +467,7 @@ const submit = async () => {
             />
           </div>
 
-          <!-- Ngày bắt đầu -->
+          <!-- Hàng 5: Ngày bắt đầu | Ngày kết thúc -->
           <div class="field">
             <label>Ngày bắt đầu <b class="req">*</b></label>
             <input
@@ -489,7 +481,6 @@ const submit = async () => {
             </p>
           </div>
 
-          <!-- Ngày kết thúc -->
           <div class="field">
             <label>Ngày kết thúc <b class="req">*</b></label>
             <input
@@ -504,7 +495,7 @@ const submit = async () => {
             </p>
           </div>
 
-          <!-- Mô tả -->
+          <!-- Hàng 6: Mô tả -->
           <div class="field span-2">
             <label>Mô tả phiếu giảm giá <small>(Không bắt buộc)</small></label>
             <textarea

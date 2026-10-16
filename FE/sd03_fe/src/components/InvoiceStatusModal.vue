@@ -281,8 +281,8 @@ const xacNhan = async () => {
 }
 
 .progress-step.is-next .progress-dot {
-  background: #fef2f2;
-  border-color: #fca5a5;
+  background: #f8fafc;
+  border-color: #e2e8f0;
 }
 
 .progress-label {
@@ -303,7 +303,7 @@ const xacNhan = async () => {
 }
 
 .progress-step.is-next .progress-label {
-  color: #dc2626;
+  color: #94a3b8;
 }
 
 .progress-line {

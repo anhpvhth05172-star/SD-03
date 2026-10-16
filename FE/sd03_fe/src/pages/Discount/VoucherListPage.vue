@@ -134,6 +134,12 @@ const statusPill = (value) => {
   return "pill-gray"; // Hết hạn
 };
 
+const resetFilter = () => {
+  filter.keyword = "";
+  filter.scope = "";
+  filter.fromDate = "";
+  filter.toDate = "";
+};
 onMounted(() => getData(0));
 </script>
 
@@ -236,10 +242,12 @@ onMounted(() => getData(0));
               <input v-model="filter.scope" type="radio" value="" />
               <span>Tất cả</span>
             </label>
+
             <label class="pill-opt">
               <input v-model="filter.scope" type="radio" value="CONG_KHAI" />
               <span>Công khai</span>
             </label>
+
             <label class="pill-opt">
               <input v-model="filter.scope" type="radio" value="CA_NHAN" />
               <span>Cá nhân</span>
@@ -265,6 +273,13 @@ onMounted(() => getData(0));
             class="f-date"
             :min="filter.fromDate || undefined"
           />
+        </div>
+
+        <div class="d-flex justify-content-end w-100">
+          <button type="button" class="btn-reset-filter" @click="resetFilter">
+            <i class="bi bi-arrow-clockwise"></i>
+            <span>Đặt lại bộ lọc</span>
+          </button>
         </div>
       </div>
     </section>
@@ -608,5 +623,47 @@ onMounted(() => getData(0));
   .filter-grid.row-2 {
     grid-template-columns: 1fr;
   }
+}
+
+.filter-reset-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  width: 100%;
+}
+
+.btn-reset-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  padding: 9px 18px;
+  border: 1px solid #c8c8c8;
+  border-radius: 24px;
+
+  background-color: #fff;
+  color: #555;
+  font-size: 14px;
+  font-weight: 500;
+
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.btn-reset-filter i {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.btn-reset-filter:hover {
+  background-color: #f5f5f5;
+  border-color: #999;
+  color: #333;
+}
+
+.btn-reset-filter:active {
+  background-color: #eee;
 }
 </style>

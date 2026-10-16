@@ -8,6 +8,9 @@ import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import "bootstrap";
 import "bootstrap-icons/font/bootstrap-icons.css";
 import "./assets/styles/custom-swal.css";
+import { caiDatFetchAuth } from "./api/fetch-auth";
+
+caiDatFetchAuth();
 
 const app = createApp(App);
 

@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/xuat-xu")
 @RequiredArgsConstructor
-@CrossOrigin(originPatterns = "*")
 public class XuatXuController {
 
     private final XuatXuService xuatXuService;

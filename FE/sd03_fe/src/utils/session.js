@@ -19,12 +19,12 @@ const ghi = (key, value) => {
   }
 }
 
-export const vaiTroHienTai = ref((doc(khoaVaiTro) || 'ADMIN').toUpperCase())
+export const vaiTroHienTai = ref((doc(khoaVaiTro) || '').toUpperCase())
 
 export const laAdmin = () => vaiTroHienTai.value === 'ADMIN'
 
 export const datVaiTro = (vaiTro) => {
-  const v = String(vaiTro || 'ADMIN').toUpperCase()
+  const v = String(vaiTro || '').toUpperCase()
   vaiTroHienTai.value = v
   ghi(khoaVaiTro, v)
 }

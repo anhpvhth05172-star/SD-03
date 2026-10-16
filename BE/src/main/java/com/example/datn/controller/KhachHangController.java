@@ -21,7 +21,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -37,8 +36,19 @@ public class KhachHangController {
     private final KhachHangRepository khachHangRepository;
 
     @GetMapping("/all")
-    public List<KhachHang> getList() {
-        return khachHangRepository.findAll();
+    public List<Map<String, Object>> getList() {
+        return khachHangRepository.findAll().stream()
+            .map(k -> {
+                Map<String, Object> m = new java.util.HashMap<>();
+                m.put("id", k.getId());
+                m.put("maKhachHang", k.getMaKhachHang());
+                m.put("tenKhachHang", k.getTenKhachHang());
+                m.put("email", k.getEmail());
+                m.put("soDienThoai", k.getSoDienThoai());
+                m.put("ngaySinh", k.getNgaySinh());
+                return m;
+            })
+            .toList();
     }
 
     @GetMapping
@@ -55,11 +65,8 @@ public class KhachHangController {
     }
 
     @GetMapping("/ma-tu-dong")
-    public Map<String, String> maKhachHangTuDong(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
-        @RequestParam(required = false) String ten
-    ) {
-        quyenGuard.canQuanLyKhachHang(vaiTro);
+    public Map<String, String> maKhachHangTuDong(@RequestParam(required = false) String ten) {
+        quyenGuard.canQuanLyKhachHang();
         return Map.of("ma", khachHangService.maKhachHangTuDong(ten));
     }
 
@@ -77,40 +84,29 @@ public class KhachHangController {
     }
 
     @PostMapping
-    public ResponseEntity<KhachHangDTO> create(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
-        @RequestBody KhachHangRequest request
-    ) {
-        quyenGuard.canQuanLyKhachHang(vaiTro);
+    public ResponseEntity<KhachHangDTO> create(@RequestBody KhachHangRequest request) {
+        quyenGuard.canQuanLyKhachHang();
         return ResponseEntity.status(HttpStatus.CREATED).body(khachHangService.create(request));
     }
 
     @PutMapping("/{id}")
-    public KhachHangDTO update(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
-        @PathVariable Long id,
-        @RequestBody KhachHangRequest request
-    ) {
-        quyenGuard.canQuanLyKhachHang(vaiTro);
+    public KhachHangDTO update(@PathVariable Long id, @RequestBody KhachHangRequest request) {
+        quyenGuard.canQuanLyKhachHang();
         return khachHangService.update(id, request);
     }
 
     @PutMapping("/{id}/trang-thai")
     public KhachHangDTO capNhatTrangThai(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
         @PathVariable Long id,
         @RequestParam String trangThai
     ) {
-        quyenGuard.canQuanLyKhachHang(vaiTro);
+        quyenGuard.canQuanLyKhachHang();
         return khachHangService.capNhatTrangThai(id, trangThai);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
-        @PathVariable Long id
-    ) {
-        quyenGuard.canQuanLyKhachHang(vaiTro);
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        quyenGuard.canQuanLyKhachHang();
         khachHangService.delete(id);
         return ResponseEntity.noContent().build();
     }

@@ -39,7 +39,10 @@ public class HoaDonDTO {
     private Long idPhuongThucThanhToan;
     private String tenPhuongThucThanhToan;
     private Long idPhieuGiamGia;
+    private String maPhieuGiamGia;
     private String tenPhieuGiamGia;
+    private String loaiGiamGia;
+    private BigDecimal giaTriGiam;
     private Long idDotGiamGia;
     private String tenDotGiamGia;
     private BigDecimal tienGiam;

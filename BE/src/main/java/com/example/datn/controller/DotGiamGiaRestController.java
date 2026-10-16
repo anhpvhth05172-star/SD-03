@@ -1,8 +1,6 @@
 package com.example.datn.controller;
 
-import com.example.datn.dto.DotGiamGia.DotGiamGiaDetailResponse;
-import com.example.datn.dto.DotGiamGia.DotGiamGiaRequest;
-import com.example.datn.dto.DotGiamGia.SanPhamChiTietOptionResponse;
+import com.example.datn.dto.DotGiamGia.*;
 import com.example.datn.entity.DotGiamGia;
 import com.example.datn.service.DotGiamGiaService;
 import com.example.datn.service.impls.DotGiamGiaChiTietService;
@@ -23,7 +21,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/admin/dot-giam-gia")
-@CrossOrigin("*")
 public class DotGiamGiaRestController {
 
     @Autowired
@@ -84,19 +81,16 @@ public class DotGiamGiaRestController {
         return serviceFinal.chiTiet(id);
     }
     @PutMapping("/change-status/{id}")
-    public ResponseEntity<?> doiTrangThai(
+    public ResponseEntity<DotGiamGiaTrangThaiResponse> doiTrangThai(
             @PathVariable Long id,
-            @RequestBody Map<String, Boolean> request
-    ) {
-        Boolean trangThai = request.get("trangThai");
+            @RequestBody DotGiamGiaTrangThaiRequest request) {
+        Boolean ketQua = serviceFinal.doiTrangThai(id, request.getTrangThai());
+        return ResponseEntity.ok(new DotGiamGiaTrangThaiResponse(id, ketQua));
+    }
 
-        serviceFinal.doiTrangThai(id, trangThai);
-
-        return ResponseEntity.ok(
-                Map.of(
-                        "message", "Cập nhật trạng thái thành công",
-                        "trangThai", trangThai
-                )
-        );
+    @PutMapping("/update/{id}")
+    public ResponseEntity<Long> capNhat(@PathVariable Long id,
+                                        @RequestBody DotGiamGiaRequest request) {
+        return ResponseEntity.ok(serviceFinal.capNhat(id, request));
     }
 }

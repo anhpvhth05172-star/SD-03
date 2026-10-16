@@ -20,7 +20,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/admin/phieu-giam-gia")
-@CrossOrigin("*")
 public class PhieuGiamGiaRestController {
 
     @Autowired

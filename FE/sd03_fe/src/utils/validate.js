@@ -12,9 +12,9 @@ export const emailHopLe = (v) => {
 
 export const soDienThoaiHopLe = (v) => {
   if (isBlank(v)) return ''
-  return /^0\d{8,9}$/.test(String(v).trim())
+  return /^0\d{9}$/.test(String(v))
     ? ''
-    : 'Số điện thoại không hợp lệ (bắt đầu bằng 0, gồm 9-10 chữ số, không chứa chữ cái)'
+    : 'Số điện thoại phải bắt đầu bằng số 0 và gồm đúng 10 chữ số'
 }
 
 /** Phân tích ngày theo định dạng YYYY-MM-DD (hoặc Date hợp lệ); trả về null nếu không hợp lệ. */

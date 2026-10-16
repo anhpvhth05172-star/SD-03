@@ -196,6 +196,19 @@ const tenGiamGia = computed(() => {
 
 const chot = (v) => v !== null && v !== undefined && v !== ''
 
+const thongTinPhieu = computed(() => {
+  const d = data.value
+  if (!d) return ''
+  const parts = []
+  if (chot(d.maPhieuGiamGia)) parts.push(d.maPhieuGiamGia)
+  const ten = d.tenGiamGiaUngDung || d.tenPhieuGiamGia
+  if (chot(ten)) parts.push(ten)
+  if (chot(d.loaiGiamGia) && d.giaTriGiam !== null && d.giaTriGiam !== undefined) {
+    parts.push(d.loaiGiamGia === 'PERCENT' ? `${d.giaTriGiam}%` : formatVnd(d.giaTriGiam))
+  }
+  return parts.join(' · ') || 'Không áp dụng'
+})
+
 const timKiemSp = ref('')
 const locMau = ref('')
 const locKichCo = ref('')
@@ -370,8 +383,8 @@ onBeforeUnmount(() => {
 
           <section class="receipt-totals">
             <p><span>Tiền hàng</span><strong>{{ formatVnd(tienHang) }}</strong></p>
-            <p v-if="coGiamGia"><span>Giảm giá <small>({{ tenGiamGia }})</small></span><strong>− {{ formatVnd(data.tienGiam) }}</strong></p>
-            <p><span>Phí vận chuyển</span><strong>{{ formatVnd(data.phiVanChuyen) }}</strong></p>
+            <p v-if="coGiamGia"><span>Giảm giá <small>({{ thongTinPhieu }})</small></span><strong>− {{ formatVnd(data.tienGiam) }}</strong></p>
+            <p v-if="Number(data.phiVanChuyen) > 0"><span>Phí vận chuyển</span><strong>{{ formatVnd(data.phiVanChuyen) }}</strong></p>
             <p class="receipt-grand-total"><span>Tổng thanh toán</span><strong>{{ formatVnd(data.tienSauGiamGia) }}</strong></p>
             <p><span>Thanh toán</span><strong>{{ data.tenPhuongThucThanhToan || '—' }}</strong></p>
           </section>
@@ -631,6 +644,10 @@ onBeforeUnmount(() => {
                 <span>Tổng tiền hàng</span>
                 <span>{{ formatVnd(tienHang) }}</span>
               </div>
+              <div class="sum-row" v-if="coGiamGia">
+                <span>Phiếu giảm giá</span>
+                <span class="sum-voucher" :title="tenGiamGia">{{ thongTinPhieu }}</span>
+              </div>
               <div class="sum-row">
                 <span>Giảm giá</span>
                 <span v-if="coGiamGia" class="sum-discount">
@@ -638,7 +655,7 @@ onBeforeUnmount(() => {
                 </span>
                 <span v-else>− 0 ₫</span>
               </div>
-              <div class="sum-row">
+              <div class="sum-row" v-if="Number(data.phiVanChuyen) > 0">
                 <span>Phí vận chuyển</span>
                 <span>+ {{ formatVnd(data.phiVanChuyen) }}</span>
               </div>
@@ -956,14 +973,14 @@ button.stepper-step.is-next {
 }
 
 button.stepper-step.is-next:hover:not(:disabled) .stepper-node {
-  background: #fef2f2;
-  border-color: #dc2626;
-  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.1);
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.15);
   transform: scale(1.08);
 }
 
 button.stepper-step.is-next:hover:not(:disabled) .stepper-label {
-  color: #dc2626;
+  color: #475569;
 }
 
 button.stepper-step.is-next:disabled {
@@ -1025,9 +1042,9 @@ button.stepper-step.is-next:disabled {
 }
 
 .stepper-step.is-next .stepper-node {
-  border-color: #fca5a5;
-  background: #fef2f2;
-  color: #dc2626;
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #94a3b8;
 }
 
 .stepper-label {
@@ -1285,6 +1302,13 @@ button.stepper-step.is-next:disabled {
 
 .sum-discount {
   color: #15803d !important;
+}
+
+.sum-voucher {
+  color: #1d4ed8 !important;
+  font-size: 12.5px !important;
+  text-align: right;
+  word-break: break-word;
 }
 
 .sum-final {

@@ -4,6 +4,7 @@ import com.example.datn.config.GHNConfig;
 import com.example.datn.dto.ShippingAddressDTO;
 import com.example.datn.dto.ShippingFeeRequest;
 import com.example.datn.dto.ShippingFeeResponse;
+import com.example.datn.dto.ShippingServiceDTO;
 import com.example.datn.dto.ShippingWardDTO;
 import com.example.datn.entity.SanPhamChiTiet;
 import com.example.datn.repository.SanPhamChiTietRepository;
@@ -27,11 +28,23 @@ public class GHNService {
     private static final String PATH_DISTRICT = "/shiip/public-api/master-data/district";
     private static final String PATH_WARD = "/shiip/public-api/master-data/ward";
     private static final String PATH_FEE = "/shiip/public-api/v2/shipping-order/fee";
+    private static final String PATH_PROVINCE_V3 = "/shiip/public-api/v3/master-data/province/all";
+    private static final String PATH_WARD_V3 = "/shiip/public-api/v3/master-data/ward/all-by-province-id";
+    private static final String PATH_SERVICES = "/shiip/public-api/v2/shipping-order/available-services";
+
+    private static final long CACHE_TTL_MS = 5 * 60_000L;
 
     private final GHNConfig cauHinh;
     private final GHNApiClient ghnApiClient;
     private final SanPhamChiTietRepository sanPhamChiTietRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private volatile List<ShippingAddressDTO> cacheTinhMoi;
+    private volatile long cacheTinhMoiLuc;
+    private final java.util.Map<Integer, CapPhongXaMoi> cachePhuongXaMoi = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private record CapPhongXaMoi(List<ShippingAddressDTO> ds, long luc) {}
+
 
     public List<ShippingAddressDTO> getTinhThanh() {
         JsonNode root = doc(ghnApiClient.get(PATH_PROVINCE));
@@ -90,6 +103,90 @@ public class GHNService {
         return new ShippingFeeResponse(phi, "VND", "Phí vận chuyển được tính bởi GHN");
     }
 
+    public List<ShippingAddressDTO> getTinhThanhMoi() {
+        long now = System.currentTimeMillis();
+        List<ShippingAddressDTO> daCache = cacheTinhMoi;
+        if (daCache != null && now - cacheTinhMoiLuc < CACHE_TTL_MS) {
+            return daCache;
+        }
+        JsonNode root = doc(ghnApiClient.get(PATH_PROVINCE_V3));
+        kiemTraCode(root, "tỉnh/thành (mô hình 2 tầng)");
+        List<ShippingAddressDTO> ketQua = new ArrayList<>();
+        for (JsonNode n : root.path("data")) {
+            int id = n.path("_id").asInt(0);
+            String ten = n.path("name").asText("");
+            if (id > 0 && !ten.isBlank()) {
+                ketQua.add(new ShippingAddressDTO(id, ten));
+            }
+        }
+        sapXepTheoTen(ketQua);
+        cacheTinhMoi = ketQua;
+        cacheTinhMoiLuc = now;
+        return ketQua;
+    }
+
+    public List<ShippingAddressDTO> getPhuongXaMoi(Integer provinceId) {
+        if (provinceId == null) {
+            throw new IllegalArgumentException("Thiếu mã tỉnh/thành để lấy danh sách phường/xã");
+        }
+        long now = System.currentTimeMillis();
+        CapPhongXaMoi daCache = cachePhuongXaMoi.get(provinceId);
+        if (daCache != null && now - daCache.luc() < CACHE_TTL_MS) {
+            return daCache.ds();
+        }
+        JsonNode root = doc(ghnApiClient.get(
+            PATH_WARD_V3 + "?province_id=" + provinceId + "&offset=0&limit=200"));
+        kiemTraCode(root, "phường/xã (mô hình 2 tầng)");
+        List<ShippingAddressDTO> ketQua = new ArrayList<>();
+        for (JsonNode n : root.path("data")) {
+            int id = n.path("_id").asInt(0);
+            String ten = n.path("name").asText("");
+            if (id > 0 && !ten.isBlank()) {
+                ketQua.add(new ShippingAddressDTO(id, ten));
+            }
+        }
+        sapXepTheoTen(ketQua);
+        cachePhuongXaMoi.put(provinceId, new CapPhongXaMoi(ketQua, now));
+        return ketQua;
+    }
+
+    public List<ShippingServiceDTO> getDichVu(Integer toDistrictId) {
+        cauHinh.kiemTraCauHinh();
+        if (toDistrictId == null) {
+            throw new IllegalArgumentException("Thiếu mã quận/huyện đích để lấy dịch vụ vận chuyển");
+        }
+        if (cauHinh.getFromDistrictId() == null) {
+            throw new IllegalArgumentException(
+                "Chưa cấu hình địa chỉ gửi: thiếu biến môi trường GHN_FROM_DISTRICT_ID");
+        }
+        int shopId;
+        try {
+            shopId = Integer.parseInt(cauHinh.getShopId().trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("GHN_SHOP_ID phải là mã số shop hợp lệ của GHN");
+        }
+        ObjectNode body = objectMapper.createObjectNode();
+        body.put("shop_id", shopId);
+        body.put("from_district", cauHinh.getFromDistrictId());
+        body.put("to_district", toDistrictId);
+
+        JsonNode root = doc(ghnApiClient.post(PATH_SERVICES, body.toString()));
+        kiemTraCode(root, "dịch vụ vận chuyển");
+        List<ShippingServiceDTO> ketQua = new ArrayList<>();
+        for (JsonNode n : root.path("data")) {
+            int serviceTypeId = n.path("service_type_id").asInt(0);
+            if (serviceTypeId <= 0) {
+                continue;
+            }
+            long serviceId = n.path("service_id").asLong(0);
+            String ten = n.path("short_name").asText("");
+            ketQua.add(new ShippingServiceDTO(serviceTypeId, serviceId, ten));
+        }
+        ketQua.sort(Comparator.comparing(ShippingServiceDTO::getServiceTypeId));
+        return ketQua;
+    }
+
+
     public int tinhPhi(ShippingFeeRequest req) {
         cauHinh.kiemTraCauHinh();
         if (req == null || req.getToDistrictId() == null) {
@@ -143,7 +240,10 @@ public class GHNService {
         long baoHiem = Math.min(giaTriHang, cauHinh.getInsuranceMaxVnd());
 
         ObjectNode body = objectMapper.createObjectNode();
-        body.put("service_type_id", cauHinh.getServiceTypeId());
+        int serviceTypeId = req.getServiceTypeId() != null && req.getServiceTypeId() > 0
+            ? req.getServiceTypeId()
+            : cauHinh.getServiceTypeId();
+        body.put("service_type_id", serviceTypeId);
         body.put("to_district_id", req.getToDistrictId());
         body.put("to_ward_code", req.getToWardCode().trim());
         body.put("weight", tongTrongLuong);

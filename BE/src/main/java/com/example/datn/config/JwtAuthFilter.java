@@ -1,4 +1,3 @@
-/*
 package com.example.datn.config;
 
 import com.example.datn.entity.PhienDangNhap;
@@ -9,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -41,32 +41,76 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (header != null && header.startsWith("Bearer ")) {
             String token = header.substring(7).trim();
             if (!token.isEmpty() && jwtService.hopLe(token)) {
-                Long idKhachHang = jwtService.layIdKhachHang(token);
-                Long idPhien = jwtService.layIdPhien(token);
-                PhienDangNhap phien = idPhien == null
-                    ? null
-                    : phienDangNhapRepository.findById(idPhien).orElse(null);
-                LocalDateTime bayGio = LocalDateTime.now();
-                if (
-                    phien != null
-                        && !phien.isRevoked()
-                        && !phien.hetHan(bayGio, thoiGianPhienMs)
-                        && phien.getIdKhachHang().equals(idKhachHang)
-                ) {
-                    UsernamePasswordAuthenticationToken xacThuc = new UsernamePasswordAuthenticationToken(
-                        idKhachHang,
-                        null,
-                        List.of(new SimpleGrantedAuthority("ROLE_KHACH_HANG"))
-                    );
-                    SecurityContextHolder.getContext().setAuthentication(xacThuc);
-                    request.setAttribute("idKhachHang", idKhachHang);
-
-                    phien.setHoatDongCuoi(bayGio);
-                    phienDangNhapRepository.save(phien);
+                String loaiTaiKhoan = jwtService.layLoaiTaiKhoan(token);
+                if (JwtService.LOAI_NHAN_VIEN.equals(loaiTaiKhoan)) {
+                    xuLyNhanVien(token, request);
+                } else {
+                    xuLyKhachHang(token, request);
                 }
             }
         }
         filterChain.doFilter(request, response);
     }
+
+    private void xuLyKhachHang(String token, HttpServletRequest request) {
+        Long idKhachHang = jwtService.layIdNguoiDung(token);
+        Long idPhien = jwtService.layIdPhien(token);
+        PhienDangNhap phien = idPhien == null
+            ? null
+            : phienDangNhapRepository.findById(idPhien).orElse(null);
+        LocalDateTime bayGio = LocalDateTime.now();
+        if (
+            phien != null
+                && !phien.isRevoked()
+                && !phien.hetHan(bayGio, thoiGianPhienMs)
+                && phien.getIdKhachHang().equals(idKhachHang)
+        ) {
+            UsernamePasswordAuthenticationToken xacThuc = new UsernamePasswordAuthenticationToken(
+                idKhachHang,
+                null,
+                taoAuthorities(jwtService.layVaiTro(token), "KHACH_HANG")
+            );
+            SecurityContextHolder.getContext().setAuthentication(xacThuc);
+            request.setAttribute("idKhachHang", idKhachHang);
+
+            phien.setHoatDongCuoi(bayGio);
+            phienDangNhapRepository.save(phien);
+        }
+    }
+
+    private void xuLyNhanVien(String token, HttpServletRequest request) {
+        Long idNhanVien = jwtService.layIdNguoiDung(token);
+        Long idPhien = jwtService.layIdPhien(token);
+        if (idPhien == null) {
+            return;
+        }
+        LocalDateTime bayGio = LocalDateTime.now();
+        PhienDangNhap phien = phienDangNhapRepository.findById(idPhien).orElse(null);
+        boolean hopLe =
+            phien != null
+                && !phien.isRevoked()
+                && !phien.hetHan(bayGio, thoiGianPhienMs)
+                && idNhanVien.equals(phien.getIdNhanVien());
+        if (!hopLe) {
+            return;
+        }
+        phien.setHoatDongCuoi(bayGio);
+        phienDangNhapRepository.save(phien);
+        UsernamePasswordAuthenticationToken xacThuc = new UsernamePasswordAuthenticationToken(
+            idNhanVien,
+            null,
+            taoAuthorities(jwtService.layVaiTro(token), "NHAN_VIEN")
+        );
+        SecurityContextHolder.getContext().setAuthentication(xacThuc);
+        request.setAttribute("idNhanVien", idNhanVien);
+    }
+
+    static List<SimpleGrantedAuthority> taoAuthorities(String vaiTro, String loaiTaiKhoan) {
+        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+        authorities.add(new SimpleGrantedAuthority("ROLE_" + loaiTaiKhoan));
+        if (vaiTro != null && !vaiTro.isBlank()) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_" + vaiTro.trim().toUpperCase()));
+        }
+        return authorities;
+    }
 }
-*/

@@ -3,8 +3,11 @@ package com.example.datn.controller;
 import com.example.datn.dto.ShippingAddressDTO;
 import com.example.datn.dto.ShippingFeeRequest;
 import com.example.datn.dto.ShippingFeeResponse;
+import com.example.datn.dto.ShippingServiceDTO;
 import com.example.datn.dto.ShippingWardDTO;
 import com.example.datn.service.GHNService;
+import com.example.datn.service.GhnDiaChiMapper;
+import com.example.datn.service.GhnDiaChiMapper.KetQuaAnhXach;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,10 +23,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ShippingController {
 
     private final GHNService ghnService;
+    private final GhnDiaChiMapper ghnDiaChiMapper;
 
     @GetMapping("/provinces")
     public List<ShippingAddressDTO> provinces() {
-        return ghnService.getTinhThanh();
+        return ghnService.getTinhThanhMoi();
     }
 
     @GetMapping("/districts")
@@ -32,12 +36,33 @@ public class ShippingController {
     }
 
     @GetMapping("/wards")
-    public List<ShippingWardDTO> wards(@RequestParam(required = false) Integer districtId) {
-        return ghnService.getPhuongXa(districtId);
+    public List<ShippingAddressDTO> wards(@RequestParam(required = false) Integer provinceId) {
+        return ghnService.getPhuongXaMoi(provinceId);
+    }
+
+    @GetMapping("/services")
+    public List<ShippingServiceDTO> services(@RequestParam Integer toDistrictId) {
+        return ghnService.getDichVu(toDistrictId);
     }
 
     @PostMapping("/fee")
     public ShippingFeeResponse fee(@RequestBody ShippingFeeRequest request) {
-        return ghnService.tinhPhiResponse(request);
+        boolean canThieuMa = request.getToDistrictId() == null
+            || request.getToWardCode() == null
+            || request.getToWardCode().isBlank();
+        Integer tinhIdLegacy = null;
+        if (canThieuMa) {
+            KetQuaAnhXach kq = ghnDiaChiMapper.anhXach(
+                request.getToProvinceName(), request.getToWardName());
+            request.setToDistrictId(kq.quanId());
+            request.setToWardCode(kq.maPhuong());
+            tinhIdLegacy = kq.tinhId();
+        }
+        ShippingFeeResponse response = ghnService.tinhPhiResponse(request);
+        response.setToProvinceId(tinhIdLegacy);
+        response.setToDistrictId(request.getToDistrictId());
+        response.setToWardCode(request.getToWardCode());
+        response.setToWardName(request.getToWardName());
+        return response;
     }
 }

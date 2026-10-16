@@ -16,6 +16,11 @@ public interface NhanVienRepository extends JpaRepository<NhanVien, Long> {
 
     boolean existsByTenTaiKhoan(String tenTaiKhoan);
 
+    java.util.Optional<com.example.datn.entity.NhanVien> findByTenTaiKhoan(String tenTaiKhoan);
+
+    @Query("SELECT n FROM NhanVien n WHERE n.email = :giaTri OR n.tenTaiKhoan = :giaTri")
+    java.util.Optional<com.example.datn.entity.NhanVien> findByEmailOrTenTaiKhoan(@Param("giaTri") String giaTri);
+
     boolean existsByTenTaiKhoanAndIdNot(String tenTaiKhoan, Long id);
 
     boolean existsByEmail(String email);

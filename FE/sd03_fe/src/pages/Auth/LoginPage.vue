@@ -1,15 +1,21 @@
 <script setup>
-/* Tạm comment logic đăng nhập (không xóa)
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { dangNhap } from '@/api/auth'
+import { dangNhap, dangNhapNhanVien } from '@/api/auth'
 import { luuPhien } from '@/utils/auth'
+import { datVaiTro, datNguoiDung } from '@/utils/session'
 
 const router = useRouter()
 
+const cheDo = ref('nhan-vien') // 'nhan-vien' | 'khach'
 const form = ref({ taiKhoan: '', matKhau: '' })
 const error = ref('')
 const loading = ref(false)
+
+const chonCheDo = (mode) => {
+  cheDo.value = mode
+  error.value = ''
+}
 
 const submit = async () => {
   error.value = ''
@@ -19,38 +25,69 @@ const submit = async () => {
   }
   loading.value = true
   try {
-    const resp = await dangNhap({
+    const payload = {
       taiKhoan: form.value.taiKhoan.trim(),
       matKhau: form.value.matKhau,
-    })
+    }
+    const resp =
+      cheDo.value === 'nhan-vien' ? await dangNhapNhanVien(payload) : await dangNhap(payload)
     luuPhien(resp)
-    router.push('/hoa-don')
+    datVaiTro(resp.vaiTro)
+    datNguoiDung(resp.tenTaiKhoan)
+    if (cheDo.value === 'nhan-vien') {
+      router.push('/hoa-don')
+    } else {
+      router.push('/tai-khoan')
+    }
   } catch (e) {
     error.value = e.message || 'Đăng nhập thất bại'
   } finally {
     loading.value = false
   }
 }
-*/
 </script>
 
 <template>
-  <!-- Tạm comment giao diện trang đăng nhập (không xóa)
   <div class="auth-screen">
     <div class="auth-card">
       <div class="auth-brand">
         <img src="/images/logo_polyshoes_final.png" alt="PolyShoes" />
       </div>
       <h1 class="auth-title">Đăng nhập</h1>
-      <p class="auth-sub">Đăng nhập để sử dụng phiếu giảm giá theo tài khoản của bạn</p>
+      <p class="auth-sub">
+        {{
+          cheDo === 'nhan-vien'
+            ? 'Đăng nhập nhân viên để quản lý cửa hàng'
+            : 'Đăng nhập để sử dụng phiếu giảm giá theo tài khoản của bạn'
+        }}
+      </p>
+
+      <div class="auth-tabs">
+        <button
+          type="button"
+          class="tab"
+          :class="{ active: cheDo === 'nhan-vien' }"
+          @click="chonCheDo('nhan-vien')"
+        >
+          Nhân viên
+        </button>
+        <button
+          type="button"
+          class="tab"
+          :class="{ active: cheDo === 'khach' }"
+          @click="chonCheDo('khach')"
+        >
+          Khách hàng
+        </button>
+      </div>
 
       <form class="auth-form" @submit.prevent="submit">
         <div class="field">
-          <label>Email hoặc tên tài khoản</label>
+          <label>Tài khoản</label>
           <input
             v-model="form.taiKhoan"
             type="text"
-            placeholder="nguyenvana hoặc user@example.com"
+            placeholder="Nhập tên tài khoản hoặc email"
             autocomplete="username"
           />
         </div>
@@ -72,13 +109,15 @@ const submit = async () => {
         </button>
       </form>
 
-      <p class="auth-switch">
+      <p v-if="cheDo === 'khach'" class="auth-switch">
         Chưa có tài khoản?
         <router-link to="/dang-ky">Đăng ký</router-link>
       </p>
+      <p class="auth-switch">
+        <router-link to="/san-pham">Về trang quản lý</router-link>
+      </p>
     </div>
   </div>
-  -->
 </template>
 
 <style scoped>
@@ -87,114 +126,110 @@ const submit = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f5f5f7;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
   padding: 24px;
 }
-
 .auth-card {
-  width: min(400px, 100%);
-  background: var(--white);
-  border-radius: 14px;
-  padding: 28px 30px 26px;
-  box-shadow: 0 10px 34px rgba(20, 20, 30, 0.08);
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
 }
-
 .auth-brand {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 8px;
+  text-align: center;
+  margin-bottom: 12px;
 }
-
 .auth-brand img {
-  width: 110px;
-  height: 76px;
-  object-fit: contain;
+  height: 48px;
 }
-
 .auth-title {
   text-align: center;
-  font-size: 20px;
-  font-weight: 700;
-  color: #22222a;
-  margin: 0;
+  margin: 0 0 4px;
+  font-size: 24px;
+  color: #0f172a;
 }
-
 .auth-sub {
   text-align: center;
-  font-size: 12.5px;
-  color: #9a9aa3;
-  margin: 6px 0 18px;
+  color: #64748b;
+  font-size: 14px;
+  margin: 0 0 20px;
 }
-
-.auth-form {
+.auth-tabs {
   display: flex;
-  flex-direction: column;
-  gap: 14px;
+  gap: 8px;
+  margin-bottom: 20px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  padding: 4px;
 }
-
+.auth-tabs .tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 10px;
+  border-radius: 8px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+}
+.auth-tabs .tab.active {
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+.field {
+  margin-bottom: 16px;
+}
 .field label {
   display: block;
-  font-size: 12.5px;
-  color: #55555e;
-  margin-bottom: 5px;
+  font-size: 13px;
   font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
 }
-
 .field input {
   width: 100%;
-  height: 40px;
-  border: 1px solid #dcdce2;
+  padding: 11px 12px;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
-  padding: 0 12px;
-  font-size: 13.5px;
-  color: #2c2c33;
-  background: #fbfbfc;
-  outline: none;
-  transition: border-color 0.15s ease;
+  font-size: 14px;
+  box-sizing: border-box;
 }
-
 .field input:focus {
-  border-color: var(--red);
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
-
 .auth-error {
-  margin: 0;
-  font-size: 13px;
   color: #dc2626;
-  font-weight: 600;
+  font-size: 13px;
+  margin: 0 0 12px;
 }
-
 .auth-btn {
-  height: 42px;
+  width: 100%;
+  padding: 12px;
   border: none;
-  border-radius: 9px;
-  background: var(--red);
+  border-radius: 8px;
+  background: #2563eb;
   color: #fff;
-  font-size: 14.5px;
   font-weight: 700;
+  font-size: 15px;
   cursor: pointer;
-  transition: opacity 0.15s ease;
 }
-
 .auth-btn:disabled {
   opacity: 0.6;
-  cursor: default;
+  cursor: not-allowed;
 }
-
 .auth-switch {
   text-align: center;
   font-size: 13px;
-  color: #6a6a73;
+  color: #64748b;
   margin: 16px 0 0;
 }
-
 .auth-switch a {
-  color: var(--red);
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.auth-switch a:hover {
-  text-decoration: underline;
+  color: #2563eb;
+  font-weight: 600;
 }
 </style>
