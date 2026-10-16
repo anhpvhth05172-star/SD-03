@@ -102,22 +102,38 @@ const activeFilterCount = computed(() => {
   return count
 })
 
+const normalizeAttributeList = (data) => {
+  if (!data) return []
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data.content)) return data.content
+  if (Array.isArray(data.data)) return data.data
+  return []
+}
+
 const fetchOptions = async () => {
+  // Thử endpoint gom tất cả tùy chọn lọc
   try {
     const bulkRes = await fetch(`${API_BASE}/attributes/all-filter-options`)
     if (bulkRes.ok) {
       const data = await bulkRes.json()
-      brands.value = data.thuongHieu || []
-      categories.value = data.loaiGiay || []
-      materials.value = data.chatLieu || []
-      styles.value = data.kieuDang || []
-      origins.value = data.xuatXu || []
-      return
+      if (data && typeof data === 'object') {
+        brands.value = normalizeAttributeList(data.thuongHieu)
+        categories.value = normalizeAttributeList(data.loaiGiay)
+        materials.value = normalizeAttributeList(data.chatLieu)
+        styles.value = normalizeAttributeList(data.kieuDang)
+        origins.value = normalizeAttributeList(data.xuatXu)
+        if (brands.value.length > 0 || categories.value.length > 0) {
+          return
+        }
+      }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Lỗi gọi all-filter-options, chuyển sang gọi từng danh mục:', e)
+  }
 
+  // Fallback: Gọi song song từng danh mục thuộc tính
   try {
-    const [resTH, resLG, resCL, resKD, resXX] = await Promise.all([
+    const [resTH, resLG, resCL, resKD, resXX] = await Promise.allSettled([
       fetch(`${API_BASE}/attributes/thuong_hieu`),
       fetch(`${API_BASE}/attributes/loai_giay`),
       fetch(`${API_BASE}/attributes/chat_lieu`),
@@ -125,12 +141,24 @@ const fetchOptions = async () => {
       fetch(`${API_BASE}/attributes/xuat_xu`)
     ])
 
+    const parseRes = async (settledRes) => {
+      if (settledRes.status === 'fulfilled' && settledRes.value.ok) {
+        try {
+          const json = await settledRes.value.json()
+          return normalizeAttributeList(json)
+        } catch {
+          return []
+        }
+      }
+      return []
+    }
+
     const [b, c, m, s, o] = await Promise.all([
-      resTH.ok ? resTH.json() : [],
-      resLG.ok ? resLG.json() : [],
-      resCL.ok ? resCL.json() : [],
-      resKD.ok ? resKD.json() : [],
-      resXX.ok ? resXX.json() : []
+      parseRes(resTH),
+      parseRes(resLG),
+      parseRes(resCL),
+      parseRes(resKD),
+      parseRes(resXX)
     ])
 
     brands.value = b

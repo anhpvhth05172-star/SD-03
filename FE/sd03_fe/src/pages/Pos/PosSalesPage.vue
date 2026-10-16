@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import QRCode from 'qrcode'
+import { Html5Qrcode } from 'html5-qrcode'
 import http from '@/api/http'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import { formatVnd, formatCurrency, formatNumber, removeVietnameseTones } from '@/utils/format'
@@ -576,33 +577,205 @@ const getShoeImage = (p) => {
   return 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=120&auto=format&fit=crop&q=60'
 }
 
-// QR scanner modal
+// Camera QR / Barcode Scanner Modal (F3)
 const isQrModalOpen = ref(false)
+const isCameraRunning = ref(false)
+const cameraError = ref('')
+const isProcessingScan = ref(false)
+const scanSuccessAnim = ref(false)
+const scannedProductName = ref('')
 const scannedCodeInput = ref('')
+let html5QrScanner = null
 
-const openQrScanner = () => {
-  if (!currentOrder.value) createNewOrder()
-  scannedCodeInput.value = ''
-  isQrModalOpen.value = true
+const playScannerBeep = () => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.type = 'sine'
+    osc.frequency.value = 1400
+    gain.gain.setValueAtTime(0.18, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.16)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.16)
+  } catch {}
 }
 
-const handleBarcodeScan = () => {
-  const code = scannedCodeInput.value.trim()
-  if (!code) return
+const findProductByScannedCode = (rawCode) => {
+  if (!rawCode) return null
+  let code = rawCode.trim()
 
-  const found = allProducts.value.find(p =>
+  // Trường hợp quét trúng mã QR biến thể được xuất từ file JSON { maCtsp, maSp, id, ... }
+  if (code.startsWith('{') && code.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(code)
+      if (parsed.maCtsp || parsed.id) {
+        const found = allProducts.value.find(p =>
+          (parsed.maCtsp && p.maCtsp && p.maCtsp.toLowerCase() === parsed.maCtsp.toLowerCase()) ||
+          (parsed.id && p.id && String(p.id) === String(parsed.id)) ||
+          (parsed.maChiTietSanPham && p.maChiTietSanPham && p.maChiTietSanPham.toLowerCase() === parsed.maChiTietSanPham.toLowerCase())
+        )
+        if (found) return found
+      }
+    } catch {}
+  }
+
+  // Quét mã CTSP hoặc Barcode thông thường
+  return allProducts.value.find(p =>
     (p.maCtsp && p.maCtsp.toLowerCase() === code.toLowerCase()) ||
     (p.maChiTietSanPham && p.maChiTietSanPham.toLowerCase() === code.toLowerCase()) ||
+    (p.maSp && p.maSp.toLowerCase() === code.toLowerCase()) ||
     (p.id && String(p.id) === code)
   )
+}
 
+const handleScannedResult = async (decodedText) => {
+  if (!decodedText || isProcessingScan.value) return
+  isProcessingScan.value = true
+
+  const found = findProductByScannedCode(decodedText)
   if (found) {
+    playScannerBeep()
+    scanSuccessAnim.value = true
+    scannedProductName.value = `${found.tenSp || found.tenSanPham || 'Sản phẩm'} (${found.color || ''} - Size ${found.size || ''})`
+
+    const stock = found.stock !== undefined ? found.stock : (found.soLuong || 0)
+    if (stock <= 0) {
+      notifyWarning('Hết hàng', `Sản phẩm "${found.tenSp || found.tenSanPham}" đã hết tồn kho!`)
+      isProcessingScan.value = false
+      scanSuccessAnim.value = false
+      return
+    }
+
     addToCart(found, 1)
-    scannedCodeInput.value = ''
-    isQrModalOpen.value = false
+
+    // Đợi 0.6s để người dùng thấy visual quét thành công rồi đóng modal
+    await new Promise((resolve) => setTimeout(resolve, 600))
+    await closeQrScanner()
+    notifySuccess('Đã thêm sản phẩm', `Đã thêm "${found.tenSp || found.tenSanPham}" vào giỏ hàng`, 1500)
   } else {
-    notifyError('Không tìm thấy', `Không tìm thấy sản phẩm có mã barcode/CTSP: "${code}"`)
+    notifyError('Không tìm thấy', `Không tìm thấy sản phẩm có mã: "${decodedText}"`)
   }
+
+  isProcessingScan.value = false
+  scanSuccessAnim.value = false
+}
+
+const startCameraScanner = async () => {
+  cameraError.value = ''
+  scanSuccessAnim.value = false
+  isProcessingScan.value = false
+
+  try {
+    const devices = await Html5Qrcode.getCameras()
+    if (!devices || devices.length === 0) {
+      cameraError.value = 'Không tìm thấy thiết bị Camera trên máy này.'
+      return
+    }
+
+    if (html5QrScanner) {
+      await stopCameraScanner()
+    }
+
+    html5QrScanner = new Html5Qrcode('pos-camera-scanner-view')
+    isCameraRunning.value = true
+
+    // Ưu tiên camera sau (back/rear) hoặc dùng camera đầu tiên
+    const cameraId = devices.length > 1
+      ? (devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'))?.id || devices[0].id)
+      : devices[0].id
+
+    await html5QrScanner.start(
+      cameraId,
+      {
+        fps: 25,
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const minEdge = Math.min(viewfinderWidth, viewfinderHeight)
+          const edge = Math.max(180, Math.floor(minEdge * 0.75))
+          return { width: edge, height: edge }
+        },
+      },
+      (decodedText) => {
+        handleScannedResult(decodedText)
+      },
+      () => {}
+    )
+  } catch (err) {
+    console.warn('Lỗi bật Camera POS:', err)
+    isCameraRunning.value = false
+    cameraError.value = 'Không thể mở Camera (chưa cấp quyền truy cập hoặc camera đang được ứng dụng khác sử dụng).'
+  }
+}
+
+const stopCameraScanner = async () => {
+  // Giải phóng MediaStream tracks
+  try {
+    const videoEls = document.querySelectorAll('#pos-camera-scanner-view video, video')
+    videoEls.forEach((v) => {
+      if (v.srcObject && typeof v.srcObject.getTracks === 'function') {
+        v.srcObject.getTracks().forEach((track) => {
+          try {
+            track.stop()
+            track.enabled = false
+          } catch {}
+        })
+        v.srcObject = null
+      }
+      try {
+        v.pause()
+        v.removeAttribute('src')
+        v.load()
+      } catch {}
+    })
+  } catch (err) {
+    console.warn('Lỗi giải phóng media tracks camera:', err)
+  }
+
+  // Tắt scanner html5QrScanner an toàn
+  if (html5QrScanner) {
+    try {
+      if (html5QrScanner.isScanning) {
+        await Promise.race([
+          html5QrScanner.stop().catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 400)),
+        ])
+      }
+    } catch (e) {
+      console.warn('html5QrScanner.stop error:', e)
+    }
+
+    try {
+      html5QrScanner.clear()
+    } catch {}
+    html5QrScanner = null
+  }
+
+  isCameraRunning.value = false
+}
+
+const openQrScanner = async () => {
+  if (!currentOrder.value) createNewOrder()
+  scannedCodeInput.value = ''
+  cameraError.value = ''
+  isQrModalOpen.value = true
+  await nextTick()
+  await startCameraScanner()
+}
+
+const closeQrScanner = async () => {
+  await stopCameraScanner()
+  isQrModalOpen.value = false
+  scanSuccessAnim.value = false
+  isProcessingScan.value = false
+}
+
+const handleManualCodeSubmit = () => {
+  const code = scannedCodeInput.value.trim()
+  if (!code) return
+  handleScannedResult(code)
+  scannedCodeInput.value = ''
 }
 
 // Bank transfer VietQR modal
@@ -849,32 +1022,16 @@ const printReceipt = () => {
   window.print()
 }
 
-// Global hotkeys listener
+// Keyboard listener (chỉ giữ Escape để đóng modal popup khi cần)
 const handleKeyDown = (e) => {
-  if (e.key === 'F1') {
-    e.preventDefault()
-    createNewOrder()
-  } else if (e.key === 'F2') {
-    e.preventDefault()
-    openProductPicker()
-  } else if (e.key === 'F3') {
-    e.preventDefault()
-    openQrScanner()
-  } else if (e.key === 'F4') {
-    e.preventDefault()
-    const inp = document.getElementById('pos-customer-input')
-    if (inp) inp.focus()
-  } else if (e.key === 'F8') {
-    e.preventDefault()
-    handleCheckout()
-  } else if (e.key === 'Escape') {
+  if (e.key === 'Escape') {
     isProductModalOpen.value = false
     isQrModalOpen.value = false
     isAddCustomerModalOpen.value = false
     isBankQrModalOpen.value = false
     isVoucherModalOpen.value = false
     isReceiptModalOpen.value = false
-    isShortcutsModalOpen.value = false
+    stopCameraScanner()
   }
 }
 
@@ -1001,6 +1158,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
   window.removeEventListener('keydown', handleKeyDown)
+  stopCameraScanner()
 })
 </script>
 
@@ -1028,14 +1186,6 @@ onUnmounted(() => {
       </div>
 
       <div class="pos-header-actions">
-        <button class="pos-hdr-btn" @click="isShortcutsModalOpen = true" title="Phím tắt hệ thống (F1-F8)">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
-            <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"></path>
-          </svg>
-          <span class="hdr-btn-text">Phím tắt</span>
-        </button>
-
         <button class="pos-hdr-btn" @click="toggleFullscreen" title="Bật/Tắt toàn màn hình">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
@@ -1124,29 +1274,21 @@ onUnmounted(() => {
             </div>
 
             <div class="cart-action-buttons">
-              <button class="btn-qr-scan-action" @click="openQrScanner" title="Quét mã QR / Barcode qua máy quét (F3)">
+              <button class="btn-qr-scan-action" @click="openQrScanner" title="Quét mã QR sản phẩm qua Camera">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="7" height="7"></rect>
-                  <rect x="14" y="3" width="7" height="7"></rect>
-                  <rect x="14" y="14" width="7" height="7"></rect>
-                  <rect x="3" y="14" width="7" height="7"></rect>
-                  <line x1="7" y1="7" x2="7" y2="7"></line>
-                  <line x1="17" y1="7" x2="17" y2="7"></line>
-                  <line x1="7" y1="17" x2="7" y2="17"></line>
-                  <line x1="17" y1="17" x2="17" y2="17"></line>
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                  <circle cx="12" cy="13" r="4"></circle>
                 </svg>
-                <span>Quét mã</span>
-                <span class="kbd-sub">F3</span>
+                <span>Quét Camera</span>
               </button>
 
-              <button class="btn-pick-product-action" @click="openProductPicker" title="Mở danh sách sản phẩm (F2)">
+              <button class="btn-pick-product-action" @click="openProductPicker" title="Mở danh sách sản phẩm">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="9" cy="21" r="1"></circle>
                   <circle cx="20" cy="21" r="1"></circle>
                   <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
                 </svg>
                 <span>Chọn sản phẩm</span>
-                <span class="kbd-sub">F2</span>
               </button>
 
               <button
@@ -1531,7 +1673,6 @@ onUnmounted(() => {
               <template v-else>
                 <span>THANH TOÁN</span>
                 <span class="btn-checkout-amount">{{ formatVnd(finalTotal) }}</span>
-                <span class="kbd-btn-tag">F8</span>
               </template>
             </button>
           </div>
@@ -1545,19 +1686,23 @@ onUnmounted(() => {
         <div class="pos-modal-dialog modal-xl">
           <div class="pos-modal-head">
             <div class="modal-head-title">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="9" cy="21" r="1"></circle>
-                <circle cx="20" cy="21" r="1"></circle>
-                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-              </svg>
-              <h3>Danh mục sản phẩm</h3>
-              <span class="modal-badge-count">{{ modalTotalElements }} biến thể</span>
+              <div class="modal-title-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                  <line x1="3" y1="6" x2="21" y2="6"></line>
+                  <path d="M16 10a4 4 0 0 1-8 0"></path>
+                </svg>
+              </div>
+              <div class="modal-title-text-group">
+                <h3>Chọn sản phẩm bán hàng</h3>
+                <span class="modal-badge-count">{{ modalTotalElements }} biến thể khả dụng</span>
+              </div>
             </div>
-            <button class="pos-modal-close" @click="isProductModalOpen = false">×</button>
+            <button class="pos-modal-close" @click="isProductModalOpen = false" title="Đóng (Esc)">×</button>
           </div>
 
           <div class="pos-modal-body">
-            <!-- Modal Filters Toolbar -->
+            <!-- Modal Filters Toolbar (Gọn gàng 1 dòng liền mạch) -->
             <div class="modal-prod-filter-bar">
               <div class="modal-search-field">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1570,6 +1715,7 @@ onUnmounted(() => {
                   placeholder="Tìm theo tên, mã CTSP, mã sản phẩm..."
                   class="modal-search-inp"
                 />
+                <button v-if="modalFilters.search" class="modal-clear-search-btn" @click="modalFilters.search = ''">×</button>
               </div>
 
               <div class="modal-select-item">
@@ -1602,7 +1748,7 @@ onUnmounted(() => {
                 />
               </div>
 
-              <div class="modal-select-item">
+              <div class="modal-select-item item-sm">
                 <SearchableSelect
                   v-model="modalFilters.idKichCo"
                   :options="sizesList"
@@ -1612,7 +1758,7 @@ onUnmounted(() => {
                 />
               </div>
 
-              <div class="modal-select-item">
+              <div class="modal-select-item item-price">
                 <SearchableSelect
                   v-model="modalFilters.priceRange"
                   :options="[
@@ -1628,6 +1774,10 @@ onUnmounted(() => {
               </div>
 
               <button class="btn-modal-reset-filter" @click="resetModalFilters" title="Đặt lại bộ lọc">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M23 4v6h-6"></path>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
                 Đặt lại
               </button>
             </div>
@@ -1638,14 +1788,14 @@ onUnmounted(() => {
                 <thead>
                   <tr>
                     <th width="45" class="text-center">STT</th>
-                    <th width="70" class="text-center">Ảnh</th>
-                    <th width="140">Mã CTSP</th>
-                    <th>Tên sản phẩm</th>
-                    <th width="100">Màu sắc</th>
-                    <th width="70" class="text-center">Size</th>
-                    <th width="85" class="text-center">Tồn kho</th>
-                    <th width="130" class="text-end">Giá bán</th>
-                    <th width="80" class="text-center">Thao tác</th>
+                    <th width="64" class="text-center">ẢNH</th>
+                    <th width="140">MÃ CTSP</th>
+                    <th>SẢN PHẨM</th>
+                    <th width="110">MÀU SẮC</th>
+                    <th width="75" class="text-center">SIZE</th>
+                    <th width="90" class="text-center">TỒN KHO</th>
+                    <th width="140" class="text-end">ĐƠN GIÁ</th>
+                    <th width="90" class="text-center">CHỌN</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1658,7 +1808,9 @@ onUnmounted(() => {
                   >
                     <td class="text-center text-slate">{{ modalCurrentPage * modalPageSize + idx + 1 }}</td>
                     <td class="text-center">
-                      <img :src="getShoeImage(item)" class="modal-thumb-img" alt="shoe" />
+                      <div class="modal-thumb-box">
+                        <img :src="getShoeImage(item)" class="modal-thumb-img" alt="shoe" />
+                      </div>
                     </td>
                     <td>
                       <span class="code-pill-modal">{{ item.maCtsp || item.maChiTietSanPham || item.maSp }}</span>
@@ -1667,7 +1819,10 @@ onUnmounted(() => {
                       <span class="prod-text-title">{{ item.tenSp || item.tenSanPham }}</span>
                     </td>
                     <td>
-                      <span class="badge-color-tag">{{ item.color || item.tenMau || '---' }}</span>
+                      <div class="modal-color-cell">
+                        <span class="modal-color-dot" :style="{ backgroundColor: (item.colorHex || '#64748b') }"></span>
+                        <span class="modal-color-name">{{ item.color || item.tenMau || '---' }}</span>
+                      </div>
                     </td>
                     <td class="text-center">
                       <span class="badge-size-tag">{{ item.size || item.tenKichCo || '---' }}</span>
@@ -1687,7 +1842,7 @@ onUnmounted(() => {
                     <td class="text-end">
                       <div class="prod-modal-price-box">
                         <span class="price-now">{{ formatVnd(getEffectivePrice(item)) }}</span>
-                        <span v-if="item.discount" class="price-was">{{ formatVnd(item.price || item.giaBan) }}</span>
+                        <span v-if="item.discount && item.discount !== '-'" class="price-was">{{ formatVnd(item.price || item.giaBan) }}</span>
                       </div>
                     </td>
                     <td class="text-center" @click.stop>
@@ -1696,13 +1851,21 @@ onUnmounted(() => {
                         :disabled="(item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0"
                         @click="handleSelectProductFromModal(item)"
                       >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                          <line x1="12" y1="5" x2="12" y2="19"></line>
+                          <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
                         Thêm
                       </button>
                     </td>
                   </tr>
                   <tr v-if="paginatedModalVariants.length === 0">
                     <td colspan="9" class="empty-state-modal">
-                      Không tìm thấy sản phẩm nào phù hợp với bộ lọc hiện tại.
+                      <div class="empty-modal-inner">
+                        <span class="empty-icon-shoe">👟</span>
+                        <p class="empty-text">Không tìm thấy sản phẩm nào phù hợp với bộ lọc hiện tại.</p>
+                        <button class="btn-clear-modal-filters" @click="resetModalFilters">Xóa bộ lọc tìm kiếm</button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -1824,40 +1987,86 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- Barcode / QR Scanner Modal (F3) -->
+    <!-- Camera QR Scanner Modal (F3) -->
     <transition name="fade">
-      <div v-if="isQrModalOpen" class="pos-modal-overlay" @click.self="isQrModalOpen = false">
-        <div class="pos-modal-dialog modal-sm">
+      <div v-if="isQrModalOpen" class="pos-modal-overlay" @click.self="closeQrScanner">
+        <div class="pos-modal-dialog modal-camera-dialog">
           <div class="pos-modal-head">
-            <h3 class="pos-modal-title">Quét mã vạch / Barcode</h3>
-            <button class="pos-modal-close" @click="isQrModalOpen = false">×</button>
+            <div class="modal-head-title">
+              <div class="modal-title-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                  <circle cx="12" cy="13" r="4"></circle>
+                </svg>
+              </div>
+              <div class="modal-title-text-group">
+                <h3>Quét Camera thêm sản phẩm</h3>
+                <span class="modal-badge-count">Nhận diện QR & Barcode</span>
+              </div>
+            </div>
+            <button class="pos-modal-close" @click="closeQrScanner" title="Đóng (Esc)">×</button>
           </div>
 
           <div class="pos-modal-body">
-            <div class="qr-modal-content">
-              <div class="qr-scanner-visual-box">
-                <div class="qr-laser-line"></div>
-                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#d92d20" stroke-width="1.5">
-                  <rect x="3" y="3" width="7" height="7"></rect>
-                  <rect x="14" y="3" width="7" height="7"></rect>
-                  <rect x="14" y="14" width="7" height="7"></rect>
-                  <rect x="3" y="14" width="7" height="7"></rect>
-                </svg>
+            <div class="pos-camera-scan-wrap">
+              <!-- Khung Camera Viewport -->
+              <div class="pos-camera-viewport">
+                <div id="pos-camera-scanner-view" class="pos-camera-stream-el"></div>
+
+                <!-- Tia laser chuyển động khi camera đang chạy -->
+                <div v-if="isCameraRunning && !scanSuccessAnim" class="pos-scanner-laser-line"></div>
+
+                <!-- 4 góc khung ngắm -->
+                <div class="pos-scanner-frame-overlay">
+                  <span class="corner top-left"></span>
+                  <span class="corner top-right"></span>
+                  <span class="corner bottom-left"></span>
+                  <span class="corner bottom-right"></span>
+                </div>
+
+                <!-- Thông báo quét thành công trực tiếp trên camera -->
+                <div v-if="scanSuccessAnim" class="pos-scan-success-overlay">
+                  <div class="success-icon-badge">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                  </div>
+                  <span class="success-text-title">Quét thành công!</span>
+                  <span class="success-product-sub">{{ scannedProductName }}</span>
+                </div>
               </div>
-              <p class="qr-guide-text">
-                Hướng máy quét vào tem mã vạch hoặc nhập mã CTSP trực tiếp bên dưới:
+
+              <!-- Hướng dẫn & Trạng thái lỗi nếu có -->
+              <p class="camera-guide-hint">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                <span>Hướng camera vào <b>mã QR / Barcode</b> trên tem giày hoặc hộp để tự động nhận diện.</span>
               </p>
 
-              <div class="qr-input-row">
+              <div v-if="cameraError" class="pos-camera-error-banner">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>{{ cameraError }}</span>
+              </div>
+
+              <!-- Nhập thủ công dự phòng nếu không quét được -->
+              <div class="pos-manual-code-row">
                 <input
                   v-model="scannedCodeInput"
                   type="text"
-                  class="qr-code-inp"
-                  placeholder="Nhập mã CTSP hoặc barcode..."
-                  autofocus
-                  @keyup.enter="handleBarcodeScan"
+                  class="pos-manual-code-inp"
+                  placeholder="Hoặc nhập mã CTSP / Barcode thủ công rồi bấm Thêm..."
+                  @keyup.enter="handleManualCodeSubmit"
                 />
-                <button class="btn-qr-find" @click="handleBarcodeScan">Thêm</button>
+                <button class="btn-pos-manual-add" @click="handleManualCodeSubmit">
+                  Thêm
+                </button>
               </div>
             </div>
           </div>
@@ -2015,54 +2224,6 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- Keyboard Shortcuts Help Modal -->
-    <transition name="fade">
-      <div v-if="isShortcutsModalOpen" class="pos-modal-overlay" @click.self="isShortcutsModalOpen = false">
-        <div class="pos-modal-dialog modal-sm">
-          <div class="pos-modal-head">
-            <h3 class="pos-modal-title">Phím tắt thao tác nhanh (POS)</h3>
-            <button class="pos-modal-close" @click="isShortcutsModalOpen = false">×</button>
-          </div>
-
-          <div class="pos-modal-body">
-            <div class="shortcuts-list">
-              <div class="shortcut-item">
-                <span class="kbd-key">F1</span>
-                <span class="kbd-desc">Tạo hóa đơn chờ mới</span>
-              </div>
-              <div class="shortcut-item">
-                <span class="kbd-key">F2</span>
-                <span class="kbd-desc">Mở danh mục chọn sản phẩm</span>
-              </div>
-              <div class="shortcut-item">
-                <span class="kbd-key">F3</span>
-                <span class="kbd-desc">Mở quét mã vạch / Barcode</span>
-              </div>
-              <div class="shortcut-item">
-                <span class="kbd-key">F4</span>
-                <span class="kbd-desc">Focus ô tìm kiếm khách hàng</span>
-              </div>
-              <div class="shortcut-item">
-                <span class="kbd-key">F8</span>
-                <span class="kbd-desc">Xác nhận thanh toán đơn hàng</span>
-              </div>
-              <div class="shortcut-item">
-                <span class="kbd-key">Enter</span>
-                <span class="kbd-desc">Thêm nhanh sản phẩm trên ô quét mã</span>
-              </div>
-              <div class="shortcut-item">
-                <span class="kbd-key">Esc</span>
-                <span class="kbd-desc">Đóng các cửa sổ popup đang mở</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="pos-modal-footer">
-            <button class="btn-modal-submit" @click="isShortcutsModalOpen = false">Đã hiểu</button>
-          </div>
-        </div>
-      </div>
-    </transition>
   </div>
 </template>
 

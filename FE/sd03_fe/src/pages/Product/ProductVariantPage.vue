@@ -989,9 +989,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Redesigned Filter Card as requested -->
     <div class="filter-card">
-      <!-- Row 1: Search on Left + Action Buttons on Right -->
       <div class="filter-row-top">
         <div class="search-col">
           <label class="filter-lbl">Tìm kiếm theo tên hoặc mã phân loại</label>
@@ -1051,7 +1049,6 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Row 2: 3 Filter Select Columns with SearchableSelect (Select2 style) -->
       <div class="filter-row-bottom">
         <div class="filter-col">
           <label class="filter-lbl">Màu sắc</label>
