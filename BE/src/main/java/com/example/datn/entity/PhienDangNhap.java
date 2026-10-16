@@ -24,8 +24,11 @@ public class PhienDangNhap {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "id_khach_hang", nullable = false)
+    @Column(name = "id_khach_hang")
     private Long idKhachHang;
+
+    @Column(name = "id_nhan_vien")
+    private Long idNhanVien;
 
     @Column(name = "refresh_token_hash", nullable = false, length = 64)
     private String refreshTokenHash;

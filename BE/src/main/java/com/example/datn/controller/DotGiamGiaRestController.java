@@ -21,7 +21,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/admin/dot-giam-gia")
-@CrossOrigin("*")
 public class DotGiamGiaRestController {
 
     @Autowired

@@ -33,3 +33,8 @@ Thumbs.db
 .env.*
 *.env
 
+# Tooling rieng (khong lien quan du an)
+.superpowers/
+/package.json
+/package-lock.json
+

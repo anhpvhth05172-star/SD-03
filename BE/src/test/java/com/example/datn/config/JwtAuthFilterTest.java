@@ -150,15 +150,42 @@ class JwtAuthFilterTest {
     }
 
     @Test
-    void tokenNhanVien_authenticate_khongCanPhien() throws Exception {
+    void tokenNhanVien_khongCoPhienId_khongAuthenticate() throws Exception {
         com.example.datn.entity.NhanVien nv = new com.example.datn.entity.NhanVien();
         nv.setId(9L);
         nv.setTenTaiKhoan("admin");
         com.example.datn.entity.VaiTro vt = new com.example.datn.entity.VaiTro();
         vt.setMaVaiTro("ADMIN");
         nv.setVaiTro(vt);
-        String token = jwtService.taoTokenNhanVien(nv);
+        String token = jwtService.taoTokenNhanVien(nv, null);
 
+        Authentication auth = chay(token);
+
+        assertThat(auth).isNull();
+        verify(phienDangNhapRepository, never()).findById(any());
+    }
+
+    @Test
+    void tokenNhanVien_vaPhienHopLe_authenticate() throws Exception {
+        com.example.datn.entity.NhanVien nv = new com.example.datn.entity.NhanVien();
+        nv.setId(9L);
+        nv.setTenTaiKhoan("admin");
+        com.example.datn.entity.VaiTro vt = new com.example.datn.entity.VaiTro();
+        vt.setMaVaiTro("ADMIN");
+        nv.setVaiTro(vt);
+
+        PhienDangNhap phien = new PhienDangNhap();
+        phien.setId(88L);
+        phien.setIdNhanVien(9L);
+        phien.setRefreshTokenHash("hash");
+        LocalDateTime hoatDongCuoiCu = LocalDateTime.now().minusMinutes(5);
+        phien.setNgayTao(hoatDongCuoiCu);
+        phien.setHoatDongCuoi(hoatDongCuoiCu);
+        phien.setRevoked(false);
+        when(phienDangNhapRepository.findById(88L)).thenReturn(Optional.of(phien));
+        when(phienDangNhapRepository.save(any(PhienDangNhap.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        String token = jwtService.taoTokenNhanVien(nv, 88L);
         Authentication auth = chay(token);
 
         assertThat(auth).isNotNull();
@@ -166,6 +193,57 @@ class JwtAuthFilterTest {
         assertThat(auth.getAuthorities())
             .extracting("authority")
             .contains("ROLE_NHAN_VIEN", "ROLE_ADMIN");
-        verify(phienDangNhapRepository, never()).findById(any());
+        assertThat(phien.getHoatDongCuoi()).isAfter(hoatDongCuoiCu);
+        verify(phienDangNhapRepository).save(phien);
+    }
+
+    @Test
+    void tokenNhanVien_phienDaLogout_khongAuthenticate() throws Exception {
+        com.example.datn.entity.NhanVien nv = new com.example.datn.entity.NhanVien();
+        nv.setId(9L);
+        nv.setTenTaiKhoan("admin");
+        com.example.datn.entity.VaiTro vt = new com.example.datn.entity.VaiTro();
+        vt.setMaVaiTro("ADMIN");
+        nv.setVaiTro(vt);
+
+        PhienDangNhap phien = new PhienDangNhap();
+        phien.setId(88L);
+        phien.setIdNhanVien(9L);
+        phien.setRefreshTokenHash("hash");
+        phien.setNgayTao(LocalDateTime.now());
+        phien.setHoatDongCuoi(LocalDateTime.now());
+        phien.setRevoked(true);
+        when(phienDangNhapRepository.findById(88L)).thenReturn(Optional.of(phien));
+
+        String token = jwtService.taoTokenNhanVien(nv, 88L);
+        Authentication auth = chay(token);
+
+        assertThat(auth).isNull();
+        verify(phienDangNhapRepository, never()).save(any());
+    }
+
+    @Test
+    void tokenNhanVien_phienCuaNhanVienKhac_khongAuthenticate() throws Exception {
+        com.example.datn.entity.NhanVien nv = new com.example.datn.entity.NhanVien();
+        nv.setId(9L);
+        nv.setTenTaiKhoan("admin");
+        com.example.datn.entity.VaiTro vt = new com.example.datn.entity.VaiTro();
+        vt.setMaVaiTro("ADMIN");
+        nv.setVaiTro(vt);
+
+        PhienDangNhap phien = new PhienDangNhap();
+        phien.setId(88L);
+        phien.setIdNhanVien(99L);
+        phien.setRefreshTokenHash("hash");
+        phien.setNgayTao(LocalDateTime.now());
+        phien.setHoatDongCuoi(LocalDateTime.now());
+        phien.setRevoked(false);
+        when(phienDangNhapRepository.findById(88L)).thenReturn(Optional.of(phien));
+
+        String token = jwtService.taoTokenNhanVien(nv, 88L);
+        Authentication auth = chay(token);
+
+        assertThat(auth).isNull();
+        verify(phienDangNhapRepository, never()).save(any());
     }
 }

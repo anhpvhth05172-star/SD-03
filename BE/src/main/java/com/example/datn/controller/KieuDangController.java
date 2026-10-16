@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/kieu-dang")
 @RequiredArgsConstructor
-@CrossOrigin(originPatterns = "*")
 public class KieuDangController {
 
     private final KieuDangService kieuDangService;

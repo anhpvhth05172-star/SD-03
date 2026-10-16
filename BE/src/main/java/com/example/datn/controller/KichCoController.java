@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/kich-co")
 @RequiredArgsConstructor
-@CrossOrigin(originPatterns = "*")
 public class KichCoController {
 
     private final KichCoService kichCoService;

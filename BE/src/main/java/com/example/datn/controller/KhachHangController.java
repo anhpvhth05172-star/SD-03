@@ -36,8 +36,19 @@ public class KhachHangController {
     private final KhachHangRepository khachHangRepository;
 
     @GetMapping("/all")
-    public List<KhachHang> getList() {
-        return khachHangRepository.findAll();
+    public List<Map<String, Object>> getList() {
+        return khachHangRepository.findAll().stream()
+            .map(k -> {
+                Map<String, Object> m = new java.util.HashMap<>();
+                m.put("id", k.getId());
+                m.put("maKhachHang", k.getMaKhachHang());
+                m.put("tenKhachHang", k.getTenKhachHang());
+                m.put("email", k.getEmail());
+                m.put("soDienThoai", k.getSoDienThoai());
+                m.put("ngaySinh", k.getNgaySinh());
+                return m;
+            })
+            .toList();
     }
 
     @GetMapping

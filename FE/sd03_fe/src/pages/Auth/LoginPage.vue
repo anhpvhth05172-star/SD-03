@@ -37,7 +37,7 @@ const submit = async () => {
     if (cheDo.value === 'nhan-vien') {
       router.push('/hoa-don')
     } else {
-      router.push('/khach-hang')
+      router.push('/tai-khoan')
     }
   } catch (e) {
     error.value = e.message || 'Đăng nhập thất bại'

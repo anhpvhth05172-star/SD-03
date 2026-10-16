@@ -166,8 +166,19 @@ public class AuthService {
             throw new DangNhapThatBaiException("Tài khoản đã bị khóa");
         }
 
+        LocalDateTime bayGio = LocalDateTime.now();
+        String refreshToken = taoRefreshToken();
+        PhienDangNhap phien = new PhienDangNhap();
+        phien.setIdNhanVien(nhanVien.getId());
+        phien.setRefreshTokenHash(sha256(refreshToken));
+        phien.setNgayTao(bayGio);
+        phien.setHoatDongCuoi(bayGio);
+        phien.setRevoked(false);
+        phienDangNhapRepository.save(phien);
+
         AuthResponse resp = new AuthResponse();
-        resp.setToken(jwtService.taoTokenNhanVien(nhanVien));
+        resp.setToken(jwtService.taoTokenNhanVien(nhanVien, phien.getId()));
+        resp.setRefreshToken(refreshToken);
         resp.setIdNhanVien(nhanVien.getId());
         resp.setLoaiTaiKhoan(JwtService.LOAI_NHAN_VIEN);
         resp.setTenTaiKhoan(nhanVien.getTenTaiKhoan());
@@ -199,6 +210,29 @@ public class AuthService {
         if (phien.isRevoked() || phien.hetHan(bayGio, thoiGianPhienMs)) {
             throw new DangNhapThatBaiException("Phiên đăng nhập đã hết hạn");
         }
+
+        if (phien.getIdNhanVien() != null) {
+            NhanVien nhanVien = nhanVienRepository
+                .findById(phien.getIdNhanVien())
+                .orElseThrow(() -> new DangNhapThatBaiException("Phiên đăng nhập không hợp lệ"));
+            if (Boolean.FALSE.equals(nhanVien.getTrangThai())) {
+                throw new DangNhapThatBaiException("Tài khoản đã bị khóa");
+            }
+            phien.setHoatDongCuoi(bayGio);
+            phienDangNhapRepository.save(phien);
+
+            AuthResponse resp = new AuthResponse();
+            resp.setToken(jwtService.taoTokenNhanVien(nhanVien, phien.getId()));
+            resp.setRefreshToken(refreshToken);
+            resp.setIdNhanVien(nhanVien.getId());
+            resp.setLoaiTaiKhoan(JwtService.LOAI_NHAN_VIEN);
+            resp.setTenTaiKhoan(nhanVien.getTenTaiKhoan());
+            resp.setEmail(nhanVien.getEmail());
+            resp.setTenKhachHang(nhanVien.getTenTaiKhoan());
+            resp.setVaiTro(nhanVien.getVaiTro() != null ? nhanVien.getVaiTro().getMaVaiTro() : "STAFF");
+            return resp;
+        }
+
         KhachHang khachHang = khachHangRepository
             .findById(phien.getIdKhachHang())
             .orElseThrow(() -> new DangNhapThatBaiException("Phiên đăng nhập không hợp lệ"));

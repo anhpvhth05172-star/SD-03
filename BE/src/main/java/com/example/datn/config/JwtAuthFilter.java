@@ -80,6 +80,22 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private void xuLyNhanVien(String token, HttpServletRequest request) {
         Long idNhanVien = jwtService.layIdNguoiDung(token);
+        Long idPhien = jwtService.layIdPhien(token);
+        if (idPhien == null) {
+            return;
+        }
+        LocalDateTime bayGio = LocalDateTime.now();
+        PhienDangNhap phien = phienDangNhapRepository.findById(idPhien).orElse(null);
+        boolean hopLe =
+            phien != null
+                && !phien.isRevoked()
+                && !phien.hetHan(bayGio, thoiGianPhienMs)
+                && idNhanVien.equals(phien.getIdNhanVien());
+        if (!hopLe) {
+            return;
+        }
+        phien.setHoatDongCuoi(bayGio);
+        phienDangNhapRepository.save(phien);
         UsernamePasswordAuthenticationToken xacThuc = new UsernamePasswordAuthenticationToken(
             idNhanVien,
             null,

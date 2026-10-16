@@ -49,15 +49,19 @@ public class JwtService {
             .compact();
     }
 
-    public String taoTokenNhanVien(NhanVien nhanVien) {
+    public String taoTokenNhanVien(NhanVien nhanVien, Long idPhien) {
         Date hienTai = new Date();
         String vaiTro = nhanVien.getVaiTro() != null ? nhanVien.getVaiTro().getMaVaiTro() : "STAFF";
-        return Jwts.builder()
+        var builder = Jwts.builder()
             .subject(String.valueOf(nhanVien.getId()))
             .claim("loaiTaiKhoan", LOAI_NHAN_VIEN)
             .claim("vaiTro", vaiTro)
             .claim("tenTaiKhoan", nhanVien.getTenTaiKhoan())
-            .claim("email", nhanVien.getEmail())
+            .claim("email", nhanVien.getEmail());
+        if (idPhien != null) {
+            builder.claim("phienId", idPhien);
+        }
+        return builder
             .issuedAt(hienTai)
             .expiration(new Date(hienTai.getTime() + thoiGianSongNhanVienMs))
             .signWith(khoa)
