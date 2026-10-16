@@ -73,8 +73,8 @@ public class DotGiamGiaRestController {
 //    }
 
     @GetMapping("/san-pham-chi-tiet/for-discount")
-    public List<SanPhamChiTietOptionResponse> danhSachSanPham() {
-        return serviceFinal.layDanhSachSanPham();
+    public List<SanPhamChiTietOptionResponse> danhSachSanPham(Long excutedId) {
+        return serviceFinal.layDanhSachSanPham(excutedId);
     }
 
     @PostMapping("/add")

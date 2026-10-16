@@ -88,6 +88,8 @@ const loadProducts = async () => {
   try {
     const res = await axios.get(
       baseAPI + "admin/dot-giam-gia/san-pham-chi-tiet/for-discount",
+      // excludeId: bỏ qua chính đợt đang sửa khi tính "đã thuộc đợt khác"
+      { params: { excludeId: route.params.id } },
     );
     products.value = res.data?.data ?? res.data ?? [];
   } catch (e) {
@@ -645,13 +647,23 @@ const submit = async () => {
                     {{ v.tenSanPham }}
                   </td>
                   <td class="dg-center">
-                    <img
-                      class="dg-img"
-                      :src="logo"
-                      :alt="v.tenSanPham"
-                      loading="lazy"
-                      @error="onImgError"
-                    />
+                    <div class="dg-img-wrap">
+                      <img
+                        class="dg-img"
+                        :src="logo"
+                        :alt="v.tenSanPham"
+                        loading="lazy"
+                        @error="onImgError"
+                      />
+                      <!-- Biến thể đã thuộc đợt giảm giá khác đang hiệu lực -->
+                      <span
+                        v-if="v.phanTramGiamKhac"
+                        class="dg-badge"
+                        :title="`Đang thuộc đợt: ${v.tenDotGiamGiaKhac}`"
+                      >
+                        -{{ v.phanTramGiamKhac }}%
+                      </span>
+                    </div>
                   </td>
                   <td class="dg-center dg-muted">{{ v.maChiTiet }}</td>
                   <td class="dg-center">{{ v.kichCo }}</td>
@@ -1000,7 +1012,13 @@ const submit = async () => {
   color: var(--muted);
 }
 
-/* Ảnh sản phẩm */
+/* Ảnh sản phẩm + nhãn % đợt giảm giá khác */
+.dg-img-wrap {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto;
+}
 .dg-img {
   display: block;
   width: 52px;
@@ -1010,6 +1028,21 @@ const submit = async () => {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #f3f4f6;
+}
+.dg-badge {
+  position: absolute;
+  top: -4px;
+  left: -6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--red);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.4;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+  cursor: help;
 }
 
 .dg-filter-row {
