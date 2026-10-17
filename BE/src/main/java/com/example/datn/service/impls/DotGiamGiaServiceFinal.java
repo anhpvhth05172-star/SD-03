@@ -11,7 +11,9 @@ import com.example.datn.repository.DotGiamGiaRepository;
 import com.example.datn.repository.SanPhamChiTietRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -29,10 +31,28 @@ public class DotGiamGiaServiceFinal {
     private final SanPhamChiTietRepository spctRepo;
 
     @Transactional(readOnly = true)
-    public List<SanPhamChiTietOptionResponse> layDanhSachSanPham() {
-        return spctRepo.findAllActiveForDiscount().stream()
+    public List<SanPhamChiTietOptionResponse> layDanhSachSanPham(Long excludeId) {
+        List<SanPhamChiTietOptionResponse> list = spctRepo.findAllActiveForDiscount().stream()
                 .map(SanPhamChiTietOptionResponse::from)
                 .toList();
+
+        Map<Long, Object[]> dangApDung = new HashMap<>();
+        for (Object[] r : chiTietRepo.findDangApDung(LocalDateTime.now(), excludeId)) {
+            Long variantId = ((Number) r[0]).longValue();
+            Object[] old = dangApDung.get(variantId);
+            if (old == null || ((Number) r[2]).intValue() > ((Number) old[2]).intValue()) {
+                dangApDung.put(variantId, r);
+            }
+        }
+
+        for (SanPhamChiTietOptionResponse v : list) {
+            Object[] r = dangApDung.get(v.getId());
+            if (r != null) {
+                v.setTenDotGiamGiaKhac((String) r[1]);
+                v.setPhanTramGiamKhac(((Number) r[2]).intValue());
+            }
+        }
+        return list;
     }
 
     @Transactional

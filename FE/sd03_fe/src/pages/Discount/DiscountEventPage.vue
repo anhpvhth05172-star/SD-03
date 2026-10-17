@@ -1,5 +1,4 @@
 <script setup>
-import { formatDateTime } from "@/utils/format";
 import axios from "axios";
 import { inject, onMounted, ref } from "vue";
 import Swal from "sweetalert2";
@@ -13,21 +12,63 @@ const pageSize = 8;
 const totalPages = ref(0);
 const totalElements = ref(0);
 const togglingId = ref(null); // id đợt đang đổi trạng thái (khóa switch)
+const lastUpdated = ref(null); // thời điểm tải dữ liệu gần nhất
+
+// ========== Bộ lọc ==========
+const emptyFilter = () => ({
+  ten: "",
+  trangThai: null,
+  tuNgay: "",
+  denNgay: "",
+});
+// Giá trị đang nhập trên form
+const filter = ref(emptyFilter());
+// Giá trị đã bấm "Áp dụng" (dùng cho phân trang, đổi trạng thái, v.v.)
+const applied = ref(emptyFilter());
 
 const getData = async (p = 0) => {
   try {
+    const params = { page: p, size: pageSize };
+    const f = applied.value;
+    if (f.ten.trim()) params.ten = f.ten.trim();
+    if (f.trangThai !== null) params.trangThai = f.trangThai;
+    if (f.tuNgay) params.tuNgay = f.tuNgay; // yyyy-MM-dd
+    if (f.denNgay) params.denNgay = f.denNgay;
+
     const res = await axios.get(apiDiscountEvent + "admin/dot-giam-gia", {
-      params: { page: p, size: pageSize },
+      params,
     });
     if (res.status === 200) {
       listEvent.value = res.data.content;
       page.value = res.data.number;
       totalPages.value = res.data.totalPages;
       totalElements.value = res.data.totalElements;
+      lastUpdated.value = new Date();
     }
   } catch (error) {
     console.error(error);
   }
+};
+
+const applyFilter = () => {
+  const { tuNgay, denNgay } = filter.value;
+  if (tuNgay && denNgay && tuNgay > denNgay) {
+    Swal.fire({
+      icon: "warning",
+      title: "Khoảng ngày không hợp lệ",
+      text: "'Từ ngày' không được lớn hơn 'Đến ngày'",
+      confirmButtonColor: "#cc0000",
+    });
+    return;
+  }
+  applied.value = { ...filter.value };
+  getData(0); // luôn về trang đầu khi lọc mới
+};
+
+const resetFilter = () => {
+  filter.value = emptyFilter();
+  applied.value = emptyFilter();
+  getData(0);
 };
 
 const goToPage = (p) => {
@@ -35,7 +76,13 @@ const goToPage = (p) => {
   getData(p);
 };
 
+// ========== Hiển thị ==========
 const formatDate = (s) => (s ? new Date(s).toLocaleDateString("vi-VN") : "");
+
+const formatUpdated = (d) =>
+  d
+    ? `${d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} ${d.toLocaleDateString("vi-VN")}`
+    : "";
 
 const isEnded = (d) => !!d.ngayKetThuc && new Date() > new Date(d.ngayKetThuc);
 const isOn = (d) => !!d.trangThai && !isEnded(d);
@@ -88,7 +135,7 @@ const toggleStatus = async (item) => {
       item.trangThai = res.data.trangThai;
     }
 
-    // Tải lại trang hiện tại để đồng bộ toàn bộ dữ liệu
+    // Tải lại trang hiện tại (giữ nguyên bộ lọc đã áp dụng)
     await getData(page.value);
 
     await Swal.fire({
@@ -138,6 +185,7 @@ onMounted(() => getData(0));
       </RouterLink>
     </div>
 
+    <!-- ===== TÌM KIẾM & BỘ LỌC ===== -->
     <section class="panel">
       <div class="panel-head">
         <span class="panel-icon">
@@ -171,34 +219,52 @@ onMounted(() => getData(0));
       <div v-show="showFilter" class="filter-row">
         <div class="f-item">
           <label>Tên đợt giảm giá</label>
-          <input type="text" placeholder="Nhập tên đợt giảm giá" />
+          <input
+            v-model="filter.ten"
+            type="text"
+            placeholder="Nhập tên đợt giảm giá"
+            @keyup.enter="applyFilter"
+          />
         </div>
 
         <div class="f-item">
           <label>Trạng thái</label>
-          <select>
-            <option value="" label="Tất cả"></option>
-            <option value="1" label="Đang hoạt động"></option>
-            <option value="0" label="Ngừng hoạt động"></option>
+          <select v-model="filter.trangThai">
+            <option :value="null">Tất cả</option>
+            <option :value="1">Đang hoạt động</option>
+            <option :value="0">Ngừng hoạt động</option>
           </select>
         </div>
 
         <div class="f-item">
           <label>Từ ngày</label>
           <div class="date-box">
-            <input type="date" />
+            <input
+              v-model="filter.tuNgay"
+              type="date"
+              :max="filter.denNgay || undefined"
+            />
           </div>
         </div>
 
         <div class="f-item">
           <label>Đến ngày</label>
           <div class="date-box">
-            <input type="date" />
+            <input
+              v-model="filter.denNgay"
+              type="date"
+              :min="filter.tuNgay || undefined"
+            />
           </div>
         </div>
 
         <div class="filter-actions">
-          <button class="btn-reset" type="button" aria-label="Đặt lại">
+          <button
+            class="btn-reset"
+            type="button"
+            aria-label="Đặt lại"
+            @click="resetFilter"
+          >
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -211,7 +277,7 @@ onMounted(() => getData(0));
               <path d="M20 4.5V11h-6.5" />
             </svg>
           </button>
-          <button class="btn-apply" type="button">
+          <button class="btn-apply" type="button" @click="applyFilter">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -227,6 +293,7 @@ onMounted(() => getData(0));
       </div>
     </section>
 
+    <!-- ===== DANH SÁCH ===== -->
     <section class="panel">
       <div class="panel-head">
         <span class="panel-icon is-red">
@@ -239,7 +306,9 @@ onMounted(() => getData(0));
         <h3 class="panel-title">Danh sách đợt giảm giá</h3>
         <span class="count-pill">{{ totalElements }} đợt</span>
         <div class="panel-right">
-          <span class="panel-meta">Cập nhật lúc 08:32 25/05/2026</span>
+          <span v-if="lastUpdated" class="panel-meta"
+            >Cập nhật lúc {{ formatUpdated(lastUpdated) }}</span
+          >
         </div>
       </div>
 
@@ -436,11 +505,6 @@ onMounted(() => getData(0));
 }
 
 /* Khóa switch khi đợt đã kết thúc hoặc đang gọi API */
-.switch.is-disabled .slider {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .switch.is-disabled .slider {
   opacity: 0.5;
   cursor: not-allowed;
