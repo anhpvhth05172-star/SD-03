@@ -1,304 +1,278 @@
 <script setup>
-import { reactive, computed, inject, ref, onMounted } from "vue";
+import {
+  reactive,
+  computed,
+  watch,
+  inject,
+  ref,
+  nextTick,
+  onMounted,
+} from "vue";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { useRouter, useRoute } from "vue-router";
-import logo from "@/assets/logo.png";
 
 const router = useRouter();
 const route = useRoute();
 const baseAPI = inject("baseAPI");
 const saving = ref(false);
-const loading = ref(true);
+const loadingForm = ref(true);
+const hydrating = ref(true); // true khi đang đổ dữ liệu cũ vào form -> tắt các watcher reset
 
-const LIST_PATH = "/admin/dot-giam-gia";
+/* ⚠️ Route cần có param :id, ví dụ /admin/phieu-giam-gia/update/:id */
+const id = route.params.id;
+
+const LOAI_GIAM = { percent: "PERCENT", cash: "AMOUNT" };
+const LOAI_GIAM_NGUOC = { PERCENT: "percent", AMOUNT: "cash" };
+const PHAM_VI = { public: "CONG_KHAI", private: "CA_NHAN" };
+const PHAM_VI_NGUOC = { CONG_KHAI: "public", CA_NHAN: "private" };
 
 const form = reactive({
-  id: null,
-  code: "",
+  code: "", // mã phiếu: chỉ hiển thị, không cho sửa
   name: "",
-  percent: null,
+  quantity: null,
+  usedCount: 0, // soLuongDaSuDung: chỉ đọc
+  limitPerUser: null, // gioiHanMoiTaiKhoan
+  minOrder: null,
+  discountType: "percent",
+  discountValue: null,
+  maxDiscount: null,
   startDate: "",
   endDate: "",
-  productIds: [], // id biến thể (san_pham_chi_tiet)
+  description: "",
+  scope: "public",
+  status: true,
+  customerIds: [],
 });
 
-/* ---------------- Giá ---------------- */
-const validPercent = computed(() => form.percent >= 1 && form.percent <= 100);
+const isPercent = computed(() => form.discountType === "percent");
+const isPrivate = computed(() => form.scope === "private");
 
-const afterDiscount = (giaBan) =>
-  Math.round((Number(giaBan) * (100 - form.percent)) / 100);
+/* ---------------- Định dạng tiền: 100.000 ---------------- */
+const fmtMoney = (v) =>
+  v === null || v === undefined || v === ""
+    ? ""
+    : Number(v).toLocaleString("vi-VN");
 
-const money = (v) => Number(v ?? 0).toLocaleString("vi-VN") + "đ";
-
-/* ---------------- Ảnh ---------------- */
-const PLACEHOLDER_IMG =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    `<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><rect width='24' height='24' fill='%23f3f4f6' stroke='none'/><rect x='4' y='5' width='16' height='14' rx='2'/><circle cx='9' cy='10' r='1.5'/><path d='M20 16l-4.5-4.5L8 19'/></svg>`,
-  );
-
-// Lấy đường dẫn ảnh từ nhiều tên field có thể có của backend
-const rawImage = (p) =>
-  p?.hinhAnh ?? p?.anh ?? p?.urlAnh ?? p?.duongDanAnh ?? p?.image ?? null;
-
-const imgSrc = (p) => {
-  const raw = rawImage(p);
-  if (!raw) return PLACEHOLDER_IMG;
-  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
-  return (
-    String(baseAPI).replace(/\/+$/, "") + "/" + String(raw).replace(/^\/+/, "")
-  );
+const onMoneyInput = (key, e) => {
+  const digits = e.target.value.replace(/\D/g, "");
+  form[key] = digits ? Number(digits) : null;
+  e.target.value = fmtMoney(form[key]);
 };
 
-const onImgError = (e) => {
-  if (e.target.src !== PLACEHOLDER_IMG) e.target.src = PLACEHOLDER_IMG;
-};
+/* "2025-06-01T08:00:00" -> "2025-06-01T08:00" (đúng định dạng datetime-local) */
+const toInputDateTime = (v) => (v ? String(v).slice(0, 16) : "");
+const toLocalDateTime = (v) => (v && v.length === 16 ? v + ":00" : v);
 
 /* ---------------- Validate ---------------- */
 const submitted = ref(false);
 const touched = reactive({});
 const touch = (key) => (touched[key] = true);
 
-const selectedProductIds = ref([]); // id sản phẩm cha đang tick
-
 const errors = computed(() => {
   const e = {};
-  if (!form.name) e.name = "Vui lòng nhập tên đợt giảm giá.";
-  if (!validPercent.value)
-    e.percent = "Mức giảm (%) phải nằm trong khoảng từ 1% đến 100%.";
+  if (!form.name) e.name = "Vui lòng nhập tên phiếu giảm giá.";
+
+  if (!form.quantity || form.quantity < 1)
+    e.quantity = "Số lượng phải lớn hơn hoặc bằng 1.";
+  else if (form.quantity < form.usedCount)
+    e.quantity = `Số lượng không được nhỏ hơn số đã sử dụng (${form.usedCount}).`;
+
+  if (!form.limitPerUser || form.limitPerUser < 1)
+    e.limitPerUser = "Giới hạn mỗi tài khoản phải lớn hơn hoặc bằng 1.";
+
+  if (form.minOrder === null || form.minOrder < 0)
+    e.minOrder = "Vui lòng nhập đơn hàng tối thiểu.";
+
+  if (isPercent.value) {
+    if (
+      !form.discountValue ||
+      form.discountValue < 1 ||
+      form.discountValue > 100
+    )
+      e.discountValue = "Mức giảm (%) phải nằm trong khoảng từ 1% đến 100%.";
+  } else if (!form.discountValue || form.discountValue <= 0) {
+    e.discountValue = "Số tiền giảm phải lớn hơn 0.";
+  }
+
   if (!form.startDate) e.startDate = "Vui lòng chọn ngày bắt đầu.";
   if (!form.endDate) e.endDate = "Vui lòng chọn ngày kết thúc.";
   else if (form.startDate && form.endDate <= form.startDate)
     e.endDate = "Ngày kết thúc phải sau ngày bắt đầu.";
-  if (selectedProductIds.value.length === 0)
-    e.productIds = "Vui lòng chọn ít nhất 1 sản phẩm.";
-  else if (form.productIds.length === 0)
-    e.productIds = "Vui lòng chọn ít nhất 1 biến thể để áp dụng.";
+
+  if (isPrivate.value && form.customerIds.length === 0)
+    e.customerIds = "Vui lòng chọn ít nhất 1 khách hàng.";
+
   return e;
 });
 
 const err = (key) => (submitted.value || touched[key]) && errors.value[key];
 
-/* ---------------- Dữ liệu sản phẩm ---------------- */
-const products = ref([]);
-const loadingProducts = ref(true);
+/* ---------------- Khách hàng ---------------- */
+const customers = ref([]);
+const loadingCustomers = ref(false);
+const customerKeyword = ref("");
+let customersLoaded = false;
 
-const loadProducts = async () => {
+const formatDate = (s) => (s ? new Date(s).toLocaleDateString("en-GB") : "—");
+
+const loadCustomers = async () => {
+  if (customersLoaded) return;
+  loadingCustomers.value = true;
   try {
-    const res = await axios.get(
-      baseAPI + "admin/dot-giam-gia/san-pham-chi-tiet/for-discount",
-      // excludeId: bỏ qua chính đợt đang sửa khi tính "đã thuộc đợt khác"
-      { params: { excludeId: route.params.id } },
-    );
-    products.value = res.data?.data ?? res.data ?? [];
+    // ⚠️ Đổi endpoint + tên field cho khớp backend của bạn
+    const res = await axios.get(baseAPI + "api/khach-hang/all");
+    const list = res.data?.data ?? res.data ?? [];
+    customers.value = list.map((k) => ({
+      id: k.id,
+      code: k.maKhachHang,
+      name: k.tenKhachHang,
+      dob: k.ngaySinh,
+      phone: k.soDienThoai,
+      email: k.email,
+      orders: k.soDonHang ?? 0,
+    }));
+    customersLoaded = true;
   } catch (e) {
     Swal.fire({
       icon: "error",
-      title: "Không tải được danh sách sản phẩm",
+      title: "Không tải được danh sách khách hàng",
       text: e.response?.data?.message || "Không kết nối được máy chủ",
       confirmButtonColor: "#cc0000",
     });
   } finally {
-    loadingProducts.value = false;
+    loadingCustomers.value = false;
   }
 };
 
-/* ---------------- Load chi tiết ---------------- */
-const toDatetimeLocal = (value) => {
-  if (!value) return "";
-  // "2026-10-12T15:13:00" → "2026-10-12T15:13"
-  return String(value).replace(" ", "T").slice(0, 16);
-};
-
-const loadDetail = async () => {
-  const id = route.params.id;
-  if (!id) {
-    Swal.fire({
-      icon: "error",
-      title: "Không tìm thấy đợt giảm giá",
-      confirmButtonColor: "#cc0000",
-    });
-    router.push(LIST_PATH);
-    return;
-  }
-
-  try {
-    const res = await axios.get(baseAPI + `admin/dot-giam-gia/detail/${id}`);
-    const data = res.data?.data ?? res.data;
-
-    form.id = data.id;
-    form.code = data.maDotGiamGia ?? "";
-    form.name = data.tenDotGiamGia ?? "";
-    form.percent = data.phanTramGiam ?? null;
-    form.startDate = toDatetimeLocal(data.ngayBatDau);
-    form.endDate = toDatetimeLocal(data.ngayKetThuc);
-
-    // Backend trả về mảng sanPhams (các biến thể đã chọn)
-    const selectedVariants = data.sanPhams ?? [];
-    form.productIds = selectedVariants.map((v) => v.id);
-
-    // Tự tick các sản phẩm cha
-    const parentIds = new Set(selectedVariants.map((v) => v.sanPhamId));
-    selectedProductIds.value = [...parentIds];
-  } catch (e) {
-    Swal.fire({
-      icon: "error",
-      title: "Không tải được thông tin đợt giảm giá",
-      text: e.response?.data?.message || "Không kết nối được máy chủ",
-      confirmButtonColor: "#cc0000",
-    });
-    router.push(LIST_PATH);
-  } finally {
-    loading.value = false;
-  }
-};
-
-onMounted(async () => {
-  await loadProducts();
-  await loadDetail();
-});
-
-/* ---------------- Bảng "Chọn sản phẩm" ---------------- */
-const productKeyword = ref("");
-
-const productList = computed(() => {
-  const map = new Map();
-  for (const p of products.value) {
-    if (!map.has(p.sanPhamId)) {
-      map.set(p.sanPhamId, {
-        id: p.sanPhamId,
-        code: p.maSanPham,
-        name: p.tenSanPham,
-        brand: p.tenThuongHieu ?? p.thuongHieu ?? "—",
-        material: p.tenChatLieu ?? p.chatLieu ?? "—",
-        image: rawImage(p),
-        variantIds: [],
-      });
-    }
-    const group = map.get(p.sanPhamId);
-    // Lấy ảnh của biến thể đầu tiên có ảnh làm ảnh đại diện sản phẩm
-    if (!group.image) group.image = rawImage(p);
-    group.variantIds.push(p.id);
-  }
-  return [...map.values()];
-});
-
-const filteredProductList = computed(() => {
-  const kw = productKeyword.value.trim().toLowerCase();
-  if (!kw) return productList.value;
-  return productList.value.filter((g) =>
-    [g.name, g.code].some((v) =>
-      String(v ?? "")
-        .toLowerCase()
-        .includes(kw),
-    ),
+const filteredCustomers = computed(() => {
+  const kw = customerKeyword.value.trim().toLowerCase();
+  if (!kw) return customers.value;
+  return customers.value.filter((c) =>
+    [c.code, c.name, c.phone].some((v) => (v || "").toLowerCase().includes(kw)),
   );
 });
 
-const allProductsSelected = computed(
+const allFilteredSelected = computed(
   () =>
-    filteredProductList.value.length > 0 &&
-    filteredProductList.value.every((g) =>
-      selectedProductIds.value.includes(g.id),
-    ),
+    filteredCustomers.value.length > 0 &&
+    filteredCustomers.value.every((c) => form.customerIds.includes(c.id)),
 );
 
-const setProductChecked = (list, checked) => {
-  const pids = list.map((g) => g.id);
-  const vids = list.flatMap((g) => g.variantIds);
-  if (checked) {
-    selectedProductIds.value = [
-      ...new Set([...selectedProductIds.value, ...pids]),
-    ];
-    form.productIds = [...new Set([...form.productIds, ...vids])];
-  } else {
-    selectedProductIds.value = selectedProductIds.value.filter(
-      (id) => !pids.includes(id),
-    );
-    form.productIds = form.productIds.filter((id) => !vids.includes(id));
+const toggleAll = (checked) => {
+  const ids = filteredCustomers.value.map((c) => c.id);
+  form.customerIds = checked
+    ? [...new Set([...form.customerIds, ...ids])]
+    : form.customerIds.filter((cid) => !ids.includes(cid));
+};
+
+/* ---------------- Watchers ---------------- */
+watch(
+  () => form.scope,
+  (value) => {
+    if (value === "private") {
+      loadCustomers();
+      if (!hydrating.value) form.quantity = form.customerIds.length || null;
+    } else if (!hydrating.value) {
+      form.customerIds = [];
+      customerKeyword.value = "";
+      form.quantity = null; // về công khai thì cho nhập lại
+    }
+  },
+);
+
+/* Cá nhân: số lượng = số khách hàng đã chọn */
+watch(
+  () => form.customerIds.length,
+  (len) => {
+    if (hydrating.value) return;
+    if (isPrivate.value) form.quantity = len || null;
+  },
+);
+
+/* ---------------- Tải dữ liệu phiếu cần sửa ---------------- */
+const loadDetail = async () => {
+  loadingForm.value = true;
+  try {
+    // ⚠️ Đổi endpoint + tên field cho khớp backend của bạn
+    const res = await axios.get(baseAPI + "admin/phieu-giam-gia/detail/" + id);
+    const d = res.data?.data ?? res.data;
+
+    hydrating.value = true;
+    form.code = d.maPhieuGiamGia;
+    form.name = d.tenPhieuGiamGia || "";
+    form.quantity = d.soLuong ?? null;
+    form.usedCount = d.soLuongDaSuDung ?? 0;
+    form.limitPerUser = d.gioiHanMoiTaiKhoan ?? 1;
+    form.minOrder = d.hoaDonToiThieu ?? 0;
+    form.discountType = LOAI_GIAM_NGUOC[d.loaiGiamGia] || "percent";
+    form.discountValue = d.giaTriGiam ?? null;
+    form.maxDiscount = d.giamToiDa ?? null;
+    form.startDate = toInputDateTime(d.ngayBatDau);
+    form.endDate = toInputDateTime(d.ngayKetThuc);
+    form.description = d.moTa || "";
+    form.scope = PHAM_VI_NGUOC[d.phamVi] || "public";
+    form.status = d.trangThai ?? true;
+    // API trả khachHangs: [{ idKhachHang, maKhachHang, ... }]
+    form.customerIds = (d.khachHangs ?? []).map((k) => k.idKhachHang);
+    if (form.scope === "private")
+      form.quantity = form.customerIds.length || null;
+
+    if (form.scope === "private") loadCustomers();
+
+    await nextTick(); // đợi watcher chạy xong rồi mới bật lại
+    hydrating.value = false;
+  } catch (e) {
+    await Swal.fire({
+      icon: "error",
+      title: "Không tải được phiếu giảm giá",
+      text: e.response?.data?.message || "Không kết nối được máy chủ",
+      confirmButtonColor: "#cc0000",
+    });
+    router.push("/admin/phieu-giam-gia");
+  } finally {
+    hydrating.value = false;
+    loadingForm.value = false;
   }
 };
 
-/* ---------------- Bảng "Chi tiết biến thể" ---------------- */
-const variants = computed(() =>
-  products.value.filter((p) => selectedProductIds.value.includes(p.sanPhamId)),
-);
-
-const variantKeyword = ref("");
-const sizeFilter = ref("");
-const colorFilter = ref("");
-
-const sizeOptions = computed(() => [
-  ...new Set(variants.value.map((v) => v.kichCo).filter(Boolean)),
-]);
-const colorOptions = computed(() => [
-  ...new Set(variants.value.map((v) => v.mauSac).filter(Boolean)),
-]);
-
-const filteredVariants = computed(() => {
-  const kw = variantKeyword.value.trim().toLowerCase();
-  return variants.value.filter((v) => {
-    if (sizeFilter.value && v.kichCo !== sizeFilter.value) return false;
-    if (colorFilter.value && v.mauSac !== colorFilter.value) return false;
-    if (!kw) return true;
-    return [v.tenSanPham, v.maChiTiet, v.kichCo, v.mauSac].some((x) =>
-      String(x ?? "")
-        .toLowerCase()
-        .includes(kw),
-    );
-  });
-});
-
-const allVariantsSelected = computed(
-  () =>
-    filteredVariants.value.length > 0 &&
-    filteredVariants.value.every((v) => form.productIds.includes(v.id)),
-);
-
-const toggleAllVariants = (checked) => {
-  const ids = filteredVariants.value.map((v) => v.id);
-  form.productIds = checked
-    ? [...new Set([...form.productIds, ...ids])]
-    : form.productIds.filter((id) => !ids.includes(id));
-};
-
-const resetVariantFilters = () => {
-  variantKeyword.value = "";
-  sizeFilter.value = "";
-  colorFilter.value = "";
-};
+onMounted(loadDetail);
 
 /* ---------------- Submit ---------------- */
-const toLocalDateTime = (v) => (v && v.length === 16 ? v + ":00" : v);
-
 const submit = async () => {
   submitted.value = true;
   if (Object.keys(errors.value).length) return;
 
   const data = {
-    id: form.id,
-    maDotGiamGia: form.code,
-    tenDotGiamGia: form.name,
-    phanTramGiam: form.percent,
+    id,
+    maPhieuGiamGia: form.code,
+    tenPhieuGiamGia: form.name,
+    loaiGiamGia: LOAI_GIAM[form.discountType],
+    giaTriGiam: form.discountValue,
+    giamToiDa:
+      isPercent.value && form.maxDiscount > 0 ? form.maxDiscount : null,
+    hoaDonToiThieu: form.minOrder || 0,
     ngayBatDau: toLocalDateTime(form.startDate),
     ngayKetThuc: toLocalDateTime(form.endDate),
-    trangThai: true,
-    moTa: null,
-    danhSachSanPhamChiTietId: form.productIds,
+    soLuong: form.quantity,
+    gioiHanMoiTaiKhoan: form.limitPerUser,
+    trangThai: form.status,
+    phamVi: PHAM_VI[form.scope],
+    danhSachKhachHangId: isPrivate.value ? form.customerIds : [],
+    moTa: form.description || null,
   };
 
   saving.value = true;
   try {
-    await axios.put(baseAPI + `admin/dot-giam-gia/update/${form.id}`, data);
-
+    // ⚠️ Đổi endpoint/method (PUT hoặc POST) cho khớp backend
+    await axios.put(baseAPI + "admin/phieu-giam-gia/update/" + id, data);
     await Swal.fire({
       icon: "success",
-      title: "Cập nhật đợt giảm giá thành công",
+      title: "Cập nhật phiếu giảm giá thành công",
       timer: 1500,
       showConfirmButton: false,
     });
-    router.push(LIST_PATH);
+    router.push("/admin/phieu-giam-gia");
   } catch (e) {
     Swal.fire({
       icon: "error",
@@ -313,23 +287,46 @@ const submit = async () => {
 </script>
 
 <template>
-  <div class="dg-screen">
-    <div v-if="loading" class="dg-loading">
-      Đang tải thông tin đợt giảm giá...
-    </div>
+  <div class="screen">
+    <!-- Đầu trang -->
+    <header class="page-head">
+      <h1 class="page-title">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linejoin="round"
+        >
+          <path
+            d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V8z"
+          />
+          <path d="M9 9h6M9 15h6" stroke-linecap="round" />
+        </svg>
+        Cập nhật phiếu giảm giá
+        <span v-if="form.code" class="code-badge">{{ form.code }}</span>
+      </h1>
+      <RouterLink to="/admin/phieu-giam-gia" class="btn-back">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M19 12H5M11 6l-6 6 6 6" />
+        </svg>
+        Quay lại danh sách
+      </RouterLink>
+    </header>
 
-    <template v-else>
-      <!-- Đầu trang -->
-      <header class="dg-head">
-        <h1 class="dg-title">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path
-              d="M21.4 11.6l-9-9A2 2 0 0 0 11 2H4a2 2 0 0 0-2 2v7c0 .55.22 1.05.59 1.42l9 9a2 2 0 0 0 2.82 0l7-7a2 2 0 0 0 0-2.84zM5.5 7a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"
-            />
-          </svg>
-          Cập nhật đợt giảm giá
-        </h1>
-        <RouterLink :to="LIST_PATH" class="dg-back">
+    <p v-if="loadingForm" class="loading">Đang tải dữ liệu phiếu giảm giá...</p>
+
+    <form v-else novalidate @submit.prevent="submit">
+      <!-- ============ Thông tin chung ============ -->
+      <section class="card">
+        <h2 class="card-title">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -338,200 +335,222 @@ const submit = async () => {
             stroke-linecap="round"
             stroke-linejoin="round"
           >
-            <path d="M19 12H5M11 6l-6 6 6 6" />
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M7 9h10M7 13h10M7 17h6" />
           </svg>
-          Quay lại danh sách
-        </RouterLink>
-      </header>
+          Thông tin chung
+        </h2>
 
-      <form novalidate @submit.prevent="submit">
-        <div class="dg-top">
-          <!-- Thông tin chung -->
-          <section class="dg-card">
-            <h2 class="dg-card-title">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <rect x="3" y="4" width="18" height="16" rx="2" />
-                <path d="M7 9h10M7 13h10M7 17h6" />
-              </svg>
-              Thông tin chung
-            </h2>
+        <div class="grid">
+          <!-- Mã phiếu (chỉ đọc) -->
+          <div class="field" style="display: none">
+            <label>Mã phiếu giảm giá</label>
+            <input :value="form.code" type="text" readonly class="readonly" />
+          </div>
 
-            <div class="dg-field">
-              <label>Mã đợt giảm giá</label>
-              <input
-                :value="form.code"
-                type="text"
-                readonly
-                class="dg-readonly"
-              />
-            </div>
+          <!-- Trạng thái -->
+          <div class="field" style="display: none">
+            <label>Trạng thái</label>
+            <select v-model="form.status">
+              <option :value="true">Đang hoạt động</option>
+              <option :value="false">Ngừng hoạt động</option>
+            </select>
+          </div>
 
-            <div class="dg-field">
-              <label>Tên đợt giảm giá <b class="dg-req">*</b></label>
-              <input
-                v-model.trim="form.name"
-                type="text"
-                maxlength="200"
-                placeholder="Nhập tên đợt giảm giá..."
-                :class="{ 'dg-invalid': err('name') }"
-                @blur="touch('name')"
-              />
-              <p v-if="err('name')" class="dg-err">
-                <i class="dg-err-ico">!</i>{{ errors.name }}
-              </p>
-            </div>
-
-            <div class="dg-field">
-              <label>Giá trị giảm (%) <b class="dg-req">*</b></label>
-              <div class="dg-affix" :class="{ 'dg-invalid': err('percent') }">
-                <input
-                  v-model.number="form.percent"
-                  type="number"
-                  min="1"
-                  max="100"
-                  placeholder="Nhập %..."
-                  @blur="touch('percent')"
-                />
-                <span class="dg-affix-text">%</span>
-              </div>
-              <p v-if="err('percent')" class="dg-err">
-                <i class="dg-err-ico">!</i>{{ errors.percent }}
-              </p>
-            </div>
-
-            <div class="dg-field">
-              <label>Ngày bắt đầu <b class="dg-req">*</b></label>
-              <input
-                v-model="form.startDate"
-                type="datetime-local"
-                :class="{ 'dg-invalid': err('startDate') }"
-                @blur="touch('startDate')"
-              />
-              <p v-if="err('startDate')" class="dg-err">
-                <i class="dg-err-ico">!</i>{{ errors.startDate }}
-              </p>
-            </div>
-
-            <div class="dg-field">
-              <label>Ngày kết thúc <b class="dg-req">*</b></label>
-              <input
-                v-model="form.endDate"
-                type="datetime-local"
-                :min="form.startDate"
-                :class="{ 'dg-invalid': err('endDate') }"
-                @blur="touch('endDate')"
-              />
-              <p v-if="err('endDate')" class="dg-err">
-                <i class="dg-err-ico">!</i>{{ errors.endDate }}
-              </p>
-            </div>
-          </section>
-
-          <!-- Chọn sản phẩm -->
-          <section class="dg-card">
-            <h2 class="dg-card-title">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" />
-                <path d="M4 7.5l8 4.5 8-4.5M12 12v9" />
-              </svg>
-              Chọn Sản Phẩm
-            </h2>
-
-            <div class="dg-search">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              >
-                <circle cx="11" cy="11" r="6.5" />
-                <path d="M16 16l4.5 4.5" />
-              </svg>
-              <input
-                v-model="productKeyword"
-                type="text"
-                placeholder="Tìm kiếm sản phẩm theo tên..."
-              />
-            </div>
-            <p v-if="err('productIds')" class="dg-err dg-err-block">
-              <i class="dg-err-ico">!</i>{{ errors.productIds }}
+          <!-- Tên phiếu -->
+          <div class="field span-2">
+            <label>Tên phiếu giảm giá <b class="req">*</b></label>
+            <input
+              v-model.trim="form.name"
+              type="text"
+              maxlength="200"
+              :class="{ invalid: err('name') }"
+              @blur="touch('name')"
+            />
+            <p v-if="err('name')" class="err">
+              <i class="err-ico">!</i>{{ errors.name }}
             </p>
+          </div>
 
-            <div class="dg-table-wrap dg-table-products">
-              <table class="dg-table">
-                <thead>
-                  <tr>
-                    <th class="dg-w-check">
-                      <input
-                        type="checkbox"
-                        aria-label="Chọn tất cả sản phẩm"
-                        :checked="allProductsSelected"
-                        :disabled="!filteredProductList.length"
-                        @change="
-                          setProductChecked(
-                            filteredProductList,
-                            $event.target.checked,
-                          )
-                        "
-                      />
-                    </th>
-                    <th class="dg-center dg-w-stt">STT</th>
-                    <th class="dg-center">Tên sản phẩm</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-if="loadingProducts">
-                    <td colspan="6" class="dg-empty">Đang tải sản phẩm...</td>
-                  </tr>
-                  <tr v-else-if="!filteredProductList.length">
-                    <td colspan="6" class="dg-empty">
-                      Không có sản phẩm phù hợp
-                    </td>
-                  </tr>
-                  <tr
-                    v-for="(g, i) in filteredProductList"
-                    v-else
-                    :key="g.id"
-                    :class="{
-                      'dg-selected': selectedProductIds.includes(g.id),
-                    }"
-                  >
-                    <td class="dg-w-check">
-                      <input
-                        type="checkbox"
-                        :checked="selectedProductIds.includes(g.id)"
-                        @change="setProductChecked([g], $event.target.checked)"
-                      />
-                    </td>
-                    <td class="dg-center">{{ i + 1 }}</td>
-                    <td class="dg-center dg-strong" :title="g.name">
-                      {{ g.name }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+          <!-- Số lượng -->
+          <div class="field">
+            <label>
+              Số lượng <b class="req">*</b>
+              <small v-if="isPrivate"
+                >(Tự động theo số khách hàng đã chọn)</small
+              >
+            </label>
+            <input
+              v-model.number="form.quantity"
+              type="number"
+              min="1"
+              :readonly="isPrivate"
+              :tabindex="isPrivate ? -1 : 0"
+              :class="{ invalid: err('quantity'), locked: isPrivate }"
+              @blur="touch('quantity')"
+            />
+            <small class="hint">Đã sử dụng: {{ form.usedCount }}</small>
+            <p v-if="err('quantity')" class="err">
+              <i class="err-ico">!</i>{{ errors.quantity }}
+            </p>
+          </div>
+
+          <!-- Giới hạn mỗi tài khoản -->
+          <div class="field">
+            <label>Giới hạn mỗi tài khoản <b class="req">*</b></label>
+            <input
+              v-model.number="form.limitPerUser"
+              type="number"
+              min="1"
+              :class="{ invalid: err('limitPerUser') }"
+              @blur="touch('limitPerUser')"
+            />
+            <small class="hint">Số lần tối đa một khách được dùng phiếu</small>
+            <p v-if="err('limitPerUser')" class="err">
+              <i class="err-ico">!</i>{{ errors.limitPerUser }}
+            </p>
+          </div>
+
+          <!-- Đơn hàng tối thiểu -->
+          <div class="field">
+            <label>Đơn hàng tối thiểu <b class="req">*</b></label>
+            <input
+              :value="fmtMoney(form.minOrder)"
+              type="text"
+              inputmode="numeric"
+              :class="{ invalid: err('minOrder') }"
+              @input="onMoneyInput('minOrder', $event)"
+              @blur="touch('minOrder')"
+            />
+            <p v-if="err('minOrder')" class="err">
+              <i class="err-ico">!</i>{{ errors.minOrder }}
+            </p>
+          </div>
+
+          <!-- Loại giảm -->
+          <div class="field">
+            <label>Loại giảm <b class="req">*</b></label>
+            <select v-model="form.discountType">
+              <option value="percent">Giảm theo %</option>
+              <option value="cash">Giảm theo số tiền</option>
+            </select>
+          </div>
+
+          <!-- Giá trị giảm -->
+          <div class="field">
+            <label>Giá trị giảm <b class="req">*</b></label>
+            <div class="affix" :class="{ invalid: err('discountValue') }">
+              <input
+                v-if="isPercent"
+                v-model.number="form.discountValue"
+                type="number"
+                min="1"
+                max="100"
+                @blur="touch('discountValue')"
+              />
+              <input
+                v-else
+                :value="fmtMoney(form.discountValue)"
+                type="text"
+                inputmode="numeric"
+                @input="onMoneyInput('discountValue', $event)"
+                @blur="touch('discountValue')"
+              />
+              <span class="affix-text">{{ isPercent ? "%" : "₫" }}</span>
             </div>
-          </section>
+            <p v-if="err('discountValue')" class="err">
+              <i class="err-ico">!</i>{{ errors.discountValue }}
+            </p>
+          </div>
+
+          <!-- Giảm tối đa (chỉ khi giảm theo %) -->
+          <div v-if="isPercent" class="field">
+            <label>Giảm tối đa (VNĐ)</label>
+            <input
+              :value="fmtMoney(form.maxDiscount)"
+              type="text"
+              inputmode="numeric"
+              placeholder="Để trống nếu không giới hạn"
+              @input="onMoneyInput('maxDiscount', $event)"
+            />
+          </div>
+
+          <!-- Ngày bắt đầu -->
+          <div class="field">
+            <label>Ngày bắt đầu <b class="req">*</b></label>
+            <input
+              v-model="form.startDate"
+              type="datetime-local"
+              :class="{ invalid: err('startDate') }"
+              @blur="touch('startDate')"
+            />
+            <p v-if="err('startDate')" class="err">
+              <i class="err-ico">!</i>{{ errors.startDate }}
+            </p>
+          </div>
+
+          <!-- Ngày kết thúc -->
+          <div class="field">
+            <label>Ngày kết thúc <b class="req">*</b></label>
+            <input
+              v-model="form.endDate"
+              type="datetime-local"
+              :min="form.startDate"
+              :class="{ invalid: err('endDate') }"
+              @blur="touch('endDate')"
+            />
+            <p v-if="err('endDate')" class="err">
+              <i class="err-ico">!</i>{{ errors.endDate }}
+            </p>
+          </div>
+
+          <!-- Mô tả -->
+          <div class="field span-2">
+            <label>Mô tả phiếu giảm giá <small>(Không bắt buộc)</small></label>
+            <textarea
+              v-model.trim="form.description"
+              rows="3"
+              maxlength="500"
+              placeholder="Nhập ghi chú hoặc mô tả"
+            ></textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Đối tượng áp dụng ============ -->
+      <section class="card">
+        <h2 class="card-title">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="9" cy="8" r="3.2" />
+            <path
+              d="M2.5 19c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5v.5h-13V19z"
+            />
+            <circle cx="17" cy="9" r="2.5" />
+            <path
+              d="M16.5 13.6c3 0 5 1.8 5 4.4v.5h-4.4c0-1.9-.8-3.6-2.1-4.6.4-.2.9-.3 1.5-.3z"
+            />
+          </svg>
+          Đối tượng áp dụng
+        </h2>
+
+        <div class="radio-row">
+          <label class="radio">
+            <input v-model="form.scope" type="radio" value="public" />
+            <span>Tất cả (Công khai)</span>
+          </label>
+          <label class="radio">
+            <input v-model="form.scope" type="radio" value="private" />
+            <span>Nhóm chỉ định (Cá nhân)</span>
+          </label>
         </div>
 
-        <!-- Chi tiết biến thể -->
-        <section class="dg-card">
-          <h2 class="dg-card-title dg-no-line">
+        <div v-if="isPrivate" class="picker">
+          <div class="picker-head">
+            <h3>Danh sách khách hàng nhận phiếu</h3>
+            <span class="picked">Đã chọn: {{ form.customerIds.length }}</span>
+          </div>
+
+          <div class="search">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -539,176 +558,88 @@ const submit = async () => {
               stroke-width="2"
               stroke-linecap="round"
             >
-              <path
-                d="M8 6h12M8 12h12M8 18h12M3.5 6h.01M3.5 12h.01M3.5 18h.01"
-              />
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="M16 16l4.5 4.5" />
             </svg>
-            Chi Tiết Biến Thể
-            <span class="dg-count"
-              >Đã chọn: {{ form.productIds.length }}/{{ variants.length }}</span
-            >
-          </h2>
-
-          <div class="dg-filter-row">
-            <div class="dg-field">
-              <label>Tìm kiếm chi tiết</label>
-              <input
-                v-model="variantKeyword"
-                type="text"
-                class="dg-pill"
-                placeholder="Nhập tên biến thể..."
-              />
-            </div>
-            <div class="dg-field">
-              <label>Kích cỡ</label>
-              <select v-model="sizeFilter" class="dg-round">
-                <option value="">Tất cả</option>
-                <option v-for="s in sizeOptions" :key="s" :value="s">
-                  {{ s }}
-                </option>
-              </select>
-            </div>
-            <div class="dg-field">
-              <label>Màu sắc</label>
-              <select v-model="colorFilter" class="dg-round">
-                <option value="">Tất cả</option>
-                <option v-for="c in colorOptions" :key="c" :value="c">
-                  {{ c }}
-                </option>
-              </select>
-            </div>
-            <button type="button" class="dg-reset" @click="resetVariantFilters">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M20 11a8 8 0 1 0-.9 4.5" />
-                <path d="M20 4.5V11h-6.5" />
-              </svg>
-              Đặt lại
-            </button>
+            <input
+              v-model="customerKeyword"
+              type="text"
+              placeholder="Tìm kiếm theo mã, tên, SDT..."
+            />
           </div>
+          <p v-if="err('customerIds')" class="err">
+            <i class="err-ico">!</i>{{ errors.customerIds }}
+          </p>
 
-          <div class="dg-table-wrap dg-table-variants">
-            <table class="dg-table dg-table-wide">
+          <div class="table-wrap">
+            <table class="cus-table">
               <thead>
                 <tr>
-                  <th class="dg-w-check">
+                  <th class="w-check">
                     <input
                       type="checkbox"
-                      aria-label="Chọn tất cả biến thể"
-                      :checked="allVariantsSelected"
-                      :disabled="!filteredVariants.length"
-                      @change="toggleAllVariants($event.target.checked)"
+                      :checked="allFilteredSelected"
+                      :disabled="!filteredCustomers.length"
+                      aria-label="Chọn tất cả"
+                      @change="toggleAll($event.target.checked)"
                     />
                   </th>
-                  <th class="dg-center dg-w-stt">STT</th>
-                  <th class="dg-center">Sản phẩm</th>
-                  <th class="dg-center dg-w-img">Ảnh</th>
-                  <th class="dg-center">Mã chi tiết</th>
-                  <th class="dg-center">Kích cỡ</th>
-                  <th class="dg-center">Màu sắc</th>
-                  <th class="dg-center">Giá bán</th>
-                  <th class="dg-center">Giá sau giảm</th>
-                  <th class="dg-center">Tồn</th>
+                  <th>Mã KH</th>
+                  <th>Tên Khách Hàng</th>
+                  <th>Ngày sinh</th>
+                  <th>Số điện thoại</th>
+                  <th>Email</th>
+                  <th class="right">Đã mua</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-if="!variants.length">
-                  <td colspan="10" class="dg-empty">
-                    Chọn sản phẩm ở trên để xem các biến thể.
-                  </td>
+                <tr v-if="loadingCustomers">
+                  <td colspan="7" class="empty">Đang tải khách hàng...</td>
                 </tr>
-                <tr v-else-if="!filteredVariants.length">
-                  <td colspan="10" class="dg-empty">
-                    Không có biến thể phù hợp
-                  </td>
+                <tr v-else-if="!filteredCustomers.length">
+                  <td colspan="7" class="empty">Không có khách hàng phù hợp</td>
                 </tr>
                 <tr
-                  v-for="(v, i) in filteredVariants"
+                  v-for="c in filteredCustomers"
                   v-else
-                  :key="v.id"
-                  :class="{ 'dg-selected': form.productIds.includes(v.id) }"
+                  :key="c.id"
+                  :class="{ selected: form.customerIds.includes(c.id) }"
                 >
-                  <td class="dg-w-check">
+                  <td class="w-check">
                     <input
-                      v-model="form.productIds"
+                      v-model="form.customerIds"
                       type="checkbox"
-                      :value="v.id"
+                      :value="c.id"
                     />
                   </td>
-                  <td class="dg-center">{{ i + 1 }}</td>
-
-                  <td class="dg-center dg-strong" :title="v.tenSanPham">
-                    {{ v.tenSanPham }}
-                  </td>
-                  <td class="dg-center">
-                    <div class="dg-img-wrap">
-                      <img
-                        class="dg-img"
-                        :src="logo"
-                        :alt="v.tenSanPham"
-                        loading="lazy"
-                        @error="onImgError"
-                      />
-                      <!-- Biến thể đã thuộc đợt giảm giá khác đang hiệu lực -->
-                      <span
-                        v-if="v.phanTramGiamKhac"
-                        class="dg-badge"
-                        :title="`Đang thuộc đợt: ${v.tenDotGiamGiaKhac}`"
-                      >
-                        -{{ v.phanTramGiamKhac }}%
-                      </span>
-                    </div>
-                  </td>
-                  <td class="dg-center dg-muted">{{ v.maChiTiet }}</td>
-                  <td class="dg-center">{{ v.kichCo }}</td>
-                  <td class="dg-center">{{ v.mauSac }}</td>
-                  <td class="dg-center">{{ money(v.giaBan) }}</td>
-                  <td class="dg-center">
-                    <span v-if="validPercent" class="dg-sale">
-                      {{ money(afterDiscount(v.giaBan)) }}
-                    </span>
-                    <span v-else class="dg-muted">—</span>
-                  </td>
-                  <td class="dg-center">{{ v.soLuong }}</td>
+                  <td class="muted">{{ c.code }}</td>
+                  <td class="strong">{{ c.name }}</td>
+                  <td>{{ formatDate(c.dob) }}</td>
+                  <td>{{ c.phone || "—" }}</td>
+                  <td>{{ c.email || "—" }}</td>
+                  <td class="right strong">{{ c.orders }} đơn</td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </section>
-
-        <!-- Nút thao tác -->
-        <div class="dg-actions">
-          <RouterLink :to="LIST_PATH" class="dg-btn-cancel">Hủy</RouterLink>
-          <button type="submit" class="dg-btn-save" :disabled="saving">
-            {{ saving ? "Đang lưu..." : "Cập nhật đợt giảm giá" }}
-          </button>
         </div>
-      </form>
-    </template>
+      </section>
+
+      <!-- Nút thao tác -->
+      <div class="actions">
+        <RouterLink to="/admin/phieu-giam-gia" class="btn-cancel"
+          >Hủy</RouterLink
+        >
+        <button type="submit" class="btn-save" :disabled="saving">
+          {{ saving ? "Đang lưu..." : "Cập nhật phiếu giảm giá" }}
+        </button>
+      </div>
+    </form>
   </div>
 </template>
 
 <style scoped>
-.dg-loading {
-  padding: 3rem;
-  text-align: center;
-  color: #6b7280;
-  font-size: 1.05rem;
-}
-
-.dg-readonly {
-  background: #f3f4f6 !important;
-  color: #6b7280 !important;
-  cursor: not-allowed;
-}
-
-.dg-screen {
+.screen {
   --red: #cc0000;
   --red-soft: #fdecec;
   --line: #e5e7eb;
@@ -718,7 +649,8 @@ const submit = async () => {
   color: var(--ink);
 }
 
-.dg-head {
+/* ---- Đầu trang ---- */
+.page-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -726,7 +658,7 @@ const submit = async () => {
   margin-bottom: 1.1rem;
   border-bottom: 1px solid var(--line);
 }
-.dg-title {
+.page-title {
   display: flex;
   align-items: center;
   gap: 0.6rem;
@@ -734,11 +666,24 @@ const submit = async () => {
   font-size: 1.35rem;
   font-weight: 700;
 }
-.dg-title svg {
+.page-title svg {
   width: 24px;
   height: 24px;
 }
-.dg-back {
+.code-badge {
+  padding: 0.15rem 0.7rem;
+  border-radius: 999px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.loading {
+  padding: 3rem 0;
+  text-align: center;
+  color: var(--muted);
+}
+.btn-back {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
@@ -750,69 +695,70 @@ const submit = async () => {
   font-weight: 600;
   text-decoration: none;
 }
-.dg-back svg {
+.btn-back svg {
   width: 16px;
   height: 16px;
 }
-.dg-back:hover {
+.btn-back:hover {
   border-color: var(--red);
   color: var(--red);
 }
 
-.dg-top {
-  display: grid;
-  grid-template-columns: minmax(280px, 1fr) 2fr;
-  gap: 1.25rem;
-  align-items: start;
-  margin-bottom: 1.25rem;
-}
-.dg-card {
+/* ---- Card ---- */
+.card {
   background: #fff;
   border-radius: 14px;
-  padding: 1.3rem 1.5rem 1.5rem;
+  padding: 1.4rem 1.6rem 1.6rem;
+  margin-bottom: 1.25rem;
   box-shadow: 0 1px 3px rgba(17, 24, 39, 0.06);
 }
-.dg-card-title {
+.card-title {
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  margin: 0 0 1.1rem;
+  margin: 0 0 1.25rem;
   padding-bottom: 0.8rem;
   border-bottom: 1px solid var(--line);
   font-size: 1rem;
   font-weight: 700;
 }
-.dg-card-title.dg-no-line {
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-.dg-card-title svg {
+.card-title svg {
   width: 18px;
   height: 18px;
 }
-.dg-count {
-  padding: 0.15rem 0.65rem;
-  border-radius: 999px;
-  background: #4b5563;
-  color: #fff;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
 
-.dg-field {
-  margin-bottom: 1rem;
+/* ---- Lưới form ---- */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.1rem 1.5rem;
 }
-.dg-field label {
+.span-2 {
+  grid-column: 1 / -1;
+}
+.field label {
   display: block;
   margin-bottom: 0.4rem;
   font-size: 0.88rem;
   font-weight: 600;
 }
-.dg-req {
+.field label small {
+  font-weight: 400;
+  color: var(--muted);
+}
+.req {
   color: var(--red);
 }
-.dg-field input,
-.dg-field select {
+.hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.field input,
+.field select,
+.field textarea {
   width: 100%;
   padding: 0.7rem 0.9rem;
   border: 1px solid var(--line);
@@ -825,42 +771,45 @@ const submit = async () => {
     border-color 0.15s,
     box-shadow 0.15s;
 }
-.dg-field input:focus,
-.dg-field select:focus {
+.field textarea {
+  resize: vertical;
+}
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
   border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
 }
-.dg-field input.dg-invalid {
+.field input.invalid {
   border-color: var(--red);
 }
-.dg-field input.dg-pill {
-  border-radius: 999px;
-  padding-left: 1.1rem;
-}
-.dg-field select.dg-round {
-  border-radius: 12px;
+.field input.readonly {
+  background: #f3f4f6;
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
-.dg-affix {
+/* Ô có hậu tố (%, ₫) */
+.affix {
   display: flex;
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
   background: #fff;
 }
-.dg-affix:focus-within {
+.affix:focus-within {
   border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
 }
-.dg-affix.dg-invalid {
+.affix.invalid {
   border-color: var(--red);
 }
-.dg-affix input {
-  border: 0 !important;
-  border-radius: 0 !important;
+.affix input {
+  border: 0;
+  border-radius: 0;
   box-shadow: none !important;
 }
-.dg-affix-text {
+.affix-text {
   display: grid;
   place-items: center;
   min-width: 48px;
@@ -870,7 +819,8 @@ const submit = async () => {
   font-weight: 600;
 }
 
-.dg-err {
+/* Thông báo lỗi */
+.err {
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -878,10 +828,7 @@ const submit = async () => {
   font-size: 0.82rem;
   color: var(--red);
 }
-.dg-err-block {
-  margin: -0.4rem 0 0.8rem;
-}
-.dg-err-ico {
+.err-ico {
   display: inline-grid;
   place-items: center;
   width: 14px;
@@ -894,12 +841,57 @@ const submit = async () => {
   flex: none;
 }
 
-.dg-search {
+/* ---- Đối tượng áp dụng ---- */
+.radio-row {
+  display: flex;
+  gap: 3rem;
+  margin-bottom: 1.1rem;
+}
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+.radio input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--red);
+}
+
+.picker {
+  padding: 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fafafa;
+}
+.picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.9rem;
+}
+.picker-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.picked {
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.search {
   position: relative;
-  max-width: 520px;
+  max-width: 460px;
   margin-bottom: 1rem;
 }
-.dg-search svg {
+.search svg {
   position: absolute;
   left: 14px;
   top: 50%;
@@ -908,182 +900,89 @@ const submit = async () => {
   transform: translateY(-50%);
   color: var(--muted);
 }
-.dg-search input {
+.search input {
   width: 100%;
-  padding: 0.65rem 1rem 0.65rem 2.7rem;
+  padding: 0.65rem 1rem 0.65rem 2.6rem;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: #fff;
   font: inherit;
   outline: none;
 }
-.dg-search input:focus {
+.search input:focus {
   border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
 }
 
-/* ===== Bảng: chia đều các cột, căn giữa ===== */
-.dg-table-wrap {
+.table-wrap {
+  max-height: 340px;
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
   background: #fff;
 }
-.dg-table-products {
-  max-height: 372px;
-}
-.dg-table-variants {
-  max-height: 420px;
-}
-.dg-table {
+.cus-table {
   width: 100%;
-  table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.92rem;
 }
-.dg-table-wide {
-  min-width: 960px;
-}
-.dg-table th {
+.cus-table th {
   position: sticky;
   top: 0;
-  z-index: 1;
-  padding: 0.8rem 0.75rem;
-  background: #fff;
+  padding: 0.75rem 1rem;
+  background: #f9fafb;
   border-bottom: 1px solid var(--line);
-  text-align: center;
-  font-weight: 700;
+  text-align: left;
+  font-weight: 600;
+  color: #4b5563;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.dg-table td {
-  padding: 0.7rem 0.75rem;
+.cus-table td {
+  padding: 0.75rem 1rem;
   border-bottom: 1px solid #f1f2f4;
-  text-align: center;
-  vertical-align: middle;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.dg-table tbody tr:last-child td {
+.cus-table tbody tr:last-child td {
   border-bottom: 0;
 }
-.dg-table tbody tr:hover {
+.cus-table tbody tr:hover {
   background: #fff7f7;
 }
-.dg-table tr.dg-selected {
+.cus-table tr.selected {
   background: var(--red-soft);
 }
-.dg-table input[type="checkbox"] {
+.cus-table input[type="checkbox"] {
   width: 17px;
   height: 17px;
   accent-color: var(--red);
   cursor: pointer;
 }
-.dg-w-check {
-  width: 48px;
+.w-check {
+  width: 44px;
 }
-.dg-w-stt {
-  width: 64px;
-}
-.dg-w-img {
-  width: 84px;
-}
-.dg-center {
-  text-align: center !important;
-}
-.dg-right {
+.right {
   text-align: right !important;
 }
-.dg-muted {
+.muted {
   color: var(--muted);
 }
-.dg-strong {
+.strong {
   font-weight: 700;
 }
-.dg-sale {
-  color: var(--red);
-  font-weight: 700;
-}
-.dg-empty {
+.empty {
   padding: 2rem 1rem !important;
   text-align: center;
   color: var(--muted);
 }
 
-/* Ảnh sản phẩm + nhãn % đợt giảm giá khác */
-.dg-img-wrap {
-  position: relative;
-  width: 52px;
-  height: 52px;
-  margin: 0 auto;
-}
-.dg-img {
-  display: block;
-  width: 52px;
-  height: 52px;
-  margin: 0 auto;
-  object-fit: cover;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f3f4f6;
-}
-.dg-badge {
-  position: absolute;
-  top: -4px;
-  left: -6px;
-  padding: 1px 6px;
-  border-radius: 6px;
-  background: var(--red);
-  color: #fff;
-  font-size: 0.7rem;
-  font-weight: 700;
-  line-height: 1.4;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  white-space: nowrap;
-  cursor: help;
-}
-
-.dg-filter-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto;
-  gap: 1.25rem;
-  align-items: end;
-  margin-bottom: 0.25rem;
-}
-.dg-reset {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  height: 44px;
-  margin-bottom: 1rem;
-  padding: 0 1.8rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: #fff;
-  font: inherit;
-  font-weight: 600;
-  color: #374151;
-  cursor: pointer;
-}
-.dg-reset svg {
-  width: 16px;
-  height: 16px;
-}
-.dg-reset:hover {
-  border-color: var(--red);
-  color: var(--red);
-}
-
-.dg-actions {
+/* ---- Nút ---- */
+.actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
 }
-.dg-btn-cancel,
-.dg-btn-save {
+.btn-cancel,
+.btn-save {
   padding: 0.7rem 1.6rem;
   border-radius: 8px;
   font: inherit;
@@ -1091,38 +990,53 @@ const submit = async () => {
   cursor: pointer;
   text-decoration: none;
 }
-.dg-btn-cancel {
+.btn-cancel {
   border: 1px solid var(--line);
   background: #fff;
   color: #374151;
 }
-.dg-btn-cancel:hover {
+.btn-cancel:hover {
   border-color: #9ca3af;
 }
-.dg-btn-save {
+.btn-save {
   border: 1px solid var(--red);
   background: var(--red);
   color: #fff;
 }
-.dg-btn-save:hover {
+.btn-save:hover {
   background: #a80000;
 }
-.dg-btn-save:disabled {
+.btn-save:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-@media (max-width: 992px) {
-  .dg-top {
+@media (max-width: 720px) {
+  .grid {
     grid-template-columns: 1fr;
   }
-  .dg-filter-row {
-    grid-template-columns: 1fr 1fr;
+  .radio-row {
+    flex-direction: column;
+    gap: 0.75rem;
   }
 }
-@media (max-width: 560px) {
-  .dg-filter-row {
-    grid-template-columns: 1fr;
-  }
+.field input.locked {
+  background: #f3f4f6;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.field input.locked:focus {
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+/* Ẩn nút tăng/giảm khi bị khóa */
+.field input.locked::-webkit-inner-spin-button,
+.field input.locked::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.field input.locked {
+  -moz-appearance: textfield;
 }
 </style>

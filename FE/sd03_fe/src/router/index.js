@@ -110,7 +110,7 @@ const routes = [
       },
       {
         path: "/phieu-giam-gia/update/:id",
-        component: VoucherFormUpdate,
+        component: DiscountFormUpdate,
         meta: { title: "Cập nhật phiếu giảm giá" },
       },
       {
@@ -134,7 +134,7 @@ const routes = [
       },
       {
         path: "/dot-giam-gia/update/:id",
-        component: DiscountFormUpdate,
+        component: VoucherFormUpdate,
         meta: { title: "Cập nhật đợt giảm giá" },
       },
       {

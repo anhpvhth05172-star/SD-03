@@ -9,6 +9,7 @@ import com.example.datn.repository.KhachHangPhieuGiamGiaRepository;
 import com.example.datn.repository.KhachHangRepository;
 import com.example.datn.repository.PhieuGiamGiaRepository;
 import com.example.datn.service.EmailService;
+import com.example.datn.service.EmailService.LoaiThongBao;
 import com.example.datn.service.PhieuGiamGiaService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -94,6 +95,9 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Không tìm thấy phiếu giảm giá"));
 
+        // Ghi nhớ trạng thái trước khi sửa để biết có bật/tắt hay không
+        boolean wasActive = Boolean.TRUE.equals(db.getTrangThai());
+
         // 2. Validate dữ liệu đầu vào
         validate(req);
 
@@ -114,6 +118,7 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
         // ==================== Xử lý danh sách khách hàng (chỉ phiếu cá nhân) ====================
         List<KhachHangPhieuGiamGia> canXoa = List.of();
         List<KhachHang> khachMoi = List.of();
+        List<KhachHang> khachCu = List.of(); // khách giữ nguyên, chưa dùng phiếu -> nhận mail cập nhật/bật/tắt
 
         if (isCaNhan) {
             Set<Long> idMoi = Set.copyOf(req.getDanhSachKhachHangId());
@@ -137,6 +142,13 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
             if (canXoa.stream().anyMatch(row -> row.getNgaySuDung() != null)) {
                 throw bad("Không thể bỏ khách hàng đã sử dụng phiếu này");
             }
+
+            // Khách ở lại và chưa dùng phiếu
+            khachCu = hienTai.stream()
+                    .filter(row -> idMoi.contains(row.getKhachHang().getId()))
+                    .filter(row -> row.getNgaySuDung() == null)
+                    .map(KhachHangPhieuGiamGia::getKhachHang)
+                    .toList();
 
             // Khách mới được thêm
             Set<Long> idThem = idMoi.stream()
@@ -183,8 +195,23 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
                     .toList();
             khPhieuRepo.saveAll(rows);
 
-            // Chỉ gửi mail cho khách mới được thêm
-            guiMailPhieuCaNhan(db, khachMoi);
+            // Khách mới được thêm: gửi mail nhận phiếu
+            guiMailPhieuCaNhan(db, khachMoi, LoaiThongBao.MOI);
+        }
+
+        // ==================== Mail cho khách cũ ====================
+        // Trạng thái đổi -> báo bật/tắt; không đổi -> báo cập nhật (chỉ khi phiếu đang bật)
+        if (isCaNhan && !khachCu.isEmpty()) {
+            boolean nowActive = Boolean.TRUE.equals(db.getTrangThai());
+            LoaiThongBao loai;
+            if (wasActive != nowActive) {
+                loai = nowActive ? LoaiThongBao.BAT : LoaiThongBao.TAT;
+            } else {
+                loai = nowActive ? LoaiThongBao.CAP_NHAT : null;
+            }
+            if (loai != null) {
+                guiMailPhieuCaNhan(db, khachCu, loai);
+            }
         }
 
         return db.getId();
@@ -238,7 +265,7 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
             khPhieuRepo.saveAll(rows);
 
             // Gửi mail cho toàn bộ khách được chọn
-            guiMailPhieuCaNhan(phieu, khachHangs);
+            guiMailPhieuCaNhan(phieu, khachHangs, LoaiThongBao.MOI);
         }
 
         return p.getId();
@@ -248,10 +275,16 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
      * Gửi mail phiếu giảm giá cá nhân cho danh sách khách hàng.
      * Chỉ gửi SAU KHI transaction commit thành công, tránh trường hợp
      * mail đã gửi mà dữ liệu bị rollback.
+     *
+     * Quy tắc: loại TAT chỉ gửi khi phiếu đang tắt;
+     * các loại còn lại (MOI, CAP_NHAT, BAT) chỉ gửi khi phiếu đang bật.
      */
-    private void guiMailPhieuCaNhan(PhieuGiamGia p, List<KhachHang> dsKhach) {
+    private void guiMailPhieuCaNhan(PhieuGiamGia p, List<KhachHang> dsKhach, LoaiThongBao loai) {
         if (dsKhach == null || dsKhach.isEmpty()) return;
-        if (!Boolean.TRUE.equals(p.getTrangThai())) return; // phiếu đang tắt thì chưa gửi
+
+        boolean active = Boolean.TRUE.equals(p.getTrangThai());
+        boolean duocGui = (loai == LoaiThongBao.TAT) ? !active : active;
+        if (!duocGui) return;
 
         String giaTri = "PERCENT".equals(p.getLoaiGiamGia())
                 ? p.getGiaTriGiam().stripTrailingZeros().toPlainString() + "%"
@@ -279,7 +312,7 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
 
         Runnable guiMail = () -> nguoiNhan.forEach(n ->
                 emailService.guiMailPhieuGiamGiaCaNhan(
-                        n[0], n[1], ma, ten, giaTri, dieuKien, batDau, ketThuc));
+                        n[0], n[1], ma, ten, giaTri, dieuKien, batDau, ketThuc, loai));
 
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -331,6 +364,17 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
         phieu.setTrangThai(newStatus);
         phieu.setNgayCapNhat(LocalDateTime.now());
         phieuRepo.save(phieu);
+
+        // Phiếu cá nhân: báo cho khách chưa dùng phiếu
+        if (CA_NHAN.equals(phieu.getPhamVi())) {
+            List<KhachHang> dsKhach = khPhieuRepo.findByPhieuId(id).stream()
+                    .filter(r -> r.getNgaySuDung() == null)
+                    .map(KhachHangPhieuGiamGia::getKhachHang)
+                    .toList();
+            guiMailPhieuCaNhan(phieu, dsKhach,
+                    newStatus ? LoaiThongBao.BAT : LoaiThongBao.TAT);
+        }
+
         return newStatus;
     }
 
