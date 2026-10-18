@@ -1,5 +1,13 @@
 <script setup>
-import { reactive, computed, inject, ref, onMounted } from "vue";
+import {
+  reactive,
+  computed,
+  inject,
+  ref,
+  watch,
+  onMounted,
+  onUnmounted,
+} from "vue";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { useRouter } from "vue-router";
@@ -31,12 +39,39 @@ const form = reactive({
   productIds: [], // id của san_pham_chi_tiet (biến thể) được chọn
 });
 
+/* ---------------- Thời điểm hiện tại (định dạng giống datetime-local) ---------------- */
+const pad = (n) => String(n).padStart(2, "0");
+const nowLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
+};
+
+// Cập nhật định kỳ để việc kiểm tra "quá khứ" luôn đúng khi form mở lâu
+const nowStr = ref(nowLocal());
+let nowTimer = null;
+onMounted(() => {
+  nowTimer = setInterval(() => (nowStr.value = nowLocal()), 30 * 1000);
+});
+onUnmounted(() => clearInterval(nowTimer));
+
 /* ---------------- Giá ---------------- */
 const validPercent = computed(() => form.percent >= 1 && form.percent <= 100);
 
+// Mức giảm thực tế = max(% đợt mới, % đợt khác đang áp dụng cho biến thể)
+const effectivePercent = (v) =>
+  Math.max(Number(form.percent) || 0, Number(v.phanTramGiamKhac) || 0);
+
 // Phải giống công thức backend: làm tròn về đồng
-const afterDiscount = (giaBan) =>
-  Math.round((Number(giaBan) * (100 - form.percent)) / 100);
+const afterDiscount = (v) =>
+  Math.round((Number(v.giaBan) * (100 - effectivePercent(v))) / 100);
+
+// Giá hiện tại: giá đang áp dụng theo đợt khác (nếu có), tính trên giá gốc
+const currentPrice = (v) =>
+  Math.round(
+    (Number(v.giaBan) * (100 - (Number(v.phanTramGiamKhac) || 0))) / 100,
+  );
 
 const money = (v) => Number(v ?? 0).toLocaleString("vi-VN") + "đ";
 
@@ -52,22 +87,56 @@ const onImgError = (e) => {
   e.target.src = PLACEHOLDER;
 };
 
-/* ---------------- Validate (hiện lỗi sau khi chạm vào ô hoặc bấm Lưu) ---------------- */
+/* ---------------- Validate (hiện lỗi ngay khi người dùng thao tác) ---------------- */
 const submitted = ref(false);
 const touched = reactive({});
 const touch = (key) => (touched[key] = true);
 
 const selectedProductIds = ref([]); // id sản phẩm (cha) đang tick
 
+// Giá trị thay đổi là hiện lỗi ngay, không cần blur hay submit
+watch(
+  () => form.name,
+  () => touch("name"),
+);
+watch(
+  () => form.percent,
+  () => touch("percent"),
+);
+watch(
+  () => form.startDate,
+  () => touch("startDate"),
+);
+watch(
+  () => form.endDate,
+  () => touch("endDate"),
+);
+watch([selectedProductIds, () => form.productIds], () => touch("productIds"), {
+  deep: true,
+});
+
 const errors = computed(() => {
   const e = {};
+
   if (!form.name) e.name = "Vui lòng nhập tên đợt giảm giá.";
-  if (!validPercent.value)
+
+  if (form.percent === null || form.percent === "")
+    e.percent = "Vui lòng nhập mức giảm (%).";
+  else if (!validPercent.value)
     e.percent = "Mức giảm (%) phải nằm trong khoảng từ 1% đến 100%.";
+
+  // Ngày bắt đầu
   if (!form.startDate) e.startDate = "Vui lòng chọn ngày bắt đầu.";
+  else if (form.startDate < nowStr.value)
+    e.startDate = "Ngày bắt đầu không được ở trong quá khứ.";
+
+  // Ngày kết thúc
   if (!form.endDate) e.endDate = "Vui lòng chọn ngày kết thúc.";
-  else if (form.startDate && form.endDate <= form.startDate)
-    e.endDate = "Ngày kết thúc phải sau ngày bắt đầu.";
+  else if (form.endDate < nowStr.value)
+    e.endDate = "Ngày kết thúc không được ở trong quá khứ.";
+  else if (form.startDate && form.endDate < form.startDate)
+    e.endDate = "Ngày kết thúc không được nhỏ hơn ngày bắt đầu.";
+
   if (selectedProductIds.value.length === 0)
     e.productIds = "Vui lòng chọn ít nhất 1 sản phẩm.";
   else if (form.productIds.length === 0)
@@ -83,12 +152,25 @@ const loadingProducts = ref(true);
 
 const loadProducts = async () => {
   try {
-    // Backend trả thêm phanTramGiamKhac + tenDotGiamGiaKhac cho biến thể
-    // đang thuộc đợt giảm giá khác (thêm mới thì không cần excludeId)
+    // Backend trả thêm phanTramGiamKhac + tenDotGiamGiaKhac (mức CAO NHẤT trong
+    // các đợt đang hiệu lực) cho biến thể đang thuộc đợt giảm giá khác
     const res = await axios.get(
       baseAPI + "admin/dot-giam-gia/san-pham-chi-tiet/for-discount",
     );
-    products.value = res.data?.data ?? res.data ?? [];
+    const raw = res.data?.data ?? res.data ?? [];
+
+    // Gộp theo id biến thể, giữ dòng có % đợt khác cao nhất
+    const byId = new Map();
+    for (const p of raw) {
+      const old = byId.get(p.id);
+      if (
+        !old ||
+        (Number(p.phanTramGiamKhac) || 0) > (Number(old.phanTramGiamKhac) || 0)
+      ) {
+        byId.set(p.id, p);
+      }
+    }
+    products.value = [...byId.values()];
   } catch (e) {
     Swal.fire({
       icon: "error",
@@ -212,6 +294,7 @@ const toLocalDateTime = (v) => (v && v.length === 16 ? v + ":00" : v);
 
 const submit = async () => {
   submitted.value = true;
+  nowStr.value = nowLocal(); // lấy lại thời điểm hiện tại để kiểm tra chính xác
   if (Object.keys(errors.value).length) return;
 
   const data = {
@@ -333,6 +416,7 @@ const submit = async () => {
             <input
               v-model="form.startDate"
               type="datetime-local"
+              :min="nowStr"
               :class="{ 'dg-invalid': err('startDate') }"
               @blur="touch('startDate')"
             />
@@ -346,7 +430,11 @@ const submit = async () => {
             <input
               v-model="form.endDate"
               type="datetime-local"
-              :min="form.startDate"
+              :min="
+                form.startDate && form.startDate > nowStr
+                  ? form.startDate
+                  : nowStr
+              "
               :class="{ 'dg-invalid': err('endDate') }"
               @blur="touch('endDate')"
             />
@@ -529,18 +617,19 @@ const submit = async () => {
                 <th class="dg-center">Kích cỡ</th>
                 <th class="dg-center">Màu sắc</th>
                 <th class="dg-right">Giá bán</th>
+                <th class="dg-right">Giá hiện tại</th>
                 <th class="dg-right">Giá sau giảm</th>
                 <th class="dg-right">Tồn</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="!variants.length">
-                <td colspan="10" class="dg-empty">
+                <td colspan="11" class="dg-empty">
                   Chọn sản phẩm ở trên để xem các biến thể.
                 </td>
               </tr>
               <tr v-else-if="!filteredVariants.length">
-                <td colspan="10" class="dg-empty">Không có biến thể phù hợp</td>
+                <td colspan="11" class="dg-empty">Không có biến thể phù hợp</td>
               </tr>
               <tr
                 v-for="(v, i) in filteredVariants"
@@ -569,7 +658,7 @@ const submit = async () => {
                     <span
                       v-if="v.phanTramGiamKhac"
                       class="dg-badge"
-                      :title="`Đang thuộc đợt: ${v.tenDotGiamGiaKhac}`"
+                      :title="`Đang thuộc đợt: ${v.tenDotGiamGiaKhac} (${v.phanTramGiamKhac}%). Khi trùng sẽ lấy mức cao hơn.`"
                     >
                       -{{ v.phanTramGiamKhac }}%
                     </span>
@@ -581,9 +670,23 @@ const submit = async () => {
                 <td class="dg-center">{{ v.mauSac }}</td>
                 <td class="dg-right">{{ money(v.giaBan) }}</td>
                 <td class="dg-right">
-                  <span v-if="validPercent" class="dg-sale">
-                    {{ money(afterDiscount(v.giaBan)) }}
+                  <span v-if="v.phanTramGiamKhac">
+                    {{ money(currentPrice(v)) }}
                   </span>
+                  <span v-else class="dg-muted">—</span>
+                </td>
+                <td class="dg-right">
+                  <template v-if="validPercent">
+                    <span class="dg-sale">{{ money(afterDiscount(v)) }}</span>
+                    <small v-if="v.phanTramGiamKhac" class="dg-note">
+                      Áp dụng {{ effectivePercent(v) }}%
+                      {{
+                        v.phanTramGiamKhac > form.percent
+                          ? "(giữ mức đợt khác)"
+                          : "(cao hơn đợt khác)"
+                      }}
+                    </small>
+                  </template>
                   <span v-else class="dg-muted">—</span>
                 </td>
                 <td class="dg-right">{{ v.soLuong }}</td>
@@ -894,6 +997,12 @@ const submit = async () => {
 .dg-sale {
   color: var(--red);
   font-weight: 700;
+}
+.dg-note {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 .dg-empty {
   padding: 2rem 1rem !important;

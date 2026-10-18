@@ -21,6 +21,15 @@ const randomCode = () => {
   return code;
 };
 
+/* Thời điểm hiện tại theo giờ local, dạng "YYYY-MM-DDTHH:mm" (khớp datetime-local) */
+const getNow = () => {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+};
+const nowStr = ref(getNow());
+
 const form = reactive({
   code: randomCode(),
   name: "",
@@ -39,6 +48,11 @@ const form = reactive({
 const isPercent = computed(() => form.discountType === "percent");
 const isPrivate = computed(() => form.scope === "private");
 
+/* ---------------- Validate (hiện lỗi ngay khi người dùng tác động vào ô) ---------------- */
+const submitted = ref(false);
+const touched = reactive({});
+const touch = (key) => (touched[key] = true);
+
 /* ---------------- Định dạng tiền: 100.000 ---------------- */
 const fmtMoney = (v) =>
   v === null || v === undefined || v === ""
@@ -49,12 +63,12 @@ const onMoneyInput = (key, e) => {
   const digits = e.target.value.replace(/\D/g, "");
   form[key] = digits ? Number(digits) : null;
   e.target.value = fmtMoney(form[key]); // hiển thị lại có dấu chấm
+  touch(key);
+  // Sửa đơn hàng tối thiểu -> kiểm tra lại giá trị giảm nếu đã nhập
+  if (key === "minOrder" && form.discountValue !== null) {
+    touch("discountValue");
+  }
 };
-
-/* ---------------- Validate (hiện lỗi sau khi chạm vào ô hoặc bấm Lưu) ---------------- */
-const submitted = ref(false);
-const touched = reactive({});
-const touch = (key) => (touched[key] = true);
 
 const errors = computed(() => {
   const e = {};
@@ -75,12 +89,23 @@ const errors = computed(() => {
       e.discountValue = "Mức giảm (%) phải nằm trong khoảng từ 1% đến 100%.";
   } else if (!form.discountValue || form.discountValue <= 0) {
     e.discountValue = "Số tiền giảm phải lớn hơn 0.";
+  } else if (form.minOrder !== null && form.discountValue > form.minOrder) {
+    e.discountValue = "Số tiền giảm không được lớn hơn đơn hàng tối thiểu.";
   }
 
-  if (!form.startDate) e.startDate = "Vui lòng chọn ngày bắt đầu.";
-  if (!form.endDate) e.endDate = "Vui lòng chọn ngày kết thúc.";
-  else if (form.startDate && form.endDate <= form.startDate)
-    e.endDate = "Ngày kết thúc phải sau ngày bắt đầu.";
+  if (!form.startDate) {
+    e.startDate = "Vui lòng chọn ngày bắt đầu.";
+  } else if (form.startDate < nowStr.value) {
+    e.startDate = "Ngày bắt đầu không được ở quá khứ.";
+  }
+
+  if (!form.endDate) {
+    e.endDate = "Vui lòng chọn ngày kết thúc.";
+  } else if (form.endDate < nowStr.value) {
+    e.endDate = "Ngày kết thúc không được ở quá khứ.";
+  } else if (form.startDate && form.endDate < form.startDate) {
+    e.endDate = "Ngày kết thúc không được nhỏ hơn ngày bắt đầu.";
+  }
 
   if (isPrivate.value && form.customerIds.length === 0)
     e.customerIds = "Vui lòng chọn ít nhất 1 khách hàng.";
@@ -146,6 +171,7 @@ const toggleAll = (checked) => {
   form.customerIds = checked
     ? [...new Set([...form.customerIds, ...ids])]
     : form.customerIds.filter((id) => !ids.includes(id));
+  touch("customerIds");
 };
 
 /* ---------------- Watchers ---------------- */
@@ -159,6 +185,8 @@ watch(
       form.customerIds = [];
       customerKeyword.value = "";
       form.quantity = null; // về công khai thì cho nhập lại
+      touched.customerIds = false;
+      touched.quantity = false;
     }
   },
   { immediate: true },
@@ -172,10 +200,21 @@ watch(
   },
 );
 
+/* Đổi loại giảm: reset giá trị giảm để tránh giữ nhầm số (50% -> 50₫) */
+watch(
+  () => form.discountType,
+  () => {
+    form.discountValue = null;
+    form.maxDiscount = null;
+    touched.discountValue = false;
+  },
+);
+
 /* ---------------- Submit ---------------- */
 const toLocalDateTime = (v) => (v && v.length === 16 ? v + ":00" : v);
 
 const submit = async () => {
+  nowStr.value = getNow(); // cập nhật mốc "hiện tại" trước khi kiểm tra
   submitted.value = true;
   if (Object.keys(errors.value).length) return;
 
@@ -280,6 +319,7 @@ const submit = async () => {
               type="text"
               maxlength="200"
               :class="{ invalid: err('name') }"
+              @input="touch('name')"
               @blur="touch('name')"
             />
             <p v-if="err('name')" class="err">
@@ -302,6 +342,7 @@ const submit = async () => {
               :readonly="isPrivate"
               :tabindex="isPrivate ? -1 : 0"
               :class="{ invalid: err('quantity'), locked: isPrivate }"
+              @input="touch('quantity')"
               @blur="touch('quantity')"
             />
             <p v-if="err('quantity')" class="err">
@@ -344,6 +385,7 @@ const submit = async () => {
                 type="number"
                 min="1"
                 max="100"
+                @input="touch('discountValue')"
                 @blur="touch('discountValue')"
               />
               <input
@@ -379,7 +421,10 @@ const submit = async () => {
             <input
               v-model="form.startDate"
               type="datetime-local"
+              :min="nowStr"
               :class="{ invalid: err('startDate') }"
+              @input="touch('startDate')"
+              @change="touch('startDate')"
               @blur="touch('startDate')"
             />
             <p v-if="err('startDate')" class="err">
@@ -393,8 +438,10 @@ const submit = async () => {
             <input
               v-model="form.endDate"
               type="datetime-local"
-              :min="form.startDate"
+              :min="form.startDate || nowStr"
               :class="{ invalid: err('endDate') }"
+              @input="touch('endDate')"
+              @change="touch('endDate')"
               @blur="touch('endDate')"
             />
             <p v-if="err('endDate')" class="err">
@@ -508,6 +555,7 @@ const submit = async () => {
                       v-model="form.customerIds"
                       type="checkbox"
                       :value="c.id"
+                      @change="touch('customerIds')"
                     />
                   </td>
                   <td class="muted">{{ c.code }}</td>

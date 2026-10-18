@@ -30,29 +30,59 @@ public class DotGiamGiaServiceFinal {
     private final DotGiamGiaChiTietRepository chiTietRepo;
     private final SanPhamChiTietRepository spctRepo;
 
+    /**
+     * Gom các đợt đang hiệu lực theo biến thể, giữ lại đợt có % CAO NHẤT.
+     * Trả về: variantId -> {variantId, tenDot, phanTram}
+     */
+    private Map<Long, Object[]> maxDotTheoBienThe(Long excludeId) {
+        Long ex = (excludeId == null) ? -1L : excludeId;
+        Map<Long, Object[]> result = new HashMap<>();
+        for (Object[] r : chiTietRepo.findApDungHienTai(LocalDateTime.now(), ex)) {
+            if (r[0] == null || r[2] == null) continue;
+            Long variantId = ((Number) r[0]).longValue();
+            Object[] old = result.get(variantId);
+            if (old == null || toPercent(r[2]).compareTo(toPercent(old[2])) > 0) {
+                result.put(variantId, r);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Danh sách biến thể để chọn vào đợt giảm giá.
+     * Biến thể thuộc nhiều đợt đang hiệu lực -> trả về đợt có % cao nhất
+     * (mức giảm áp dụng = max các đợt, không cộng dồn, không nhân chồng).
+     */
     @Transactional(readOnly = true)
     public List<SanPhamChiTietOptionResponse> layDanhSachSanPham(Long excludeId) {
         List<SanPhamChiTietOptionResponse> list = spctRepo.findAllActiveForDiscount().stream()
                 .map(SanPhamChiTietOptionResponse::from)
                 .toList();
 
-        Map<Long, Object[]> dangApDung = new HashMap<>();
-        for (Object[] r : chiTietRepo.findDangApDung(LocalDateTime.now(), excludeId)) {
-            Long variantId = ((Number) r[0]).longValue();
-            Object[] old = dangApDung.get(variantId);
-            if (old == null || ((Number) r[2]).intValue() > ((Number) old[2]).intValue()) {
-                dangApDung.put(variantId, r);
-            }
-        }
+        Map<Long, Object[]> dangApDung = maxDotTheoBienThe(excludeId);
 
         for (SanPhamChiTietOptionResponse v : list) {
             Object[] r = dangApDung.get(v.getId());
             if (r != null) {
                 v.setTenDotGiamGiaKhac((String) r[1]);
-                v.setPhanTramGiamKhac(((Number) r[2]).intValue());
+                v.setPhanTramGiamKhac(toPercent(r[2]).intValue());
             }
         }
         return list;
+    }
+
+    /**
+     * % giảm thực tế của 1 biến thể tại thời điểm hiện tại = MAX các đợt đang hiệu lực.
+     * Dùng khi tính giá cho giỏ hàng / hóa đơn. Trả về 0 nếu không thuộc đợt nào.
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal phanTramGiamHieuLuc(Long variantId) {
+        Object[] r = maxDotTheoBienThe(null).get(variantId);
+        return r == null ? BigDecimal.ZERO : toPercent(r[2]);
+    }
+
+    private BigDecimal toPercent(Object value) {
+        return value instanceof BigDecimal bd ? bd : new BigDecimal(value.toString());
     }
 
     @Transactional
@@ -65,12 +95,7 @@ public class DotGiamGiaServiceFinal {
             throw bad("Có sản phẩm không tồn tại");
         }
 
-        // Một biến thể không được thuộc 2 đợt chồng thời gian
-        List<DotGiamGiaChiTiet> conflicts =
-                chiTietRepo.findOverlapping(ids, r.getNgayBatDau(), r.getNgayKetThuc());
-        if (!conflicts.isEmpty()) {
-            throw bad(moTaXungDot(conflicts));
-        }
+        // Cho phép 1 biến thể thuộc nhiều đợt cùng lúc: khi tính giá sẽ lấy max %.
 
         DotGiamGia d = new DotGiamGia();
         d.setMaDotGiamGia(r.getMaDotGiamGia().trim());
@@ -125,15 +150,6 @@ public class DotGiamGiaServiceFinal {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, msg);
     }
 
-    private String moTaXungDot(List<DotGiamGiaChiTiet> conflicts) {
-        String detail = conflicts.stream().limit(5)
-                .map(c -> c.getSanPhamChiTiet().getMaChiTietSanPham()
-                        + " (đợt " + c.getDotGiamGia().getMaDotGiamGia() + ")")
-                .collect(Collectors.joining(", "));
-        return "Sản phẩm đã thuộc đợt giảm giá khác trùng thời gian: " + detail
-                + (conflicts.size() > 5 ? "..." : "");
-    }
-
     @Transactional(readOnly = true)
     public DotGiamGiaDetailResponse chiTiet(Long id) {
         DotGiamGia d = dotRepo.findById(id)
@@ -186,34 +202,14 @@ public class DotGiamGiaServiceFinal {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Không tìm thấy đợt giảm giá"));
 
-        // Không thay đổi gì thì trả luôn giá trị hiện tại
         if (trangThai.equals(d.getTrangThai())) {
             return d.getTrangThai();
         }
 
-        // Chỉ kiểm tra khi BẬT lại
-        if (trangThai) {
-            // 1. Đợt đã kết thúc thì không bật lại được
-            if (d.getNgayKetThuc().isBefore(LocalDateTime.now())) {
-                throw bad("Đợt giảm giá đã kết thúc, không thể bật lại");
-            }
-
-            // 2. Bật lại không được làm trùng với đợt khác đang hoạt động
-            Set<Long> variantIds = chiTietRepo.findByDotId(id).stream()
-                    .map(ct -> ct.getSanPhamChiTiet().getId())
-                    .collect(Collectors.toSet());
-
-            if (!variantIds.isEmpty()) {
-                List<DotGiamGiaChiTiet> conflicts = chiTietRepo
-                        .findOverlapping(variantIds, d.getNgayBatDau(), d.getNgayKetThuc())
-                        .stream()
-                        .filter(c -> !c.getDotGiamGia().getId().equals(id))
-                        .filter(c -> Boolean.TRUE.equals(c.getDotGiamGia().getTrangThai()))
-                        .toList();
-                if (!conflicts.isEmpty()) {
-                    throw bad(moTaXungDot(conflicts));
-                }
-            }
+        // Đợt đã kết thúc thì không bật lại được
+        // (không kiểm tra trùng đợt: nhiều đợt cùng lúc sẽ lấy max %)
+        if (trangThai && d.getNgayKetThuc().isBefore(LocalDateTime.now())) {
+            throw bad("Đợt giảm giá đã kết thúc, không thể bật lại");
         }
 
         d.setTrangThai(trangThai);
@@ -234,17 +230,6 @@ public class DotGiamGiaServiceFinal {
             throw bad("Có sản phẩm không tồn tại");
         }
 
-        // Kiểm tra chồng thời gian, bỏ qua chính đợt đang sửa
-        List<DotGiamGiaChiTiet> conflicts = chiTietRepo
-                .findOverlapping(newIds, r.getNgayBatDau(), r.getNgayKetThuc())
-                .stream()
-                .filter(c -> !c.getDotGiamGia().getId().equals(id))
-                .toList();
-        if (!conflicts.isEmpty()) {
-            throw bad(moTaXungDot(conflicts));
-        }
-
-        // Cập nhật thông tin đợt
         d.setMaDotGiamGia(r.getMaDotGiamGia().trim());
         d.setTenDotGiamGia(r.getTenDotGiamGia().trim());
         d.setPhanTramGiam(r.getPhanTramGiam());

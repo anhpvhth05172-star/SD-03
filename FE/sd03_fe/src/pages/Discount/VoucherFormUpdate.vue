@@ -1,5 +1,14 @@
 <script setup>
-import { reactive, computed, inject, ref, onMounted } from "vue";
+import {
+  reactive,
+  computed,
+  inject,
+  ref,
+  watch,
+  nextTick,
+  onMounted,
+  onUnmounted,
+} from "vue";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { useRouter, useRoute } from "vue-router";
@@ -23,11 +32,55 @@ const form = reactive({
   productIds: [], // id biến thể (san_pham_chi_tiet)
 });
 
+// Ngày bắt đầu gốc lúc load: nếu giữ nguyên thì không kiểm tra "quá khứ"
+const originalStartDate = ref("");
+
+/* ---------------- Thời điểm hiện tại (định dạng giống datetime-local) ---------------- */
+const pad = (n) => String(n).padStart(2, "0");
+const nowLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
+};
+
+const nowStr = ref(nowLocal());
+let nowTimer = null;
+onMounted(() => {
+  nowTimer = setInterval(() => (nowStr.value = nowLocal()), 30 * 1000);
+});
+onUnmounted(() => clearInterval(nowTimer));
+
+// min cho ô ngày bắt đầu: nếu đợt đã bắt đầu từ trước thì cho phép giữ giá trị gốc
+const startMin = computed(() =>
+  originalStartDate.value && originalStartDate.value < nowStr.value
+    ? originalStartDate.value
+    : nowStr.value,
+);
+
+// min cho ô ngày kết thúc: lớn nhất giữa ngày bắt đầu và hiện tại
+const endMin = computed(() =>
+  form.startDate && form.startDate > nowStr.value
+    ? form.startDate
+    : nowStr.value,
+);
+
 /* ---------------- Giá ---------------- */
 const validPercent = computed(() => form.percent >= 1 && form.percent <= 100);
 
-const afterDiscount = (giaBan) =>
-  Math.round((Number(giaBan) * (100 - form.percent)) / 100);
+// Mức giảm thực tế = max(% đợt đang sửa, % đợt khác đang áp dụng cho biến thể)
+const effectivePercent = (v) =>
+  Math.max(Number(form.percent) || 0, Number(v.phanTramGiamKhac) || 0);
+
+// Phải giống công thức backend: làm tròn về đồng
+const afterDiscount = (v) =>
+  Math.round((Number(v.giaBan) * (100 - effectivePercent(v))) / 100);
+
+// Giá hiện tại: giá đang áp dụng theo đợt khác (nếu có), tính trên giá gốc
+const currentPrice = (v) =>
+  Math.round(
+    (Number(v.giaBan) * (100 - (Number(v.phanTramGiamKhac) || 0))) / 100,
+  );
 
 const money = (v) => Number(v ?? 0).toLocaleString("vi-VN") + "đ";
 
@@ -42,35 +95,63 @@ const PLACEHOLDER_IMG =
 const rawImage = (p) =>
   p?.hinhAnh ?? p?.anh ?? p?.urlAnh ?? p?.duongDanAnh ?? p?.image ?? null;
 
-const imgSrc = (p) => {
-  const raw = rawImage(p);
-  if (!raw) return PLACEHOLDER_IMG;
-  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
-  return (
-    String(baseAPI).replace(/\/+$/, "") + "/" + String(raw).replace(/^\/+/, "")
-  );
-};
-
 const onImgError = (e) => {
   if (e.target.src !== PLACEHOLDER_IMG) e.target.src = PLACEHOLDER_IMG;
 };
 
-/* ---------------- Validate ---------------- */
+/* ---------------- Validate (hiện lỗi ngay khi người dùng thao tác) ---------------- */
 const submitted = ref(false);
 const touched = reactive({});
 const touch = (key) => (touched[key] = true);
 
 const selectedProductIds = ref([]); // id sản phẩm cha đang tick
 
+// Giá trị thay đổi là hiện lỗi ngay, không cần blur hay submit
+watch(
+  () => form.name,
+  () => touch("name"),
+);
+watch(
+  () => form.percent,
+  () => touch("percent"),
+);
+watch(
+  () => form.startDate,
+  () => touch("startDate"),
+);
+watch(
+  () => form.endDate,
+  () => touch("endDate"),
+);
+watch([selectedProductIds, () => form.productIds], () => touch("productIds"), {
+  deep: true,
+});
+
 const errors = computed(() => {
   const e = {};
+
   if (!form.name) e.name = "Vui lòng nhập tên đợt giảm giá.";
-  if (!validPercent.value)
+
+  if (form.percent === null || form.percent === "")
+    e.percent = "Vui lòng nhập mức giảm (%).";
+  else if (!validPercent.value)
     e.percent = "Mức giảm (%) phải nằm trong khoảng từ 1% đến 100%.";
+
+  // Ngày bắt đầu: chỉ chặn quá khứ khi người dùng đổi so với giá trị gốc
   if (!form.startDate) e.startDate = "Vui lòng chọn ngày bắt đầu.";
+  else if (
+    form.startDate !== originalStartDate.value &&
+    form.startDate < nowStr.value
+  )
+    e.startDate = "Ngày bắt đầu không được ở trong quá khứ.";
+
+  // Ngày kết thúc
   if (!form.endDate) e.endDate = "Vui lòng chọn ngày kết thúc.";
-  else if (form.startDate && form.endDate <= form.startDate)
-    e.endDate = "Ngày kết thúc phải sau ngày bắt đầu.";
+  else if (form.endDate < nowStr.value)
+    e.endDate = "Ngày kết thúc không được ở trong quá khứ.";
+  else if (form.startDate && form.endDate < form.startDate)
+    e.endDate = "Ngày kết thúc không được nhỏ hơn ngày bắt đầu.";
+
   if (selectedProductIds.value.length === 0)
     e.productIds = "Vui lòng chọn ít nhất 1 sản phẩm.";
   else if (form.productIds.length === 0)
@@ -86,12 +167,26 @@ const loadingProducts = ref(true);
 
 const loadProducts = async () => {
   try {
+    // excludeId: bỏ qua chính đợt đang sửa khi tính "đã thuộc đợt khác"
+    // Backend trả phanTramGiamKhac = mức CAO NHẤT trong các đợt khác đang hiệu lực
     const res = await axios.get(
       baseAPI + "admin/dot-giam-gia/san-pham-chi-tiet/for-discount",
-      // excludeId: bỏ qua chính đợt đang sửa khi tính "đã thuộc đợt khác"
       { params: { excludeId: route.params.id } },
     );
-    products.value = res.data?.data ?? res.data ?? [];
+    const raw = res.data?.data ?? res.data ?? [];
+
+    // Gộp theo id biến thể, giữ dòng có % đợt khác cao nhất
+    const byId = new Map();
+    for (const p of raw) {
+      const old = byId.get(p.id);
+      if (
+        !old ||
+        (Number(p.phanTramGiamKhac) || 0) > (Number(old.phanTramGiamKhac) || 0)
+      ) {
+        byId.set(p.id, p);
+      }
+    }
+    products.value = [...byId.values()];
   } catch (e) {
     Swal.fire({
       icon: "error",
@@ -133,6 +228,7 @@ const loadDetail = async () => {
     form.percent = data.phanTramGiam ?? null;
     form.startDate = toDatetimeLocal(data.ngayBatDau);
     form.endDate = toDatetimeLocal(data.ngayKetThuc);
+    originalStartDate.value = form.startDate;
 
     // Backend trả về mảng sanPhams (các biến thể đã chọn)
     const selectedVariants = data.sanPhams ?? [];
@@ -141,6 +237,11 @@ const loadDetail = async () => {
     // Tự tick các sản phẩm cha
     const parentIds = new Set(selectedVariants.map((v) => v.sanPhamId));
     selectedProductIds.value = [...parentIds];
+
+    // Gán dữ liệu ban đầu sẽ kích hoạt các watch -> xóa trạng thái "đã chạm"
+    // để không hiện lỗi ngay khi vừa mở form
+    await nextTick();
+    Object.keys(touched).forEach((k) => delete touched[k]);
   } catch (e) {
     Swal.fire({
       icon: "error",
@@ -274,6 +375,7 @@ const toLocalDateTime = (v) => (v && v.length === 16 ? v + ":00" : v);
 
 const submit = async () => {
   submitted.value = true;
+  nowStr.value = nowLocal(); // lấy lại thời điểm hiện tại để kiểm tra chính xác
   if (Object.keys(errors.value).length) return;
 
   const data = {
@@ -411,6 +513,7 @@ const submit = async () => {
               <input
                 v-model="form.startDate"
                 type="datetime-local"
+                :min="startMin"
                 :class="{ 'dg-invalid': err('startDate') }"
                 @blur="touch('startDate')"
               />
@@ -424,7 +527,7 @@ const submit = async () => {
               <input
                 v-model="form.endDate"
                 type="datetime-local"
-                :min="form.startDate"
+                :min="endMin"
                 :class="{ 'dg-invalid': err('endDate') }"
                 @blur="touch('endDate')"
               />
@@ -496,10 +599,10 @@ const submit = async () => {
                 </thead>
                 <tbody>
                   <tr v-if="loadingProducts">
-                    <td colspan="6" class="dg-empty">Đang tải sản phẩm...</td>
+                    <td colspan="3" class="dg-empty">Đang tải sản phẩm...</td>
                   </tr>
                   <tr v-else-if="!filteredProductList.length">
-                    <td colspan="6" class="dg-empty">
+                    <td colspan="3" class="dg-empty">
                       Không có sản phẩm phù hợp
                     </td>
                   </tr>
@@ -613,18 +716,19 @@ const submit = async () => {
                   <th class="dg-center">Kích cỡ</th>
                   <th class="dg-center">Màu sắc</th>
                   <th class="dg-center">Giá bán</th>
+                  <th class="dg-center">Giá hiện tại</th>
                   <th class="dg-center">Giá sau giảm</th>
                   <th class="dg-center">Tồn</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-if="!variants.length">
-                  <td colspan="10" class="dg-empty">
+                  <td colspan="11" class="dg-empty">
                     Chọn sản phẩm ở trên để xem các biến thể.
                   </td>
                 </tr>
                 <tr v-else-if="!filteredVariants.length">
-                  <td colspan="10" class="dg-empty">
+                  <td colspan="11" class="dg-empty">
                     Không có biến thể phù hợp
                   </td>
                 </tr>
@@ -646,7 +750,7 @@ const submit = async () => {
                   <td class="dg-center dg-strong" :title="v.tenSanPham">
                     {{ v.tenSanPham }}
                   </td>
-                  <td class="dg-center">
+                  <td class="dg-center dg-cell-img">
                     <div class="dg-img-wrap">
                       <img
                         class="dg-img"
@@ -659,7 +763,7 @@ const submit = async () => {
                       <span
                         v-if="v.phanTramGiamKhac"
                         class="dg-badge"
-                        :title="`Đang thuộc đợt: ${v.tenDotGiamGiaKhac}`"
+                        :title="`Đang thuộc đợt: ${v.tenDotGiamGiaKhac} (${v.phanTramGiamKhac}%). Khi trùng sẽ lấy mức cao hơn.`"
                       >
                         -{{ v.phanTramGiamKhac }}%
                       </span>
@@ -670,9 +774,23 @@ const submit = async () => {
                   <td class="dg-center">{{ v.mauSac }}</td>
                   <td class="dg-center">{{ money(v.giaBan) }}</td>
                   <td class="dg-center">
-                    <span v-if="validPercent" class="dg-sale">
-                      {{ money(afterDiscount(v.giaBan)) }}
+                    <span v-if="v.phanTramGiamKhac">
+                      {{ money(currentPrice(v)) }}
                     </span>
+                    <span v-else class="dg-muted">—</span>
+                  </td>
+                  <td class="dg-center">
+                    <template v-if="validPercent">
+                      <span class="dg-sale">{{ money(afterDiscount(v)) }}</span>
+                      <small v-if="v.phanTramGiamKhac" class="dg-note">
+                        Áp dụng {{ effectivePercent(v) }}%
+                        {{
+                          v.phanTramGiamKhac > form.percent
+                            ? "(giữ mức đợt khác)"
+                            : "(cao hơn đợt khác)"
+                        }}
+                      </small>
+                    </template>
                     <span v-else class="dg-muted">—</span>
                   </td>
                   <td class="dg-center">{{ v.soLuong }}</td>
@@ -942,7 +1060,7 @@ const submit = async () => {
   font-size: 0.92rem;
 }
 .dg-table-wide {
-  min-width: 960px;
+  min-width: 1100px;
 }
 .dg-table th {
   position: sticky;
@@ -1006,43 +1124,17 @@ const submit = async () => {
   color: var(--red);
   font-weight: 700;
 }
+.dg-note {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: normal;
+}
 .dg-empty {
   padding: 2rem 1rem !important;
   text-align: center;
   color: var(--muted);
-}
-
-/* Ảnh sản phẩm + nhãn % đợt giảm giá khác */
-.dg-img-wrap {
-  position: relative;
-  width: 52px;
-  height: 52px;
-  margin: 0 auto;
-}
-.dg-img {
-  display: block;
-  width: 52px;
-  height: 52px;
-  margin: 0 auto;
-  object-fit: cover;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f3f4f6;
-}
-.dg-badge {
-  position: absolute;
-  top: -4px;
-  left: -6px;
-  padding: 1px 6px;
-  border-radius: 6px;
-  background: var(--red);
-  color: #fff;
-  font-size: 0.7rem;
-  font-weight: 700;
-  line-height: 1.4;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  white-space: nowrap;
-  cursor: help;
 }
 
 .dg-filter-row {
@@ -1124,5 +1216,41 @@ const submit = async () => {
   .dg-filter-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---- Ảnh biến thể + nhãn % đợt giảm giá khác (nhãn đè lên góc ảnh) ---- */
+.dg-table td.dg-cell-img {
+  overflow: visible; /* cho nhãn tràn ra ngoài mép, không bị cắt */
+}
+.dg-img-wrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+}
+.dg-img,
+.dg-thumb {
+  display: block;
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f3f4f6;
+}
+.dg-badge {
+  position: absolute;
+  top: -8px;
+  left: -10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--red);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.3;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+  cursor: help;
 }
 </style>

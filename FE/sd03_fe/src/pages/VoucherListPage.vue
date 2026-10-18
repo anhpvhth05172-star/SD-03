@@ -404,7 +404,9 @@ onMounted(() => getData(0));
                 </span>
               </td>
               <td>{{ d.soLuong }}</td>
-              <td>{{ formatDiscount(d.giaTriGiam) }}</td>
+              <td style="font-weight: bold">
+                {{ formatDiscount(d.giaTriGiam) }}
+              </td>
               <td>
                 {{ formatDate(d.ngayBatDau) }} - {{ formatDate(d.ngayKetThuc) }}
               </td>
