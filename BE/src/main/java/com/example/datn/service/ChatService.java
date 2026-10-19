@@ -28,6 +28,7 @@ public class ChatService {
     private final HoiThoaiRepository hoiThoaiRepository;
     private final TinNhanRepository tinNhanRepository;
     private final KhachHangRepository khachHangRepository;
+    private final com.example.datn.repository.NhanVienRepository nhanVienRepository;
 
     /**
      * Lay hoac tao hoi thoai nhan vien cho khach.
@@ -45,7 +46,12 @@ public class ChatService {
                     HoiThoai.TRANG_THAI_DANG_MO
                 )
                 .map(this::toKhachDTO)
-                .orElseGet(() -> toKhachDTO(taoHoiThoaiNhanVien(idKhachHang, null, null)));
+                .orElseGet(() -> {
+                    KhachHang kh = khachHangRepository.findById(idKhachHang).orElse(null);
+                    return toKhachDTO(
+                        taoHoiThoaiNhanVien(idKhachHang, null, kh == null ? null : kh.getTenTaiKhoan())
+                    );
+                });
         }
         String hash = hashMaAnDanh(maAnDanh);
         return hoiThoaiRepository
@@ -124,18 +130,14 @@ public class ChatService {
     }
 
     /**
-     * Nhan vien gui tin: chi duoc gui hoi thoai minh phu trach hoac chua ai phu trach
-     * (tu nhan khi chua co nguoi phu trach).
+     * Nhan vien gui tin: hop thu chung - moi nhan vien/quan tri vien deu tra loi duoc
+     * moi hoi thoai (khong con gioi han "phu trach rieng").
      */
     @Transactional
     public TinNhanDTO guiTinNhanVien(Long idHoiThoai, Long idNhanVien, String noiDung) {
         HoiThoai hoiThoai = hoiThoaiRepository
             .findByIdAndLoai(idHoiThoai, HoiThoai.LOAI_NHAN_VIEN)
             .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay hoi thoai"));
-        if (hoiThoai.getNhanVienPhuTrach() != null
-            && !hoiThoai.getNhanVienPhuTrach().getId().equals(idNhanVien)) {
-            throw new KhongCoQuyenException("Hoi thoai nay da duoc nhan vien khac phu trach");
-        }
         if (hoiThoai.getNhanVienPhuTrach() == null) {
             var nv = new com.example.datn.entity.NhanVien();
             nv.setId(idNhanVien);
@@ -156,23 +158,19 @@ public class ChatService {
         xacMinhSoHuu(hoiThoai, idKhachHang, maAnDanh);
         return tinNhanRepository.timMoiHon(idHoiThoai, tuId == null ? 0L : tuId)
             .stream()
-            .map(ChatService::toDTO)
+            .map(this::toDTO)
             .toList();
     }
 
-    /** Nhan vien poll tin moi (chi hoi thoai minh phu trach hoac chua ai phu trach). */
+    /** Nhan vien poll tin moi (hop thu chung). */
     @Transactional(readOnly = true)
     public List<TinNhanDTO> layTinNhanVien(Long idHoiThoai, Long idNhanVien, Long tuId) {
         HoiThoai hoiThoai = hoiThoaiRepository
             .findByIdAndLoai(idHoiThoai, HoiThoai.LOAI_NHAN_VIEN)
             .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay hoi thoai"));
-        if (hoiThoai.getNhanVienPhuTrach() != null
-            && !hoiThoai.getNhanVienPhuTrach().getId().equals(idNhanVien)) {
-            throw new KhongCoQuyenException("Hoi thoai nay do nhan vien khac phu trach");
-        }
         return tinNhanRepository.timMoiHon(idHoiThoai, tuId == null ? 0L : tuId)
             .stream()
-            .map(ChatService::toDTO)
+            .map(this::toDTO)
             .toList();
     }
 
@@ -190,16 +188,12 @@ public class ChatService {
         HoiThoai hoiThoai = hoiThoaiRepository
             .findByIdAndLoai(idHoiThoai, HoiThoai.LOAI_NHAN_VIEN)
             .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay hoi thoai"));
-        if (hoiThoai.getNhanVienPhuTrach() != null
-            && !hoiThoai.getNhanVienPhuTrach().getId().equals(idNhanVien)) {
-            throw new KhongCoQuyenException("Hoi thoai nay do nhan vien khac phu trach");
-        }
         tinNhanRepository.danhDaDoc(idHoiThoai, TinNhan.GUI_KHACH);
     }
 
     @Transactional(readOnly = true)
     public List<HoiThoaiDTO> dsHoiThoaiNhanVien(Long idNhanVien) {
-        return hoiThoaiRepository.timHoiThoaiChoNhanVien(HoiThoai.LOAI_NHAN_VIEN, idNhanVien)
+        return hoiThoaiRepository.timHoiThoaiChoNhanVien(HoiThoai.LOAI_NHAN_VIEN)
             .stream()
             .map(this::toNVDTO)
             .toList();
@@ -210,10 +204,6 @@ public class ChatService {
         HoiThoai hoiThoai = hoiThoaiRepository
             .findByIdAndLoai(idHoiThoai, HoiThoai.LOAI_NHAN_VIEN)
             .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay hoi thoai"));
-        if (hoiThoai.getNhanVienPhuTrach() != null
-            && !hoiThoai.getNhanVienPhuTrach().getId().equals(idNhanVien)) {
-            throw new KhongCoQuyenException("Hoi thoai nay do nhan vien khac phu trach");
-        }
         hoiThoai.setTrangThai(HoiThoai.TRANG_THAI_DONG);
         hoiThoai.setNgayCapNhat(LocalDateTime.now());
         return toNVDTO(hoiThoaiRepository.save(hoiThoai));
@@ -291,7 +281,7 @@ public class ChatService {
         }
         return tinNhanRepository.timMoiHon(idHoiThoai, tuId == null ? 0L : tuId)
             .stream()
-            .map(ChatService::toDTO)
+            .map(this::toDTO)
             .toList();
     }
 
@@ -402,7 +392,7 @@ public class ChatService {
         return toDTO(h, demTinChuaDoc(h, false));
     }
 
-    static TinNhanDTO toDTO(TinNhan t) {
+    TinNhanDTO toDTO(TinNhan t) {
         return new TinNhanDTO(
             t.getId(),
             t.getHoiThoai() != null ? t.getHoiThoai().getId() : null,
@@ -410,7 +400,24 @@ public class ChatService {
             t.getIdNguoiGui(),
             t.getNoiDung(),
             t.isDaDoc(),
-            t.getNgayTao()
+            t.getNgayTao(),
+            layTenNguoiGui(t)
         );
+    }
+
+    private String layTenNguoiGui(TinNhan t) {
+        if (TinNhan.GUI_NHAN_VIEN.equals(t.getLoaiNguoiGui()) && t.getIdNguoiGui() != null) {
+            return nhanVienRepository
+                .findById(t.getIdNguoiGui())
+                .map(com.example.datn.entity.NhanVien::getTenTaiKhoan)
+                .orElse(null);
+        }
+        if (TinNhan.GUI_KHACH.equals(t.getLoaiNguoiGui())) {
+            return t.getHoiThoai() != null ? t.getHoiThoai().getTenKhach() : null;
+        }
+        if (TinNhan.GUI_AI.equals(t.getLoaiNguoiGui())) {
+            return "AI";
+        }
+        return null;
     }
 }

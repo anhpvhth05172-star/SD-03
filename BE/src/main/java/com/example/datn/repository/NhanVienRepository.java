@@ -25,6 +25,8 @@ public interface NhanVienRepository extends JpaRepository<NhanVien, Long> {
 
     boolean existsByEmail(String email);
 
+    java.util.Optional<com.example.datn.entity.NhanVien> findByEmail(String email);
+
     boolean existsByEmailAndIdNot(String email, Long id);
 
     @Query("SELECT COALESCE(MAX(n.id), 0) FROM NhanVien n")

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CustomerAddressModal from '@/components/CustomerAddressModal.vue'
+import DoiMatKhauModal from '@/components/DoiMatKhauModal.vue'
 import { getCustomer, listCustomers, updateCustomerStatus, deleteCustomer } from '@/api/customer'
 import { exportCsv, fetchAllPages } from '@/utils/export'
 import { takeFlashWithMeta } from '@/utils/flash'
@@ -208,6 +209,7 @@ const removeCustomer = async (row) => {
 }
 
 const diaChiCustomerId = ref(null)
+const doiMkCustomerId = ref(null)
 const openAddress = (row) => {
   diaChiCustomerId.value = row.id
 }
@@ -566,6 +568,12 @@ onMounted(() => {
             <i class="bi bi-pencil-square"></i>
             <span>Chỉnh sửa thông tin</span>
           </button>
+          <button class="btn-profile-edit customer" type="button"
+            @click="doiMkCustomerId = detailData.id"
+            style="background: linear-gradient(135deg, #d97706, #f59e0b); box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);">
+            <i class="bi bi-key"></i>
+            <span>Đổi mật khẩu</span>
+          </button>
           <button class="btn-profile-delete" type="button" @click="removeCustomer(detailData); detailData = null">
             <i class="bi bi-trash3"></i>
             <span>Xóa tài khoản</span>
@@ -578,6 +586,9 @@ onMounted(() => {
     </div>
     <CustomerAddressModal v-if="diaChiCustomerId" :customer-id="diaChiCustomerId" @close="dongDiaChi"
       @changed="doiDiaChi" />
+    <DoiMatKhauModal v-if="doiMkCustomerId" loai="KH" :id="doiMkCustomerId"
+      :ten-tai-khoan="detailData?.tenTaiKhoan || detailData?.email || ''" @close="doiMkCustomerId = null"
+      @success="detailData = null" />
   </div>
 </template>
 

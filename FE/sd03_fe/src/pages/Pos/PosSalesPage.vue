@@ -843,7 +843,7 @@ const handleCheckout = async () => {
       toProvinceId: delivery?.legacy?.toProvinceId ?? null,
       toDistrictId: delivery?.legacy?.toDistrictId ?? null,
       toWardCode: delivery?.legacy?.toWardCode ?? null,
-      trangThai: 'Đã hoàn thành',
+      trangThai: currentOrder.value.isDelivery ? 'Chờ xác nhận' : 'Đã hoàn thành',
       ghiChu: currentOrder.value.note || 'Bán hàng tại quầy POS',
       idKhachHang: currentOrder.value.customer ? currentOrder.value.customer.id : null,
       idNhanVien: employeeId,

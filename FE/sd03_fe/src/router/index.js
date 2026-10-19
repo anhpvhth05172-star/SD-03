@@ -32,6 +32,7 @@ import DiscountFormUpdate from '@/pages/Discount/DiscountFormUpdate.vue'
 import VoucherFormUpdate from '@/pages/Discount/VoucherFormUpdate.vue'
 import LoginPage from '@/pages/Auth/LoginPage.vue'
 import RegisterPage from '@/pages/Auth/RegisterPage.vue'
+import QuenMatKhauPage from '@/pages/Auth/QuenMatKhauPage.vue'
 import StaffChatPage from '@/pages/Chat/StaffChatPage.vue'
 import CustomerAccountPage from '@/pages/Auth/CustomerAccountPage.vue'
 
@@ -40,6 +41,7 @@ const metaBo = { requiresAuth: true, canBo: true }
 const routes = [
   { path: '/dang-nhap', component: LoginPage, meta: { title: 'Đăng nhập' } },
   { path: '/dang-ky', component: RegisterPage, meta: { title: 'Đăng ký' } },
+  { path: '/quen-mat-khau', component: QuenMatKhauPage, meta: { title: 'Quên mật khẩu' } },
   {
     path: '/tai-khoan',
     component: CustomerAccountPage,

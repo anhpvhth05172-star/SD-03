@@ -144,6 +144,92 @@ public class EmailService {
         }
     }
 
+    /**
+     * Gửi email mã OTP đặt lại mật khẩu cho nhân viên.
+     *
+     * @return true nếu nhà cung cấp mail xác nhận đã tiếp nhận email; false nếu gửi thất bại.
+     */
+    public boolean guiMaQuenMatKhau(String toEmail, String maOtp) {
+        if (toEmail == null || toEmail.trim().isEmpty()) {
+            log.warn("Không thể gửi email: Địa chỉ email trống");
+            return false;
+        }
+
+        String tu = diaChiNguoiGui();
+        if (tu == null) {
+            log.error(
+                "Không gửi email mã OTP tới {}: chưa cấu hình người gửi (spring.mail.from / MAIL_USERNAME)",
+                toEmail
+            );
+            return false;
+        }
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(tu, "PolyShoes System");
+            helper.setTo(toEmail.trim());
+            helper.setSubject("[PolyShoes] Mã xác nhận đặt lại mật khẩu");
+
+            helper.setText(buildOtpTemplate(maOtp), true);
+
+            mailSender.send(message);
+            log.info("Nhà cung cấp mail đã chấp nhận email mã OTP gửi tới {}", toEmail);
+            return true;
+        } catch (Exception e) {
+            log.error("Gửi email mã OTP tới {} thất bại: {}", toEmail, e.toString(), e);
+            return false;
+        }
+    }
+
+    private String buildOtpTemplate(String maOtp) {
+        return """
+            <!DOCTYPE html>
+            <html lang="vi">
+            <head>
+              <meta charset="UTF-8">
+              <style>
+                body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px; color: #333; }
+                .email-container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #e1e8ed; }
+                .email-header { background: linear-gradient(135deg, #e11d48, #f43f5e); color: #ffffff; padding: 28px 24px; text-align: center; }
+                .email-header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+                .email-header p { margin: 8px 0 0; opacity: 0.9; font-size: 14px; }
+                .email-body { padding: 32px 28px; line-height: 1.6; }
+                .otp-box { background: #fff1f2; border-left: 4px solid #e11d48; border-radius: 8px; padding: 22px 24px; margin: 24px 0; text-align: center; }
+                .otp-code { font-family: monospace; font-size: 34px; letter-spacing: 8px; font-weight: 700; color: #be123c; }
+                .warning-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 14px 16px; margin: 20px 0; font-size: 13.5px; color: #92400e; }
+                .email-footer { background: #f8fafc; padding: 20px 24px; text-align: center; font-size: 12.5px; color: #64748b; border-top: 1px solid #e2e8f0; }
+              </style>
+            </head>
+            <body>
+              <div class="email-container">
+                <div class="email-header">
+                  <h1>PolyShoes Management System</h1>
+                  <p>Đặt lại mật khẩu tài khoản nhân viên</p>
+                </div>
+                <div class="email-body">
+                  <p>Xin chào,</p>
+                  <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản nhân viên của bạn. Mã xác nhận của bạn là:</p>
+                  <div class="otp-box">
+                    <div class="otp-code">%s</div>
+                  </div>
+                  <div class="warning-box">
+                    ⏳ Mã có hiệu lực trong <b>10 phút</b>. Bạn có thể gửi lại mã sau 60 giây.
+                  </div>
+                  <p>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.</p>
+                  <p style="margin-top: 24px;">Trân trọng,<br/><b>Ban Quản trị PolyShoes</b></p>
+                </div>
+                <div class="email-footer">
+                  <p>© 2026 PolyShoes. Mọi quyền được bảo lưu.</p>
+                  <p>Email này được gửi tự động, vui lòng không chia sẻ mã xác nhận với bất kỳ ai.</p>
+                </div>
+              </div>
+            </body>
+            </html>
+            """.formatted(maOtp);
+    }
+
     private String buildEmployeeWelcomeTemplate(
         String tenNhanVien,
         String maNhanVien,

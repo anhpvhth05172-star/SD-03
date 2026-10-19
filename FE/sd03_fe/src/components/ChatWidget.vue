@@ -132,7 +132,7 @@ const gui = async () => {
 const tenNguoiGui = (t) => {
   if (t.loaiNguoiGui === 'KHACH') return 'Bạn'
   if (t.loaiNguoiGui === 'AI') return 'Trợ lý AI'
-  return 'Nhân viên'
+  return t.tenNguoiGui ? `Nhân viên ${t.tenNguoiGui}` : 'Nhân viên'
 }
 
 onMounted(() => {

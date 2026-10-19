@@ -21,23 +21,24 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    // ==== JWT DA TAT theo yeu cau (phuc hoi: bo comment cac dong duoi + tra ma tran quyen) ====
-    // private final JwtService jwtService;
-    // private final PhienDangNhapRepository phienDangNhapRepository;
-    // private final long thoiGianPhienMs;
-    //
-    // public SecurityConfig(
-    //     JwtService jwtService,
-    //     PhienDangNhapRepository phienDangNhapRepository,
-    //     @Value("${app.auth.session-inactivity-ms:1800000}") long thoiGianPhienMs
-    // ) {
-    //     this.jwtService = jwtService;
-    //     this.phienDangNhapRepository = phienDangNhapRepository;
-    //     this.thoiGianPhienMs = thoiGianPhienMs;
-    // }
+    private final JwtService jwtService;
+    private final PhienDangNhapRepository phienDangNhapRepository;
+    private final long thoiGianPhienGhiNhoMs;
+
+    public SecurityConfig(
+        JwtService jwtService,
+        PhienDangNhapRepository phienDangNhapRepository,
+        @Value("${app.auth.session-remember-ms:2592000000}") long thoiGianPhienGhiNhoMs
+    ) {
+        this.jwtService = jwtService;
+        this.phienDangNhapRepository = phienDangNhapRepository;
+        this.thoiGianPhienGhiNhoMs = thoiGianPhienGhiNhoMs;
+    }
 
     /**
-     * JWT da tat: khong con xac thuc token, moi endpoint deu public (permitAll).
+     * Dang public permitAll (ma tran quyen van comment duoi day).
+     * JwtAuthFilter duoc bat lai de xac dinh danh tinh cho chat nhan-vien:
+     * filter dung cua so lon nhat (ghi nho); /api/auth/refresh van chot han dung.
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -91,12 +92,11 @@ public class SecurityConfig {
             .exceptionHandling(eh -> eh
                 .authenticationEntryPoint((request, response, ex) -> chuaDangNhap(response))
                 .accessDeniedHandler((request, response, ex) -> thieuQuyen(response))
+            )
+            .addFilterBefore(
+                new JwtAuthFilter(jwtService, phienDangNhapRepository, thoiGianPhienGhiNhoMs),
+                UsernamePasswordAuthenticationFilter.class
             );
-            // TAT JwtAuthFilter (khong con xac thuc JWT):
-            // .addFilterBefore(
-            //     new JwtAuthFilter(jwtService, phienDangNhapRepository, thoiGianPhienMs),
-            //     UsernamePasswordAuthenticationFilter.class
-            // );
         return http.build();
     }
 

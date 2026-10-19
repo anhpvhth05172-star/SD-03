@@ -27,11 +27,10 @@ public interface HoiThoaiRepository extends JpaRepository<HoiThoai, Long> {
         """
         SELECT h FROM HoiThoai h
         WHERE h.loai = :loai
-          AND (h.nhanVienPhuTrach IS NULL OR h.nhanVienPhuTrach.id = :idNhanVien)
         ORDER BY h.ngayCapNhat DESC
         """
     )
-    List<HoiThoai> timHoiThoaiChoNhanVien(@Param("loai") String loai, @Param("idNhanVien") Long idNhanVien);
+    List<HoiThoai> timHoiThoaiChoNhanVien(@Param("loai") String loai);
 
     Optional<HoiThoai> findByIdAndLoai(Long id, String loai);
 

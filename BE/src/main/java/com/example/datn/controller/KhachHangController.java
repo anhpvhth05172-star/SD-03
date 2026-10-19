@@ -35,6 +35,18 @@ public class KhachHangController {
 
     private final KhachHangRepository khachHangRepository;
 
+    private final com.example.datn.service.AuthService authService;
+
+    @PutMapping("/{id}/doi-mat-khau")
+    public ResponseEntity<Map<String, String>> doiMatKhau(
+        @PathVariable Long id,
+        @RequestBody com.example.datn.dto.Auth.DoiMatKhauRequest request
+    ) {
+        quyenGuard.canQuanLyKhachHang();
+        authService.doiMatKhauKhachHang(id, request.getMatKhauMoi(), request.getXacNhan());
+        return ResponseEntity.ok(Map.of("message", "Đổi mật khẩu thành công"));
+    }
+
     @GetMapping("/all")
     public List<Map<String, Object>> getList() {
         return khachHangRepository.findAll().stream()

@@ -46,10 +46,10 @@ public interface KhachHangRepository extends JpaRepository<KhachHang, Long> {
           AND (:denNgay IS NULL OR k.ngayTao <= :denNgay)
           AND (:tongChiTieuMin IS NULL
                OR (SELECT COALESCE(SUM(h.tienSauGiamGia), 0) FROM HoaDon h
-                   WHERE h.khachHang = k AND h.trangThai NOT IN ('DA_HUY', 'DA_HOAN_TIEN')) >= :tongChiTieuMin)
+                   WHERE h.khachHang = k AND h.trangThai NOT IN ('DA_HUY', 'DA_HOAN_TIEN', 'GIAO_HANG_THAT_BAI')) >= :tongChiTieuMin)
           AND (:tongChiTieuMax IS NULL
                OR (SELECT COALESCE(SUM(h.tienSauGiamGia), 0) FROM HoaDon h
-                   WHERE h.khachHang = k AND h.trangThai NOT IN ('DA_HUY', 'DA_HOAN_TIEN')) < :tongChiTieuMax)
+                   WHERE h.khachHang = k AND h.trangThai NOT IN ('DA_HUY', 'DA_HOAN_TIEN', 'GIAO_HANG_THAT_BAI')) < :tongChiTieuMax)
         """
     )
     Page<KhachHang> findByFilters(
@@ -69,7 +69,7 @@ public interface KhachHangRepository extends JpaRepository<KhachHang, Long> {
         )
         FROM HoaDon h
         WHERE h.khachHang.id IN :ids
-          AND h.trangThai NOT IN ('DA_HUY', 'DA_HOAN_TIEN')
+          AND h.trangThai NOT IN ('DA_HUY', 'DA_HOAN_TIEN', 'GIAO_HANG_THAT_BAI')
         GROUP BY h.khachHang.id
         """
     )

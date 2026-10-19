@@ -98,9 +98,9 @@ const dong = async () => {
 }
 
 const tenNguoiGui = (t) => {
-  if (t.loaiNguoiGui === 'KHACH') return 'Khách'
+  if (t.loaiNguoiGui === 'KHACH') return t.tenNguoiGui || 'Khách'
   if (t.loaiNguoiGui === 'AI') return 'AI'
-  return 'Bạn'
+  return t.tenNguoiGui || 'Nhân viên'
 }
 
 const gio = (s) => {

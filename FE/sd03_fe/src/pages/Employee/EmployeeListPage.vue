@@ -2,15 +2,24 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { deleteEmployee, getEmployee, getEmployeeFormData, listEmployees, updateEmployeeStatus } from '@/api/employee'
+import DoiMatKhauModal from '@/components/DoiMatKhauModal.vue'
 import { exportCsv, fetchAllPages } from '@/utils/export'
 import { takeFlashWithMeta } from '@/utils/flash'
 import { avatarColor, formatDate, formatDateTime, initialsOf } from '@/utils/format'
 import { getAvatarSrc, onAvatarError } from '@/utils/avatar'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm, notifyDeleteConfirm } from '@/utils/notify'
+import { API_BASE } from '@/api/http'
 
 const router = useRouter()
 const flashMsg = ref('')
 const exporting = ref(false)
+
+const isImportModalOpen = ref(false)
+const isImporting = ref(false)
+const isDownloadingTemplate = ref(false)
+const selectedImportFile = ref(null)
+const importResult = ref(null)
+const fileInputExcelRef = ref(null)
 
 const vaiTros = ref([])
 const rows = ref([])
@@ -25,6 +34,7 @@ const fVaiTro = ref('')
 const fTrangThai = ref('')
 
 const detailData = ref(null)
+const doiMkNhanVienId = ref(null)
 
 let searchTimeout = null
 const onKeywordInput = () => {
@@ -67,6 +77,88 @@ const load = async () => {
 const applyFilter = () => {
   page.value = 0
   load()
+}
+
+const openImportModal = () => {
+  selectedImportFile.value = null
+  importResult.value = null
+  isImportModalOpen.value = true
+}
+
+const triggerSelectFile = () => fileInputExcelRef.value?.click()
+
+const chonFileExcel = (file) => {
+  if (!file) return
+  const name = file.name.toLowerCase()
+  if (!name.endsWith('.xlsx') && !name.endsWith('.xls')) {
+    notifyWarning('Vui lòng chọn tệp định dạng Excel (.xlsx hoặc .xls)')
+    return
+  }
+  selectedImportFile.value = file
+  importResult.value = null
+}
+
+const onFileExcelChange = (e) => {
+  chonFileExcel(e.target.files && e.target.files[0])
+  e.target.value = ''
+}
+
+const onDropExcelFile = (e) => {
+  chonFileExcel(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0])
+}
+
+const downloadTemplate = async () => {
+  isDownloadingTemplate.value = true
+  try {
+    const res = await fetch(`${API_BASE}/nhan-vien/excel/template`)
+    if (!res.ok) throw new Error('Không thể tải file mẫu')
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'Mau_Import_Nhan_Vien.xlsx'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+    notifySuccess('Đã tải xuống file Excel mẫu thành công!')
+  } catch (err) {
+    notifyError('Tải file mẫu thất bại', err.message)
+  } finally {
+    isDownloadingTemplate.value = false
+  }
+}
+
+const submitImportExcel = async () => {
+  if (!selectedImportFile.value) {
+    notifyWarning('Vui lòng chọn tệp Excel trước khi import')
+    return
+  }
+  isImporting.value = true
+  importResult.value = null
+  const formData = new FormData()
+  formData.append('file', selectedImportFile.value)
+  try {
+    const res = await fetch(`${API_BASE}/nhan-vien/excel/import`, {
+      method: 'POST',
+      body: formData,
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      throw new Error(data.message || 'Lỗi xử lý file Excel')
+    }
+    importResult.value = data
+    if (data.soDongThanhCong > 0) {
+      notifySuccess(`Import thành công ${data.soDongThanhCong}/${data.tongSoDong} dòng dữ liệu!`)
+      load()
+    } else {
+      notifyWarning('Không có dòng dữ liệu nào được import thành công')
+    }
+  } catch (err) {
+    notifyError('Import thất bại', err.message)
+  } finally {
+    isImporting.value = false
+  }
 }
 
 const resetFilter = () => {
@@ -292,6 +384,16 @@ onMounted(async () => {
             <polyline points="10 9 9 9 8 9"></polyline>
           </svg>
           {{ exporting ? 'Đang xuất...' : 'Xuất Excel' }}
+        </button>
+
+        <!-- Nút Nhập Excel -->
+        <button class="btn-action-outline" type="button" @click="openImportModal" title="Nhập danh sách nhân viên từ file Excel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          Nhập Excel
         </button>
 
         <!-- Nút Thêm nhân viên -->
@@ -531,6 +633,15 @@ onMounted(async () => {
           </button>
           <button
             v-if="!isAccountProtected(detailData)"
+            class="btn-profile-edit"
+            type="button"
+            @click="doiMkNhanVienId = detailData.id"
+          >
+            <i class="bi bi-key"></i>
+            <span>Đổi mật khẩu</span>
+          </button>
+          <button
+            v-if="!isAccountProtected(detailData)"
             class="btn-profile-delete"
             type="button"
             @click="removeEmployee(detailData); detailData = null"
@@ -544,6 +655,132 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <!-- Modal Import Excel -->
+    <div v-if="isImportModalOpen" class="emp-import-backdrop" @click.self="isImportModalOpen = false">
+      <div class="emp-import-modal">
+        <div class="emp-import-header">
+          <div class="emp-import-title-group">
+            <span class="emp-import-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="12" y1="18" x2="12" y2="12"></line>
+                <polyline points="9 15 12 12 15 15"></polyline>
+              </svg>
+            </span>
+            <div>
+              <h3 class="emp-import-title">Nhập nhân viên từ File Excel</h3>
+              <p class="emp-import-sub">Tải file mẫu, điền dữ liệu rồi nhập danh sách vào hệ thống</p>
+            </div>
+          </div>
+          <button class="emp-import-close" @click="isImportModalOpen = false" title="Đóng">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
+        <div class="emp-import-body">
+          <div class="emp-template-card">
+            <div>
+              <h4 class="emp-template-heading">Chưa có file đúng chuẩn?</h4>
+              <p class="emp-template-desc">Tải file mẫu có sẵn cấu trúc cột, điền dữ liệu là nhập được ngay.</p>
+            </div>
+            <button class="emp-btn-download" @click="downloadTemplate" :disabled="isDownloadingTemplate">
+              {{ isDownloadingTemplate ? 'Đang tải...' : 'Tải file mẫu (.xlsx)' }}
+            </button>
+          </div>
+
+          <input
+            ref="fileInputExcelRef"
+            type="file"
+            accept=".xlsx,.xls"
+            style="display: none;"
+            @change="onFileExcelChange"
+          />
+
+          <div
+            class="emp-dropzone"
+            :class="{ 'has-file': !!selectedImportFile }"
+            @dragover.prevent
+            @dragenter.prevent
+            @drop.prevent="onDropExcelFile"
+            @click="triggerSelectFile"
+          >
+            <template v-if="!selectedImportFile">
+              <div class="emp-drop-icon">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path>
+                  <path d="M12 12v9"></path>
+                  <path d="m16 16-4-4-4 4"></path>
+                </svg>
+              </div>
+              <p class="emp-drop-title">Kéo &amp; thả file Excel vào đây, hoặc <span class="emp-highlight">bấm để chọn</span></p>
+              <p class="emp-drop-hint">Hỗ trợ tệp .xlsx hoặc .xls</p>
+            </template>
+            <div v-else class="emp-drop-file" @click.stop>
+              <div class="emp-file-meta">
+                <span class="emp-file-name">{{ selectedImportFile.name }}</span>
+                <span class="emp-file-size">{{ (selectedImportFile.size / 1024).toFixed(1) }} KB</span>
+              </div>
+              <button class="emp-file-remove" type="button" @click="selectedImportFile = null; importResult = null" title="Hủy chọn file">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="emp-import-notice">
+            <div class="emp-notice-title">Lưu ý quan trọng:</div>
+            <ul class="emp-notice-list">
+              <li>Ngày sinh dạng <strong>dd/MM/yyyy</strong>, nhân viên phải đủ 18 tuổi.</li>
+              <li>Vai trò chỉ nhận <strong>ADMIN</strong> hoặc <strong>STAFF</strong>.</li>
+              <li>Email, số điện thoại trùng (trong file hoặc trong hệ thống) sẽ báo lỗi từng dòng; các dòng khác vẫn import.</li>
+              <li>Mã nhân viên tự动生成, mật khẩu mặc định <strong>123456</strong>; import không gửi mail cấp tài khoản.</li>
+            </ul>
+          </div>
+
+          <div v-if="importResult" class="emp-import-result" :class="{ 'has-errors': importResult.soDongThatBai > 0 }">
+            <h4 class="emp-result-heading">
+              <span v-if="importResult.soDongThanhCong > 0">Hoàn tất xử lý:</span>
+              <span v-else>Chưa có dữ liệu hợp lệ:</span>
+              Đã nhập thành công {{ importResult.soDongThanhCong }} / {{ importResult.tongSoDong }} dòng
+            </h4>
+            <div class="emp-result-pills">
+              <span class="emp-pill success">Thành công: <strong>{{ importResult.soDongThanhCong }}</strong></span>
+              <span class="emp-pill danger">Lỗi: <strong>{{ importResult.soDongThatBai }}</strong></span>
+            </div>
+            <div v-if="importResult.danhSachLoi && importResult.danhSachLoi.length" class="emp-result-errors">
+              <div class="emp-errors-title">Chi tiết dòng cần kiểm tra:</div>
+              <ul class="emp-errors-list">
+                <li v-for="(err, idx) in importResult.danhSachLoi" :key="idx">{{ err }}</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="emp-import-footer">
+          <button class="emp-btn-cancel" @click="isImportModalOpen = false" :disabled="isImporting">
+            {{ importResult ? 'Đóng' : 'Hủy bỏ' }}
+          </button>
+          <button class="emp-btn-submit" :disabled="!selectedImportFile || isImporting" @click="submitImportExcel">
+            {{ isImporting ? 'Đang xử lý dữ liệu...' : 'Bắt đầu nhập dữ liệu' }}
+          </button>
+        </div>
+      </div>
+    </div>
+    <DoiMatKhauModal
+      v-if="doiMkNhanVienId"
+      loai="NV"
+      :id="doiMkNhanVienId"
+      :ten-tai-khoan="detailData?.tenTaiKhoan || detailData?.maNhanVien || ''"
+      @close="doiMkNhanVienId = null"
+      @success="detailData = null"
+    />
   </div>
 </template>
 
@@ -1391,5 +1628,360 @@ onMounted(async () => {
 .btn-profile-close:hover {
   background: #e2e8f0;
   color: #0f172a;
+}
+
+/* ===== Modal Import Excel ===== */
+.emp-import-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.emp-import-modal {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 640px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+}
+
+.emp-import-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 22px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.emp-import-title-group {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.emp-import-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: #4f46e5;
+  flex-shrink: 0;
+}
+
+.emp-import-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.emp-import-sub {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.emp-import-close {
+  border: none;
+  background: #f1f5f9;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.emp-import-close:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.emp-import-body {
+  padding: 20px 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.emp-template-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.emp-template-heading {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.emp-template-desc {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.emp-btn-download {
+  border: 1px solid #4f46e5;
+  background: #fff;
+  color: #4f46e5;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.emp-btn-download:hover:not(:disabled) {
+  background: #eef2ff;
+}
+
+.emp-btn-download:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.emp-dropzone {
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 26px 18px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.emp-dropzone:hover,
+.emp-dropzone.has-file {
+  border-color: #4f46e5;
+  background: #eef2ff;
+}
+
+.emp-drop-icon {
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.emp-drop-title {
+  margin: 0;
+  font-size: 13.5px;
+  color: #334155;
+}
+
+.emp-highlight {
+  color: #4f46e5;
+  font-weight: 600;
+}
+
+.emp-drop-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.emp-drop-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.emp-file-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.emp-file-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emp-file-size {
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+.emp-file-remove {
+  border: none;
+  background: #fee2e2;
+  color: #b91c1c;
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.emp-import-notice {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+
+.emp-notice-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #92400e;
+  margin-bottom: 6px;
+}
+
+.emp-notice-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: #78350f;
+  line-height: 1.7;
+}
+
+.emp-import-result {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.emp-import-result.has-errors {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.emp-result-heading {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.emp-result-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.emp-pill {
+  font-size: 12px;
+  border-radius: 999px;
+  padding: 4px 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+.emp-pill.success {
+  border-color: #86efac;
+  color: #15803d;
+}
+
+.emp-pill.danger {
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.emp-result-errors {
+  margin-top: 12px;
+}
+
+.emp-errors-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #b91c1c;
+  margin-bottom: 6px;
+}
+
+.emp-errors-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: #7f1d1d;
+  line-height: 1.7;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.emp-import-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 22px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.emp-btn-cancel {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 9px 16px;
+  cursor: pointer;
+}
+
+.emp-btn-cancel:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.emp-btn-submit {
+  border: none;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.emp-btn-submit:hover:not(:disabled) {
+  background: #4338ca;
+}
+
+.emp-btn-submit:disabled,
+.emp-btn-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

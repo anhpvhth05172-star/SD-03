@@ -8,7 +8,7 @@ import { datVaiTro, datNguoiDung } from '@/utils/session'
 const router = useRouter()
 
 const cheDo = ref('nhan-vien') // 'nhan-vien' | 'khach'
-const form = ref({ taiKhoan: '', matKhau: '' })
+const form = ref({ taiKhoan: '', matKhau: '', ghiNhoDangNhap: false })
 const error = ref('')
 const loading = ref(false)
 
@@ -28,6 +28,7 @@ const submit = async () => {
     const payload = {
       taiKhoan: form.value.taiKhoan.trim(),
       matKhau: form.value.matKhau,
+      ghiNhoDangNhap: form.value.ghiNhoDangNhap,
     }
     const resp =
       cheDo.value === 'nhan-vien' ? await dangNhapNhanVien(payload) : await dangNhap(payload)
@@ -100,7 +101,15 @@ const submit = async () => {
             placeholder="Nhập mật khẩu"
             autocomplete="current-password"
           />
+          <router-link v-if="cheDo === 'nhan-vien'" to="/quen-mat-khau" class="auth-forgot">
+            Quên mật khẩu?
+          </router-link>
         </div>
+
+        <label class="auth-remember">
+          <input v-model="form.ghiNhoDangNhap" type="checkbox" />
+          <span>Ghi nhớ đăng nhập</span>
+        </label>
 
         <p v-if="error" class="auth-error">{{ error }}</p>
 
@@ -201,6 +210,33 @@ const submit = async () => {
   outline: none;
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+.auth-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  user-select: none;
+}
+.auth-remember input {
+  width: 15px;
+  height: 15px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+.auth-forgot {
+  display: block;
+  text-align: right;
+  margin-top: 6px;
+  font-size: 13px;
+  color: #2563eb;
+  text-decoration: none;
+}
+.auth-forgot:hover {
+  text-decoration: underline;
 }
 .auth-error {
   color: #dc2626;

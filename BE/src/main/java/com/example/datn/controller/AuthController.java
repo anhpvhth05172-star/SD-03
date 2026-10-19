@@ -54,6 +54,20 @@ public class AuthController {
         return authService.dangNhapNhanVien(req);
     }
 
+    @PostMapping("/nhan-vien/gui-ma-quen-mat-khau")
+    public ResponseEntity<Map<String, String>> guiMaQuenMatKhau(@RequestBody Map<String, String> req) {
+        authService.guiMaQuenMatKhau(req == null ? null : req.get("email"));
+        return ResponseEntity.ok(Map.of("message", "Đã gửi mã xác nhận đến email của bạn"));
+    }
+
+    @PostMapping("/nhan-vien/dat-lai-mat-khau")
+    public ResponseEntity<Map<String, String>> datLaiMatKhau(
+        @RequestBody com.example.datn.dto.Auth.DatLaiMatKhauRequest req
+    ) {
+        authService.datLaiMatKhau(req.getEmail(), req.getMaOTP(), req.getMatKhauMoi(), req.getXacNhan());
+        return ResponseEntity.ok(Map.of("message", "Đặt lại mật khẩu thành công, vui lòng đăng nhập"));
+    }
+
     @PostMapping("/refresh")
     public AuthResponse refresh(@RequestBody RefreshRequest req) {
         return authService.refresh(req == null ? null : req.refreshToken());

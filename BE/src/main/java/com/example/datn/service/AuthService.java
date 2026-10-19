@@ -34,8 +34,13 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final PhienDangNhapRepository phienDangNhapRepository;
+    private final EmailService emailService;
+    private final QuenMatKhauOtpService quenMatKhauOtpService;
 
     private final long thoiGianPhienMs;
+    private final long thoiGianPhienGhiNhoMs;
+
+    private static final String PREFIX_REFRESH_GHI_NHO = "r_";
 
     public AuthService(
         KhachHangRepository khachHangRepository,
@@ -43,7 +48,10 @@ public class AuthService {
         PasswordEncoder passwordEncoder,
         JwtService jwtService,
         PhienDangNhapRepository phienDangNhapRepository,
-        @Value("${app.auth.session-inactivity-ms:1800000}") long thoiGianPhienMs
+        @Value("${app.auth.session-inactivity-ms:1800000}") long thoiGianPhienMs,
+        EmailService emailService,
+        QuenMatKhauOtpService quenMatKhauOtpService,
+        @Value("${app.auth.session-remember-ms:2592000000}") long thoiGianPhienGhiNhoMs
     ) {
         this.khachHangRepository = khachHangRepository;
         this.nhanVienRepository = nhanVienRepository;
@@ -51,6 +59,9 @@ public class AuthService {
         this.jwtService = jwtService;
         this.phienDangNhapRepository = phienDangNhapRepository;
         this.thoiGianPhienMs = thoiGianPhienMs;
+        this.emailService = emailService;
+        this.quenMatKhauOtpService = quenMatKhauOtpService;
+        this.thoiGianPhienGhiNhoMs = thoiGianPhienGhiNhoMs;
     }
 
     @Transactional
@@ -127,7 +138,7 @@ public class AuthService {
         }
 
         LocalDateTime bayGio = LocalDateTime.now();
-        String refreshToken = taoRefreshToken();
+        String refreshToken = taoRefreshToken(req.getGhiNhoDangNhap());
         PhienDangNhap phien = new PhienDangNhap();
         phien.setIdKhachHang(khachHang.getId());
         phien.setRefreshTokenHash(sha256(refreshToken));
@@ -167,7 +178,7 @@ public class AuthService {
         }
 
         LocalDateTime bayGio = LocalDateTime.now();
-        String refreshToken = taoRefreshToken();
+        String refreshToken = taoRefreshToken(req.getGhiNhoDangNhap());
         PhienDangNhap phien = new PhienDangNhap();
         phien.setIdNhanVien(nhanVien.getId());
         phien.setRefreshTokenHash(sha256(refreshToken));
@@ -207,7 +218,9 @@ public class AuthService {
             .findByRefreshTokenHash(sha256(refreshToken))
             .orElseThrow(() -> new DangNhapThatBaiException("Phiên đăng nhập không hợp lệ"));
         LocalDateTime bayGio = LocalDateTime.now();
-        if (phien.isRevoked() || phien.hetHan(bayGio, thoiGianPhienMs)) {
+        boolean ghiNho = refreshToken.startsWith(PREFIX_REFRESH_GHI_NHO);
+        long thoiGianGioiHan = ghiNho ? thoiGianPhienGhiNhoMs : thoiGianPhienMs;
+        if (phien.isRevoked() || phien.hetHan(bayGio, thoiGianGioiHan)) {
             throw new DangNhapThatBaiException("Phiên đăng nhập đã hết hạn");
         }
 
@@ -254,6 +267,83 @@ public class AuthService {
         );
     }
 
+    /**
+     * Admin đặt lại mật khẩu cho nhân viên. Tài khoản vai trò ADMIN không được đổi mật khẩu.
+     */
+    @Transactional
+    public void doiMatKhauNhanVien(Long id, String matKhauMoi, String xacNhan) {
+        hopLeMatKhauMoi(matKhauMoi, xacNhan);
+        NhanVien nhanVien = nhanVienRepository
+            .findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy nhân viên"));
+        if (nhanVien.getVaiTro() != null && "ADMIN".equalsIgnoreCase(nhanVien.getVaiTro().getMaVaiTro())) {
+            throw new IllegalArgumentException("Không được đổi mật khẩu tài khoản quản trị");
+        }
+        nhanVien.setMatKhau(passwordEncoder.encode(matKhauMoi));
+        nhanVienRepository.save(nhanVien);
+    }
+
+    /**
+     * Admin đặt lại mật khẩu cho khách hàng.
+     */
+    @Transactional
+    public void doiMatKhauKhachHang(Long id, String matKhauMoi, String xacNhan) {
+        hopLeMatKhauMoi(matKhauMoi, xacNhan);
+        KhachHang khachHang = khachHangRepository
+            .findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy khách hàng"));
+        khachHang.setMatKhau(passwordEncoder.encode(matKhauMoi));
+        khachHangRepository.save(khachHang);
+    }
+
+    private static void hopLeMatKhauMoi(String matKhauMoi, String xacNhan) {
+        if (isBlank(matKhauMoi)) {
+            throw new IllegalArgumentException("Mật khẩu mới không được để trống");
+        }
+        if (matKhauMoi.length() < 6 || matKhauMoi.length() > 127) {
+            throw new IllegalArgumentException("Mật khẩu phải có từ 6 đến 127 ký tự");
+        }
+        if (isBlank(xacNhan)) {
+            throw new IllegalArgumentException("Vui lòng xác nhận mật khẩu mới");
+        }
+        if (!matKhauMoi.equals(xacNhan)) {
+            throw new IllegalArgumentException("Mật khẩu xác nhận không khớp");
+        }
+    }
+
+    /**
+     * Nhân viên quên mật khẩu: gửi mã OTP 6 số tới email đã đăng ký.
+     */
+    @Transactional
+    public void guiMaQuenMatKhau(String email) {
+        NhanVien nhanVien = timNhanVienTheoEmail(email);
+        String maOtp = quenMatKhauOtpService.sinhMa(nhanVien.getEmail());
+        if (!emailService.guiMaQuenMatKhau(nhanVien.getEmail(), maOtp)) {
+            throw new IllegalStateException("Không gửi được mã xác nhận, vui lòng thử lại sau");
+        }
+    }
+
+    /**
+     * Nhân viên đặt lại mật khẩu bằng mã OTP hợp lệ.
+     */
+    @Transactional
+    public void datLaiMatKhau(String email, String maOtp, String matKhauMoi, String xacNhan) {
+        hopLeMatKhauMoi(matKhauMoi, xacNhan);
+        quenMatKhauOtpService.xacNhan(email, maOtp);
+        NhanVien nhanVien = timNhanVienTheoEmail(email);
+        nhanVien.setMatKhau(passwordEncoder.encode(matKhauMoi));
+        nhanVienRepository.save(nhanVien);
+    }
+
+    private NhanVien timNhanVienTheoEmail(String email) {
+        if (isBlank(email)) {
+            throw new IllegalArgumentException("Email không được để trống");
+        }
+        return nhanVienRepository
+            .findByEmail(email.trim())
+            .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy tài khoản với email này"));
+    }
+
     @Transactional
     public void dangXuat(String refreshToken) {
         if (isBlank(refreshToken)) {
@@ -267,10 +357,11 @@ public class AuthService {
         }
     }
 
-    private static String taoRefreshToken() {
+    private static String taoRefreshToken(Boolean ghiNhoDangNhap) {
         byte[] bytes = new byte[48];
         ThreadLocalRandom.current().nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        return Boolean.TRUE.equals(ghiNhoDangNhap) ? PREFIX_REFRESH_GHI_NHO + token : token;
     }
 
     private static String sha256(String giaTri) {

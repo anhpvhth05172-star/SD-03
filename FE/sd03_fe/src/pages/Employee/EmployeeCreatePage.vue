@@ -698,12 +698,20 @@ onMounted(async () => {
 
           <div class="form-grid-2">
             <div class="form-group">
+              <label class="form-label">Mã nhân viên</label>
+              <input class="form-input" type="text"
+                :value="isEdit ? form.maNhanVien : maPreview"
+                disabled
+                placeholder="Tự động tạo khi nhập họ và tên" />
+              <p class="field-hint" style="font-size: 12px; color: #64748b; margin-top: 4px;">
+                Mã tự động tạo, không thể chỉnh sửa.
+              </p>
+            </div>
+
+            <div class="form-group">
               <label class="form-label">Họ và tên <span class="req">*</span></label>
               <input v-model="form.tenTaiKhoan" type="text" class="form-input" placeholder="Nhập họ và tên"
                 maxlength="100" @input="capNhatMaGoiY" @blur="cham('tenTaiKhoan')" />
-              <p v-if="!isEdit && maPreview" class="field-hint" style="font-size: 12px; color: #64748b; margin-top: 4px;">
-                Mã nhân viên (tự động tạo): <b style="color: #4f46e5;">{{ maPreview }}</b>
-              </p>
               <p v-if="hienLoi('tenTaiKhoan', loiTen)" class="input-error">{{ loiTen }}</p>
             </div>
 
@@ -1566,5 +1574,13 @@ onMounted(async () => {
   font-size: 13.5px;
   font-weight: 600;
   color: #1e293b;
+}
+
+.form-input:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+  -webkit-text-fill-color: #94a3b8;
+  opacity: 1;
 }
 </style>

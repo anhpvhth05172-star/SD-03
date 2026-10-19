@@ -561,6 +561,41 @@ class HoaDonValidationTest {
     }
 
     @Test
+    void taoDonTrangThaiGiaoHangThatBai_BiTuChoi() {
+        chuanBi(spct(true, true));
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        req.setTrangThai("Giao hàng thất bại");
+
+        assertThatThrownBy(() -> service.create(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Trạng thái khởi tạo không hợp lệ");
+
+        verify(hoaDonRepository, never()).save(any(HoaDon.class));
+    }
+
+    @Test
+    void taoDonTrangThaiDangGiaoHang_BiTuChoi() {
+        chuanBi(spct(true, true));
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        req.setTrangThai("Đang giao hàng");
+
+        assertThatThrownBy(() -> service.create(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Trạng thái khởi tạo không hợp lệ");
+    }
+
+    @Test
+    void taoDonTrangThaiDaHoanThanh_VanTaoDuoc() {
+        chuanBi(spct(true, true));
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        req.setTrangThai("Đã hoàn thành");
+
+        HoaDonDTO dto = service.create(req);
+
+        assertThat(dto.getId()).isEqualTo(HD_ID);
+    }
+
+    @Test
     void taiQuayKhongDiaChi_TaoDuoc() {
         chuanBi(spct(true, true));
         HoaDonRequest req = yeuCau(new BigDecimal("500000"));
