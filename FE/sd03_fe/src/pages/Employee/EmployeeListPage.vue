@@ -1,8 +1,16 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { deleteEmployee, getEmployee, getEmployeeFormData, listEmployees, updateEmployeeStatus } from '@/api/employee'
-import { exportCsv, fetchAllPages } from '@/utils/export'
+import {
+  deleteEmployee,
+  getEmployee,
+  getEmployeeFormData,
+  importEmployeesConfirm,
+  listEmployees,
+  sendEmployeesBulkEmail,
+  updateEmployeeStatus,
+} from '@/api/employee'
+import { exportExcel, fetchAllPages } from '@/utils/export'
 import { takeFlashWithMeta } from '@/utils/flash'
 import { avatarColor, formatDate, formatDateTime, initialsOf } from '@/utils/format'
 import { getAvatarSrc, onAvatarError } from '@/utils/avatar'
@@ -99,26 +107,58 @@ const gioiTinhLabel = (value) => {
   return value || '—'
 }
 
+const ngaySinhChu = (value) => {
+  if (!value) return ''
+  const s = String(value)
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+  return s
+}
+
+const gioiTinhNhap = (value) => {
+  if (value === 'NAM' || value === 'Nam') return 'Nam'
+  if (value === 'NU' || value === 'Nu' || value === 'Nữ') return 'Nữ'
+  if (value === 'KHAC' || value === 'Khác') return 'Khác'
+  return ''
+}
+
+// Tiêu đề cột phải KHỚP CHÍNH XÁC mẫu import của backend (NhanVienImportService.TIEU_DE)
+// để file xuất → chỉnh sửa → import lại đọc đúng từng cột.
+const TIEU_DE_IMPORT_NHAN_VIEN = [
+  'Mã nhân viên (trống = tự sinh)',
+  'Họ và tên *',
+  'Email',
+  'Số điện thoại',
+  'Giới tính (Nam / Nữ / Khác)',
+  'Ngày sinh (dd/MM/yyyy)',
+  'Vai trò (ADMIN / STAFF)',
+  'Tỉnh/Thành phố',
+  'Xã/Phường/Thị trấn',
+  'Địa chỉ cụ thể',
+]
+
 const exportFile = async () => {
   const params = buildParams()
   if (!params) return
   exporting.value = true
   try {
     const all = await fetchAllPages(listEmployees, params)
-    exportCsv(
-      'danh-sach-nhan-vien.csv',
-      ['STT', 'Mã NV', 'Họ tên', 'Email', 'Giới tính', 'Số điện thoại', 'Địa chỉ', 'Vai trò', 'Trạng thái'],
-      all.map((r, i) => [
-        i + 1,
-        r.maNhanVien,
-        r.tenTaiKhoan,
+    await exportExcel(
+      'danh-sach-nhan-vien.xlsx',
+      TIEU_DE_IMPORT_NHAN_VIEN,
+      all.map((r) => [
+        r.maNhanVien || '',
+        r.tenTaiKhoan || '',
         r.email || '',
-        gioiTinhLabel(r.gioiTinh),
-        r.soDienThoai || '',
-        formatEmployeeAddress(r),
-        r.tenVaiTro || '',
-        r.trangThai ? 'Hoạt động' : 'Đã khóa',
+        String(r.soDienThoai || ''),
+        gioiTinhNhap(r.gioiTinh),
+        ngaySinhChu(r.ngaySinh),
+        r.maVaiTro || r.tenVaiTro || '',
+        r.queQuan || '',
+        r.phuong || '',
+        r.diaChiCuThe || '',
       ]),
+      { sheetName: 'Danh sách nhân viên' }
     )
     notifySuccess('Đã xuất danh sách nhân viên thành công!')
   } catch (e) {
@@ -138,6 +178,213 @@ const pageList = computed(() => {
   for (let i = start; i <= end; i++) arr.push(i)
   return arr
 })
+
+// ===== Chọn nhân viên bằng checkbox =====
+const selectedIds = ref([])
+
+const isSelected = (id) => selectedIds.value.includes(id)
+
+const toggleSelect = (id) => {
+  selectedIds.value = isSelected(id)
+    ? selectedIds.value.filter((x) => x !== id)
+    : [...selectedIds.value, id]
+}
+
+const allPageSelected = computed(
+  () => rows.value.length > 0 && rows.value.every((r) => selectedIds.value.includes(r.id)),
+)
+
+const toggleSelectAllPage = () => {
+  const pageIds = rows.value.map((r) => r.id)
+  if (allPageSelected.value) {
+    selectedIds.value = selectedIds.value.filter((id) => !pageIds.includes(id))
+  } else {
+    selectedIds.value = [...new Set([...selectedIds.value, ...pageIds])]
+  }
+}
+
+const selectedRowsKnown = computed(() => rows.value.filter((r) => selectedIds.value.includes(r.id)))
+
+// ===== Gửi email hàng loạt =====
+const showEmailModal = ref(false)
+const emailForm = ref({ tieuDe: '', noiDung: '' })
+const emailSending = ref(false)
+const emailResult = ref(null)
+
+const openEmailModal = () => {
+  if (selectedIds.value.length === 0) {
+    notifyWarning('Vui lòng chọn ít nhất một nhân viên')
+    return
+  }
+  emailResult.value = null
+  showEmailModal.value = true
+}
+
+const sendBulkEmail = async () => {
+  const tieuDe = emailForm.value.tieuDe.trim()
+  const noiDung = emailForm.value.noiDung.trim()
+  if (!tieuDe) {
+    notifyWarning('Vui lòng nhập tiêu đề email')
+    return
+  }
+  if (!noiDung) {
+    notifyWarning('Vui lòng nhập nội dung email')
+    return
+  }
+  const soLuong = selectedIds.value.length
+  const ok = await notifyConfirm(
+    'Xác nhận gửi email',
+    `Gửi email "${tieuDe}" tới ${soLuong} nhân viên đã chọn?`,
+    'Gửi email',
+    'Hủy bỏ',
+  )
+  if (!ok) return
+
+  emailSending.value = true
+  try {
+    const res = await sendEmployeesBulkEmail({
+      ids: [...selectedIds.value],
+      tieuDe,
+      noiDung,
+    })
+    emailResult.value = res
+    if (res.guiThanhCong > 0) {
+      notifySuccess(`Đã gửi thành công ${res.guiThanhCong}/${res.tongYeuCau} email`)
+    } else {
+      notifyWarning('Không có email nào được gửi thành công')
+    }
+  } catch (e) {
+    notifyError('Gửi email thất bại', e.message)
+  } finally {
+    emailSending.value = false
+  }
+}
+
+// ===== Import nhân viên từ Excel =====
+// Chỉ chọn/kéo thả 1 tệp rồi Xác nhận nhập — không qua bước trung gian.
+// Mỗi lần xác nhận gửi chính tệp đang chọn lên backend để đọc lại từ đầu,
+// nên đổi tệp hoặc sửa tệp rồi chọn lại luôn lấy dữ liệu mới nhất.
+const showImportModal = ref(false)
+const importFile = ref(null)
+const importResult = ref(null)
+const importLoading = ref(false)
+const importDragging = ref(false)
+const importFileInput = ref(null)
+
+const IMPORT_ACCEPT = '.xlsx,.xls'
+
+const formatFileSize = (bytes) => {
+  if (!Number.isFinite(bytes)) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+}
+
+const openImportModal = () => {
+  importFile.value = null
+  importResult.value = null
+  importLoading.value = false
+  importDragging.value = false
+  showImportModal.value = true
+}
+
+const closeImportModal = () => {
+  if (importLoading.value) return
+  showImportModal.value = false
+  importFile.value = null
+  importResult.value = null
+  if (importFileInput.value) importFileInput.value.value = ''
+}
+
+const chonFileImport = (f) => {
+  if (!f) return
+  if (!/\.(xlsx|xls)$/i.test(f.name)) {
+    notifyWarning('Sai định dạng tệp', 'Vui lòng chọn tệp Excel (.xlsx hoặc .xls)')
+    return
+  }
+  importFile.value = f
+  importResult.value = null
+}
+
+const onImportFileChange = (e) => {
+  const f = e.target.files && e.target.files.length ? e.target.files[0] : null
+  // Xóa giá trị input ngay: sau khi người dùng sửa tệp rồi chọn lại CÙNG tên tệp,
+  // trình duyệt vẫn phát sinh change và ta nhận được phiên bản mới nhất của tệp.
+  e.target.value = ''
+  chonFileImport(f)
+}
+
+const openImportPicker = () => {
+  if (importLoading.value || !importFileInput.value) return
+  importFileInput.value.click()
+}
+
+const onImportDragOver = (e) => {
+  e.preventDefault()
+  if (!importLoading.value) importDragging.value = true
+}
+
+const onImportDragLeave = () => {
+  importDragging.value = false
+}
+
+const onImportDrop = (e) => {
+  e.preventDefault()
+  importDragging.value = false
+  if (importLoading.value) return
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length
+    ? e.dataTransfer.files[0]
+    : null
+  chonFileImport(f)
+}
+
+const clearImportFile = () => {
+  if (importLoading.value) return
+  importFile.value = null
+  importResult.value = null
+  if (importFileInput.value) importFileInput.value.value = ''
+}
+
+const confirmImport = async () => {
+  if (importLoading.value) return
+  if (!importFile.value) {
+    notifyWarning('Chưa chọn tệp', 'Vui lòng chọn tệp Excel trước khi xác nhận nhập')
+    return
+  }
+
+  importLoading.value = true
+  try {
+    // Gửi đúng tệp đang chọn — backend đọc lại toàn bộ nội dung hiện tại của tệp
+    const ketQua = await importEmployeesConfirm(importFile.value)
+    importResult.value = ketQua
+
+    const them = ketQua.themThanhCong || 0
+    const capNhat = ketQua.capNhatThanhCong || 0
+    const loi = ketQua.thatBai || 0
+
+    // Làm mới danh sách theo đúng bộ lọc / phân trang đang áp dụng
+    await load()
+
+    if (them + capNhat === 0 && loi > 0) {
+      notifyError('Nhập thất bại', `Không có dòng nào được lưu. ${loi} dòng lỗi — xem chi tiết trong hộp thoại.`)
+      return // giữ modal + tệp để người dùng sửa tệp và thử lại
+    }
+    if (loi > 0) {
+      notifyWarning('Nhập hoàn tất (có dòng lỗi)', `${them} thêm mới, ${capNhat} cập nhật, ${loi} dòng lỗi không được lưu`)
+      return // giữ modal hiển thị chi tiết lỗi, tệp vẫn còn để thử lại
+    }
+    notifySuccess('Nhập nhân viên thành công', `${them} thêm mới, ${capNhat} cập nhật`)
+    showImportModal.value = false
+    importFile.value = null
+    importResult.value = null
+    if (importFileInput.value) importFileInput.value.value = ''
+  } catch (e) {
+    // Lỗi API / đọc tệp: giữ nguyên modal và tệp đã chọn để thử lại
+    notifyError('Nhập thất bại', e.message)
+  } finally {
+    importLoading.value = false
+  }
+}
 
 const openDetail = async (row) => {
   try {
@@ -294,6 +541,30 @@ onMounted(async () => {
           {{ exporting ? 'Đang xuất...' : 'Xuất Excel' }}
         </button>
 
+        <!-- Nút Nhập Excel -->
+        <button class="btn-action-outline" type="button" @click="openImportModal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          Nhập Excel
+        </button>
+
+        <!-- Nút Gửi email hàng loạt -->
+        <button
+          class="btn-action-outline"
+          type="button"
+          :disabled="selectedIds.length === 0"
+          @click="openEmailModal"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+            <polyline points="22,6 12,13 2,6"></polyline>
+          </svg>
+          Gửi email{{ selectedIds.length ? ` (${selectedIds.length})` : '' }}
+        </button>
+
         <!-- Nút Thêm nhân viên -->
         <button class="btn-action-primary" type="button" @click="router.push('/nhan-vien/them')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -323,6 +594,15 @@ onMounted(async () => {
         <table class="employee-table">
           <thead>
             <tr>
+              <th style="width: 40px; text-align: center;" title="Chọn tất cả nhân viên trong trang">
+                <input
+                  type="checkbox"
+                  class="row-check"
+                  :checked="allPageSelected"
+                  :disabled="loading || rows.length === 0"
+                  @change="toggleSelectAllPage"
+                />
+              </th>
               <th style="width: 45px;">STT</th>
               <th style="width: 60px; text-align: center;">Ảnh</th>
               <th style="width: 105px;">Mã NV</th>
@@ -338,13 +618,21 @@ onMounted(async () => {
           </thead>
           <tbody>
             <tr v-if="loading">
-              <td colspan="11" class="text-center py-5 text-muted">Đang tải dữ liệu...</td>
+              <td colspan="12" class="text-center py-5 text-muted">Đang tải dữ liệu...</td>
             </tr>
             <tr v-else-if="rows.length === 0">
-              <td colspan="11" class="text-center py-5 text-muted">Không tìm thấy nhân viên nào</td>
+              <td colspan="12" class="text-center py-5 text-muted">Không tìm thấy nhân viên nào</td>
             </tr>
             <template v-else>
               <tr v-for="(row, index) in rows" :key="row.id">
+                <td class="text-center">
+                  <input
+                    type="checkbox"
+                    class="row-check"
+                    :checked="isSelected(row.id)"
+                    @change="toggleSelect(row.id)"
+                  />
+                </td>
                 <td class="cell-stt">{{ (page * size) + index + 1 }}</td>
                 <td class="text-center">
                   <div class="employee-avatar has-img">
@@ -573,6 +861,187 @@ onMounted(async () => {
           </button>
           <button class="btn-profile-close" type="button" @click="detailData = null">
             Đóng
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: NHẬP NHÂN VIÊN TỪ EXCEL -->
+    <div v-if="showImportModal" class="action-modal-overlay" @click.self="closeImportModal">
+      <div class="action-modal modal-import">
+        <div class="action-modal-head">
+          <h3><i class="bi bi-file-earmark-excel"></i> Nhập nhân viên từ Excel</h3>
+          <button class="action-modal-x" type="button" @click="closeImportModal">×</button>
+        </div>
+
+        <div class="action-modal-body">
+          <p class="action-modal-note">
+            Chọn tệp <b>.xlsx / .xls</b> theo đúng mẫu rồi bấm <b>Xác nhận nhập</b>.
+            Mã nhân viên đã tồn tại sẽ được cập nhật theo tệp, mã để trống sẽ tự sinh,
+            nhân viên không có trong tệp sẽ <b>không</b> bị xóa. Dòng lỗi được liệt kê rõ ràng, không âm thầm bỏ qua.
+          </p>
+
+          <input
+            ref="importFileInput"
+            type="file"
+            :accept="IMPORT_ACCEPT"
+            hidden
+            @change="onImportFileChange"
+          />
+
+          <div
+            class="import-dropzone"
+            :class="{ 'is-dragover': importDragging, 'is-disabled': importLoading }"
+            role="button"
+            tabindex="0"
+            :aria-disabled="importLoading"
+            @click="openImportPicker"
+            @keydown.enter.prevent="openImportPicker"
+            @dragover="onImportDragOver"
+            @dragleave="onImportDragLeave"
+            @drop="onImportDrop"
+          >
+            <template v-if="!importFile">
+              <i class="bi bi-cloud-arrow-up"></i>
+              <p class="import-dropzone-title">Kéo thả tệp Excel vào đây</p>
+              <p class="import-dropzone-hint">hoặc nhấn để chọn tệp từ máy tính — chấp nhận .xlsx, .xls</p>
+            </template>
+
+            <template v-else>
+              <div class="import-file-card">
+                <i class="bi bi-file-earmark-excel"></i>
+                <div class="import-file-info">
+                  <span class="import-file-current" :title="importFile.name">{{ importFile.name }}</span>
+                  <span class="import-file-size">{{ formatFileSize(importFile.size) }}</span>
+                </div>
+                <div class="import-file-actions">
+                  <button
+                    class="btn-action-outline import-file-btn"
+                    type="button"
+                    :disabled="importLoading"
+                    @click.stop="openImportPicker"
+                  >
+                    <i class="bi bi-arrow-repeat"></i> Đổi tệp
+                  </button>
+                  <button
+                    class="btn-action-outline import-file-btn is-danger"
+                    type="button"
+                    :disabled="importLoading"
+                    @click.stop="clearImportFile"
+                  >
+                    <i class="bi bi-trash"></i> Xóa
+                  </button>
+                </div>
+              </div>
+              <p class="import-dropzone-hint">Nhấn để chọn tệp khác, hoặc kéo tệp mới vào để thay thế</p>
+            </template>
+          </div>
+
+          <div v-if="importLoading" class="import-processing">
+            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            Đang nhập dữ liệu từ tệp, vui lòng chờ...
+          </div>
+
+          <div
+            v-if="importResult"
+            class="import-result"
+            :class="{ 'is-failed': importResult.thatBai > 0 && !(importResult.themThanhCong + importResult.capNhatThanhCong) }"
+          >
+            <p>
+              Nhập hoàn tất: <b>{{ importResult.themThanhCong }}</b> thêm mới,
+              <b>{{ importResult.capNhatThanhCong }}</b> cập nhật,
+              <b :class="{ 'is-bad': importResult.thatBai > 0 }">{{ importResult.thatBai }}</b> thất bại.
+            </p>
+            <ul v-if="importResult.chiTietLoi && importResult.chiTietLoi.length">
+              <li v-for="(loi, i) in importResult.chiTietLoi" :key="i">{{ loi }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="action-modal-foot">
+          <button class="btn-action-outline" type="button" :disabled="importLoading" @click="closeImportModal">
+            {{ importResult ? 'Đóng' : 'Hủy' }}
+          </button>
+          <button
+            class="btn-action-primary"
+            type="button"
+            :disabled="!importFile || importLoading"
+            @click="confirmImport"
+          >
+            {{ importLoading ? 'Đang nhập...' : 'Xác nhận nhập' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: GỬI EMAIL HÀNG LOẠT -->
+    <div v-if="showEmailModal" class="action-modal-overlay" @click.self="showEmailModal = false">
+      <div class="action-modal modal-email">
+        <div class="action-modal-head">
+          <h3><i class="bi bi-envelope-paper"></i> Gửi email hàng loạt</h3>
+          <button class="action-modal-x" type="button" @click="showEmailModal = false">×</button>
+        </div>
+
+        <div class="action-modal-body">
+          <p class="action-modal-note">
+            Email sẽ được gửi tới <b>{{ selectedIds.length }}</b> nhân viên đã chọn.
+            Nhân viên không có email hợp lệ sẽ bị bỏ qua và báo cáo chi tiết.
+          </p>
+
+          <div v-if="selectedRowsKnown.length" class="email-chips">
+            <span v-for="r in selectedRowsKnown" :key="r.id" class="email-chip">
+              {{ r.tenTaiKhoan }} <i>{{ r.email || 'không có email' }}</i>
+            </span>
+            <span v-if="selectedIds.length > selectedRowsKnown.length" class="email-chip is-more">
+              +{{ selectedIds.length - selectedRowsKnown.length }} nhân viên khác
+            </span>
+          </div>
+
+          <div class="action-field">
+            <label>Tiêu đề <b class="req">*</b></label>
+            <input
+              v-model="emailForm.tieuDe"
+              type="text"
+              maxlength="200"
+              placeholder="Thông báo từ PolyShoes"
+            />
+          </div>
+
+          <div class="action-field">
+            <label>Nội dung <b class="req">*</b></label>
+            <textarea
+              v-model="emailForm.noiDung"
+              rows="6"
+              maxlength="5000"
+              placeholder="Nhập nội dung gửi tới nhân viên..."
+            ></textarea>
+          </div>
+
+          <div v-if="emailResult" class="import-result">
+            <p>
+              Đã gửi thành công <b>{{ emailResult.guiThanhCong }}</b>/<b>{{ emailResult.tongYeuCau }}</b>
+              email<template v-if="emailResult.thatBai > 0">, {{ emailResult.thatBai }} bị bỏ qua/thất bại</template>.
+            </p>
+            <ul v-if="emailResult.boQua && emailResult.boQua.length">
+              <li v-for="(b, i) in emailResult.boQua" :key="i">
+                {{ b.tenTaiKhoan || b.maNhanVien || ('#' + b.id) }}: {{ b.lyDo }}
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="action-modal-foot">
+          <button class="btn-action-outline" type="button" @click="showEmailModal = false">
+            {{ emailResult ? 'Đóng' : 'Hủy' }}
+          </button>
+          <button
+            v-if="!emailResult"
+            class="btn-action-primary"
+            type="button"
+            :disabled="emailSending"
+            @click="sendBulkEmail"
+          >
+            {{ emailSending ? 'Đang gửi...' : `Gửi ${selectedIds.length} email` }}
           </button>
         </div>
       </div>
@@ -1394,5 +1863,338 @@ onMounted(async () => {
 .btn-profile-close:hover {
   background: #e2e8f0;
   color: #0f172a;
+}
+
+/* ===== Checkbox chọn dòng ===== */
+.row-check {
+  width: 16px;
+  height: 16px;
+  accent-color: #e11d48;
+  cursor: pointer;
+}
+
+.row-check:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ===== Modal hành động (import / email hàng loạt) ===== */
+.action-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.action-modal {
+  background: #fff;
+  border-radius: 16px;
+  width: min(940px, 100%);
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3);
+}
+
+.modal-email {
+  width: min(680px, 100%);
+}
+
+.action-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.action-modal-head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-modal-head h3 i {
+  color: #e11d48;
+}
+
+.action-modal-x {
+  border: 0;
+  background: #f1f5f9;
+  color: #64748b;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.action-modal-x:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.action-modal-body {
+  padding: 18px 20px;
+  overflow-y: auto;
+}
+
+.action-modal-note {
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.action-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+/* Khu vực chọn / kéo thả tệp import */
+.import-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 30px 18px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.import-dropzone:hover,
+.import-dropzone.is-dragover {
+  border-color: #f43f5e;
+  background: #fff1f2;
+}
+
+.import-dropzone:focus-visible {
+  outline: 2px solid #f43f5e;
+  outline-offset: 2px;
+}
+
+.import-dropzone.is-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.import-dropzone > i {
+  font-size: 34px;
+  color: #e11d48;
+}
+
+.import-dropzone-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.import-dropzone-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.import-file-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(560px, 100%);
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.import-file-card > i {
+  font-size: 28px;
+  color: #e11d48;
+}
+
+.import-file-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.import-file-current {
+  max-width: 100%;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-file-size {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.import-file-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.import-file-actions .import-file-btn {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+
+.import-file-actions .import-file-btn.is-danger:hover {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.import-processing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13.5px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.import-processing .spinner-border {
+  color: #f43f5e;
+}
+
+.import-result {
+  margin-top: 14px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13.5px;
+  color: #166534;
+}
+
+.import-result p {
+  margin: 0;
+}
+
+.import-result .is-bad {
+  color: #dc2626;
+}
+
+.import-result ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.import-result li {
+  margin-bottom: 3px;
+}
+
+.import-result.is-failed {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.email-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.email-chip {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  color: #334155;
+  max-width: 100%;
+}
+
+.email-chip i {
+  font-style: normal;
+  color: #64748b;
+}
+
+.email-chip.is-more {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+  font-weight: 600;
+}
+
+.action-field {
+  margin-bottom: 14px;
+}
+
+.action-field label {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.action-field .req {
+  color: #dc2626;
+}
+
+.action-field input,
+.action-field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #0f172a;
+  font-family: inherit;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.action-field input:focus,
+.action-field textarea:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14);
+}
+
+.action-field textarea {
+  resize: vertical;
 }
 </style>

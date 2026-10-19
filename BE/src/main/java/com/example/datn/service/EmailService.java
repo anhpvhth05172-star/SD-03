@@ -143,6 +143,89 @@ public class EmailService {
         }
     }
 
+    /**
+     * Gửi email nội dung tùy chỉnh (tiêu đề + nội dung do quản trị viên soạn) tới một địa chỉ.
+     *
+     * @return true nếu nhà cung cấp mail xác nhận đã tiếp nhận email; false nếu gửi thất bại.
+     */
+    public boolean guiMailCustom(String toEmail, String tieuDe, String noiDung) {
+        if (toEmail == null || toEmail.trim().isEmpty()) {
+            log.warn("Không thể gửi email: địa chỉ người nhận trống");
+            return false;
+        }
+        if (tieuDe == null || tieuDe.trim().isEmpty() || noiDung == null || noiDung.trim().isEmpty()) {
+            log.warn("Không thể gửi email: tiêu đề hoặc nội dung trống");
+            return false;
+        }
+
+        String tu = diaChiNguoiGui();
+        if (tu == null) {
+            log.error(
+                "Không gửi email tới {}: chưa cấu hình người gửi (spring.mail.from / MAIL_USERNAME)",
+                toEmail
+            );
+            return false;
+        }
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(tu, "PolyShoes Shop");
+            helper.setTo(toEmail.trim());
+            helper.setSubject(tieuDe.trim());
+            helper.setText(buildCustomTemplate(noiDung.trim()), true);
+
+            mailSender.send(message);
+            log.info("Nhà cung cấp mail đã chấp nhận email hàng loạt gửi tới {}", toEmail);
+            return true;
+        } catch (Exception e) {
+            log.error("Gửi email hàng loạt tới {} thất bại: {}", toEmail, e.toString(), e);
+            return false;
+        }
+    }
+
+    private static String escapeHtml(String s) {
+        return s
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&#39;");
+    }
+
+    private String buildCustomTemplate(String noiDung) {
+        String noiDungHtml = escapeHtml(noiDung).replace("\r\n", "\n").replace("\n", "<br/>");
+        return """
+            <!DOCTYPE html>
+            <html lang="vi">
+            <head>
+              <meta charset="UTF-8">
+              <style>
+                body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px; color: #333; }
+                .email-container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #e1e8ed; }
+                .email-header { background: linear-gradient(135deg, #e11d48, #f43f5e); color: #ffffff; padding: 24px; text-align: center; }
+                .email-header h1 { margin: 0; font-size: 22px; font-weight: 700; }
+                .email-body { padding: 28px 26px; line-height: 1.65; font-size: 15px; }
+                .email-footer { background: #f8fafc; padding: 16px 24px; text-align: center; font-size: 12.5px; color: #64748b; border-top: 1px solid #e2e8f0; }
+              </style>
+            </head>
+            <body>
+              <div class="email-container">
+                <div class="email-header">
+                  <h1>PolyShoes Shop</h1>
+                </div>
+                <div class="email-body">%s</div>
+                <div class="email-footer">
+                  <p>&copy; 2026 PolyShoes. Mọi quyền được bảo lưu.</p>
+                  <p>Email này được gửi tự động từ hệ thống quản trị PolyShoes.</p>
+                </div>
+              </div>
+            </body>
+            </html>
+            """.formatted(noiDungHtml);
+    }
+
     private String buildEmployeeWelcomeTemplate(
         String tenNhanVien,
         String maNhanVien,

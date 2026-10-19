@@ -32,4 +32,15 @@ public class SanPhamChiTietResponse {
     private String trangThaiTonKho;
     private String img;
     private LocalDateTime ngayTao;
+
+    // Thuộc tính cấp sản phẩm — dùng để xuất file Excel biến thể
+    // theo đúng cột của tệp import sản phẩm (round-trip: xuất → sửa → nhập lại).
+    private String tenThuongHieu;
+    private String tenLoaiGiay;
+    private String chatLieu;
+    private String kieuDang;
+    private String xuatXu;
+    private String doiTuong;
+    private String tinhNang;
+    private String moTa;
 }

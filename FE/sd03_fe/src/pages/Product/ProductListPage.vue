@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
+import { exportExcel } from '@/utils/export'
 
 const router = useRouter()
 const API_BASE = 'http://localhost:8080/api/v1'
@@ -344,166 +345,27 @@ const exportToExcel = async () => {
       return
     }
 
-    let xml = `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:html="http://www.w3.org/TR/REC-html40">
- <Styles>
-  <Style ss:ID="Default" ss:Name="Normal">
-   <Alignment ss:Vertical="Center"/>
-   <Borders/>
-   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#1E293B"/>
-   <Interior/>
-   <NumberFormat/>
-   <Protection/>
-  </Style>
-  <Style ss:ID="Header">
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-   </Borders>
-   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#FFFFFF" ss:Bold="1"/>
-   <Interior ss:Color="#166534" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="RowEven">
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-   <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="RowOdd">
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-   <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="CenterCell">
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-  </Style>
-  <Style ss:ID="ActiveStatus">
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#059669" ss:Bold="1"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-  </Style>
-  <Style ss:ID="PriceCell">
-    <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
-    <Font ss:FontName="Arial" ss:Size="10" ss:Color="#0F172A" ss:Bold="1"/>
-    <NumberFormat ss:Format="#,##0"/>
-    <Borders>
-     <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-     <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-     <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-     <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    </Borders>
-  </Style>
-  <Style ss:ID="InactiveStatus">
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#DC2626" ss:Bold="1"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-  </Style>
- </Styles>
- <Worksheet ss:Name="Danh sách sản phẩm">
-  <Table ss:DefaultRowHeight="24">
-   <Column ss:Width="40"/>
-   <Column ss:Width="110"/>
-   <Column ss:Width="230"/>
-   <Column ss:Width="130"/>
-   <Column ss:Width="130"/>
-   <Column ss:Width="100"/>
-   <Column ss:Width="140"/>
-   <Column ss:Width="90"/>
-   <Column ss:Width="160"/>
-   <Column ss:Width="130"/>
-   <Row ss:Height="28">
-    <Cell ss:StyleID="Header"><Data ss:Type="String">STT</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Mã sản phẩm</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Tên sản phẩm</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Thương hiệu</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Loại giày</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Số lượng</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Giá bán</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Đối tượng</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Tính năng</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Trạng thái</Data></Cell>
-   </Row>`
-
-    const escapeXml = (str) => {
-      if (!str) return ''
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;')
-    }
-
-    itemsToExport.forEach((item, index) => {
-      const styleId = index % 2 === 0 ? 'RowEven' : 'RowOdd'
-      const statusStyle = item.trangThai !== false ? 'ActiveStatus' : 'InactiveStatus'
-      const statusText = item.trangThai !== false ? 'Kinh doanh' : 'Ngưng kinh doanh'
-      const code = item.maSanPham || `SP0${item.id}`
-
-      xml += `
-   <Row ss:Height="22">
-    <Cell ss:StyleID="CenterCell"><Data ss:Type="Number">${index + 1}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(code)}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tenSanPham)}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tenThuongHieu || '---')}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tenLoaiGiay || '---')}</Data></Cell>
-    <Cell ss:StyleID="CenterCell"><Data ss:Type="Number">${item.soLuong !== undefined ? item.soLuong : 0}</Data></Cell>
-    <Cell ss:StyleID="PriceCell"><Data ss:Type="Number">${item.giaBan || 0}</Data></Cell>
-    <Cell ss:StyleID="CenterCell"><Data ss:Type="String">${escapeXml(item.doiTuong || 'Unisex')}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tinhNang || '')}</Data></Cell>
-    <Cell ss:StyleID="${statusStyle}"><Data ss:Type="String">${statusText}</Data></Cell>
-   </Row>`
-    })
-
-    xml += `
-  </Table>
- </Worksheet>
-</Workbook>`
-
-    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
     const now = new Date()
     const pad = (n) => String(n).padStart(2, '0')
     const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-    link.href = url
-    link.download = `Danh_sach_san_pham_${dateStr}.xls`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
 
+    await exportExcel(
+      `Danh_sach_san_pham_${dateStr}.xlsx`,
+      ['STT', 'Mã sản phẩm', 'Tên sản phẩm', 'Thương hiệu', 'Loại giày', 'Số lượng', 'Giá bán', 'Đối tượng', 'Tính năng', 'Trạng thái'],
+      itemsToExport.map((item, index) => [
+        index + 1,
+        item.maSanPham || `SP0${item.id}`,
+        item.tenSanPham || '',
+        item.tenThuongHieu || '',
+        item.tenLoaiGiay || '',
+        item.soLuong !== undefined ? item.soLuong : 0,
+        item.giaBan || 0,
+        item.doiTuong || 'Unisex',
+        item.tinhNang || '',
+        item.trangThai !== false ? 'Kinh doanh' : 'Ngưng kinh doanh',
+      ]),
+      { sheetName: 'Danh sách sản phẩm' }
+    )
     showToastNotice('Thành công', `Đã xuất ${itemsToExport.length} sản phẩm ra file Excel!`, 'success')
   } catch (err) {
     console.error('Lỗi xuất Excel:', err)
@@ -1111,7 +973,6 @@ onUnmounted(() => {
             <input
               ref="fileInputExcelRef"
               type="file"
-              accept=".xlsx,.xls"
               style="display: none;"
               @change="onFileExcelChange"
             />

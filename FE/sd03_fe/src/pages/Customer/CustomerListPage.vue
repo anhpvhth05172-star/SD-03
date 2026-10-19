@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CustomerAddressModal from '@/components/CustomerAddressModal.vue'
 import { getCustomer, listCustomers, updateCustomerStatus, deleteCustomer } from '@/api/customer'
-import { exportCsv, fetchAllPages } from '@/utils/export'
+import { exportExcel, fetchAllPages } from '@/utils/export'
 import { takeFlashWithMeta } from '@/utils/flash'
 import { avatarColor, formatDate, formatDateTime, formatVnd, initialsOf } from '@/utils/format'
 import { getAvatarSrc, onAvatarError } from '@/utils/avatar'
@@ -110,18 +110,19 @@ const exportFile = async () => {
   exporting.value = true
   try {
     const all = await fetchAllPages(listCustomers, params)
-    exportCsv(
-      'danh-sach-khach-hang.csv',
+    await exportExcel(
+      'danh-sach-khach-hang.xlsx',
       ['STT', 'Mã KH', 'Họ và tên', 'Email', 'Địa chỉ', 'Số điện thoại', 'Trạng thái'],
       all.map((r, i) => [
         i + 1,
-        r.maKhachHang,
-        r.tenKhachHang,
+        r.maKhachHang || '',
+        r.tenKhachHang || '',
         r.email || '',
         formatCustomerAddress(r),
-        r.soDienThoai || '',
+        String(r.soDienThoai || ''),
         r.trangThai ? 'Hoạt động' : 'Đã khóa',
       ]),
+      { sheetName: 'Danh sách khách hàng' }
     )
     notifySuccess('Đã xuất danh sách khách hàng thành công!')
   } catch (e) {

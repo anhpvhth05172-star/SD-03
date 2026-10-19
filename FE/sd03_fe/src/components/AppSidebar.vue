@@ -62,6 +62,16 @@ const menu = [
     adminOnly: true,
   },
   {
+    label: 'Quản lý lịch làm việc',
+    path: '/lich-lam-viec',
+    iconType: 'schedule',
+    adminOnly: true,
+    children: [
+      { label: 'Lịch làm việc', path: '/lich-lam-viec' },
+      { label: 'Lịch ca làm', path: '/lich-ca-lam' },
+    ],
+  },
+  {
     label: 'Quản lý giảm giá',
     path: '/phieu-giam-gia',
     iconType: 'discounts',
@@ -190,6 +200,14 @@ const visibleMenu = computed(() => menu.filter((item) => !item.adminOnly || laAd
                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
                   <line x1="7" y1="7" x2="7.01" y2="7" />
+                </svg>
+
+                <svg v-else-if="item.iconType === 'schedule'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
                 </svg>
               </div>
               <span class="nav-text">{{ item.label }}</span>

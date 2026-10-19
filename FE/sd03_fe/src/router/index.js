@@ -21,13 +21,15 @@ import AttributeCategoryPage from '@/pages/Product/AttributeCategoryPage.vue'
 // Tạm comment trang đăng nhập/đăng ký (không xóa)
 // import LoginPage from '@/pages/Auth/LoginPage.vue'
 // import RegisterPage from '@/pages/Auth/RegisterPage.vue'
-import PlaceholderPage from '@/pages/Common/PlaceholderPage.vue'
 import DiscountForm from '@/pages/Discount/DiscountForm.vue'
 import VoucherForm from '@/pages/Discount/VoucherForm.vue'
 import DiscountFormDetail from '@/pages/Discount/DiscountFormDetail.vue'
 import VoucherFormDetail from '@/pages/Discount/VoucherFormDetail.vue'
 import DiscountFormUpdate from '@/pages/Discount/DiscountFormUpdate.vue'
 import VoucherFormUpdate from '@/pages/Discount/VoucherFormUpdate.vue'
+import StatisticsPage from '@/pages/Statistics/StatisticsPage.vue'
+import WorkSchedulePage from '@/pages/Schedule/WorkSchedulePage.vue'
+import ShiftSchedulePage from '@/pages/Schedule/ShiftSchedulePage.vue'
 
 const routes = [
   // Tạm comment route đăng nhập/đăng ký (không xóa)
@@ -59,7 +61,9 @@ const routes = [
       { path: '/dot-giam-gia/update/:id', component: DiscountFormUpdate, meta: { title: 'Cập nhật đợt giảm giá' } },
       { path: '/dot-giam-gia/edit/:id', redirect: to => `/dot-giam-gia/update/${to.params.id}` },
       { path: '/giam-gia', redirect: '/phieu-giam-gia' },
-      { path: '/thong-ke', component: PlaceholderPage, meta: { title: 'Thống kê', requiresAuth: true } },
+      { path: '/thong-ke', component: StatisticsPage, meta: { title: 'Thống kê', requiresAuth: true } },
+      { path: '/lich-lam-viec', component: WorkSchedulePage, meta: { title: 'Quản lý lịch làm việc', requiresAuth: true } },
+      { path: '/lich-ca-lam', component: ShiftSchedulePage, meta: { title: 'Lịch ca làm', requiresAuth: true } },
       { path: '/ban-hang', name: 'PosSales', component: PosSalesPage, meta: { title: 'Bán hàng tại quầy', requiresAuth: true } },
       { path: '/khach-hang', component: CustomerListPage, meta: { title: 'Quản lý khách hàng', requiresAuth: true } },
       { path: '/khach-hang/them', component: CustomerCreatePage, meta: { title: 'Quản lý khách hàng', requiresAuth: true } },
@@ -116,6 +120,9 @@ router.beforeEach(async (to) => {
 
 router.beforeEach((to) => {
   if (to.path.startsWith('/nhan-vien') && !laAdmin()) {
+    return '/khach-hang'
+  }
+  if ((to.path.startsWith('/lich-lam-viec') || to.path.startsWith('/lich-ca-lam')) && !laAdmin()) {
     return '/khach-hang'
   }
   return true

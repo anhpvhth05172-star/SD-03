@@ -50,6 +50,21 @@ public class SanPhamServiceImpl implements SanPhamService {
     private final ThanGiayRepository thanGiayRepository;
     private final DeGiayRepository deGiayRepository;
 
+    /** Tiêu đề mẫu của tệp import sản phẩm (14 cột, đọc theo đúng thứ tự). */
+    private static final String[] TIEU_DE_MAU_SANPHAM = {
+        "STT", "Tên sản phẩm (*)", "Thương hiệu (*)", "Loại giày (*)",
+        "Chất liệu (*)", "Kiểu dáng (*)", "Xuất xứ (*)", "Đối tượng",
+        "Màu sắc (*)", "Kích cỡ (*)", "Số lượng (*)", "Giá bán (VNĐ) (*)",
+        "Tính năng", "Mô tả"
+    };
+
+    /** Chuỗi chuẩn hóa (không dấu, viết thường) mà mỗi cột tiêu đề phải bắt đầu bằng. */
+    private static final String[] KY_MON_TIEU_DE_SANPHAM = {
+        "stt", "ten san pham", "thuong hieu", "loai giay", "chat lieu",
+        "kieu dang", "xuat xu", "doi tuong", "mau sac", "kich co",
+        "so luong", "gia ban", "tinh nang", "mo ta"
+    };
+
     @Override
     public Page<SanPhamResponse> getAll(int page, int size, String keyword, Long idThuongHieu, Long idLoaiGiay, Long idChatLieu, Long idKieuDang, Long idXuatXu, String doiTuong, Boolean trangThai) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id"));
@@ -562,6 +577,12 @@ public class SanPhamServiceImpl implements SanPhamService {
                 throw new IllegalArgumentException("File Excel không có dữ liệu để import");
             }
 
+            // Hàng tiêu đề phải đúng mẫu 14 cột theo đúng thứ tự — sai/thiếu thì báo rõ
+            // thay vì đọc nhầm dữ liệu theo vị trí cột.
+            com.example.datn.util.ExcelTieuDeUtil.kiemTraTieuDe(
+                sheet, new org.apache.poi.ss.usermodel.DataFormatter(),
+                KY_MON_TIEU_DE_SANPHAM, TIEU_DE_MAU_SANPHAM);
+
             // Group rows by Normalized Product Name
             java.util.Map<String, List<ExcelRowData>> groupedProducts = new java.util.LinkedHashMap<>();
 
@@ -752,6 +773,9 @@ public class SanPhamServiceImpl implements SanPhamService {
             }
 
             return result;
+        } catch (IllegalArgumentException ex) {
+            // Giữ nguyên thông báo lỗi cấu trúc/validate cụ thể cho người dùng
+            throw ex;
         } catch (Exception e) {
             throw new RuntimeException("Lỗi xử lý file Excel: " + e.getMessage(), e);
         }

@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { checkCustomerEmail, createCustomer, getCustomer, suggestCustomerCode, updateCustomer } from '@/api/customer'
 import { layDiaGioi, layPhuongXa, phanTichDiaChiCccd, timTinh } from '@/api/diaGioi'
 import AvatarCard from '@/components/AvatarCard.vue'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import { setFlash } from '@/utils/flash'
 import { hopLeMa, maDeXuat } from '@/utils/maNhanVien'
 import { datVaiTro, layNguoiDung, vaiTroHienTai } from '@/utils/session'
@@ -549,17 +550,16 @@ onMounted(async () => {
           </div>
 
           <div class="form-fields">
-            <div class="field">
+            <div v-if="isEdit" class="field">
               <label class="field-label">Mã khách hàng</label>
               <input
                 v-model="form.maKhachHang"
                 type="text"
                 maxlength="25"
-                placeholder="Để trống sẽ tự sinh theo họ tên"
+                placeholder="Mã khách hàng"
                 @input="maTuDong = false"
                 @blur="cham('maKhachHang')"
               />
-              <p v-if="!isEdit && maPreview" class="field-hint">Mã gợi ý theo họ tên: <b>{{ maPreview }}</b></p>
               <p v-if="hienLoi('maKhachHang', loiMaKhachHang)" class="field-hint is-error">{{ loiMaKhachHang }}</p>
             </div>
 
@@ -645,13 +645,13 @@ onMounted(async () => {
           <div class="form-fields">
             <div class="field">
               <label class="field-label">Tỉnh/Thành phố</label>
-              <select v-model="form.tinhThanhPho" :disabled="diaGioiLoading"
-                @change="cham('tinhThanhPho'); chonTinh($event.target.value)">
-                <option value="">
-                  {{ diaGioiLoading ? 'Đang tải danh sách tỉnh/thành...' : 'Chọn tỉnh/thành phố' }}
-                </option>
-                <option v-for="t in tinhThanhs" :key="t.code" :value="t.ten">{{ t.ten }}</option>
-              </select>
+              <SearchableSelect
+                v-model="form.tinhThanhPho"
+                :options="tinhThanhs.map((t) => ({ value: t.ten, label: t.ten }))"
+                :placeholder="diaGioiLoading ? 'Đang tải danh sách tỉnh/thành...' : 'Chọn tỉnh/thành phố'"
+                :disabled="diaGioiLoading"
+                @update:model-value="(v) => { cham('tinhThanhPho'); chonTinh(v) }"
+              />
               <p v-if="diaGioiError" class="field-hint is-error">
                 {{ diaGioiError }}
                 <button type="button" class="link-retry" @click="napDiaGioi(form.tinhThanhPho, form.phuong)">Thử lại</button>
@@ -661,13 +661,13 @@ onMounted(async () => {
 
             <div class="field">
               <label class="field-label">Phường/Xã</label>
-              <select v-model="form.phuong" :disabled="diaGioiLoading || !form.tinhThanhPho"
-                @change="cham('phuong')">
-                <option value="">
-                  {{ diaGioiLoading ? 'Đang tải...' : form.tinhThanhPho ? 'Chọn phường/xã' : 'Chọn tỉnh trước' }}
-                </option>
-                <option v-for="p in phuongXas" :key="p.code" :value="p.ten">{{ p.ten }}</option>
-              </select>
+              <SearchableSelect
+                v-model="form.phuong"
+                :options="phuongXas.map((p) => ({ value: p.ten, label: p.ten }))"
+                :placeholder="diaGioiLoading ? 'Đang tải...' : form.tinhThanhPho ? 'Chọn phường/xã' : 'Chọn tỉnh trước'"
+                :disabled="diaGioiLoading || !form.tinhThanhPho"
+                @update:model-value="cham('phuong')"
+              />
               <p v-if="hienLoi('phuong', loiPhuong)" class="field-hint is-error">{{ loiPhuong }}</p>
             </div>
 

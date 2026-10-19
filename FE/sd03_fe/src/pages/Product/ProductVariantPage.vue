@@ -3,6 +3,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import QRCode from 'qrcode'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
+import { exportExcel } from '@/utils/export'
 
 const router = useRouter()
 const route = useRoute()
@@ -278,161 +279,38 @@ const exportVariantsToExcel = async () => {
       return
     }
 
-    let xml = `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:html="http://www.w3.org/TR/REC-html40">
- <Styles>
-  <Style ss:ID="Default" ss:Name="Normal">
-   <Alignment ss:Vertical="Center"/>
-   <Borders/>
-   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#1E293B"/>
-   <Interior/>
-   <NumberFormat/>
-   <Protection/>
-  </Style>
-  <Style ss:ID="Header">
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-   </Borders>
-   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#FFFFFF" ss:Bold="1"/>
-   <Interior ss:Color="#166534" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="RowEven">
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-   <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="RowOdd">
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-   <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="CenterCell">
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-  </Style>
-  <Style ss:ID="PriceCell">
-   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
-   <NumberFormat ss:Format="#,##0\ &quot;₫&quot;"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-  </Style>
-  <Style ss:ID="ActiveStatus">
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#059669" ss:Bold="1"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-  </Style>
-  <Style ss:ID="InactiveStatus">
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#DC2626" ss:Bold="1"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-  </Style>
- </Styles>
- <Worksheet ss:Name="Danh sách biến thể">
-  <Table ss:DefaultRowHeight="24">
-   <Column ss:Width="40"/>
-   <Column ss:Width="110"/>
-   <Column ss:Width="130"/>
-   <Column ss:Width="200"/>
-   <Column ss:Width="110"/>
-   <Column ss:Width="80"/>
-   <Column ss:Width="80"/>
-   <Column ss:Width="130"/>
-   <Column ss:Width="130"/>
-   <Row ss:Height="28">
-    <Cell ss:StyleID="Header"><Data ss:Type="String">STT</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Mã SP</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Mã CTSP</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Tên sản phẩm</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Màu sắc</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Kích cỡ</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Số lượng tồn</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Giá bán</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Trạng thái</Data></Cell>
-   </Row>`
-
-    const escapeXml = (str) => {
-      if (!str) return ''
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;')
-    }
-
-    itemsToExport.forEach((item, index) => {
-      const styleId = index % 2 === 0 ? 'RowEven' : 'RowOdd'
-      const statusStyle = item.trangThai !== false ? 'ActiveStatus' : 'InactiveStatus'
-      const statusText = item.trangThai !== false ? 'Kinh doanh' : 'Ngưng kinh doanh'
-
-      xml += `
-   <Row ss:Height="22">
-    <Cell ss:StyleID="CenterCell"><Data ss:Type="Number">${index + 1}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.maSp || '')}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.maCtsp || `SPCT0${item.id}`)}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tenSp || selectedProductName.value || '')}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.color || '')}</Data></Cell>
-    <Cell ss:StyleID="CenterCell"><Data ss:Type="String">${escapeXml(item.size || '')}</Data></Cell>
-    <Cell ss:StyleID="CenterCell"><Data ss:Type="Number">${item.stock !== undefined ? item.stock : 0}</Data></Cell>
-    <Cell ss:StyleID="PriceCell"><Data ss:Type="Number">${item.price || 0}</Data></Cell>
-    <Cell ss:StyleID="${statusStyle}"><Data ss:Type="String">${statusText}</Data></Cell>
-   </Row>`
-    })
-
-    xml += `
-  </Table>
- </Worksheet>
-</Workbook>`
-
-    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
     const now = new Date()
     const pad = (n) => String(n).padStart(2, '0')
     const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-    link.href = url
-    link.download = `Danh_sach_bien_the_${dateStr}.xls`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
 
+    await exportExcel(
+      `Danh_sach_bien_the_${dateStr}.xlsx`,
+      [
+        'STT', 'Tên sản phẩm', 'Thương hiệu', 'Loại giày', 'Chất liệu', 'Kiểu dáng', 'Xuất xứ',
+        'Đối tượng', 'Màu sắc', 'Kích cỡ', 'Số lượng', 'Giá bán', 'Tính năng', 'Mô tả',
+        'Mã SP', 'Mã CTSP', 'Trạng thái',
+      ],
+      itemsToExport.map((item, index) => [
+        index + 1,
+        item.tenSp || selectedProductName.value || '',
+        item.tenThuongHieu || '',
+        item.tenLoaiGiay || '',
+        item.chatLieu || '',
+        item.kieuDang || '',
+        item.xuatXu || '',
+        item.doiTuong || '',
+        item.color || '',
+        item.size || '',
+        item.stock !== undefined ? item.stock : 0,
+        item.price || 0,
+        item.tinhNang || '',
+        item.moTa || '',
+        item.maSp || '',
+        item.maCtsp || '',
+        item.trangThai !== false ? 'Kinh doanh' : 'Ngưng kinh doanh',
+      ]),
+      { sheetName: 'Danh sách biến thể' }
+    )
     showToastNotice('Thành công', `Đã xuất ${itemsToExport.length} biến thể ra file Excel!`, 'success')
   } catch (err) {
     console.error('Lỗi xuất Excel:', err)

@@ -1,10 +1,15 @@
 package com.example.datn.controller;
 
 import com.example.datn.config.QuyenGuard;
+import com.example.datn.dto.NhanVien.GuiEmailHangLoatRequest;
+import com.example.datn.dto.NhanVien.GuiEmailHangLoatResponse;
 import com.example.datn.dto.NhanVien.NhanVienDTO;
 import com.example.datn.dto.NhanVien.NhanVienFormDataResponse;
 import com.example.datn.dto.NhanVien.NhanVienRequest;
+import com.example.datn.dto.NhanVien.NhanVienImportPreviewResponse;
+import com.example.datn.dto.NhanVien.NhanVienImportKetQuaResponse;
 import com.example.datn.dto.Common.PageResponse;
+import com.example.datn.service.NhanVienImportService;
 import com.example.datn.service.NhanVienService;
 import java.time.LocalDate;
 import java.util.Map;
@@ -29,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class NhanVienController {
 
     private final NhanVienService nhanVienService;
+    private final NhanVienImportService nhanVienImportService;
     private final QuyenGuard quyenGuard;
 
     @GetMapping
@@ -87,6 +93,46 @@ public class NhanVienController {
     ) {
         quyenGuard.canQuanLyNhanVien(vaiTro);
         return ResponseEntity.status(HttpStatus.CREATED).body(nhanVienService.create(request));
+    }
+
+    @PostMapping("/gui-email-hang-loat")
+    public GuiEmailHangLoatResponse guiEmailHangLoat(
+        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
+        @RequestBody GuiEmailHangLoatRequest request
+    ) {
+        quyenGuard.canQuanLyNhanVien(vaiTro);
+        return nhanVienService.guiEmailHangLoat(request);
+    }
+
+    @GetMapping("/import/mau")
+    public ResponseEntity<byte[]> taiFileMauImport(
+        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro
+    ) {
+        quyenGuard.canQuanLyNhanVien(vaiTro);
+        return ResponseEntity.ok()
+            .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename=\"mau-nhan-vien.xlsx\"")
+            .contentType(org.springframework.http.MediaType.parseMediaType(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .body(nhanVienImportService.taoFileMau());
+    }
+
+    @PostMapping("/import/xem-truoc")
+    public NhanVienImportPreviewResponse xemTruocImport(
+        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
+        @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+    ) {
+        quyenGuard.canQuanLyNhanVien(vaiTro);
+        return nhanVienImportService.xemTruoc(file);
+    }
+
+    @PostMapping("/import/xac-nhan")
+    public NhanVienImportKetQuaResponse xacNhanImport(
+        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
+        @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+    ) {
+        quyenGuard.canQuanLyNhanVien(vaiTro);
+        return nhanVienImportService.xacNhan(file);
     }
 
     @PutMapping("/{id}")
