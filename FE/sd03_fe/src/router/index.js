@@ -23,7 +23,6 @@ import CustomerListPage from '@/pages/Customer/CustomerListPage.vue'
 import CustomerCreatePage from '@/pages/Customer/CustomerCreatePage.vue'
 import PosSalesPage from '@/pages/Pos/PosSalesPage.vue'
 import AttributeCategoryPage from '@/pages/Product/AttributeCategoryPage.vue'
-import PlaceholderPage from '@/pages/Common/PlaceholderPage.vue'
 import DiscountForm from '@/pages/Discount/DiscountForm.vue'
 import VoucherForm from '@/pages/Discount/VoucherForm.vue'
 import DiscountFormDetail from '@/pages/Discount/DiscountFormDetail.vue'
@@ -35,6 +34,9 @@ import RegisterPage from '@/pages/Auth/RegisterPage.vue'
 import QuenMatKhauPage from '@/pages/Auth/QuenMatKhauPage.vue'
 import StaffChatPage from '@/pages/Chat/StaffChatPage.vue'
 import CustomerAccountPage from '@/pages/Auth/CustomerAccountPage.vue'
+import StatisticsPage from '@/pages/Statistics/StatisticsPage.vue'
+import WorkSchedulePage from '@/pages/Schedule/WorkSchedulePage.vue'
+import ShiftSchedulePage from '@/pages/Schedule/ShiftSchedulePage.vue'
 
 const metaBo = { requiresAuth: true, canBo: true }
 
@@ -82,8 +84,18 @@ const routes = [
       { path: '/giam-gia', redirect: '/phieu-giam-gia' },
       {
         path: '/thong-ke',
-        component: PlaceholderPage,
+        component: StatisticsPage,
         meta: { ...metaBo, title: 'Thống kê' },
+      },
+      {
+        path: '/lich-lam-viec',
+        component: WorkSchedulePage,
+        meta: { ...metaBo, title: 'Quản lý lịch làm việc', adminOnly: true },
+      },
+      {
+        path: '/lich-ca-lam',
+        component: ShiftSchedulePage,
+        meta: { ...metaBo, title: 'Lịch ca làm', adminOnly: true },
       },
       {
         path: '/ban-hang',

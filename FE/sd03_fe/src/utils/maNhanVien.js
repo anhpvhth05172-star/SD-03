@@ -8,6 +8,12 @@ export const boDau = (s) =>
     .replace(/Đ/g, 'D')
 
 /**
+ * Mã phải bắt đầu bằng chữ cái (đúng hopLeMaNhanVien). Tên gọi cuối là chuỗi số
+ * sẽ sinh mã bắt đầu bằng số -> thêm tiền tố "NV" (khớp backend MaNhanVien.sinh).
+ */
+const dauLaChuCai = (ma) => (/^[A-Za-z]/.test(ma) ? ma : `NV${ma}`)
+
+/**
  * Phần gốc (chưa cộng số) của mã sinh từ họ tên:
  * tên gọi cuối viết hoa chữ đầu + chữ cái đầu của họ và tên đệm viết thường.
  * Ví dụ: "Nguyễn Thị Bình" -> "Binhnt".
@@ -18,14 +24,14 @@ export const sinhMaTuTen = (ten) => {
   const parts = goc.split(' ')
   const cuoiRaw = boDau(parts[parts.length - 1]).toLowerCase()
   const cuoi = cuoiRaw ? cuoiRaw.charAt(0).toUpperCase() + cuoiRaw.slice(1) : ''
-  if (parts.length === 1) return cat(cuoi)
+  if (parts.length === 1) return cat(dauLaChuCai(cuoi))
   const dau = parts
     .slice(0, -1)
     .map((p) => boDau(p).toLowerCase())
     .filter(Boolean)
     .map((p) => p.charAt(0))
     .join('')
-  return cat(cuoi + dau)
+  return cat(dauLaChuCai(cuoi + dau))
 }
 
 /** Tương thích với tên gọi cũ. */

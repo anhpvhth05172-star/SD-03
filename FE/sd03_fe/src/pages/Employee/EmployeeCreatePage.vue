@@ -14,6 +14,7 @@ import {
 import { setFlash } from '@/utils/flash'
 import { datVaiTro, layNguoiDung, vaiTroHienTai } from '@/utils/session'
 import { notifyConfirm, notifyError, notifySuccess, notifyWarning } from '@/utils/notify'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import {
   batBuoc,
   chonBatBuoc,
@@ -790,29 +791,25 @@ onMounted(async () => {
           <div class="form-grid-2">
             <div class="form-group">
               <label class="form-label">Tỉnh/Thành phố <span class="req">*</span></label>
-              <div class="select-wrapper">
-                <select v-model="form.queQuan" class="form-select" :disabled="diaGioiLoading"
-                  @change="cham('queQuan'); chonTinh($event.target.value)">
-                  <option value="">{{ diaGioiLoading ? 'Đang tải tỉnh thành...' : 'Chọn tỉnh thành' }}</option>
-                  <option v-for="t in tinhThanhs" :key="t.code" :value="t.ten">{{ t.ten }}</option>
-                </select>
-                <i class="bi bi-chevron-down select-arrow"></i>
-              </div>
+              <SearchableSelect
+                v-model="form.queQuan"
+                :options="tinhThanhs.map((t) => ({ value: t.ten, label: t.ten }))"
+                :placeholder="diaGioiLoading ? 'Đang tải tỉnh thành...' : 'Chọn tỉnh thành'"
+                :disabled="diaGioiLoading"
+                @update:model-value="(v) => { cham('queQuan'); chonTinh(v) }"
+              />
               <p v-if="hienLoi('queQuan', loiQueQuan)" class="input-error">{{ loiQueQuan }}</p>
             </div>
 
             <div class="form-group">
               <label class="form-label">Xã/Phường/Thị trấn <span class="req">*</span></label>
-              <div class="select-wrapper">
-                <select v-model="form.phuong" class="form-select" :disabled="diaGioiLoading || !form.queQuan"
-                  @change="cham('phuong')">
-                  <option value="">
-                    {{ diaGioiLoading ? 'Đang tải...' : form.queQuan ? 'Chọn xã phường' : 'Chọn xã phường' }}
-                  </option>
-                  <option v-for="p in phuongXas" :key="p.code" :value="p.ten">{{ p.ten }}</option>
-                </select>
-                <i class="bi bi-chevron-down select-arrow"></i>
-              </div>
+              <SearchableSelect
+                v-model="form.phuong"
+                :options="phuongXas.map((p) => ({ value: p.ten, label: p.ten }))"
+                :placeholder="diaGioiLoading ? 'Đang tải...' : 'Chọn xã phường'"
+                :disabled="diaGioiLoading || !form.queQuan"
+                @update:model-value="cham('phuong')"
+              />
               <p v-if="hienLoi('phuong', loiPhuong)" class="input-error">{{ loiPhuong }}</p>
             </div>
           </div>

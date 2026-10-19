@@ -377,11 +377,13 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
             giaSauGiam = gkm.giaSauGiam();
         }
 
+        com.example.datn.entity.SanPham sp = spct.getSanPham();
+
         return SanPhamChiTietResponse.builder()
                 .id(spct.getId())
-                .idSanPham(spct.getSanPham() != null ? spct.getSanPham().getId() : null)
-                .maSp(spct.getSanPham() != null ? spct.getSanPham().getMaSanPham() : "SP001")
-                .tenSp(spct.getSanPham() != null ? spct.getSanPham().getTenSanPham() : "Sản phẩm")
+                .idSanPham(sp != null ? sp.getId() : null)
+                .maSp(sp != null ? sp.getMaSanPham() : "SP001")
+                .tenSp(sp != null ? sp.getTenSanPham() : "Sản phẩm")
                 .maCtsp(spct.getMaChiTietSanPham() != null ? spct.getMaChiTietSanPham() : ("CTSP" + spct.getId()))
                 .idMauSac(spct.getMauSac() != null ? spct.getMauSac().getId() : null)
                 .color(colorName)
@@ -397,6 +399,14 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
                 .trangThaiTonKho(trangThaiTonKho)
                 .img(imgUrl)
                 .ngayTao(spct.getNgayTao())
+                .tenThuongHieu(sp != null && sp.getThuongHieu() != null ? sp.getThuongHieu().getTenThuongHieu() : null)
+                .tenLoaiGiay(sp != null && sp.getLoaiGiay() != null ? sp.getLoaiGiay().getTenLoaiGiay() : null)
+                .chatLieu(sp != null && sp.getChatLieu() != null ? sp.getChatLieu().getTenChatLieu() : null)
+                .kieuDang(sp != null && sp.getKieuDang() != null ? sp.getKieuDang().getTenKieuDang() : null)
+                .xuatXu(sp != null && sp.getXuatXu() != null ? sp.getXuatXu().getTenXuatXu() : null)
+                .doiTuong(sp != null ? sp.getDoiTuong() : null)
+                .tinhNang(sp != null ? sp.getTinhNang() : null)
+                .moTa(sp != null ? sp.getMoTa() : null)
                 .build();
     }
 }

@@ -1,11 +1,16 @@
 package com.example.datn.controller;
 
 import com.example.datn.config.QuyenGuard;
+import com.example.datn.dto.NhanVien.GuiEmailHangLoatRequest;
+import com.example.datn.dto.NhanVien.GuiEmailHangLoatResponse;
 import com.example.datn.dto.NhanVien.NhanVienDTO;
 import com.example.datn.dto.NhanVien.NhanVienExcelImportResult;
 import com.example.datn.dto.NhanVien.NhanVienFormDataResponse;
 import com.example.datn.dto.NhanVien.NhanVienRequest;
+import com.example.datn.dto.NhanVien.NhanVienImportPreviewResponse;
+import com.example.datn.dto.NhanVien.NhanVienImportKetQuaResponse;
 import com.example.datn.dto.Common.PageResponse;
+import com.example.datn.service.NhanVienImportService;
 import com.example.datn.service.NhanVienService;
 import java.time.LocalDate;
 import java.util.Map;
@@ -32,6 +37,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class NhanVienController {
 
     private final NhanVienService nhanVienService;
+    private final NhanVienImportService nhanVienImportService;
     private final QuyenGuard quyenGuard;
     private final com.example.datn.service.AuthService authService;
 
@@ -99,6 +105,41 @@ public class NhanVienController {
     public ResponseEntity<NhanVienDTO> create(@RequestBody NhanVienRequest request) {
         quyenGuard.canQuanLyNhanVien();
         return ResponseEntity.status(HttpStatus.CREATED).body(nhanVienService.create(request));
+    }
+
+    @PostMapping("/gui-email-hang-loat")
+    public GuiEmailHangLoatResponse guiEmailHangLoat(
+        @RequestBody GuiEmailHangLoatRequest request
+    ) {
+        quyenGuard.canQuanLyNhanVien();
+        return nhanVienService.guiEmailHangLoat(request);
+    }
+
+    @GetMapping("/import/mau")
+    public ResponseEntity<byte[]> taiFileMauImport() {
+        quyenGuard.canQuanLyNhanVien();
+        return ResponseEntity.ok()
+            .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename=\"mau-nhan-vien.xlsx\"")
+            .contentType(org.springframework.http.MediaType.parseMediaType(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .body(nhanVienImportService.taoFileMau());
+    }
+
+    @PostMapping("/import/xem-truoc")
+    public NhanVienImportPreviewResponse xemTruocImport(
+        @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+    ) {
+        quyenGuard.canQuanLyNhanVien();
+        return nhanVienImportService.xemTruoc(file);
+    }
+
+    @PostMapping("/import/xac-nhan")
+    public NhanVienImportKetQuaResponse xacNhanImport(
+        @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+    ) {
+        quyenGuard.canQuanLyNhanVien();
+        return nhanVienImportService.xacNhan(file);
     }
 
     @PutMapping("/{id}")

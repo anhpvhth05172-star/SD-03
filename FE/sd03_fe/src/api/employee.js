@@ -27,3 +27,21 @@ export const changeEmployeePassword = (id, matKhauMoi, xacNhan) =>
 
 export const checkEmployeeEmail = (email, excludeId) =>
   http.get('/nhan-vien/check-email', { params: { email, excludeId } }).then((r) => r.data)
+
+export const sendEmployeesBulkEmail = (data) =>
+  http.post('/nhan-vien/gui-email-hang-loat', data).then((r) => r.data)
+
+export const downloadEmployeeImportTemplate = () =>
+  http.get('/nhan-vien/import/mau', { responseType: 'blob' }).then((r) => r.data)
+
+const buildImportFormData = (file) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return fd
+}
+
+export const importEmployeesPreview = (file) =>
+  http.post('/nhan-vien/import/xem-truoc', buildImportFormData(file)).then((r) => r.data)
+
+export const importEmployeesConfirm = (file) =>
+  http.post('/nhan-vien/import/xac-nhan', buildImportFormData(file)).then((r) => r.data)

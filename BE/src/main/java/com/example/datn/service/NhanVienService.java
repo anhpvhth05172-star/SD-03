@@ -4,6 +4,8 @@ import com.example.datn.dto.NhanVien.NhanVienDTO;
 import com.example.datn.dto.NhanVien.NhanVienExcelImportResult;
 import com.example.datn.dto.NhanVien.NhanVienFormDataResponse;
 import com.example.datn.dto.NhanVien.NhanVienRequest;
+import com.example.datn.dto.NhanVien.GuiEmailHangLoatRequest;
+import com.example.datn.dto.NhanVien.GuiEmailHangLoatResponse;
 import com.example.datn.dto.Common.PageResponse;
 import com.example.datn.entity.NhanVien;
 import com.example.datn.entity.VaiTro;
@@ -60,6 +62,7 @@ public class NhanVienService {
     public static final String THONG_BAO_TUOI ="Nhân viên phải đủ 18 tuổi.";
     private static final int SO_LAN_TAO = 5;
     private static final int SO_MA_TOI_DA = 1_000_000;
+    private static final int GUI_EMAIL_TOI_DA = 500;
     private static final String[][] GIOI_TINH_MAP = {
         {"NAM", "Nam"},
         {"NU", "Nữ"},
@@ -120,10 +123,14 @@ public class NhanVienService {
     }
 
     public NhanVienDTO create(NhanVienRequest req) {
-        return taoNhanVien(req, true);
+        return create(req, true);
     }
 
-    private NhanVienDTO taoNhanVien(NhanVienRequest req, boolean guiMail) {
+    /**
+     * Tạo nhân viên mới. Tham số {@code emailCapTaiKhoan} cho phép bỏ qua bước gửi email
+     * cấp tài khoản (dùng khi import hàng loạt, không gửi email cho từng dòng).
+     */
+    public NhanVienDTO create(NhanVienRequest req, boolean emailCapTaiKhoan) {
         if (req == null) {
             throw new IllegalArgumentException("Dữ liệu không hợp lệ");
         }
@@ -136,7 +143,7 @@ public class NhanVienService {
                     return toDTO(nhanVienRepository.saveAndFlush(nhanVien));
                 });
                 if (dto != null) {
-                    dto.setEmailGuiThanhCong(guiMail && guiEmailCapTaiKhoan(dto, req));
+                    dto.setEmailGuiThanhCong(emailCapTaiKhoan && guiEmailCapTaiKhoan(dto, req));
                     return dto;
                 }
             } catch (DataIntegrityViolationException ex) {
@@ -179,6 +186,78 @@ public class NhanVienService {
         return excludeId == null
             ? nhanVienRepository.existsByEmail(cleanEmail)
             : nhanVienRepository.existsByEmailAndIdNot(cleanEmail, excludeId);
+    }
+
+    /** Kiểm tra dữ liệu nhân viên không thay đổi dữ liệu (dùng cho xem trước import Excel). */
+    @Transactional(readOnly = true)
+    public void kiemTraHopLe(NhanVienRequest req, Long excludeId) {
+        validate(req, excludeId);
+    }
+
+    /**
+     * Gửi cùng một nội dung email (tiêu đề + nội dung) tới nhiều nhân viên.
+     * Nhân viên không có email hợp lệ hoặc gửi lỗi đều được ghi nhận lý do vào danh sách bỏ qua.
+     */
+    @Transactional(readOnly = true)
+    public GuiEmailHangLoatResponse guiEmailHangLoat(GuiEmailHangLoatRequest req) {
+        if (req == null || req.getIds() == null || req.getIds().isEmpty()) {
+            throw new IllegalArgumentException("Danh sách nhân viên nhận email không được để trống");
+        }
+        if (isBlank(req.getTieuDe())) {
+            throw new IllegalArgumentException("Tiêu đề email không được để trống");
+        }
+        checkLength(req.getTieuDe(), 200, "Tiêu đề email");
+        if (isBlank(req.getNoiDung())) {
+            throw new IllegalArgumentException("Nội dung email không được để trống");
+        }
+        checkLength(req.getNoiDung(), 5000, "Nội dung email");
+
+        List<Long> ids = req.getIds().stream()
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .toList();
+        if (ids.isEmpty()) {
+            throw new IllegalArgumentException("Danh sách nhân viên nhận email không hợp lệ");
+        }
+        if (ids.size() > GUI_EMAIL_TOI_DA) {
+            throw new IllegalArgumentException("Mỗi lần gửi tối đa " + GUI_EMAIL_TOI_DA + " nhân viên");
+        }
+
+        GuiEmailHangLoatResponse response = GuiEmailHangLoatResponse.builder()
+            .tongYeuCau(ids.size())
+            .build();
+
+        java.util.Map<Long, NhanVien> nhanVienMap = nhanVienRepository.findAllById(ids).stream()
+            .collect(java.util.stream.Collectors.toMap(NhanVien::getId, nv -> nv, (a, b) -> a));
+        String tieuDe = req.getTieuDe().trim();
+        String noiDung = req.getNoiDung().trim();
+
+        for (Long id : ids) {
+            NhanVien nv = nhanVienMap.get(id);
+            if (nv == null) {
+                response.setThatBai(response.getThatBai() + 1);
+                response.getBoQua().add(
+                    new GuiEmailHangLoatResponse.BoQua(id, null, null, null, "Không tìm thấy nhân viên"));
+                continue;
+            }
+            if (isBlank(nv.getEmail()) || !EMAIL_PATTERN.matcher(nv.getEmail().trim()).matches()) {
+                response.setThatBai(response.getThatBai() + 1);
+                response.getBoQua().add(new GuiEmailHangLoatResponse.BoQua(
+                    id, nv.getMaNhanVien(), nv.getTenTaiKhoan(), nv.getEmail(),
+                    "Nhân viên không có địa chỉ email hợp lệ"));
+                continue;
+            }
+            boolean guiOk = emailService.guiMailCustom(nv.getEmail().trim(), tieuDe, noiDung);
+            if (guiOk) {
+                response.setGuiThanhCong(response.getGuiThanhCong() + 1);
+            } else {
+                response.setThatBai(response.getThatBai() + 1);
+                response.getBoQua().add(new GuiEmailHangLoatResponse.BoQua(
+                    id, nv.getMaNhanVien(), nv.getTenTaiKhoan(), nv.getEmail(),
+                    "Nhà cung cấp email từ chối hoặc có lỗi khi gửi"));
+            }
+        }
+        return response;
     }
 
     @Transactional
@@ -327,7 +406,7 @@ public class NhanVienService {
                 kq.setTongSoDong(kq.getTongSoDong() + 1);
                 try {
                     NhanVienRequest req = docDong(row, cot, fmt, soDong, emailDaCo, sdtDaCo);
-                    taoNhanVien(req, false);
+                    create(req, false);
                     kq.setSoDongThanhCong(kq.getSoDongThanhCong() + 1);
                 } catch (IllegalArgumentException e) {
                     kq.setSoDongThatBai(kq.getSoDongThatBai() + 1);
