@@ -3,11 +3,13 @@ import { getToken, getRefreshToken, isTokenExpired, luuPhien, dangXuat } from '.
 
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api'
 
-const API_ORIGIN = new URL(API_BASE).origin
+// Không set Content-Type mặc định ở đây: axios tự gắn application/json cho body object,
+// còn FormData (upload Excel) phải để nguyên cho browser gắn multipart/form-data + boundary.
+// Set cứng 'application/json' sẽ làm axios serialize FormData thành JSON -> backend không nhận được file.
+export const API_ORIGIN = new URL(API_BASE).origin
 
 const http = axios.create({
   baseURL: API_BASE,
-  headers: { 'Content-Type': 'application/json' },
 })
 
 let refreshPromise = null

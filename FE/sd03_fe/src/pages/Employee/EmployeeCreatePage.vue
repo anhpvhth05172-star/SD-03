@@ -746,11 +746,12 @@ onMounted(async () => {
 
             <div class="form-group">
               <label class="form-label">Giới tính <span class="req">*</span></label>
-              <div class="select-wrapper">
-                <select v-model="form.gioiTinh" class="form-select" @change="cham('gioiTinh')">
-                  <option v-for="g in gioiTinhOptions" :key="g.value" :value="g.value">{{ g.label }}</option>
-                </select>
-                <i class="bi bi-chevron-down select-arrow"></i>
+              <div class="radio-row" role="radiogroup" aria-label="Giới tính" @change="cham('gioiTinh')">
+                <label v-for="g in gioiTinhOptions" :key="g.value" class="radio-item">
+                  <input v-model="form.gioiTinh" type="radio" name="gioiTinh" :value="g.value" />
+                  <span class="radio-dot"></span>
+                  <span>{{ g.label }}</span>
+                </label>
               </div>
               <p v-if="hienLoi('gioiTinh', loiGioiTinh)" class="input-error">{{ loiGioiTinh }}</p>
             </div>
