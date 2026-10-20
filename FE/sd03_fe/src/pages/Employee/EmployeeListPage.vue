@@ -1384,8 +1384,9 @@ onMounted(async () => {
 
 .employee-table th {
   padding: 13px 12px;
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
   color: #334155;
   border-bottom: 1px solid #f1f5f9;
   background: #ffffff;
@@ -1394,7 +1395,7 @@ onMounted(async () => {
 
 .employee-table td {
   padding: 13px 12px;
-  font-size: 13.5px;
+  font-size: 13px;
   color: #334155;
   border-bottom: 1px solid #f8fafc;
   vertical-align: middle;

@@ -578,7 +578,7 @@ onMounted(() => getData(0));
 }
 .filter-title h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -634,7 +634,7 @@ onMounted(() => getData(0));
 .f-item label {
   display: block;
   margin-bottom: 0.4rem;
-  font-size: 0.85rem;
+  font-size: 11.5px;
   color: var(--muted);
 }
 
@@ -647,6 +647,7 @@ onMounted(() => getData(0));
   border-radius: 8px;
   background: #fff;
   font: inherit;
+  font-size: 13px;
   color: var(--ink);
   outline: none;
   transition:
