@@ -8,6 +8,7 @@ import {
 import { refreshSession } from "../api/http";
 import { laAdmin } from "../utils/session";
 import AdminLayout from "../layouts/AdminLayout.vue";
+import ClientLayout from "../layouts/clients/ClientLayout.vue";
 import ProductListPage from "../pages/ProductListPage.vue";
 import ProductCreatePage from "../pages/ProductCreatePage.vue";
 import ProductVariantPage from "../pages/ProductVariantPage.vue";
@@ -31,6 +32,18 @@ import DiscountFormDetail from "@/pages/Discount/DiscountFormDetail.vue";
 import VoucherFormDetail from "@/pages/Discount/VoucherFormDetail.vue";
 import DiscountFormUpdate from "@/pages/Discount/DiscountFormUpdate.vue";
 import VoucherFormUpdate from "@/pages/Discount/VoucherFormUpdate.vue";
+
+// ===== Client (cửa hàng) =====
+import Home from "@/pages/clients/views/Home.vue";
+import ProductShop from "@/pages/clients/views/ProductShop.vue";
+import ProductDetail from "@/pages/clients/views/ProductDetail.vue";
+import ProductCart from "@/pages/clients/views/ProductCart.vue";
+import CheckOut from "@/pages/clients/views/CheckOut.vue";
+import ProductCartDetail from "@/pages/clients/views/ProductCartDetail.vue";
+import About from "@/pages/clients/views/About.vue";
+import OrderList from "@/pages/clients/views/OrderList.vue";
+import OrderLookup from "@/pages/clients/views/OrderLookup.vue";
+import Contact from "@/pages/clients/views/Contact.vue";
 
 const routes = [
   { path: "/dang-nhap", component: LoginPage, meta: { title: "Đăng nhập" } },
@@ -185,6 +198,83 @@ const routes = [
       },
     ],
   },
+  // ===== Client: giao diện khách hàng (layout riêng) =====
+  {
+    path: "/",
+    component: ClientLayout,
+    children: [
+      {
+        path: "/trang-chu",
+        name: "ClientHome",
+        component: Home,
+        meta: { title: "Trang chủ" },
+      },
+      {
+        path: "/client",
+        redirect: "/trang-chu",
+      },
+      {
+        path: "/gioi-thieu",
+        name: "ClientAbout",
+        component: About,
+        meta: { title: "Giới thiệu - Poly Shoes" },
+      },
+      {
+        path: "/cua-hang",
+        name: "ClientShop",
+        component: ProductShop,
+        meta: { title: "Sản phẩm" },
+      },
+      {
+        path: "/goi-y",
+        name: "ClientSuggestions",
+        component: ProductShop,
+        meta: { title: "Gợi ý sản phẩm" },
+      },
+      {
+        path: "/cua-hang/:id",
+        name: "ClientDetail",
+        component: ProductDetail,
+        meta: { title: "Chi tiết sản phẩm" },
+      },
+      {
+        path: "/don-hang",
+        name: "ClientOrders",
+        component: OrderList,
+        meta: { title: "Đơn hàng của bạn" },
+      },
+      {
+        path: "/don-hang/:id",
+        name: "ClientOrderDetail",
+        component: ProductCartDetail,
+        meta: { title: "Chi tiết đơn hàng" },
+      },
+      {
+        path: "/tra-cuu",
+        name: "ClientLookup",
+        component: OrderLookup,
+        meta: { title: "Tra cứu đơn hàng" },
+      },
+      {
+        path: "/lien-he",
+        name: "ClientContact",
+        component: Contact,
+        meta: { title: "Liên hệ Poly Shoes" },
+      },
+      {
+        path: "/gio-hang",
+        name: "ClientCart",
+        component: ProductCart,
+        meta: { title: "Giỏ hàng" },
+      },
+      {
+        path: "/thanh-toan",
+        name: "ClientCheckout",
+        component: CheckOut,
+        meta: { title: "Thanh toán" },
+      },
+    ],
+  },
   {
     path: "/admin/:pathMatch(.*)*",
     redirect: (to) => {
@@ -202,6 +292,7 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
+  scrollBehavior: () => ({ top: 0 }),
 });
 
 // router.beforeEach(async (to) => {

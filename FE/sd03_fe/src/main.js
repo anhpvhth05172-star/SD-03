@@ -8,7 +8,6 @@ import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import "bootstrap";
 import "bootstrap-icons/font/bootstrap-icons.css";
 import "./assets/styles/custom-swal.css";
-
 const app = createApp(App);
 
 app.use(router);
