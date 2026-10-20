@@ -24,6 +24,11 @@ const pageSize = ref(10)
 const pageSizeOptions = [5, 10, 20, 50]
 
 const activeTab = ref('ALL')
+const statusTabs = [
+  { value: 'ALL', label: 'Tất cả' },
+  { value: 'ACTIVE', label: 'Đang kinh doanh' },
+  { value: 'INACTIVE', label: 'Ngừng kinh doanh' },
+]
 const selectedIds = ref([])
 const isAllSelected = computed({
   get: () => products.value.length > 0 && selectedIds.value.length === products.value.length,
@@ -227,7 +232,7 @@ const reloadAllData = () => {
 }
 
 const selectTab = (tab) => {
-  activeTab.value = tab
+  activeTab.value = tab || 'ALL'
   currentPage.value = 0
   fetchProducts()
 }
@@ -295,7 +300,7 @@ const toggleStatus = async (item) => {
   const oldStatus = item.trangThai
   const newStatus = !oldStatus
   item.trangThai = newStatus
-  const statusLabel = newStatus ? 'Kinh doanh' : 'Ngưng kinh doanh'
+  const statusLabel = newStatus ? 'Đang kinh doanh' : 'Ngừng kinh doanh'
   const code = item.maSanPham || `SP0${item.id}`
 
   try {
@@ -406,7 +411,7 @@ const exportToExcel = async () => {
         item.giaBan || 0,
         item.doiTuong || 'Unisex',
         item.tinhNang || '',
-        item.trangThai !== false ? 'Kinh doanh' : 'Ngưng kinh doanh',
+        item.trangThai !== false ? 'Đang kinh doanh' : 'Ngừng kinh doanh',
       ]),
       { sheetName: 'Danh sách sản phẩm' }
     )
@@ -540,18 +545,14 @@ onUnmounted(() => {
       <!-- Tabs and Action Header -->
       <div class="status-tabs-row">
         <div class="tabs-group">
-          <button class="status-tab" :class="{ active: activeTab === 'ALL' }" @click="selectTab('ALL')">
-            Tất cả
-            <span class="tab-pill">{{ totalElements }}</span>
-          </button>
-          <button class="status-tab" :class="{ active: activeTab === 'ACTIVE' }" @click="selectTab('ACTIVE')">
-            <span class="dot green-dot"></span>
-            Kinh doanh
-          </button>
-          <button class="status-tab" :class="{ active: activeTab === 'INACTIVE' }" @click="selectTab('INACTIVE')">
-            <span class="dot gray-dot"></span>
-            Ngưng kinh doanh
-          </button>
+          <SearchableSelect
+            v-model="activeTab"
+            :options="statusTabs"
+            label-key="label"
+            value-key="value"
+            placeholder="Trạng thái"
+            @change="selectTab"
+          />
         </div>
 
         <div class="page-actions">
@@ -714,12 +715,12 @@ onUnmounted(() => {
               </td>
               <td class="text-center">
                 <span class="simple-status-badge" :class="item.trangThai ? 'status-active' : 'status-inactive'">
-                  {{ item.trangThai ? 'Kinh doanh' : 'Ngưng kinh doanh' }}
+                  {{ item.trangThai ? 'Đang kinh doanh' : 'Ngừng kinh doanh' }}
                 </span>
               </td>
               <td class="text-center">
                 <div class="action-btns">
-                  <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
+                  <label class="switch-toggle" :title="item.trangThai ? 'Click để ngừng kinh doanh' : 'Click để bật kinh doanh'">
                     <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
                     <span class="slider round"></span>
                   </label>
@@ -921,7 +922,7 @@ onUnmounted(() => {
               </div>
 
               <div class="form-group span-2 switch-row">
-                <label class="form-label mb-0">Trạng thái (Bật: Kinh doanh / Tắt: Ngưng kinh doanh)</label>
+                <label class="form-label mb-0">Trạng thái (Bật: Đang kinh doanh / Tắt: Ngừng kinh doanh)</label>
                 <label class="switch-toggle">
                   <input type="checkbox" v-model="editForm.trangThai" />
                   <span class="slider round"></span>

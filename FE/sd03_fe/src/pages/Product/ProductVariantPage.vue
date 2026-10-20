@@ -211,8 +211,8 @@ const getColorHex = (item) => {
 }
 
 const getVariantStatusLabel = (item) => {
-  if (item.trangThai === false) return 'Ngưng kinh doanh'
-  return 'Kinh doanh'
+  if (item.trangThai === false) return 'Ngừng kinh doanh'
+  return 'Đang kinh doanh'
 }
 
 const getVariantStatusClass = (item) => {
@@ -236,7 +236,7 @@ const toggleStatus = async (item) => {
   const oldStatus = item.trangThai
   const newStatus = !oldStatus
   item.trangThai = newStatus
-  const statusLabel = newStatus ? 'Kinh doanh' : 'Ngưng kinh doanh'
+  const statusLabel = newStatus ? 'Đang kinh doanh' : 'Ngừng kinh doanh'
   const itemCode = item.maCtsp || item.maSp || `SKU-${item.id}`
 
   try {
@@ -316,7 +316,7 @@ const exportVariantsToExcel = async () => {
         item.moTa || '',
         item.maSp || '',
         item.maCtsp || '',
-        item.trangThai !== false ? 'Kinh doanh' : 'Ngưng kinh doanh',
+        item.trangThai !== false ? 'Đang kinh doanh' : 'Ngừng kinh doanh',
       ]),
       { sheetName: 'Danh sách biến thể' }
     )
@@ -1011,8 +1011,8 @@ onUnmounted(() => {
           <SearchableSelect
             v-model="filters.trangThai"
             :options="[
-              { value: true, label: 'Kinh doanh' },
-              { value: false, label: 'Ngưng kinh doanh' }
+              { value: true, label: 'Đang kinh doanh' },
+              { value: false, label: 'Ngừng kinh doanh' }
             ]"
             label-key="label"
             value-key="value"
@@ -1134,13 +1134,13 @@ onUnmounted(() => {
                 </td>
                 <td class="text-center">
                   <span class="simple-status-badge" :class="item.trangThai ? 'status-active' : 'status-inactive'">
-                    {{ item.trangThai ? 'Kinh doanh' : 'Ngưng kinh doanh' }}
+                    {{ item.trangThai ? 'Đang kinh doanh' : 'Ngừng kinh doanh' }}
                   </span>
                 </td>
                 <td class="text-center">
                   <div class="action-icon-group">
                     <!-- Switch Toggle -->
-                    <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
+                    <label class="switch-toggle" :title="item.trangThai ? 'Click để ngừng kinh doanh' : 'Click để bật kinh doanh'">
                       <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
                       <span class="slider round"></span>
                     </label>
@@ -1335,8 +1335,8 @@ onUnmounted(() => {
                 <SearchableSelect
                   v-model="editForm.trangThai"
                   :options="[
-                    { value: true, label: 'Kinh doanh' },
-                    { value: false, label: 'Ngưng kinh doanh' }
+                    { value: true, label: 'Đang kinh doanh' },
+                    { value: false, label: 'Ngừng kinh doanh' }
                   ]"
                   label-key="label"
                   value-key="value"
@@ -1438,8 +1438,8 @@ onUnmounted(() => {
                 <SearchableSelect
                   v-model="addForm.trangThai"
                   :options="[
-                    { value: true, label: 'Kinh doanh' },
-                    { value: false, label: 'Ngưng kinh doanh' }
+                    { value: true, label: 'Đang kinh doanh' },
+                    { value: false, label: 'Ngừng kinh doanh' }
                   ]"
                   label-key="label"
                   value-key="value"
