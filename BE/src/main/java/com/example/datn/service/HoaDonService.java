@@ -45,7 +45,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 public class HoaDonService {
     private static final Pattern TEN_KHACH_HANG_HOP_LE =
         Pattern.compile("^[\\p{L}\\s.'-]+$");
@@ -109,6 +108,30 @@ public class HoaDonService {
     private final LichSuHoaDonRepository lichSuHoaDonRepository;
     private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository;
     private final GHNService ghnService;
+
+    public HoaDonService(
+        HoaDonRepository hoaDonRepository,
+        ChiTietHoaDonRepository chiTietHoaDonRepository,
+        KhachHangRepository khachHangRepository,
+        NhanVienRepository nhanVienRepository,
+        PhuongThucThanhToanRepository phuongThucThanhToanRepository,
+        PhieuGiamGiaRepository phieuGiamGiaRepository,
+        SanPhamChiTietRepository sanPhamChiTietRepository,
+        LichSuHoaDonRepository lichSuHoaDonRepository,
+        LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository,
+        GHNService ghnService
+    ) {
+        this.hoaDonRepository = hoaDonRepository;
+        this.chiTietHoaDonRepository = chiTietHoaDonRepository;
+        this.khachHangRepository = khachHangRepository;
+        this.nhanVienRepository = nhanVienRepository;
+        this.phuongThucThanhToanRepository = phuongThucThanhToanRepository;
+        this.phieuGiamGiaRepository = phieuGiamGiaRepository;
+        this.sanPhamChiTietRepository = sanPhamChiTietRepository;
+        this.lichSuHoaDonRepository = lichSuHoaDonRepository;
+        this.lichSuSuDungRepository = lichSuSuDungRepository;
+        this.ghnService = ghnService;
+    }
 
     @Transactional(readOnly = true)
     public PageResponse<HoaDonDTO> list(

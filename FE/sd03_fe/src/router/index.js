@@ -160,6 +160,10 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  // Đã comment phần chặn đăng nhập theo yêu cầu để truy cập tự do
+  return true
+
+  /*
   // Trang đăng nhập/đăng ký: đã đăng nhập thì về trang tương ứng vai trò.
   if (to.path === '/dang-nhap' || to.path === '/dang-ky') {
     if (isNhanVienDangNhap()) return '/hoa-don'
@@ -202,6 +206,7 @@ router.beforeEach(async (to) => {
   }
 
   return true
+  */
 })
 
 export default router

@@ -327,7 +327,16 @@ const openQuickAdd = (type) => {
 
 const handleAttributeAdded = async (item) => {
   try {
-    const endpoint = item.type === 'color' ? 'mau_sac' : 'kich_co'
+    const endpointMap = {
+      color: 'mau_sac',
+      size: 'kich_co',
+      brand: 'thuong_hieu',
+      category: 'loai_giay',
+      material: 'chat_lieu',
+      style: 'kieu_dang',
+      origin: 'xuat_xu'
+    }
+    const endpoint = endpointMap[item.type] || item.type
     const payload = {
       ten: item.name.trim(),
       moTa: item.code || item.description || '',
@@ -347,11 +356,41 @@ const handleAttributeAdded = async (item) => {
         colorOptions.value.push(newCol)
         selectedColors.value.push(newCol)
         showToast(`Đã lưu màu sắc mới: ${saved.ten}`)
-      } else {
+      } else if (item.type === 'size') {
         const newSz = { id: saved.id, ten: saved.ten }
         sizeOptions.value.push(newSz)
         selectedSizes.value.push(newSz)
         showToast(`Đã lưu kích cỡ mới: ${saved.ten}`)
+      } else if (item.type === 'brand') {
+        const newOpt = { id: saved.id, ten: saved.ten }
+        brandOptions.value.push(newOpt)
+        form.brand = saved.id
+        clearErrors()
+        showToast(`Đã lưu thương hiệu mới: ${saved.ten}`)
+      } else if (item.type === 'category') {
+        const newOpt = { id: saved.id, ten: saved.ten }
+        categoryOptions.value.push(newOpt)
+        form.category = saved.id
+        clearErrors()
+        showToast(`Đã lưu loại giày mới: ${saved.ten}`)
+      } else if (item.type === 'material') {
+        const newOpt = { id: saved.id, ten: saved.ten }
+        materialOptions.value.push(newOpt)
+        form.material = saved.id
+        clearErrors()
+        showToast(`Đã lưu chất liệu mới: ${saved.ten}`)
+      } else if (item.type === 'style') {
+        const newOpt = { id: saved.id, ten: saved.ten }
+        styleOptions.value.push(newOpt)
+        form.style = saved.id
+        clearErrors()
+        showToast(`Đã lưu kiểu dáng mới: ${saved.ten}`)
+      } else if (item.type === 'origin') {
+        const newOpt = { id: saved.id, ten: saved.ten }
+        originOptions.value.push(newOpt)
+        form.origin = saved.id
+        clearErrors()
+        showToast(`Đã lưu xuất xứ mới: ${saved.ten}`)
       }
     } else {
       const errData = await res.json().catch(() => ({}))
@@ -551,7 +590,10 @@ onMounted(() => {
         </div>
 
         <div class="form-field">
-          <label class="form-label required">Thương hiệu</label>
+          <div class="field-label-row">
+            <label class="form-label required">Thương hiệu</label>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('brand')" title="Thêm nhanh Thương hiệu">+ Thêm nhanh</button>
+          </div>
           <SearchableSelect
             v-model="form.brand"
             :options="brandOptions"
@@ -563,7 +605,10 @@ onMounted(() => {
         </div>
 
         <div class="form-field">
-          <label class="form-label required">Loại giày</label>
+          <div class="field-label-row">
+            <label class="form-label required">Loại giày</label>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('category')" title="Thêm nhanh Loại giày">+ Thêm nhanh</button>
+          </div>
           <SearchableSelect
             v-model="form.category"
             :options="categoryOptions"
@@ -587,7 +632,10 @@ onMounted(() => {
         </div>
 
         <div class="form-field">
-          <label class="form-label required">Chất liệu</label>
+          <div class="field-label-row">
+            <label class="form-label required">Chất liệu</label>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('material')" title="Thêm nhanh Chất liệu">+ Thêm nhanh</button>
+          </div>
           <SearchableSelect
             v-model="form.material"
             :options="materialOptions"
@@ -599,7 +647,10 @@ onMounted(() => {
         </div>
 
         <div class="form-field">
-          <label class="form-label required">Kiểu dáng</label>
+          <div class="field-label-row">
+            <label class="form-label required">Kiểu dáng</label>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('style')" title="Thêm nhanh Kiểu dáng">+ Thêm nhanh</button>
+          </div>
           <SearchableSelect
             v-model="form.style"
             :options="styleOptions"
@@ -611,7 +662,10 @@ onMounted(() => {
         </div>
 
         <div class="form-field">
-          <label class="form-label required">Xuất xứ</label>
+          <div class="field-label-row">
+            <label class="form-label required">Xuất xứ</label>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('origin')" title="Thêm nhanh Xuất xứ">+ Thêm nhanh</button>
+          </div>
           <SearchableSelect
             v-model="form.origin"
             :options="originOptions"

@@ -103,22 +103,38 @@ const activeFilterCount = computed(() => {
   return count
 })
 
+const normalizeAttributeList = (data) => {
+  if (!data) return []
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data.content)) return data.content
+  if (Array.isArray(data.data)) return data.data
+  return []
+}
+
 const fetchOptions = async () => {
+  // Thá»­ endpoint gom táº¥t cáº£ tÃ¹y chá»n lá»c
   try {
     const bulkRes = await fetch(`${API_BASE}/attributes/all-filter-options`)
     if (bulkRes.ok) {
       const data = await bulkRes.json()
-      brands.value = data.thuongHieu || []
-      categories.value = data.loaiGiay || []
-      materials.value = data.chatLieu || []
-      styles.value = data.kieuDang || []
-      origins.value = data.xuatXu || []
-      return
+      if (data && typeof data === 'object') {
+        brands.value = normalizeAttributeList(data.thuongHieu)
+        categories.value = normalizeAttributeList(data.loaiGiay)
+        materials.value = normalizeAttributeList(data.chatLieu)
+        styles.value = normalizeAttributeList(data.kieuDang)
+        origins.value = normalizeAttributeList(data.xuatXu)
+        if (brands.value.length > 0 || categories.value.length > 0) {
+          return
+        }
+      }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Lá»—i gá»i all-filter-options, chuyá»ƒn sang gá»i tá»«ng danh má»¥c:', e)
+  }
 
+  // Fallback: Gá»i song song tá»«ng danh má»¥c thuá»™c tÃ­nh
   try {
-    const [resTH, resLG, resCL, resKD, resXX] = await Promise.all([
+    const [resTH, resLG, resCL, resKD, resXX] = await Promise.allSettled([
       fetch(`${API_BASE}/attributes/thuong_hieu`),
       fetch(`${API_BASE}/attributes/loai_giay`),
       fetch(`${API_BASE}/attributes/chat_lieu`),
@@ -126,12 +142,24 @@ const fetchOptions = async () => {
       fetch(`${API_BASE}/attributes/xuat_xu`)
     ])
 
+    const parseRes = async (settledRes) => {
+      if (settledRes.status === 'fulfilled' && settledRes.value.ok) {
+        try {
+          const json = await settledRes.value.json()
+          return normalizeAttributeList(json)
+        } catch {
+          return []
+        }
+      }
+      return []
+    }
+
     const [b, c, m, s, o] = await Promise.all([
-      resTH.ok ? resTH.json() : [],
-      resLG.ok ? resLG.json() : [],
-      resCL.ok ? resCL.json() : [],
-      resKD.ok ? resKD.json() : [],
-      resXX.ok ? resXX.json() : []
+      parseRes(resTH),
+      parseRes(resLG),
+      parseRes(resCL),
+      parseRes(resKD),
+      parseRes(resXX)
     ])
 
     brands.value = b
@@ -140,7 +168,7 @@ const fetchOptions = async () => {
     styles.value = s
     origins.value = o
   } catch (err) {
-    console.error('Lỗi tải danh mục bộ lọc:', err)
+    console.error('Lá»—i táº£i danh má»¥c bá»™ lá»c:', err)
   }
 }
 
@@ -185,7 +213,7 @@ const fetchProducts = async () => {
     }
   } catch (err) {
     if (err.name !== 'AbortError') {
-      console.error('Lỗi khi gọi API sản phẩm:', err)
+      console.error('Lá»—i khi gá»i API sáº£n pháº©m:', err)
     }
   } finally {
     isLoading.value = false
@@ -227,7 +255,7 @@ const resetFilters = () => {
   activeTab.value = 'ALL'
   currentPage.value = 0
   fetchProducts()
-  showToastNotice('Thành công', 'Đã đặt lại bộ lọc về mặc định', 'success')
+  showToastNotice('ThÃ nh cÃ´ng', 'ÄÃ£ Ä‘áº·t láº¡i bá»™ lá»c vá» máº·c Ä‘á»‹nh', 'success')
 }
 
 const changePage = (p) => {
@@ -238,12 +266,12 @@ const changePage = (p) => {
 }
 
 const formatPrice = (val) => {
-  if (val === null || val === undefined || isNaN(val)) return '0 ₫'
+  if (val === null || val === undefined || isNaN(val)) return '0 â‚«'
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val)
 }
 
 const formatProductPrice = (item) => {
-  if (!item) return '0 ₫'
+  if (!item) return '0 â‚«'
   if (item.giaBanMin && item.giaBanMax && item.giaBanMin !== item.giaBanMax) {
     return `${formatPrice(item.giaBanMin)} - ${formatPrice(item.giaBanMax)}`
   }
@@ -255,7 +283,7 @@ const hasProductDiscount = (item) => {
 }
 
 const formatProductDiscountedPrice = (item) => {
-  if (!item) return '0 ₫'
+  if (!item) return '0 â‚«'
   if (item.giaSauGiamMin && item.giaSauGiamMax && item.giaSauGiamMin !== item.giaSauGiamMax) {
     return `${formatPrice(item.giaSauGiamMin)} - ${formatPrice(item.giaSauGiamMax)}`
   }
@@ -266,24 +294,24 @@ const toggleStatus = async (item) => {
   const oldStatus = item.trangThai
   const newStatus = !oldStatus
   item.trangThai = newStatus
-  const statusLabel = newStatus ? 'Kinh doanh' : 'Ngưng kinh doanh'
+  const statusLabel = newStatus ? 'Kinh doanh' : 'NgÆ°ng kinh doanh'
   const code = item.maSanPham || `SP0${item.id}`
 
   try {
     const res = await fetch(`${API_BASE}/san-pham/${item.id}/toggle-status`, { method: 'PATCH' })
     if (res.ok) {
       showToastNotice(
-        'Cập nhật trạng thái thành công',
-        `Đã chuyển trạng thái sản phẩm (${code}) sang "${statusLabel}"`,
+        'Cáº­p nháº­t tráº¡ng thÃ¡i thÃ nh cÃ´ng',
+        `ÄÃ£ chuyá»ƒn tráº¡ng thÃ¡i sáº£n pháº©m (${code}) sang "${statusLabel}"`,
         newStatus ? 'success' : 'warning'
       )
     } else {
       item.trangThai = oldStatus
-      showToastNotice('Lỗi cập nhật', 'Không thể chuyển đổi trạng thái sản phẩm', 'danger')
+      showToastNotice('Lá»—i cáº­p nháº­t', 'KhÃ´ng thá»ƒ chuyá»ƒn Ä‘á»•i tráº¡ng thÃ¡i sáº£n pháº©m', 'danger')
     }
   } catch (err) {
     item.trangThai = oldStatus
-    showToastNotice('Lỗi kết nối', 'Không thể kết nối với máy chủ', 'danger')
+    showToastNotice('Lá»—i káº¿t ná»‘i', 'KhÃ´ng thá»ƒ káº¿t ná»‘i vá»›i mÃ¡y chá»§', 'danger')
   }
 }
 
@@ -302,22 +330,22 @@ const deleteProduct = async (id) => {
       const errData = await res.json().catch(() => ({}))
       products.value = originalList
       if (totalElements.value >= 0) totalElements.value++
-      showToastNotice('Không thể xóa', errData.message || 'Sản phẩm đã có dữ liệu giao dịch liên quan', 'danger')
+      showToastNotice('KhÃ´ng thá»ƒ xÃ³a', errData.message || 'Sáº£n pháº©m Ä‘Ã£ cÃ³ dá»¯ liá»‡u giao dá»‹ch liÃªn quan', 'danger')
     } else {
-      showToastNotice('Thành công', 'Đã xóa sản phẩm thành công', 'success')
+      showToastNotice('ThÃ nh cÃ´ng', 'ÄÃ£ xÃ³a sáº£n pháº©m thÃ nh cÃ´ng', 'success')
       fetchProducts()
     }
   } catch (err) {
     products.value = originalList
     if (totalElements.value >= 0) totalElements.value++
-    showToastNotice('Lỗi kết nối', 'Không thể kết nối tới máy chủ', 'danger')
+    showToastNotice('Lá»—i káº¿t ná»‘i', 'KhÃ´ng thá»ƒ káº¿t ná»‘i tá»›i mÃ¡y chá»§', 'danger')
   }
 }
 
 const copyToClipboard = (text) => {
   if (!text) return
   navigator.clipboard.writeText(text)
-  showToastNotice('Đã sao chép', `Đã sao chép mã "${text}" vào clipboard`, 'success')
+  showToastNotice('ÄÃ£ sao chÃ©p', `ÄÃ£ sao chÃ©p mÃ£ "${text}" vÃ o clipboard`, 'success')
 }
 
 const viewProductDetails = (item) => {
@@ -356,7 +384,7 @@ const exportToExcel = async () => {
     }
 
     if (!itemsToExport || itemsToExport.length === 0) {
-      showToastNotice('Không có dữ liệu', 'Không có sản phẩm nào để xuất Excel', 'warning')
+      showToastNotice('KhÃ´ng cÃ³ dá»¯ liá»‡u', 'KhÃ´ng cÃ³ sáº£n pháº©m nÃ o Ä‘á»ƒ xuáº¥t Excel', 'warning')
       return
     }
 
@@ -366,7 +394,7 @@ const exportToExcel = async () => {
 
     await exportExcel(
       `Danh_sach_san_pham_${dateStr}.xlsx`,
-      ['STT', 'Mã sản phẩm', 'Tên sản phẩm', 'Thương hiệu', 'Loại giày', 'Số lượng', 'Giá bán', 'Đối tượng', 'Tính năng', 'Trạng thái'],
+      ['STT', 'MÃ£ sáº£n pháº©m', 'TÃªn sáº£n pháº©m', 'ThÆ°Æ¡ng hiá»‡u', 'Loáº¡i giÃ y', 'Sá»‘ lÆ°á»£ng', 'GiÃ¡ bÃ¡n', 'Äá»‘i tÆ°á»£ng', 'TÃ­nh nÄƒng', 'Tráº¡ng thÃ¡i'],
       itemsToExport.map((item, index) => [
         index + 1,
         item.maSanPham || `SP0${item.id}`,
@@ -377,118 +405,20 @@ const exportToExcel = async () => {
         item.giaBan || 0,
         item.doiTuong || 'Unisex',
         item.tinhNang || '',
-        item.trangThai !== false ? 'Kinh doanh' : 'Ngưng kinh doanh',
+        item.trangThai !== false ? 'Kinh doanh' : 'NgÆ°ng kinh doanh',
       ]),
-      { sheetName: 'Danh sách sản phẩm' }
+      { sheetName: 'Danh sÃ¡ch sáº£n pháº©m' }
     )
-    showToastNotice('Thành công', `Đã xuất ${itemsToExport.length} sản phẩm ra file Excel!`, 'success')
+    showToastNotice('ThÃ nh cÃ´ng', `ÄÃ£ xuáº¥t ${itemsToExport.length} sáº£n pháº©m ra file Excel!`, 'success')
   } catch (err) {
-    console.error('Lỗi xuất Excel:', err)
-    showToastNotice('Lỗi', 'Không thể xuất file Excel', 'danger')
+    console.error('Lá»—i xuáº¥t Excel:', err)
+    showToastNotice('Lá»—i', 'KhÃ´ng thá»ƒ xuáº¥t file Excel', 'danger')
   } finally {
     isExporting.value = false
   }
 }
 
-// Import Excel state & functions
-const isImportModalOpen = ref(false)
-const selectedImportFile = ref(null)
-const isImporting = ref(false)
-const isDownloadingTemplate = ref(false)
-const importResult = ref(null)
-const fileInputExcelRef = ref(null)
 
-const openImportModal = () => {
-  selectedImportFile.value = null
-  importResult.value = null
-  isImportModalOpen.value = true
-}
-
-const triggerSelectFile = () => {
-  if (fileInputExcelRef.value) {
-    fileInputExcelRef.value.click()
-  }
-}
-
-const onFileExcelChange = (e) => {
-  const file = e.target.files && e.target.files[0]
-  if (!file) return
-  const name = file.name.toLowerCase()
-  if (!name.endsWith('.xlsx') && !name.endsWith('.xls')) {
-    notifyWarning('Vui lòng chọn tệp định dạng Excel (.xlsx hoặc .xls)')
-    return
-  }
-  selectedImportFile.value = file
-  importResult.value = null
-}
-
-const onDropExcelFile = (e) => {
-  const file = e.dataTransfer.files && e.dataTransfer.files[0]
-  if (!file) return
-  const name = file.name.toLowerCase()
-  if (!name.endsWith('.xlsx') && !name.endsWith('.xls')) {
-    notifyWarning('Vui lòng chọn tệp định dạng Excel (.xlsx hoặc .xls)')
-    return
-  }
-  selectedImportFile.value = file
-  importResult.value = null
-}
-
-const downloadTemplate = async () => {
-  isDownloadingTemplate.value = true
-  try {
-    const res = await fetch(`${API_BASE}/san-pham/excel/template`)
-    if (!res.ok) throw new Error('Không thể tải file mẫu')
-    const blob = await res.blob()
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'Mau_Import_San_Pham.xlsx'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
-    notifySuccess('Đã tải xuống file Excel mẫu thành công!')
-  } catch (err) {
-    notifyError('Tải file mẫu thất bại', err.message)
-  } finally {
-    isDownloadingTemplate.value = false
-  }
-}
-
-const submitImportExcel = async () => {
-  if (!selectedImportFile.value) {
-    notifyWarning('Vui lòng chọn tệp Excel trước khi import')
-    return
-  }
-  isImporting.value = true
-  importResult.value = null
-  const formData = new FormData()
-  formData.append('file', selectedImportFile.value)
-
-  try {
-    const res = await fetch(`${API_BASE}/san-pham/excel/import`, {
-      method: 'POST',
-      body: formData,
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      throw new Error(data.message || 'Lỗi xử lý file Excel')
-    }
-
-    importResult.value = data
-    if (data.soDongThanhCong > 0) {
-      notifySuccess(`Import thành công ${data.soDongThanhCong}/${data.tongSoDong} dòng dữ liệu!`)
-      reloadAllData()
-    } else {
-      notifyWarning('Không có dòng dữ liệu nào được import thành công')
-    }
-  } catch (err) {
-    notifyError('Import thất bại', err.message)
-  } finally {
-    isImporting.value = false
-  }
-}
 
 // Quick edit functions
 const openQuickEdit = (item) => {
@@ -515,27 +445,27 @@ const validateEditForm = () => {
   Object.keys(editErrors).forEach(k => editErrors[k] = '')
 
   if (!editForm.tenSanPham || !editForm.tenSanPham.trim()) {
-    editErrors.tenSanPham = 'Tên sản phẩm không được để trống'
+    editErrors.tenSanPham = 'TÃªn sáº£n pháº©m khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng'
     valid = false
   }
   if (!editForm.idThuongHieu) {
-    editErrors.idThuongHieu = 'Vui lòng chọn Thương hiệu'
+    editErrors.idThuongHieu = 'Vui lÃ²ng chá»n ThÆ°Æ¡ng hiá»‡u'
     valid = false
   }
   if (!editForm.idLoaiGiay) {
-    editErrors.idLoaiGiay = 'Vui lòng chọn Loại giày'
+    editErrors.idLoaiGiay = 'Vui lÃ²ng chá»n Loáº¡i giÃ y'
     valid = false
   }
   if (!editForm.idChatLieu) {
-    editErrors.idChatLieu = 'Vui lòng chọn Chất liệu'
+    editErrors.idChatLieu = 'Vui lÃ²ng chá»n Cháº¥t liá»‡u'
     valid = false
   }
   if (!editForm.idKieuDang) {
-    editErrors.idKieuDang = 'Vui lòng chọn Kiểu dáng'
+    editErrors.idKieuDang = 'Vui lÃ²ng chá»n Kiá»ƒu dÃ¡ng'
     valid = false
   }
   if (!editForm.idXuatXu) {
-    editErrors.idXuatXu = 'Vui lòng chọn Xuất xứ'
+    editErrors.idXuatXu = 'Vui lÃ²ng chá»n Xuáº¥t xá»©'
     valid = false
   }
   return valid
@@ -566,15 +496,15 @@ const submitQuickEdit = async () => {
     })
 
     if (res.ok) {
-      showToastNotice('Thành công', `Đã cập nhật sản phẩm "${editForm.tenSanPham}" thành công!`, 'success')
+      showToastNotice('ThÃ nh cÃ´ng', `ÄÃ£ cáº­p nháº­t sáº£n pháº©m "${editForm.tenSanPham}" thÃ nh cÃ´ng!`, 'success')
       isEditModalOpen.value = false
       fetchProducts()
     } else {
       const errData = await res.json().catch(() => ({}))
-      showToastNotice('Lỗi cập nhật', errData.message || 'Không thể lưu thay đổi', 'danger')
+      showToastNotice('Lá»—i cáº­p nháº­t', errData.message || 'KhÃ´ng thá»ƒ lÆ°u thay Ä‘á»•i', 'danger')
     }
   } catch (err) {
-    showToastNotice('Lỗi kết nối', 'Không thể kết nối máy chủ', 'danger')
+    showToastNotice('Lá»—i káº¿t ná»‘i', 'KhÃ´ng thá»ƒ káº¿t ná»‘i mÃ¡y chá»§', 'danger')
   } finally {
     isUpdating.value = false
   }
@@ -596,10 +526,10 @@ onUnmounted(() => {
     <div class="page-top-row">
       <div class="page-intro">
         <div class="breadcrumbs-tag">
-          <span>Trang chủ</span> / <span class="active">Quản lý sản phẩm</span>
+          <span>Trang chá»§</span> / <span class="active">Quáº£n lÃ½ sáº£n pháº©m</span>
         </div>
         <h1 class="page-heading">
-          Quản lý Sản phẩm
+          Quáº£n lÃ½ Sáº£n pháº©m
         </h1>
       </div>
     </div>
@@ -610,7 +540,7 @@ onUnmounted(() => {
       <div class="status-tabs-row">
         <div class="tabs-group">
           <button class="status-tab" :class="{ active: activeTab === 'ALL' }" @click="selectTab('ALL')">
-            Tất cả
+            Táº¥t cáº£
             <span class="tab-pill">{{ totalElements }}</span>
           </button>
           <button class="status-tab" :class="{ active: activeTab === 'ACTIVE' }" @click="selectTab('ACTIVE')">
@@ -619,28 +549,28 @@ onUnmounted(() => {
           </button>
           <button class="status-tab" :class="{ active: activeTab === 'INACTIVE' }" @click="selectTab('INACTIVE')">
             <span class="dot gray-dot"></span>
-            Ngưng kinh doanh
+            NgÆ°ng kinh doanh
           </button>
         </div>
 
         <div class="page-actions">
-          <button class="btn btn-reset-filter" @click="resetFilters" title="Đặt lại bộ lọc về mặc định">
+          <button class="btn btn-reset-filter" @click="resetFilters" title="Äáº·t láº¡i bá»™ lá»c vá» máº·c Ä‘á»‹nh">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M23 4v6h-6"></path>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
             </svg>
-            Đặt lại bộ lọc
+            Äáº·t láº¡i bá»™ lá»c
           </button>
 
-          <button class="btn btn-outline-refresh" @click="reloadAllData" :class="{ 'is-loading': isLoading }" title="Tải lại dữ liệu">
+          <button class="btn btn-outline-refresh" @click="reloadAllData" :class="{ 'is-loading': isLoading }" title="Táº£i láº¡i dá»¯ liá»‡u">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="23 4 23 10 17 10"></polyline>
               <polyline points="1 20 1 14 7 14"></polyline>
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
             </svg>
-            Làm mới
+            LÃ m má»›i
           </button>
-          <button class="btn btn-export-excel" @click="exportToExcel" :disabled="isExporting" title="Xuất danh sách sản phẩm ra file Excel">
+          <button class="btn btn-export-excel" @click="exportToExcel" :disabled="isExporting" title="Xuáº¥t danh sÃ¡ch sáº£n pháº©m ra file Excel">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
@@ -648,22 +578,14 @@ onUnmounted(() => {
               <line x1="8" y1="17" x2="16" y2="17"></line>
               <polyline points="10 9 9 9 8 9"></polyline>
             </svg>
-            {{ isExporting ? 'Đang xuất...' : 'Xuất Excel' }}
-          </button>
-          <button class="btn btn-import-excel" @click="openImportModal" title="Nhập danh sách sản phẩm từ file Excel">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            Nhập Excel
+            {{ isExporting ? 'Äang xuáº¥t...' : 'Xuáº¥t Excel' }}
           </button>
           <button class="btn btn-add-new" @click="navigateToAdd">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
-            Thêm sản phẩm mới
+            ThÃªm sáº£n pháº©m má»›i
           </button>
         </div>
       </div>
@@ -672,7 +594,7 @@ onUnmounted(() => {
       <transition name="collapse-fade">
         <div v-show="isFilterExpanded" class="filters-grid">
           <div class="filter-col span-2">
-            <label class="filter-lbl">Tìm kiếm sản phẩm</label>
+            <label class="filter-lbl">TÃ¬m kiáº¿m sáº£n pháº©m</label>
             <div class="search-wrap">
               <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"></circle>
@@ -682,35 +604,35 @@ onUnmounted(() => {
                 v-model="filters.keyword"
                 type="text"
                 class="form-control"
-                placeholder="Nhập tên hoặc mã sản phẩm (vd: SP001, Nike...)"
+                placeholder="Nháº­p tÃªn hoáº·c mÃ£ sáº£n pháº©m (vd: SP001, Nike...)"
                 @input="onSearchInput"
               />
-              <button v-if="filters.keyword" class="clear-search-btn" @click="filters.keyword = ''; onFilterChange()">×</button>
+              <button v-if="filters.keyword" class="clear-search-btn" @click="filters.keyword = ''; onFilterChange()">Ã—</button>
             </div>
           </div>
 
           <div class="filter-col">
-            <label class="filter-lbl">Thương hiệu</label>
+            <label class="filter-lbl">ThÆ°Æ¡ng hiá»‡u</label>
             <SearchableSelect
               v-model="filters.idThuongHieu"
               :options="brands"
               label-key="ten"
               value-key="id"
-              placeholder="Tất cả thương hiệu"
-              search-placeholder="Tìm thương hiệu..."
+              placeholder="Táº¥t cáº£ thÆ°Æ¡ng hiá»‡u"
+              search-placeholder="TÃ¬m thÆ°Æ¡ng hiá»‡u..."
               @change="onFilterChange"
             />
           </div>
 
           <div class="filter-col">
-            <label class="filter-lbl">Loại giày</label>
+            <label class="filter-lbl">Loáº¡i giÃ y</label>
             <SearchableSelect
               v-model="filters.idLoaiGiay"
               :options="categories"
               label-key="ten"
               value-key="id"
-              placeholder="Tất cả loại giày"
-              search-placeholder="Tìm loại giày..."
+              placeholder="Táº¥t cáº£ loáº¡i giÃ y"
+              search-placeholder="TÃ¬m loáº¡i giÃ y..."
               @change="onFilterChange"
             />
           </div>
@@ -722,14 +644,14 @@ onUnmounted(() => {
     <div class="table-container-card">
       <div class="table-card-head">
         <div class="head-left">
-          <h2 class="card-title">Danh sách mặt hàng</h2>
-          <span class="items-count-pill">{{ products.length }}/{{ totalElements }} sản phẩm</span>
-          <span v-if="selectedIds.length > 0" class="selected-badge">Đã chọn: {{ selectedIds.length }}</span>
+          <h2 class="card-title">Danh sÃ¡ch máº·t hÃ ng</h2>
+          <span class="items-count-pill">{{ products.length }}/{{ totalElements }} sáº£n pháº©m</span>
+          <span v-if="selectedIds.length > 0" class="selected-badge">ÄÃ£ chá»n: {{ selectedIds.length }}</span>
         </div>
         <div class="head-right">
-          <span class="page-size-label">Hiển thị:</span>
+          <span class="page-size-label">Hiá»ƒn thá»‹:</span>
           <select v-model="pageSize" class="page-size-select" @change="fetchProducts">
-            <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }} bản ghi/trang</option>
+            <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }} báº£n ghi/trang</option>
           </select>
         </div>
       </div>
@@ -739,14 +661,14 @@ onUnmounted(() => {
           <thead>
             <tr>
               <th width="60" class="text-center">STT</th>
-              <th width="120">MÃ SẢN PHẨM</th>
-              <th width="320">SẢN PHẨM</th>
-              <th width="140">THƯƠNG HIỆU</th>
-              <th width="140">LOẠI GIÀY</th>
-              <th width="100" class="text-center">SỐ LƯỢNG</th>
-              <th width="160" class="text-end">GIÁ BÁN</th>
-              <th width="130" class="text-center">TRẠNG THÁI</th>
-              <th width="80" class="text-center">HÀNH ĐỘNG</th>
+              <th width="120">MÃƒ Sáº¢N PHáº¨M</th>
+              <th width="320">Sáº¢N PHáº¨M</th>
+              <th width="140">THÆ¯Æ NG HIá»†U</th>
+              <th width="140">LOáº I GIÃ€Y</th>
+              <th width="100" class="text-center">Sá» LÆ¯á»¢NG</th>
+              <th width="160" class="text-end">GIÃ BÃN</th>
+              <th width="140" class="text-center">TRáº NG THÃI</th>
+              <th width="120" class="text-center">HÃ€NH Äá»˜NG</th>
             </tr>
           </thead>
           <tbody>
@@ -768,6 +690,7 @@ onUnmounted(() => {
                         <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                       </svg>
                     </div>
+                    <span v-if="hasProductDiscount(item)" class="image-discount-badge">{{ item.discount }}</span>
                   </div>
                   <div class="product-details-col">
                     <span class="name-plain-text">{{ item.tenSanPham }}</span>
@@ -789,17 +712,17 @@ onUnmounted(() => {
                 <span v-else>{{ formatProductPrice(item) }}</span>
               </td>
               <td class="text-center">
-                <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
-                  <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
-                  <span class="slider round"></span>
-                </label>
-                <div class="status-label" :class="{ active: item.trangThai }">
-                  {{ item.trangThai ? 'Kinh doanh' : 'Ngưng kinh doanh' }}
-                </div>
+                <span class="simple-status-badge" :class="item.trangThai ? 'status-active' : 'status-inactive'">
+                  {{ item.trangThai ? 'Kinh doanh' : 'NgÆ°ng kinh doanh' }}
+                </span>
               </td>
               <td class="text-center">
                 <div class="action-btns">
-                  <button class="act-btn view-btn" title="Xem chi tiết sản phẩm" @click="viewProductDetails(item)">
+                  <label class="switch-toggle" :title="item.trangThai ? 'Click Ä‘á»ƒ ngÆ°ng kinh doanh' : 'Click Ä‘á»ƒ báº­t kinh doanh'">
+                    <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
+                    <span class="slider round"></span>
+                  </label>
+                  <button class="act-btn view-btn" title="Xem chi tiáº¿t sáº£n pháº©m" @click="viewProductDetails(item)">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                       <circle cx="12" cy="12" r="3"></circle>
@@ -828,10 +751,10 @@ onUnmounted(() => {
             <tr v-else-if="products.length === 0">
               <td colspan="9" class="empty-state-cell">
                 <div class="empty-state-box">
-                  <div class="empty-icon">👟</div>
-                  <div class="empty-title">Không tìm thấy sản phẩm nào</div>
-                  <p class="empty-desc">Thử thay đổi từ khóa tìm kiếm hoặc đặt lại các bộ lọc thuộc tính.</p>
-                  <button class="btn btn-outline-reset" @click="resetFilters">Xóa bộ lọc</button>
+                  <div class="empty-icon">ðŸ‘Ÿ</div>
+                  <div class="empty-title">KhÃ´ng tÃ¬m tháº¥y sáº£n pháº©m nÃ o</div>
+                  <p class="empty-desc">Thá»­ thay Ä‘á»•i tá»« khÃ³a tÃ¬m kiáº¿m hoáº·c Ä‘áº·t láº¡i cÃ¡c bá»™ lá»c thuá»™c tÃ­nh.</p>
+                  <button class="btn btn-outline-reset" @click="resetFilters">XÃ³a bá»™ lá»c</button>
                 </div>
               </td>
             </tr>
@@ -842,11 +765,11 @@ onUnmounted(() => {
       <!-- Pagination -->
       <div v-if="totalPages > 1" class="table-card-foot">
         <span class="foot-info">
-          Hiển thị <strong>{{ products.length ? currentPage * pageSize + 1 : 0 }} - {{ currentPage * pageSize + products.length }}</strong> trong tổng số <strong>{{ totalElements }}</strong> mặt hàng
+          Hiá»ƒn thá»‹ <strong>{{ products.length ? currentPage * pageSize + 1 : 0 }} - {{ currentPage * pageSize + products.length }}</strong> trong tá»•ng sá»‘ <strong>{{ totalElements }}</strong> máº·t hÃ ng
         </span>
         <div class="foot-pager">
           <button class="pager-btn" :disabled="currentPage === 0" @click="changePage(currentPage - 1)">
-            ‹ Trước
+            â€¹ TrÆ°á»›c
           </button>
           <button
             v-for="p in totalPages"
@@ -858,7 +781,7 @@ onUnmounted(() => {
             {{ p }}
           </button>
           <button class="pager-btn" :disabled="currentPage >= totalPages - 1" @click="changePage(currentPage + 1)">
-            Sau ›
+            Sau â€º
           </button>
         </div>
       </div>
@@ -870,134 +793,134 @@ onUnmounted(() => {
         <div class="modal-dialog">
           <div class="modal-header">
             <div class="modal-title-group">
-              <h3 class="modal-title">Chỉnh sửa thông tin sản phẩm</h3>
+              <h3 class="modal-title">Chá»‰nh sá»­a thÃ´ng tin sáº£n pháº©m</h3>
               <span class="modal-code-tag">{{ editForm.maSanPham }}</span>
             </div>
-            <button class="modal-close" @click="isEditModalOpen = false">×</button>
+            <button class="modal-close" @click="isEditModalOpen = false">Ã—</button>
           </div>
 
           <div class="modal-body">
             <div class="edit-grid">
               <div class="form-group span-2">
-                <label class="form-label">Tên sản phẩm <span class="req">*</span></label>
+                <label class="form-label">TÃªn sáº£n pháº©m <span class="req">*</span></label>
                 <input
                   v-model="editForm.tenSanPham"
                   type="text"
                   class="modal-input"
                   :class="{ 'has-error': editErrors.tenSanPham }"
-                  placeholder="Nhập tên sản phẩm..."
+                  placeholder="Nháº­p tÃªn sáº£n pháº©m..."
                 />
                 <span v-if="editErrors.tenSanPham" class="err-msg">{{ editErrors.tenSanPham }}</span>
               </div>
 
               <div class="form-group">
-                <label class="form-label">Thương hiệu <span class="req">*</span></label>
+                <label class="form-label">ThÆ°Æ¡ng hiá»‡u <span class="req">*</span></label>
                 <SearchableSelect
                   v-model="editForm.idThuongHieu"
                   :options="brands"
                   label-key="ten"
                   value-key="id"
-                  placeholder="-- Chọn thương hiệu --"
-                  search-placeholder="Tìm thương hiệu..."
+                  placeholder="-- Chá»n thÆ°Æ¡ng hiá»‡u --"
+                  search-placeholder="TÃ¬m thÆ°Æ¡ng hiá»‡u..."
                   :has-error="!!editErrors.idThuongHieu"
                 />
                 <span v-if="editErrors.idThuongHieu" class="err-msg">{{ editErrors.idThuongHieu }}</span>
               </div>
 
               <div class="form-group">
-                <label class="form-label">Loại giày <span class="req">*</span></label>
+                <label class="form-label">Loáº¡i giÃ y <span class="req">*</span></label>
                 <SearchableSelect
                   v-model="editForm.idLoaiGiay"
                   :options="categories"
                   label-key="ten"
                   value-key="id"
-                  placeholder="-- Chọn loại giày --"
-                  search-placeholder="Tìm loại giày..."
+                  placeholder="-- Chá»n loáº¡i giÃ y --"
+                  search-placeholder="TÃ¬m loáº¡i giÃ y..."
                   :has-error="!!editErrors.idLoaiGiay"
                 />
                 <span v-if="editErrors.idLoaiGiay" class="err-msg">{{ editErrors.idLoaiGiay }}</span>
               </div>
 
               <div class="form-group">
-                <label class="form-label">Chất liệu <span class="req">*</span></label>
+                <label class="form-label">Cháº¥t liá»‡u <span class="req">*</span></label>
                 <SearchableSelect
                   v-model="editForm.idChatLieu"
                   :options="materials"
                   label-key="ten"
                   value-key="id"
-                  placeholder="-- Chọn chất liệu --"
-                  search-placeholder="Tìm chất liệu..."
+                  placeholder="-- Chá»n cháº¥t liá»‡u --"
+                  search-placeholder="TÃ¬m cháº¥t liá»‡u..."
                   :has-error="!!editErrors.idChatLieu"
                 />
                 <span v-if="editErrors.idChatLieu" class="err-msg">{{ editErrors.idChatLieu }}</span>
               </div>
 
               <div class="form-group">
-                <label class="form-label">Kiểu dáng <span class="req">*</span></label>
+                <label class="form-label">Kiá»ƒu dÃ¡ng <span class="req">*</span></label>
                 <SearchableSelect
                   v-model="editForm.idKieuDang"
                   :options="styles"
                   label-key="ten"
                   value-key="id"
-                  placeholder="-- Chọn kiểu dáng --"
-                  search-placeholder="Tìm kiểu dáng..."
+                  placeholder="-- Chá»n kiá»ƒu dÃ¡ng --"
+                  search-placeholder="TÃ¬m kiá»ƒu dÃ¡ng..."
                   :has-error="!!editErrors.idKieuDang"
                 />
                 <span v-if="editErrors.idKieuDang" class="err-msg">{{ editErrors.idKieuDang }}</span>
               </div>
 
               <div class="form-group">
-                <label class="form-label">Xuất xứ <span class="req">*</span></label>
+                <label class="form-label">Xuáº¥t xá»© <span class="req">*</span></label>
                 <SearchableSelect
                   v-model="editForm.idXuatXu"
                   :options="origins"
                   label-key="ten"
                   value-key="id"
-                  placeholder="-- Chọn xuất xứ --"
-                  search-placeholder="Tìm xuất xứ..."
+                  placeholder="-- Chá»n xuáº¥t xá»© --"
+                  search-placeholder="TÃ¬m xuáº¥t xá»©..."
                   :has-error="!!editErrors.idXuatXu"
                 />
                 <span v-if="editErrors.idXuatXu" class="err-msg">{{ editErrors.idXuatXu }}</span>
               </div>
 
               <div class="form-group">
-                <label class="form-label">Đối tượng sử dụng</label>
+                <label class="form-label">Äá»‘i tÆ°á»£ng sá»­ dá»¥ng</label>
                 <SearchableSelect
                   v-model="editForm.doiTuong"
                   :options="[
                     { value: 'Nam', label: 'Nam' },
-                    { value: 'Nữ', label: 'Nữ' },
-                    { value: 'Unisex', label: 'Tất cả (Unisex)' }
+                    { value: 'Ná»¯', label: 'Ná»¯' },
+                    { value: 'Unisex', label: 'Táº¥t cáº£ (Unisex)' }
                   ]"
                   label-key="label"
                   value-key="value"
-                  placeholder="Chọn đối tượng..."
+                  placeholder="Chá»n Ä‘á»‘i tÆ°á»£ng..."
                   :allow-clear="false"
                 />
               </div>
 
               <div class="form-group span-2">
-                <label class="form-label">Tính năng nổi bật</label>
+                <label class="form-label">TÃ­nh nÄƒng ná»•i báº­t</label>
                 <input
                   v-model="editForm.tinhNang"
                   type="text"
                   class="modal-input"
-                  placeholder="Ví dụ: Êm ái, Chống trượt, Thoáng khí..."
+                  placeholder="VÃ­ dá»¥: ÃŠm Ã¡i, Chá»‘ng trÆ°á»£t, ThoÃ¡ng khÃ­..."
                 />
               </div>
 
               <div class="form-group span-2">
-                <label class="form-label">Mô tả sản phẩm</label>
+                <label class="form-label">MÃ´ táº£ sáº£n pháº©m</label>
                 <textarea
                   v-model="editForm.moTa"
                   class="modal-textarea"
                   rows="3"
-                  placeholder="Nhập mô tả chi tiết sản phẩm..."
+                  placeholder="Nháº­p mÃ´ táº£ chi tiáº¿t sáº£n pháº©m..."
                 ></textarea>
               </div>
 
               <div class="form-group span-2 switch-row">
-                <label class="form-label mb-0">Trạng thái (Bật: Kinh doanh / Tắt: Ngưng kinh doanh)</label>
+                <label class="form-label mb-0">Tráº¡ng thÃ¡i (Báº­t: Kinh doanh / Táº¯t: NgÆ°ng kinh doanh)</label>
                 <label class="switch-toggle">
                   <input type="checkbox" v-model="editForm.trangThai" />
                   <span class="slider round"></span>
@@ -1007,160 +930,15 @@ onUnmounted(() => {
           </div>
 
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="isEditModalOpen = false">Hủy bỏ</button>
+            <button class="btn btn-secondary" @click="isEditModalOpen = false">Há»§y bá»</button>
             <button class="btn btn-primary" :disabled="isUpdating" @click="submitQuickEdit">
-              {{ isUpdating ? 'Đang lưu...' : 'Lưu thay đổi' }}
+              {{ isUpdating ? 'Äang lÆ°u...' : 'LÆ°u thay Ä‘á»•i' }}
             </button>
           </div>
         </div>
       </div>
     </transition>
 
-    <!-- Modal Import Excel -->
-    <transition name="modal-fade">
-      <div v-if="isImportModalOpen" class="modal-backdrop" @click.self="isImportModalOpen = false">
-        <div class="modal-box modal-import-excel">
-          <div class="modal-header">
-            <div class="modal-title-group">
-              <span class="modal-icon-badge excel-badge">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                  <line x1="12" y1="18" x2="12" y2="12"></line>
-                  <polyline points="9 15 12 12 15 15"></polyline>
-                </svg>
-              </span>
-              <div>
-                <h3 class="modal-title">Nhập Sản phẩm từ File Excel</h3>
-                <p class="modal-subtitle">Tải dữ liệu danh sách sản phẩm và các biến thể vào hệ thống</p>
-              </div>
-            </div>
-            <button class="btn-close-modal" @click="isImportModalOpen = false" title="Đóng">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          </div>
-
-          <div class="modal-body import-body">
-            <!-- Bước 1: Tải file mẫu -->
-            <div class="template-download-card">
-              <div class="template-info">
-                <div class="template-icon">📄</div>
-                <div>
-                  <h4 class="template-heading">Chưa có file dữ liệu đúng chuẩn?</h4>
-                  <p class="template-desc">Tải về mẫu file Excel có sẵn cấu trúc cột và dữ liệu mẫu để nhập liệu chính xác nhất.</p>
-                </div>
-              </div>
-              <button class="btn btn-download-template" @click="downloadTemplate" :disabled="isDownloadingTemplate">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="7 10 12 15 17 10"></polyline>
-                  <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-                {{ isDownloadingTemplate ? 'Đang tải...' : 'Tải file mẫu (.xlsx)' }}
-              </button>
-            </div>
-
-            <!-- Bước 2: Vùng Upload / Kéo thả file -->
-            <input
-              ref="fileInputExcelRef"
-              type="file"
-              style="display: none;"
-              @change="onFileExcelChange"
-            />
-
-            <div
-              class="dropzone-box"
-              :class="{ 'has-file': selectedImportFile }"
-              @dragover.prevent
-              @dragenter.prevent
-              @drop.prevent="onDropExcelFile"
-              @click="triggerSelectFile"
-            >
-              <div v-if="!selectedImportFile" class="dropzone-empty">
-                <div class="dropzone-icon">
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                    <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path>
-                    <path d="M12 12v9"></path>
-                    <path d="m16 16-4-4-4 4"></path>
-                  </svg>
-                </div>
-                <h4 class="dropzone-title">Kéo & thả file Excel vào đây, hoặc <span class="highlight">bấm để chọn</span></h4>
-                <p class="dropzone-hint">Hỗ trợ các tệp định dạng .xlsx hoặc .xls (Dung lượng tối đa 10MB)</p>
-              </div>
-
-              <div v-else class="dropzone-file-info" @click.stop>
-                <div class="file-icon-wrap">📊</div>
-                <div class="file-meta">
-                  <span class="file-name">{{ selectedImportFile.name }}</span>
-                  <span class="file-size">{{ (selectedImportFile.size / 1024).toFixed(1) }} KB</span>
-                </div>
-                <button class="btn-remove-file" type="button" @click="selectedImportFile = null; importResult = null" title="Hủy chọn file">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <!-- Lưu ý tính năng -->
-            <div class="import-notice-box">
-              <div class="notice-title">💡 Lưu ý quan trọng:</div>
-              <ul class="notice-list">
-                <li>Các cột có dấu <strong>(*)</strong> là bắt buộc phải có dữ liệu.</li>
-                <li>Hệ thống <strong>tự động nhận diện hoặc tạo mới</strong> các thuộc tính chưa có (Thương hiệu, Loại giày, Màu sắc, Size...).</li>
-                <li>Nếu sản phẩm và biến thể đã tồn tại, hệ thống sẽ <strong>tự động cộng dồn số lượng tồn kho</strong>.</li>
-              </ul>
-            </div>
-
-            <!-- Kết quả import (nếu có) -->
-            <div v-if="importResult" class="import-result-card" :class="{ 'has-errors': importResult.soDongThatBai > 0 }">
-              <h4 class="result-heading">
-                <span v-if="importResult.soDongThanhCong > 0">✅ Hoàn tất xử lý:</span>
-                <span v-else>⚠️ Chưa có dữ liệu hợp lệ:</span>
-                Đã nhập thành công {{ importResult.soDongThanhCong }} / {{ importResult.tongSoDong }} dòng
-              </h4>
-              <div class="result-stats-row">
-                <div class="stat-pill success">Sản phẩm mới: <strong>{{ importResult.soSanPhamMoi }}</strong></div>
-                <div class="stat-pill primary">Biến thể mới: <strong>{{ importResult.soBienTheMoi }}</strong></div>
-                <div class="stat-pill info">Cộng dồn kho: <strong>{{ importResult.soBienTheCapNhat }}</strong></div>
-                <div v-if="importResult.soDongThatBai > 0" class="stat-pill danger">Bỏ qua / Lỗi: <strong>{{ importResult.soDongThatBai }}</strong></div>
-              </div>
-
-              <!-- Danh sách chi tiết lỗi nếu có -->
-              <div v-if="importResult.danhSachLoi && importResult.danhSachLoi.length" class="result-errors-box">
-                <div class="errors-title">Chi tiết dòng cần kiểm tra:</div>
-                <ul class="errors-list">
-                  <li v-for="(err, idx) in importResult.danhSachLoi" :key="idx">{{ err }}</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="isImportModalOpen = false" :disabled="isImporting">
-              {{ importResult ? 'Đóng' : 'Hủy bỏ' }}
-            </button>
-            <button
-              class="btn btn-submit-import"
-              :disabled="!selectedImportFile || isImporting"
-              @click="submitImportExcel"
-            >
-              <svg v-if="!isImporting" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-              </svg>
-              <span v-else class="spinner-small"></span>
-              {{ isImporting ? 'Đang xử lý dữ liệu...' : 'Bắt đầu Nhập dữ liệu' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
   </div>
 </template>
 

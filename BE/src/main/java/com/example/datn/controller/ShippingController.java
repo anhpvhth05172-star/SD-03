@@ -19,11 +19,15 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/shipping")
-@RequiredArgsConstructor
 public class ShippingController {
 
     private final GHNService ghnService;
     private final GhnDiaChiMapper ghnDiaChiMapper;
+
+    public ShippingController(GHNService ghnService, GhnDiaChiMapper ghnDiaChiMapper) {
+        this.ghnService = ghnService;
+        this.ghnDiaChiMapper = ghnDiaChiMapper;
+    }
 
     @GetMapping("/provinces")
     public List<ShippingAddressDTO> provinces() {
@@ -52,11 +56,23 @@ public class ShippingController {
             || request.getToWardCode().isBlank();
         Integer tinhIdLegacy = null;
         if (canThieuMa) {
-            KetQuaAnhXach kq = ghnDiaChiMapper.anhXach(
-                request.getToProvinceName(), request.getToWardName());
-            request.setToDistrictId(kq.quanId());
-            request.setToWardCode(kq.maPhuong());
-            tinhIdLegacy = kq.tinhId();
+            try {
+                if (ghnService.daCauHinhGhn()) {
+                    KetQuaAnhXach kq = ghnDiaChiMapper.anhXach(
+                        request.getToProvinceName(), request.getToWardName());
+                    request.setToDistrictId(kq.quanId());
+                    request.setToWardCode(kq.maPhuong());
+                    tinhIdLegacy = kq.tinhId();
+                } else {
+                    request.setToDistrictId(1);
+                    request.setToWardCode("001");
+                    tinhIdLegacy = 1;
+                }
+            } catch (Exception e) {
+                request.setToDistrictId(1);
+                request.setToWardCode("001");
+                tinhIdLegacy = 1;
+            }
         }
         ShippingFeeResponse response = ghnService.tinhPhiResponse(request);
         response.setToProvinceId(tinhIdLegacy);
