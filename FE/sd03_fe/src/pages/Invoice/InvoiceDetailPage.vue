@@ -8,8 +8,10 @@ import { formatDateTime, formatVnd, payStatusOf } from '@/utils/format'
 import {
   TRANG_THAI_ONLINE,
   TRANG_THAI_POS,
+  TRANG_THAI_GIAO_THAT_BAI,
   isTerminal as isTerminalOf,
   laPos,
+  nhanBuoc,
   pillClass,
   trangThaiTiepTheoOf,
 } from '@/constants/invoiceStatus'
@@ -80,6 +82,7 @@ const genQr = async () => {
 
 const stepsList = computed(() => {
   if (!data.value) return TRANG_THAI_ONLINE
+  if (data.value.trangThai === 'Giao hàng thất bại') return TRANG_THAI_GIAO_THAT_BAI
   return laPos(data.value) ? TRANG_THAI_POS : TRANG_THAI_ONLINE
 })
 
@@ -501,7 +504,8 @@ onBeforeUnmount(() => {
                   :class="{
                     'is-done': laDaQua(s),
                     'is-active': laTrangThaiHienTai(s),
-                    'is-next': laTrangThaiTiepTheo(s),
+                    'is-fail': s === 'Giao hàng thất bại',
+                    'is-next': laTrangThaiTiepTheo(s) && !laDaQua(s),
                   }"
                   :title="laTrangThaiHienTai(s) ? 'Trạng thái hiện tại' : (laDaQua(s) ? 'Đã hoàn thành' : undefined)"
                 >
@@ -523,6 +527,10 @@ onBeforeUnmount(() => {
                       <circle cx="7" cy="18" r="2" />
                       <circle cx="17" cy="18" r="2" />
                     </svg>
+                    <svg v-else-if="s === 'Giao hàng thất bại'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M15 9l-6 6M9 9l6 6" />
+                    </svg>
                     <svg v-else-if="i === 4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M20 6L9 17l-5-5" />
                     </svg>
@@ -530,7 +538,7 @@ onBeforeUnmount(() => {
                       <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 16.5 7.1 18.2l.9-5.5-4-3.9L9.5 8z" />
                     </svg>
                   </span>
-                  <span class="stepper-label">{{ s }}</span>
+                  <span class="stepper-label">{{ nhanBuoc(s) }}</span>
                   <span v-if="i === 0" class="stepper-time">{{ formatDateTime(data.ngayTao) }}</span>
                   <span v-else-if="laTrangThaiHienTai(s) && i > 0" class="stepper-time">
                     {{ formatDateTime(data.ngayCapNhat) }}
@@ -1073,7 +1081,8 @@ button.stepper-step.is-next:disabled {
 }
 
 .stepper-step.is-done::before,
-.stepper-step.is-active::before {
+.stepper-step.is-active::before,
+.stepper-step.is-fail::before {
   background: #dc2626;
 }
 
@@ -1110,6 +1119,13 @@ button.stepper-step.is-next:disabled {
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
 }
 
+.stepper-step.is-fail .stepper-node {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.16);
+}
+
 .stepper-step.is-next .stepper-node {
   border-color: #e2e8f0;
   background: #f8fafc;
@@ -1124,11 +1140,17 @@ button.stepper-step.is-next:disabled {
 }
 
 .stepper-step.is-done .stepper-label,
-.stepper-step.is-active .stepper-label {
+.stepper-step.is-active .stepper-label,
+.stepper-step.is-fail .stepper-label {
   color: #1e293b;
 }
 
-.stepper-step:not(.is-done):not(.is-active) .stepper-label {
+.stepper-step.is-fail .stepper-label {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.stepper-step:not(.is-done):not(.is-active):not(.is-fail) .stepper-label {
   color: #94a3b8;
   font-weight: 500;
 }

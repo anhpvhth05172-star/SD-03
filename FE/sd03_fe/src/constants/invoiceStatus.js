@@ -9,7 +9,17 @@ export const TRANG_THAI_ONLINE = [
 
 export const TRANG_THAI_POS = ['Chờ xác nhận', 'Đã hoàn thành']
 
+export const TRANG_THAI_GIAO_THAT_BAI = [
+  'Chờ xác nhận',
+  'Đã xác nhận',
+  'Chờ giao hàng',
+  'Đang giao hàng',
+  'Giao hàng thất bại',
+]
+
 export const TRANG_THAI_KET_THUC = ['Đã hủy', 'Đã hoàn tiền']
+
+export const nhanBuoc = (ten) => (ten === 'Đã giao hàng' ? 'Giao hàng thành công' : ten)
 
 export const laPos = (invoice) => {
   const loaiDon = invoice?.loaiDon
