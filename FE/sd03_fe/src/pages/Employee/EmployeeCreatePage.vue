@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { DS_34_TINH_THANH, layDiaGioi, layPhuongXa, phanTichChuoiCccd, phanTichDiaChiCccd, timTinh } from '@/api/diaGioi'
 import {
   checkEmployeeEmail,
+  checkEmployeeSdt,
   createEmployee,
   getEmployee,
   getEmployeeFormData,
@@ -48,6 +49,7 @@ const vaiTros = ref([])
 const daNopForm = ref(false)
 const ngaySinhDaCham = ref(false)
 const emailTrungLoi = ref('')
+const sdtTrungLoi = ref('')
 let yeuCauHienTai = 0
 
 const tinhThanhs = ref([])
@@ -166,7 +168,25 @@ const kiemTraEmailTrung = async () => {
       emailTrungLoi.value = ''
     }
   } catch {
-    emailTrungLoi.value = ''
+    emailTrungLoi.value = 'Không thể kiểm tra email trùng, vui lòng thử lại'
+  }
+}
+
+const kiemTraSdtTrung = async () => {
+  const sdt = (form.value.soDienThoai || '').trim()
+  if (!/^0\d{9}$/.test(sdt)) {
+    sdtTrungLoi.value = ''
+    return
+  }
+  try {
+    const res = await checkEmployeeSdt(sdt, isEdit ? route.params.id : null)
+    if (res && res.exists) {
+      sdtTrungLoi.value = 'Số điện thoại đã được sử dụng'
+    } else {
+      sdtTrungLoi.value = ''
+    }
+  } catch {
+    sdtTrungLoi.value = 'Không thể kiểm tra số điện thoại trùng, vui lòng thử lại'
   }
 }
 
@@ -494,6 +514,7 @@ const validate = () =>
     loiEmail.value,
     emailTrungLoi.value,
     loiSdt.value,
+    sdtTrungLoi.value,
     loiVaiTro.value,
     loiGioiTinh.value,
     loiNgaySinh.value,
@@ -523,6 +544,9 @@ const submit = async () => {
   daNopForm.value = true
   if (form.value.email.trim()) {
     await kiemTraEmailTrung()
+  }
+  if (form.value.soDienThoai.trim()) {
+    await kiemTraSdtTrung()
   }
   const error = validate()
   if (error) {
@@ -728,8 +752,10 @@ onMounted(async () => {
             <div class="form-group">
               <label class="form-label">Số điện thoại <span class="req">*</span></label>
               <input v-model="form.soDienThoai" type="tel" class="form-input" placeholder="Nhập số điện thoại"
-                maxlength="10" @blur="cham('soDienThoai')" />
+                :class="{ 'has-error': sdtTrungLoi || hienLoi('soDienThoai', loiSdt) }"
+                maxlength="10" @blur="cham('soDienThoai'); kiemTraSdtTrung()" />
               <p v-if="hienLoi('soDienThoai', loiSdt)" class="input-error">{{ loiSdt }}</p>
+              <p v-else-if="sdtTrungLoi" class="input-error">{{ sdtTrungLoi }}</p>
             </div>
 
             <div class="form-group">

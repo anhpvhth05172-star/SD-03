@@ -190,6 +190,17 @@ public class NhanVienService {
             : nhanVienRepository.existsByEmailAndIdNot(cleanEmail, excludeId);
     }
 
+    @Transactional(readOnly = true)
+    public boolean checkTrungSdt(String soDienThoai, Long excludeId) {
+        if (soDienThoai == null || soDienThoai.trim().isEmpty()) {
+            return false;
+        }
+        String cleanSdt = soDienThoai.trim();
+        return excludeId == null
+            ? nhanVienRepository.existsBySoDienThoai(cleanSdt)
+            : nhanVienRepository.existsBySoDienThoaiAndIdNot(cleanSdt, excludeId);
+    }
+
     /** Kiểm tra dữ liệu nhân viên không thay đổi dữ liệu (dùng cho xem trước import Excel). */
     @Transactional(readOnly = true)
     public void kiemTraHopLe(NhanVienRequest req, Long excludeId) {
@@ -600,6 +611,12 @@ public class NhanVienService {
             String sdt = req.getSoDienThoai().trim();
             if (!SO_DIEN_THAI_PATTERN.matcher(sdt).matches()) {
                 throw new IllegalArgumentException("Số điện thoại phải bắt đầu bằng số 0 và gồm đúng 10 chữ số");
+            }
+            boolean trungSdt = taoMoi
+                ? nhanVienRepository.existsBySoDienThoai(sdt)
+                : nhanVienRepository.existsBySoDienThoaiAndIdNot(sdt, excludeId);
+            if (trungSdt) {
+                throw new IllegalArgumentException("Số điện thoại đã được sử dụng");
             }
         }
         if (taoMoi && req.getNgaySinh() == null) {

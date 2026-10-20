@@ -28,6 +28,9 @@ export const changeEmployeePassword = (id, matKhauMoi, xacNhan) =>
 export const checkEmployeeEmail = (email, excludeId) =>
   http.get('/nhan-vien/check-email', { params: { email, excludeId } }).then((r) => r.data)
 
+export const checkEmployeeSdt = (soDienThoai, excludeId) =>
+  http.get('/nhan-vien/check-sdt', { params: { soDienThoai, excludeId } }).then((r) => r.data)
+
 export const sendEmployeesBulkEmail = (data) =>
   http.post('/nhan-vien/gui-email-hang-loat', data).then((r) => r.data)
 

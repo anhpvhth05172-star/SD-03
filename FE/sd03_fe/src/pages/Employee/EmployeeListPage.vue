@@ -1447,12 +1447,11 @@ onMounted(async () => {
 }
 
 .address-clamp {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: block;
   max-width: 280px;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 /* Avatar tròn */
