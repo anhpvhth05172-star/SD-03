@@ -101,29 +101,6 @@ const formatCustomerAddress = (row) => {
   return parts.length ? parts.join(', ') : '—'
 }
 
-const formatCustomerAddressTooltip = (row) => {
-  const ds =
-    row.danhSachDiaChi && row.danhSachDiaChi.length
-      ? row.danhSachDiaChi
-      : row.diaChiMacDinh
-        ? [row.diaChiMacDinh]
-        : []
-  if (!ds.length) return 'Chưa cập nhật địa chỉ'
-  if (ds.length === 1) {
-    const parts = [ds[0].diaChiCuThe, ds[0].phuong, ds[0].thanhPho].filter(Boolean)
-    return parts.length ? parts.join(', ') : '—'
-  }
-  return ds
-    .map((d, i) => {
-      const parts = [d.diaChiCuThe, d.phuong, d.thanhPho].filter(Boolean)
-      const addr = parts.length ? parts.join(', ') : '—'
-      const ten = d.tenChiChi && d.tenChiChi !== row.tenKhachHang ? ` (${d.tenChiChi})` : ''
-      const def = d.macDinh ? ' [Mặc định]' : ''
-      return `${i + 1}. ${addr}${ten}${def}`
-    })
-    .join('\n')
-}
-
 const diaChiText = computed(() => {
   if (!detailData.value) return ''
   return formatCustomerAddress(detailData.value)
@@ -370,15 +347,8 @@ onMounted(() => {
                 <td class="cell-name">{{ row.tenKhachHang }}</td>
                 <td class="cell-email">{{ row.email || '—' }}</td>
                 <td class="cell-address">
-                  <span class="address-clamp" :title="formatCustomerAddressTooltip(row)">
+                  <span class="address-clamp">
                     {{ formatCustomerAddress(row) }}
-                  </span>
-                  <span
-                    v-if="row.danhSachDiaChi && row.danhSachDiaChi.length > 1"
-                    class="extra-addr-tag"
-                    :title="formatCustomerAddressTooltip(row)"
-                  >
-                    +{{ row.danhSachDiaChi.length - 1 }} địa chỉ
                   </span>
                 </td>
                 <td class="cell-phone">{{ row.soDienThoai || '—' }}</td>
@@ -405,17 +375,7 @@ onMounted(() => {
                         <circle cx="12" cy="10" r="3"></circle>
                       </svg>
                     </button>
-                    <button class="btn-icon is-view" type="button" title="Xem chi tiết" aria-label="Xem chi tiết"
-                      @click="openDetail(row)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                        <circle cx="9" cy="10" r="2"></circle>
-                        <path d="M6 16c0-1.7 1.3-3 3-3s3 1.3 3 3"></path>
-                        <line x1="15" y1="9" x2="18" y2="9"></line>
-                        <line x1="15" y1="13" x2="18" y2="13"></line>
-                      </svg>
-                    </button>
+                    <button class="btn-text-edit" type="button" title="Sửa" @click="openDetail(row)">Sửa</button>
                   </div>
                 </td>
               </tr>
@@ -888,18 +848,6 @@ onMounted(() => {
   line-height: 1.45;
 }
 
-.extra-addr-tag {
-  display: inline-block;
-  margin-top: 4px;
-  padding: 1px 7px;
-  background: #eff6ff;
-  color: #2563eb;
-  border: 1px solid #bfdbfe;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: default;
-}
 
 /* Avatar tròn */
 .customer-avatar {
@@ -1012,15 +960,23 @@ onMounted(() => {
   color: #ffffff;
 }
 
-/* Nút View (xám xanh) */
-.btn-icon.is-view {
-  background: #f8fafc;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
+/* Nút Sửa (chữ) */
+.btn-text-edit {
+  min-width: 46px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 14px;
+  background: #f5f3ff;
+  color: #8b5cf6;
+  border: 1px solid #ede9fe;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.btn-icon.is-view:hover {
-  background: #64748b;
+.btn-text-edit:hover {
+  background: #8b5cf6;
   color: #ffffff;
 }
 

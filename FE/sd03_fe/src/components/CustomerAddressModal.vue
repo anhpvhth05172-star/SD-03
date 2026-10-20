@@ -272,12 +272,11 @@ onMounted(() => {
         <li v-for="d in danhSach" :key="d.id" class="addr-item">
           <div class="addr-main">
             <div class="addr-title">
-              <span>{{ d.tenChiChi || d.maDiaChi }}</span>
+              <span>{{ d.tenChiChi || 'Địa chỉ' }}</span>
               <span v-if="d.macDinh" class="pill pill-green">Mặc định</span>
               <span v-if="d.trangThai === false" class="pill pill-red">Ngừng dùng</span>
             </div>
             <div class="addr-sub">{{ lineOf(d) }}</div>
-            <div class="addr-code">{{ d.maDiaChi }}</div>
           </div>
           <div class="addr-acts">
             <button v-if="!d.macDinh" type="button" class="mini-btn" @click="datMacDinh(d)">Mặc định</button>
@@ -526,12 +525,6 @@ onMounted(() => {
   font-size: 12.5px;
   color: #4a4a52;
   margin-top: 3px;
-}
-
-.addr-code {
-  font-size: 11.5px;
-  color: #9a9aa3;
-  margin-top: 2px;
 }
 
 .addr-acts {
