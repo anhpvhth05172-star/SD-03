@@ -710,13 +710,13 @@ const submit = async () => {
                     />
                   </th>
                   <th class="dg-center dg-w-stt">STT</th>
-                  <th class="dg-center">Sản phẩm</th>
                   <th class="dg-center dg-w-img">Ảnh</th>
+                  <th class="dg-center">Sản phẩm</th>
                   <th class="dg-center">Mã chi tiết</th>
                   <th class="dg-center">Kích cỡ</th>
                   <th class="dg-center">Màu sắc</th>
                   <th class="dg-center">Giá bán</th>
-                  <th class="dg-center">Giá hiện tại</th>
+                  <th class="dg-center">% giảm</th>
                   <th class="dg-center">Giá sau giảm</th>
                   <th class="dg-center">Tồn</th>
                 </tr>
@@ -747,9 +747,6 @@ const submit = async () => {
                   </td>
                   <td class="dg-center">{{ i + 1 }}</td>
 
-                  <td class="dg-center dg-strong" :title="v.tenSanPham">
-                    {{ v.tenSanPham }}
-                  </td>
                   <td class="dg-center dg-cell-img">
                     <div class="dg-img-wrap">
                       <img
@@ -769,14 +766,15 @@ const submit = async () => {
                       </span>
                     </div>
                   </td>
+                  <td class="dg-center dg-strong" :title="v.tenSanPham">
+                    {{ v.tenSanPham }}
+                  </td>
                   <td class="dg-center dg-muted">{{ v.maChiTiet }}</td>
                   <td class="dg-center">{{ v.kichCo }}</td>
                   <td class="dg-center">{{ v.mauSac }}</td>
                   <td class="dg-center">{{ money(v.giaBan) }}</td>
                   <td class="dg-center">
-                    <span v-if="v.phanTramGiamKhac">
-                      {{ money(currentPrice(v)) }}
-                    </span>
+                    <template v-if="validPercent">{{ form.percent }}%</template>
                     <span v-else class="dg-muted">—</span>
                   </td>
                   <td class="dg-center">

@@ -617,7 +617,7 @@ const submit = async () => {
                 <th class="dg-center">Kích cỡ</th>
                 <th class="dg-center">Màu sắc</th>
                 <th class="dg-right">Giá bán</th>
-                <th class="dg-right">Giá hiện tại</th>
+                <th class="dg-center">% giảm</th>
                 <th class="dg-right">Giá sau giảm</th>
                 <th class="dg-right">Tồn</th>
               </tr>
@@ -669,10 +669,8 @@ const submit = async () => {
                 <td class="dg-center">{{ v.kichCo }}</td>
                 <td class="dg-center">{{ v.mauSac }}</td>
                 <td class="dg-right">{{ money(v.giaBan) }}</td>
-                <td class="dg-right">
-                  <span v-if="v.phanTramGiamKhac">
-                    {{ money(currentPrice(v)) }}
-                  </span>
+                <td class="dg-center">
+                  <template v-if="validPercent">{{ form.percent }}%</template>
                   <span v-else class="dg-muted">—</span>
                 </td>
                 <td class="dg-right">
