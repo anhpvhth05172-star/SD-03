@@ -51,7 +51,7 @@ if not exist "BE\target\DATN-0.0.1-SNAPSHOT.jar" (
 
 REM --- 3. Dung backend cu neu dang giu port 8080 (de khong trung port) ---
 echo [..] Kiem tra port 8080...
-for /f "tokens=5" %%P in ('netstat -ano ^| findstr /r ":8080 .*LISTENING"') do (
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr /r /c:"TCP.*:8080 .*LISTENING"') do (
     echo     Dung process cu PID %%P tren 8080
     taskkill /F /PID %%P >nul 2>&1
 )
@@ -63,7 +63,7 @@ echo [..] Khoi chay Backend tren http://localhost:8080 ...
 start "PolyShoes BE :8080" cmd /k "cd /d "%~dp0BE" && java -jar target\DATN-0.0.1-SNAPSHOT.jar --server.port=8080"
 
 REM --- 5. Khoi chay Frontend neu chua chay ---
-netstat -ano | findstr /r ":5173 .*LISTENING" >nul 2>&1
+netstat -ano | findstr /r /c:"TCP.*:5173 .*LISTENING" >nul 2>&1
 if %errorlevel%==0 (
     echo [OK]  Frontend da chay tren 5173 - bo qua
 ) else (

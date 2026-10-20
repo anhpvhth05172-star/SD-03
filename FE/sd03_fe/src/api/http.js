@@ -5,9 +5,11 @@ import { vaiTroHienTai } from '../utils/session'
 
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api'
 
+// Không set Content-Type mặc định ở đây: axios tự gắn application/json cho body object,
+// còn FormData (upload Excel) phải để nguyên cho browser gắn multipart/form-data + boundary.
+// Set cứng 'application/json' sẽ làm axios serialize FormData thành JSON -> backend không nhận được file.
 const http = axios.create({
   baseURL: API_BASE,
-  headers: { 'Content-Type': 'application/json' },
 })
 
 /* Tạm comment refreshToken + chuyển về trang đăng nhập (không xóa)
