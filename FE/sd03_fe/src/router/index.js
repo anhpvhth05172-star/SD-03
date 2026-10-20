@@ -56,9 +56,9 @@ const routes = [
       {
         path: '',
         redirect: () => {
-          if (isNhanVienDangNhap()) return '/hoa-don'
           if (isKhachHangDangNhap()) return '/tai-khoan'
-          return '/dang-nhap'
+          // Mặc định: màn hình mua hàng (POS) — khách ẩn danh và nhân viên đều vào đây
+          return '/ban-hang'
         },
       },
       { path: '/san-pham', name: 'ProductList', component: ProductListPage, meta: { ...metaBo, title: 'Quản lý sản phẩm' } },
@@ -74,12 +74,12 @@ const routes = [
       { path: '/phieu-giam-gia', component: VoucherListPage, meta: { ...metaBo, title: 'Quản lý phiếu giảm giá' } },
       { path: '/phieu-giam-gia/add', component: DiscountForm, meta: { ...metaBo, title: 'Thêm phiếu giảm giá' } },
       { path: '/phieu-giam-gia/detail/:id', component: DiscountFormDetail, meta: { ...metaBo, title: 'Chi tiết phiếu giảm giá' } },
-      { path: '/phieu-giam-gia/update/:id', component: VoucherFormUpdate, meta: { ...metaBo, title: 'Cập nhật phiếu giảm giá' } },
+      { path: '/phieu-giam-gia/update/:id', component: DiscountFormUpdate, meta: { ...metaBo, title: 'Cập nhật phiếu giảm giá' } },
       { path: '/phieu-giam-gia/:id/edit', redirect: to => `/phieu-giam-gia/update/${to.params.id}` },
       { path: '/dot-giam-gia', component: DiscountEventPage, meta: { ...metaBo, title: 'Quản lý đợt giảm giá' } },
       { path: '/dot-giam-gia/add', component: VoucherForm, meta: { ...metaBo, title: 'Thêm đợt giảm giá' } },
       { path: '/dot-giam-gia/detail/:id', component: VoucherFormDetail, meta: { ...metaBo, title: 'Chi tiết đợt giảm giá' } },
-      { path: '/dot-giam-gia/update/:id', component: DiscountFormUpdate, meta: { ...metaBo, title: 'Cập nhật đợt giảm giá' } },
+      { path: '/dot-giam-gia/update/:id', component: VoucherFormUpdate, meta: { ...metaBo, title: 'Cập nhật đợt giảm giá' } },
       { path: '/dot-giam-gia/edit/:id', redirect: to => `/dot-giam-gia/update/${to.params.id}` },
       { path: '/giam-gia', redirect: '/phieu-giam-gia' },
       {
@@ -101,7 +101,8 @@ const routes = [
         path: '/ban-hang',
         name: 'PosSales',
         component: PosSalesPage,
-        meta: { ...metaBo, title: 'Bán hàng tại quầy' },
+        // Màn hình mua hàng mặc định — công khai (khách ẩn danh cũng thấy)
+        meta: { title: 'Bán hàng tại quầy' },
       },
       {
         path: '/khach-hang',
@@ -160,10 +161,6 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  // Đã comment phần chặn đăng nhập theo yêu cầu để truy cập tự do
-  return true
-
-  /*
   // Trang đăng nhập/đăng ký: đã đăng nhập thì về trang tương ứng vai trò.
   if (to.path === '/dang-nhap' || to.path === '/dang-ky') {
     if (isNhanVienDangNhap()) return '/hoa-don'
@@ -206,7 +203,6 @@ router.beforeEach(async (to) => {
   }
 
   return true
-  */
 })
 
 export default router
