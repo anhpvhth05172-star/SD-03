@@ -118,7 +118,7 @@ const onDropExcelFile = (e) => {
 const downloadTemplate = async () => {
   isDownloadingTemplate.value = true
   try {
-    const res = await fetch(`${API_BASE}/nhan-vien/excel/template`)
+    const res = await fetch(`${API_BASE}/nhan-vien/import/mau`)
     if (!res.ok) throw new Error('Không thể tải file mẫu')
     const blob = await res.blob()
     const url = window.URL.createObjectURL(blob)
@@ -144,20 +144,18 @@ const submitImportExcel = async () => {
   }
   isImporting.value = true
   importResult.value = null
-  const formData = new FormData()
-  formData.append('file', selectedImportFile.value)
   try {
-    const res = await fetch(`${API_BASE}/nhan-vien/excel/import`, {
-      method: 'POST',
-      body: formData,
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      throw new Error(data.message || 'Lỗi xử lý file Excel')
+    const ketQua = await importEmployeesConfirm(selectedImportFile.value)
+    const thanhCong = (ketQua.themThanhCong || 0) + (ketQua.capNhatThanhCong || 0)
+    const thatBai = ketQua.thatBai || 0
+    importResult.value = {
+      soDongThanhCong: thanhCong,
+      soDongThatBai: thatBai,
+      tongSoDong: thanhCong + thatBai,
+      danhSachLoi: ketQua.chiTietLoi || [],
     }
-    importResult.value = data
-    if (data.soDongThanhCong > 0) {
-      notifySuccess(`Import thành công ${data.soDongThanhCong}/${data.tongSoDong} dòng dữ liệu!`)
+    if (thanhCong > 0) {
+      notifySuccess(`Import thành công ${thanhCong}/${thanhCong + thatBai} dòng dữ liệu!`)
       load()
     } else {
       notifyWarning('Không có dòng dữ liệu nào được import thành công')

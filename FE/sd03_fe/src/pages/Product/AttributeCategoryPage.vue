@@ -4,10 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import { removeVietnameseTones } from '@/utils/format'
+import { API_ORIGIN } from '@/api/http'
 
 const route = useRoute()
 const router = useRouter()
-const API_BASE = 'http://localhost:8080/api/v1/attributes'
+const API_BASE = `${API_ORIGIN}/api/v1/attributes`
 
 const showToast = (msg, type = 'success') => {
   if (type === 'success') {

@@ -2,7 +2,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import QRCode from 'qrcode'
 import { Html5Qrcode } from 'html5-qrcode'
-import http from '@/api/http'
+import http, { API_ORIGIN } from '@/api/http'
 import { getProvinces, getWards, getServices, tinhPhi } from '@/api/shipping'
 import { DS_63_TINH_THANH } from '@/api/diaGioi'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
@@ -11,7 +11,7 @@ import { formatVnd } from '@/utils/format'
 import { getUser } from '@/utils/auth'
 import { tenVaiTro } from '@/utils/session'
 
-const API_BASE = 'http://localhost:8080/api/v1'
+const API_BASE = `${API_ORIGIN}/api/v1`
 
 const staffUser = computed(() => getUser())
 const staffName = computed(() => staffUser.value?.tenKhachHang || staffUser.value?.tenTaiKhoan || 'Nhân viên')

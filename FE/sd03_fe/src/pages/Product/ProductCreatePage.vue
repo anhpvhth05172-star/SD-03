@@ -6,9 +6,10 @@ import SearchableSelect from '@/components/SearchableSelect.vue'
 import CurrencyInput from '@/components/CurrencyInput.vue'
 import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
+import { API_ORIGIN } from '@/api/http'
 
 const router = useRouter()
-const API_BASE = 'http://localhost:8080/api/v1'
+const API_BASE = `${API_ORIGIN}/api/v1`
 
 const form = reactive({
   code: '',

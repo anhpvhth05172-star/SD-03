@@ -122,4 +122,31 @@ class NhanVienGuiEmailHangLoatTest {
         assertEquals(1, res.getTongYeuCau());
         assertEquals(1, res.getGuiThanhCong());
     }
+
+    @Test
+    void guiHangLoat_GuiSongSong_KhongQuaCham() throws Exception {
+        int soNhanVien = 16;
+        NhanVien[] ds = new NhanVien[soNhanVien];
+        java.util.List<Long> ids = new java.util.ArrayList<>();
+        for (int i = 0; i < soNhanVien; i++) {
+            ds[i] = nhanVien((long) (i + 1), "NV" + i, "Nhân viên " + i, "nv" + i + "@example.com");
+            ids.add((long) (i + 1));
+        }
+        EmailService emailService = mock(EmailService.class);
+        when(emailService.guiMailCustom(anyString(), anyString(), anyString())).thenAnswer(inv -> {
+            Thread.sleep(150);
+            return true;
+        });
+
+        long start = System.nanoTime();
+        GuiEmailHangLoatResponse res = service(repoVoiCacNhanVien(ds), emailService)
+            .guiEmailHangLoat(yeuCau(ids));
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+        assertEquals(16, res.getTongYeuCau());
+        assertEquals(16, res.getGuiThanhCong());
+        // Tuần tiến sẽ mất 16 x 150ms = 2400ms. Gửi song song phải gọn trong ~600ms.
+        assertTrue(elapsedMs < 1500,
+            "Email phải được gửi song song, không được tuần tiến (mất " + elapsedMs + "ms)");
+    }
 }

@@ -8,10 +8,11 @@ import CurrencyInput from '@/components/CurrencyInput.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
+import { API_ORIGIN } from '@/api/http'
 
 const router = useRouter()
 const route = useRoute()
-const API_BASE = 'http://localhost:8080/api/v1'
+const API_BASE = `${API_ORIGIN}/api/v1`
 
 const showToast = ref(true)
 const isLoading = ref(false)

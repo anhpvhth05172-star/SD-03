@@ -63,6 +63,8 @@ public class NhanVienService {
     private static final int SO_LAN_TAO = 5;
     private static final int SO_MA_TOI_DA = 1_000_000;
     private static final int GUI_EMAIL_TOI_DA = 500;
+    /** Số luồng gửi email hàng loạt song song — mỗi email mất ~3-5s nếu gửi tuần tiến. */
+    private static final int GUI_EMAIL_SONG_SONG = 8;
     private static final String[][] GIOI_TINH_MAP = {
         {"NAM", "Nam"},
         {"NU", "Nữ"},
@@ -232,6 +234,8 @@ public class NhanVienService {
         String tieuDe = req.getTieuDe().trim();
         String noiDung = req.getNoiDung().trim();
 
+        // 1. Kiểm tra dữ liệu trên thread chính (email hợp lệ, nhân viên tồn tại)
+        java.util.List<Long> canGui = new java.util.ArrayList<>();
         for (Long id : ids) {
             NhanVien nv = nhanVienMap.get(id);
             if (nv == null) {
@@ -247,15 +251,45 @@ public class NhanVienService {
                     "Nhân viên không có địa chỉ email hợp lệ"));
                 continue;
             }
-            boolean guiOk = emailService.guiMailCustom(nv.getEmail().trim(), tieuDe, noiDung);
-            if (guiOk) {
-                response.setGuiThanhCong(response.getGuiThanhCong() + 1);
-            } else {
-                response.setThatBai(response.getThatBai() + 1);
-                response.getBoQua().add(new GuiEmailHangLoatResponse.BoQua(
-                    id, nv.getMaNhanVien(), nv.getTenTaiKhoan(), nv.getEmail(),
-                    "Nhà cung cấp email từ chối hoặc có lỗi khi gửi"));
+            canGui.add(id);
+        }
+
+        if (canGui.isEmpty()) {
+            return response;
+        }
+
+        // 2. Gửi song song với pool giới hạn — mỗi email mất ~3-5s (SMTP handshake),
+        //    tuần tiến khiến 50 người gửi mất hơn 3 phút và người dùng tưởng treo.
+        java.util.concurrent.ExecutorService pool =
+            java.util.concurrent.Executors.newFixedThreadPool(Math.min(GUI_EMAIL_SONG_SONG, canGui.size()));
+        try {
+            java.util.List<java.util.concurrent.Future<boolean[]>> futures = new java.util.ArrayList<>();
+            for (Long id : canGui) {
+                String email = nhanVienMap.get(id).getEmail().trim();
+                futures.add(pool.submit(() -> new boolean[] { emailService.guiMailCustom(email, tieuDe, noiDung) }));
             }
+            for (int i = 0; i < futures.size(); i++) {
+                Long id = canGui.get(i);
+                NhanVien nv = nhanVienMap.get(id);
+                boolean guiOk = false;
+                try {
+                    guiOk = futures.get(i).get()[0];
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (java.util.concurrent.ExecutionException e) {
+                    log.error("Gửi email hàng loạt cho nhân viên {} gặp lỗi", id, e.getCause());
+                }
+                if (guiOk) {
+                    response.setGuiThanhCong(response.getGuiThanhCong() + 1);
+                } else {
+                    response.setThatBai(response.getThatBai() + 1);
+                    response.getBoQua().add(new GuiEmailHangLoatResponse.BoQua(
+                        id, nv.getMaNhanVien(), nv.getTenTaiKhoan(), nv.getEmail(),
+                        "Nhà cung cấp email từ chối hoặc có lỗi khi gửi"));
+                }
+            }
+        } finally {
+            pool.shutdown();
         }
         return response;
     }

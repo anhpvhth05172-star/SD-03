@@ -23,7 +23,7 @@ import org.springframework.web.client.RestClient;
 public class GeminiService {
 
     private static final String URL_DEFAULT =
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
     private static final int TIMEOUT_MS = 15_000;
 
     private final RestClient restClient;
@@ -38,6 +38,7 @@ public class GeminiService {
     ) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.url = url == null || url.isBlank() ? URL_DEFAULT : url.trim();
+        log.info("Gemini init: configured={}, url={}", daCauHinh(), this.url);
         this.objectMapper = objectMapper;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofMillis(TIMEOUT_MS));
@@ -77,13 +78,14 @@ public class GeminiService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("x-goog-api-key", apiKey);
 
+            // Đọc trực tiếp InputStream: Google đôi khi trả content-type không chuẩn,
+            // để BodyHandler của converter lọc dễ fail với "application/octet-stream".
             String raw = restClient
                 .post()
                 .uri(url)
                 .headers(h -> h.addAll(headers))
                 .body(objectMapper.writeValueAsString(body))
-                .retrieve()
-                .body(String.class);
+                .exchange((req, res) -> new String(res.getBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
 
             JsonNode root = objectMapper.readTree(raw);
             JsonNode candidates = root.path("candidates");
@@ -95,10 +97,10 @@ public class GeminiService {
             }
             throw new IllegalStateException("Gemini không trả về nội dung hợp lệ");
         } catch (RuntimeException e) {
-            log.warn("Gemini loi: {}", e.getMessage());
+            log.warn("Gemini loi url=" + url + " : " + e.getMessage(), e);
             throw e;
         } catch (Exception e) {
-            log.warn("Gemini loi doc phan hoi: {}", e.getMessage());
+            log.warn("Gemini loi doc phan hoi url=" + url + " : " + e.getMessage(), e);
             throw new IllegalStateException("Không kết nối được Gemini", e);
         }
     }

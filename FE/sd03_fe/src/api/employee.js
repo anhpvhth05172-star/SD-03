@@ -40,8 +40,14 @@ const buildImportFormData = (file) => {
   return fd
 }
 
+// Override Content-Type JSON mặc định của instance: nếu để application/json,
+// axios 1.x sẽ serialize FormData thành JSON (formDataToJSON) và backend báo
+// "Current request is not a multipart request". Để undefined thì axios bỏ hẳn
+// header này, browser tự gắn multipart/form-data kèm boundary.
+const multipartConfig = { headers: { 'Content-Type': undefined } }
+
 export const importEmployeesPreview = (file) =>
-  http.post('/nhan-vien/import/xem-truoc', buildImportFormData(file)).then((r) => r.data)
+  http.post('/nhan-vien/import/xem-truoc', buildImportFormData(file), multipartConfig).then((r) => r.data)
 
 export const importEmployeesConfirm = (file) =>
-  http.post('/nhan-vien/import/xac-nhan', buildImportFormData(file)).then((r) => r.data)
+  http.post('/nhan-vien/import/xac-nhan', buildImportFormData(file), multipartConfig).then((r) => r.data)
