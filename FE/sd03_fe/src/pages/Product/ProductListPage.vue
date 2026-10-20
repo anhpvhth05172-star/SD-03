@@ -355,14 +355,7 @@ const copyToClipboard = (text) => {
 }
 
 const viewProductDetails = (item) => {
-  router.push({
-    path: '/san-pham/bien-the',
-    query: {
-      idSanPham: item.id,
-      maSanPham: item.maSanPham || `SP0${item.id}`,
-      tenSanPham: item.tenSanPham
-    }
-  })
+  router.push('/san-pham/bien-the')
 }
 const viewProductVariants = viewProductDetails
 

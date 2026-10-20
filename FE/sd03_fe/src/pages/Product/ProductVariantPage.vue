@@ -46,24 +46,6 @@ const filters = reactive({
 const colorsList = ref([])
 const sizesList = ref([])
 
-const selectedProductCode = ref('')
-const selectedProductName = ref('')
-const isFilteredByProduct = computed(() => !!route.query.idSanPham)
-
-const initProductHeaderInfo = () => {
-  if (route.query.idSanPham) {
-    selectedProductName.value = route.query.tenSanPham || `Sản phẩm #${route.query.idSanPham}`
-    selectedProductCode.value = route.query.maSanPham || `SP0${route.query.idSanPham}`
-  } else {
-    selectedProductName.value = ''
-    selectedProductCode.value = ''
-  }
-}
-
-const clearProductFilter = () => {
-  router.push('/san-pham/bien-the')
-}
-
 let debounceTimer = null
 let currentAbortController = null
 
@@ -104,9 +86,6 @@ const buildParams = (pageIndex) => {
   if (filters.trangThai !== '') {
     params.append('trangThai', filters.trangThai)
   }
-  if (route.query.idSanPham) {
-    params.append('idSanPham', route.query.idSanPham)
-  }
 
   return params
 }
@@ -136,14 +115,14 @@ const fetchVariants = async (useCache = true) => {
       totalElements.value = total
       totalPages.value = pages
     } else {
-      if (variants.value.length === 0 && !route.query.idSanPham) {
+      if (variants.value.length === 0) {
         useFallbackData()
       }
     }
   } catch (err) {
     if (err.name !== 'AbortError') {
       console.error('Lỗi khi tải biến thể sản phẩm:', err)
-      if (variants.value.length === 0 && !route.query.idSanPham) {
+      if (variants.value.length === 0) {
         useFallbackData()
       }
     }
@@ -155,7 +134,6 @@ const fetchVariants = async (useCache = true) => {
 watch(
   () => route.query,
   () => {
-    initProductHeaderInfo()
     currentPage.value = 0
     fetchVariants(false)
   },
@@ -301,7 +279,7 @@ const exportVariantsToExcel = async () => {
       ],
       itemsToExport.map((item, index) => [
         index + 1,
-        item.tenSp || selectedProductName.value || '',
+        item.tenSp || '',
         item.tenThuongHieu || '',
         item.tenLoaiGiay || '',
         item.chatLieu || '',
@@ -344,7 +322,7 @@ const generateVariantQrDataUrl = async (item) => {
   const payload = JSON.stringify({
     maCtsp: item.maCtsp || `SPCT0${item.id}`,
     maSp: item.maSp || '',
-    tenSp: item.tenSp || selectedProductName.value || '',
+        tenSp: item.tenSp || '',
     color: item.color || '',
     size: item.size || '',
     price: item.price || 0,
@@ -366,7 +344,7 @@ const openSingleQrModal = async (item) => {
   try {
     const dataUrl = await generateVariantQrDataUrl(item)
     qrModal.title = `Mã QR Biến thể: ${item.maCtsp || `SPCT0${item.id}`}`
-    qrModal.subtitle = `${item.tenSp || selectedProductName.value || ''} (${item.color || ''} - Size ${item.size || ''})`
+      qrModal.subtitle = `${item.tenSp || ''} (${item.color || ''} - Size ${item.size || ''})`
     qrModal.items = [
       {
         ...item,
@@ -528,9 +506,13 @@ const handleQuickAttributeAdded = async (item) => {
   }
 }
 
+const addFormProduct = computed(() =>
+  productsList.value.find((p) => p.id === addForm.idSanPham)
+)
+
 const openAddVariantModal = () => {
   addFormError.value = ''
-  addForm.idSanPham = route.query.idSanPham ? Number(route.query.idSanPham) : (productsList.value.length > 0 ? productsList.value[0].id : '')
+  addForm.idSanPham = productsList.value.length > 0 ? productsList.value[0].id : ''
   addForm.idMauSac = ''
   addForm.idKichCo = ''
   addForm.stock = 10
@@ -584,7 +566,7 @@ const triggerAddImageUpload = () => {
 
 const saveAddVariant = async () => {
   addFormError.value = ''
-  const targetIdSanPham = addForm.idSanPham || route.query.idSanPham
+  const targetIdSanPham = addForm.idSanPham
   if (!targetIdSanPham) {
     addFormError.value = 'Vui lòng chọn sản phẩm cần thêm biến thể!'
     return
@@ -858,11 +840,7 @@ const resetFilters = () => {
   filters.idKichCo = ''
   filters.trangThai = ''
   currentPage.value = 0
-  if (route.query.idSanPham || route.query.tenSanPham || route.query.maSanPham) {
-    router.push({ path: '/san-pham/bien-the' })
-  } else {
-    fetchVariants(false)
-  }
+  fetchVariants(false)
 }
 
 onMounted(() => {
@@ -880,21 +858,7 @@ onUnmounted(() => {
     <!-- Top Header -->
     <div class="page-top-bar">
       <div class="title-info">
-        <template v-if="isFilteredByProduct">
-          <div class="filter-origin-tag">
-            <span class="origin-label">Đang lọc theo sản phẩm:</span>
-            <span class="product-code-tag">{{ selectedProductCode }}</span>
-            <button class="clear-product-filter-btn" @click="clearProductFilter" title="Xem tất cả biến thể">
-              ✕ Xem tất cả biến thể
-            </button>
-          </div>
-          <h1 class="heading-title">
-            Biến thể của: <span class="highlight-product">{{ selectedProductName }}</span>
-          </h1>
-        </template>
-        <template v-else>
-          <h1 class="heading-title">Biến thể sản phẩm</h1>
-        </template>
+        <h1 class="heading-title">Biến thể sản phẩm</h1>
       </div>
 
       <div class="top-actions-group">
@@ -1062,9 +1026,9 @@ onUnmounted(() => {
                 <input type="checkbox" v-model="isAllSelected" class="custom-chk" />
               </th>
               <th width="50" class="text-center">STT</th>
+              <th width="80" class="text-center">Ảnh</th>
               <th width="110">Mã SP</th>
               <th width="130">Mã CTSP</th>
-              <th width="80" class="text-center">Ảnh</th>
               <th width="150">Màu sắc</th>
               <th width="80" class="text-center">Kích cỡ</th>
               <th width="100" class="text-center">Số lượng</th>
@@ -1096,10 +1060,6 @@ onUnmounted(() => {
                   <input type="checkbox" :value="item.id" v-model="selectedIds" class="custom-chk" />
                 </td>
                 <td class="text-center index-col">{{ currentPage * pageSize + idx + 1 }}</td>
-                <td class="code-col">{{ item.maSp || '---' }}</td>
-                <td class="code-ctsp-col">
-                  <span class="sku-badge">{{ item.maCtsp || `SPCT0${item.id}` }}</span>
-                </td>
                 <td class="text-center">
                   <div class="variant-thumb-wrapper">
                     <img v-if="item.img" :src="item.img" alt="Thumbnail" class="variant-thumb" @error="item.img = null" />
@@ -1110,6 +1070,10 @@ onUnmounted(() => {
                     </div>
                     <span v-if="hasDiscount(item)" class="image-discount-badge">{{ item.discount }}</span>
                   </div>
+                </td>
+                <td class="code-col">{{ item.maSp || '---' }}</td>
+                <td class="code-ctsp-col">
+                  <span class="sku-badge">{{ item.maCtsp || `SPCT0${item.id}` }}</span>
                 </td>
                 <td>
                   <div class="color-cell">
@@ -1235,7 +1199,7 @@ onUnmounted(() => {
                 </div>
                 <div class="qr-info-box">
                   <div class="qr-sku-tag">{{ qrItem.maCtsp || `SPCT0${qrItem.id}` }}</div>
-                  <div class="qr-prod-title">{{ qrItem.tenSp || selectedProductName || 'Sản phẩm' }}</div>
+                  <div class="qr-prod-title">{{ qrItem.tenSp || 'Sản phẩm' }}</div>
                   <div class="qr-attr-pills">
                     <span class="qr-pill color">{{ qrItem.color || 'Màu mặc định' }}</span>
                     <span class="qr-pill size">Size {{ qrItem.size || '-' }}</span>
@@ -1364,8 +1328,8 @@ onUnmounted(() => {
             <div class="modal-title-group">
               <h3 class="modal-title">Thêm biến thể mới</h3>
               <p class="modal-subtitle">
-                Sản phẩm: <strong>{{ selectedProductName || 'Chọn sản phẩm' }}</strong> 
-                <span v-if="selectedProductCode" class="modal-code-tag">{{ selectedProductCode }}</span>
+                Sản phẩm: <strong>{{ addFormProduct?.tenSanPham || 'Chọn sản phẩm' }}</strong>
+                <span v-if="addFormProduct?.maSanPham" class="modal-code-tag">{{ addFormProduct.maSanPham }}</span>
               </p>
             </div>
             <button class="modal-close" @click="isAddModalOpen = false">×</button>
@@ -1378,7 +1342,7 @@ onUnmounted(() => {
 
             <div class="edit-grid">
               <!-- Nếu chưa lọc theo sản phẩm thì cho chọn sản phẩm -->
-              <div v-if="!isFilteredByProduct" class="form-group span-2">
+              <div class="form-group span-2">
                 <label class="form-lbl">Chọn sản phẩm <span class="required">*</span></label>
                 <SearchableSelect
                   v-model="addForm.idSanPham"
