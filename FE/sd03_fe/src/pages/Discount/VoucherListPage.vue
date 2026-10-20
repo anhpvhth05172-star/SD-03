@@ -27,7 +27,6 @@ const filter = reactive(emptyFilter());
 const applied = reactive(emptyFilter());
 
 const hasFilter = computed(() => Object.values(applied).some((v) => v));
-const showFilter = ref(true);
 
 /* ---------------- Cache danh sách ban đầu ---------------- */
 try {
@@ -184,9 +183,6 @@ onMounted(() => getData(0));
     <div class="screen-head">
       <div>
         <h1 class="screen-title">Quản lý phiếu giảm giá</h1>
-        <p class="screen-sub">
-          Tạo, theo dõi và phân phối các mã giảm giá đến khách hàng
-        </p>
       </div>
       <RouterLink
         :to="`/admin/phieu-giam-gia/add`"
@@ -215,37 +211,9 @@ onMounted(() => getData(0));
           </svg>
           <h3>Tìm kiếm &amp; bộ lọc</h3>
         </div>
-
-        <div class="filter-head-right">
-          <span class="filter-count">{{ totalElements }} kết quả</span>
-          <button
-            type="button"
-            class="filter-toggle"
-            :aria-expanded="showFilter"
-            @click="showFilter = !showFilter"
-          >
-            {{ showFilter ? "Ẩn bớt" : "Mở rộng" }}
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              :class="{ 'is-flipped': !showFilter }"
-              aria-hidden="true"
-            >
-              <path d="M6 15l6-6 6 6" />
-            </svg>
-          </button>
-        </div>
       </div>
 
-      <form
-        v-show="showFilter"
-        class="filter-row"
-        @submit.prevent="applyFilter"
-      >
+      <form class="filter-row" @submit.prevent="applyFilter">
         <div class="f-item f-keyword">
           <label for="f-keyword">Mã / tên phiếu giảm giá</label>
           <input
@@ -368,9 +336,6 @@ onMounted(() => getData(0));
         </span>
         <h3 class="panel-title">Danh sách phiếu giảm giá</h3>
         <span class="count-pill">{{ totalElements }} phiếu</span>
-        <div class="panel-right">
-          <span class="panel-meta">Cập nhật lúc 08:32 25/05/2026</span>
-        </div>
       </div>
 
       <div class="table-wrap">
