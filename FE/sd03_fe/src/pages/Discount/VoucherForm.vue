@@ -12,6 +12,8 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import { useRouter } from "vue-router";
 import logo from "@/assets/logo.png";
+import SearchableSelect from "@/components/SearchableSelect.vue";
+import { API_BASE } from "@/api/http";
 
 const router = useRouter();
 const baseAPI = inject("baseAPI");
@@ -149,13 +151,35 @@ const err = (key) => (submitted.value || touched[key]) && errors.value[key];
 /* ---------------- Dữ liệu sản phẩm ---------------- */
 const products = ref([]); // danh sách biến thể (phẳng) từ server
 const loadingProducts = ref(true);
+const thuongHieuOptions = ref([]);
+const chatLieuOptions = ref([]);
+const filterThuongHieu = ref("");
+const filterChatLieu = ref("");
+
+const loadFilterOptions = async () => {
+  try {
+    const r = await fetch(`${API_BASE}/v1/attributes/all-filter-options`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const norm = (x) => (Array.isArray(x) ? x : Array.isArray(x?.content) ? x.content : Array.isArray(x?.data) ? x.data : []);
+    thuongHieuOptions.value = norm(d?.thuongHieu);
+    chatLieuOptions.value = norm(d?.chatLieu);
+  } catch {
+    /* bỏ qua, không lọc được vẫn chọn bộ lọc khác */
+  }
+};
 
 const loadProducts = async () => {
   try {
+    loadingProducts.value = true;
     // Backend trả thêm phanTramGiamKhac + tenDotGiamGiaKhac (mức CAO NHẤT trong
     // các đợt đang hiệu lực) cho biến thể đang thuộc đợt giảm giá khác
+    const params = {};
+    if (filterThuongHieu.value) params.idThuongHieu = filterThuongHieu.value;
+    if (filterChatLieu.value) params.idChatLieu = filterChatLieu.value;
     const res = await axios.get(
       baseAPI + "admin/dot-giam-gia/san-pham-chi-tiet/for-discount",
+      { params },
     );
     const raw = res.data?.data ?? res.data ?? [];
 
@@ -182,7 +206,10 @@ const loadProducts = async () => {
     loadingProducts.value = false;
   }
 };
-onMounted(loadProducts);
+onMounted(() => {
+  loadProducts();
+  loadFilterOptions();
+});
 
 /* ---------------- Bảng "Chọn sản phẩm" (gom biến thể theo sản phẩm) ---------------- */
 const productKeyword = ref("");
@@ -287,6 +314,10 @@ const resetVariantFilters = () => {
   variantKeyword.value = "";
   sizeFilter.value = "";
   colorFilter.value = "";
+  const hadServerFilter = !!(filterThuongHieu.value || filterChatLieu.value);
+  filterThuongHieu.value = "";
+  filterChatLieu.value = "";
+  if (hadServerFilter) loadProducts();
 };
 
 /* ---------------- Submit ---------------- */
@@ -581,6 +612,30 @@ const submit = async () => {
               </option>
             </select>
           </div>
+          <div class="dg-field">
+            <label>Thương hiệu</label>
+            <SearchableSelect
+              v-model="filterThuongHieu"
+              :options="thuongHieuOptions"
+              label-key="ten"
+              value-key="id"
+              placeholder="Tất cả thương hiệu"
+              search-placeholder="Tìm thương hiệu..."
+              @change="loadProducts"
+            />
+          </div>
+          <div class="dg-field">
+            <label>Chất liệu</label>
+            <SearchableSelect
+              v-model="filterChatLieu"
+              :options="chatLieuOptions"
+              label-key="ten"
+              value-key="id"
+              placeholder="Tất cả chất liệu"
+              search-placeholder="Tìm chất liệu..."
+              @change="loadProducts"
+            />
+          </div>
           <button type="button" class="dg-reset" @click="resetVariantFilters">
             <svg
               viewBox="0 0 24 24"
@@ -616,6 +671,8 @@ const submit = async () => {
                 <th>Mã chi tiết</th>
                 <th class="dg-center">Kích cỡ</th>
                 <th class="dg-center">Màu sắc</th>
+                <th>Thương hiệu</th>
+                <th>Chất liệu</th>
                 <th class="dg-right">Giá bán</th>
                 <th class="dg-center">% giảm</th>
                 <th class="dg-right">Giá sau giảm</th>
@@ -624,12 +681,12 @@ const submit = async () => {
             </thead>
             <tbody>
               <tr v-if="!variants.length">
-                <td colspan="11" class="dg-empty">
+                <td colspan="13" class="dg-empty">
                   Chọn sản phẩm ở trên để xem các biến thể.
                 </td>
               </tr>
               <tr v-else-if="!filteredVariants.length">
-                <td colspan="11" class="dg-empty">Không có biến thể phù hợp</td>
+                <td colspan="13" class="dg-empty">Không có biến thể phù hợp</td>
               </tr>
               <tr
                 v-for="(v, i) in filteredVariants"
@@ -668,6 +725,8 @@ const submit = async () => {
                 <td class="dg-muted">{{ v.maChiTiet }}</td>
                 <td class="dg-center">{{ v.kichCo }}</td>
                 <td class="dg-center">{{ v.mauSac }}</td>
+                <td>{{ v.tenThuongHieu }}</td>
+                <td>{{ v.chatLieu }}</td>
                 <td class="dg-right">{{ money(v.giaBan) }}</td>
                 <td class="dg-center">
                   <template v-if="validPercent">{{ form.percent }}%</template>

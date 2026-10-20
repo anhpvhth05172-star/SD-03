@@ -49,13 +49,15 @@ public class DotGiamGiaServiceFinal {
     }
 
     /**
-     * Danh sách biến thể để chọn vào đợt giảm giá.
+     * Danh sách biến thể để chọn vào đợt giảm giá, lọc theo thương hiệu/chất liệu (nullable).
      * Biến thể thuộc nhiều đợt đang hiệu lực -> trả về đợt có % cao nhất
-     * (mức giảm áp dụng = max các đợt, không cộng dồn, không nhân chồng).
+     * (mức giảm áp dụng = max các đợt, không cộng dồn, không áp dụng nhiều lần).
      */
     @Transactional(readOnly = true)
-    public List<SanPhamChiTietOptionResponse> layDanhSachSanPham(Long excludeId) {
+    public List<SanPhamChiTietOptionResponse> layDanhSachSanPham(Long excludeId, Long idThuongHieu, Long idChatLieu) {
         List<SanPhamChiTietOptionResponse> list = spctRepo.findAllActiveForDiscount().stream()
+                .filter(s -> trungThuongHieu(s, idThuongHieu))
+                .filter(s -> trungChatLieu(s, idChatLieu))
                 .map(SanPhamChiTietOptionResponse::from)
                 .toList();
 
@@ -69,6 +71,18 @@ public class DotGiamGiaServiceFinal {
             }
         }
         return list;
+    }
+
+    private boolean trungThuongHieu(SanPhamChiTiet s, Long idThuongHieu) {
+        return idThuongHieu == null
+                || (s.getSanPham().getThuongHieu() != null
+                    && idThuongHieu.equals(s.getSanPham().getThuongHieu().getId()));
+    }
+
+    private boolean trungChatLieu(SanPhamChiTiet s, Long idChatLieu) {
+        return idChatLieu == null
+                || (s.getSanPham().getChatLieu() != null
+                    && idChatLieu.equals(s.getSanPham().getChatLieu().getId()));
     }
 
     /**

@@ -19,6 +19,8 @@ public class SanPhamChiTietOptionResponse {
     private String mauSac;
     private BigDecimal giaBan;
     private Integer soLuong;
+    private String tenThuongHieu;
+    private String chatLieu;
 
     // % và tên của đợt giảm giá KHÁC đang áp dụng cho biến thể này (null nếu không có)
     @Setter
@@ -37,6 +39,8 @@ public class SanPhamChiTietOptionResponse {
                 s.getMauSac().getTenMau(),      // ⚠️ chỉnh theo entity MauSac
                 s.getGiaBan(),
                 s.getSoLuong(),
+                s.getSanPham().getThuongHieu() == null ? null : s.getSanPham().getThuongHieu().getTenThuongHieu(),
+                s.getSanPham().getChatLieu() == null ? null : s.getSanPham().getChatLieu().getTenChatLieu(),
                 null,   // phanTramGiamKhac: được gán sau ở service
                 null);  // tenDotGiamGiaKhac: được gán sau ở service
     }
