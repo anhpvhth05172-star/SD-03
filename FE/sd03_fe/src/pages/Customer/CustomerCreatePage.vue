@@ -4,7 +4,6 @@ import { Html5Qrcode } from 'html5-qrcode'
 import { useRoute, useRouter } from 'vue-router'
 import { checkCustomerEmail, createCustomer, getCustomer, suggestCustomerCode, updateCustomer } from '@/api/customer'
 import { layDiaGioi, layPhuongXa, phanTichDiaChiCccd, timTinh } from '@/api/diaGioi'
-import AvatarCard from '@/components/AvatarCard.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { setFlash } from '@/utils/flash'
 import { hopLeMa, maDeXuat } from '@/utils/maNhanVien'
@@ -68,10 +67,6 @@ const form = ref({
   diaChiCuThe: '',
   anhDaiDien: '',
 })
-
-const onAvatarChange = (val) => {
-  form.value.anhDaiDien = val?.dataUrl || ''
-}
 
 const kiemTraEmailTrung = async () => {
   const em = (form.value.email || '').trim()
@@ -530,13 +525,6 @@ onMounted(async () => {
     <p v-if="loading" class="form-error">Đang tải dữ liệu...</p>
 
     <div class="create-grid">
-      <AvatarCard
-        :ten="form.tenKhachHang"
-        :phu="form.email || form.maKhachHang"
-        :anh="form.anhDaiDien"
-        @change="onAvatarChange"
-      />
-
       <div class="form-col">
         <section class="panel">
           <div class="panel-head">
@@ -708,7 +696,7 @@ onMounted(async () => {
 
 .create-grid {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -895,7 +883,7 @@ onMounted(async () => {
 
 @media (max-width: 1024px) {
   .create-grid {
-    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
 

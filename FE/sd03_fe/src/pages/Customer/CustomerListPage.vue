@@ -349,7 +349,6 @@ onMounted(() => {
           <thead>
             <tr>
               <th style="width: 50px;">STT</th>
-              <th style="width: 65px; text-align: center;">Ảnh</th>
               <th style="width: 170px;">Họ tên</th>
               <th style="width: 200px;">Email</th>
               <th>Địa chỉ</th>
@@ -360,19 +359,14 @@ onMounted(() => {
           </thead>
           <tbody>
             <tr v-if="loading">
-              <td colspan="8" class="text-center py-5 text-muted">Đang tải dữ liệu...</td>
+              <td colspan="7" class="text-center py-5 text-muted">Đang tải dữ liệu...</td>
             </tr>
             <tr v-else-if="rows.length === 0">
-              <td colspan="8" class="text-center py-5 text-muted">Không tìm thấy khách hàng nào</td>
+              <td colspan="7" class="text-center py-5 text-muted">Không tìm thấy khách hàng nào</td>
             </tr>
             <template v-else>
               <tr v-for="(row, index) in rows" :key="row.id">
                 <td class="cell-stt">{{ (page * size) + index + 1 }}</td>
-                <td class="text-center">
-                  <div class="customer-avatar has-img">
-                    <img :src="getAvatarSrc(row)" :alt="row.tenKhachHang" @error="onAvatarError($event, row)" />
-                  </div>
-                </td>
                 <td class="cell-name">{{ row.tenKhachHang }}</td>
                 <td class="cell-email">{{ row.email || '—' }}</td>
                 <td class="cell-address">
