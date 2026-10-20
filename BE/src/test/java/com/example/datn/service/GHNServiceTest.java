@@ -33,8 +33,9 @@ class GHNServiceTest {
     private final GHNApiClient ghnApiClient = mock(GHNApiClient.class);
     private final SanPhamChiTietRepository sanPhamChiTietRepository =
         mock(SanPhamChiTietRepository.class);
+    private final OpenApiClient openApiClient = mock(OpenApiClient.class);
     private final GHNService service = new GHNService(
-        cauHinh, ghnApiClient, sanPhamChiTietRepository
+        cauHinh, ghnApiClient, sanPhamChiTietRepository, openApiClient
     );
 
     @BeforeEach

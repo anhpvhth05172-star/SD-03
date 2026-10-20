@@ -16,20 +16,59 @@ const itemCode = ref('#d92d20')
 const itemDescription = ref('')
 const modalError = ref('')
 
-const title = computed(() => {
-  return props.type === 'color' ? 'Thêm nhanh Màu sắc' : 'Thêm nhanh Kích cỡ'
+const typeConfigs = {
+  color: {
+    title: 'Thêm nhanh Màu sắc',
+    label: 'Tên màu sắc',
+    placeholder: 'Ví dụ: Xanh rêu, Đỏ đô...'
+  },
+  size: {
+    title: 'Thêm nhanh Kích cỡ',
+    label: 'Kích cỡ (Size)',
+    placeholder: 'Ví dụ: 39, 40, 40.5, 41...'
+  },
+  brand: {
+    title: 'Thêm nhanh Thương hiệu',
+    label: 'Tên thương hiệu',
+    placeholder: 'Ví dụ: Nike, Adidas, Puma, Mizuno...'
+  },
+  category: {
+    title: 'Thêm nhanh Loại giày',
+    label: 'Tên loại giày',
+    placeholder: 'Ví dụ: Giày chạy bộ, Giày thể thao, Sneaker...'
+  },
+  material: {
+    title: 'Thêm nhanh Chất liệu',
+    label: 'Tên chất liệu',
+    placeholder: 'Ví dụ: Da thật, Vải lưới Mesh, Cao su...'
+  },
+  style: {
+    title: 'Thêm nhanh Kiểu dáng',
+    label: 'Tên kiểu dáng',
+    placeholder: 'Ví dụ: Cổ thấp (Low-top), Cổ lửng (Mid), Cổ cao...'
+  },
+  origin: {
+    title: 'Thêm nhanh Xuất xứ',
+    label: 'Tên xuất xứ / Quốc gia',
+    placeholder: 'Ví dụ: Việt Nam, Nhật Bản, Mỹ...'
+  }
+}
+
+const currentConfig = computed(() => {
+  return typeConfigs[props.type] || {
+    title: `Thêm nhanh ${props.type}`,
+    label: 'Tên thuộc tính',
+    placeholder: 'Nhập tên...'
+  }
 })
 
-const labelName = computed(() => {
-  return props.type === 'color' ? 'Tên màu sắc' : 'Kích cỡ (Size)'
-})
-
-const placeholderName = computed(() => {
-  return props.type === 'color' ? 'Ví dụ: Xanh rêu, Đỏ đô...' : 'Ví dụ: 39.5, 44, 45...'
-})
+const title = computed(() => currentConfig.value.title)
+const labelName = computed(() => currentConfig.value.label)
+const placeholderName = computed(() => currentConfig.value.placeholder)
 
 const handleClose = () => {
   itemName.value = ''
+  itemCode.value = '#d92d20'
   itemDescription.value = ''
   modalError.value = ''
   emit('close')
@@ -39,7 +78,7 @@ const handleSave = () => {
   modalError.value = ''
   const trimmed = itemName.value.trim()
   if (!trimmed) {
-    modalError.value = props.type === 'color' ? 'Vui lòng nhập tên màu sắc!' : 'Vui lòng nhập kích cỡ!'
+    modalError.value = `Vui lòng nhập ${labelName.value.toLowerCase()}!`
     return
   }
   if (trimmed.length > 150 || itemDescription.value.trim().length > 500) {

@@ -556,105 +556,7 @@ const exportToExcel = async () => {
   }
 }
 
-// Import Excel state & functions
-const isImportModalOpen = ref(false)
-const selectedImportFile = ref(null)
-const isImporting = ref(false)
-const isDownloadingTemplate = ref(false)
-const importResult = ref(null)
-const fileInputExcelRef = ref(null)
 
-const openImportModal = () => {
-  selectedImportFile.value = null
-  importResult.value = null
-  isImportModalOpen.value = true
-}
-
-const triggerSelectFile = () => {
-  if (fileInputExcelRef.value) {
-    fileInputExcelRef.value.click()
-  }
-}
-
-const onFileExcelChange = (e) => {
-  const file = e.target.files && e.target.files[0]
-  if (!file) return
-  const name = file.name.toLowerCase()
-  if (!name.endsWith('.xlsx') && !name.endsWith('.xls')) {
-    notifyWarning('Vui lòng chọn tệp định dạng Excel (.xlsx hoặc .xls)')
-    return
-  }
-  selectedImportFile.value = file
-  importResult.value = null
-}
-
-const onDropExcelFile = (e) => {
-  const file = e.dataTransfer.files && e.dataTransfer.files[0]
-  if (!file) return
-  const name = file.name.toLowerCase()
-  if (!name.endsWith('.xlsx') && !name.endsWith('.xls')) {
-    notifyWarning('Vui lòng chọn tệp định dạng Excel (.xlsx hoặc .xls)')
-    return
-  }
-  selectedImportFile.value = file
-  importResult.value = null
-}
-
-const downloadTemplate = async () => {
-  isDownloadingTemplate.value = true
-  try {
-    const res = await fetch(`${API_BASE}/san-pham/excel/template`)
-    if (!res.ok) throw new Error('Không thể tải file mẫu')
-    const blob = await res.blob()
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'Mau_Import_San_Pham.xlsx'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
-    notifySuccess('Đã tải xuống file Excel mẫu thành công!')
-  } catch (err) {
-    notifyError('Tải file mẫu thất bại', err.message)
-  } finally {
-    isDownloadingTemplate.value = false
-  }
-}
-
-const submitImportExcel = async () => {
-  if (!selectedImportFile.value) {
-    notifyWarning('Vui lòng chọn tệp Excel trước khi import')
-    return
-  }
-  isImporting.value = true
-  importResult.value = null
-  const formData = new FormData()
-  formData.append('file', selectedImportFile.value)
-
-  try {
-    const res = await fetch(`${API_BASE}/san-pham/excel/import`, {
-      method: 'POST',
-      body: formData,
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      throw new Error(data.message || 'Lỗi xử lý file Excel')
-    }
-
-    importResult.value = data
-    if (data.soDongThanhCong > 0) {
-      notifySuccess(`Import thành công ${data.soDongThanhCong}/${data.tongSoDong} dòng dữ liệu!`)
-      reloadAllData()
-    } else {
-      notifyWarning('Không có dòng dữ liệu nào được import thành công')
-    }
-  } catch (err) {
-    notifyError('Import thất bại', err.message)
-  } finally {
-    isImporting.value = false
-  }
-}
 
 // Quick edit functions
 const openQuickEdit = (item) => {
@@ -816,14 +718,6 @@ onUnmounted(() => {
             </svg>
             {{ isExporting ? 'Đang xuất...' : 'Xuất Excel' }}
           </button>
-          <button class="btn btn-import-excel" @click="openImportModal" title="Nhập danh sách sản phẩm từ file Excel">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            Nhập Excel
-          </button>
           <button class="btn btn-add-new" @click="navigateToAdd">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -911,8 +805,8 @@ onUnmounted(() => {
               <th width="140">LOẠI GIÀY</th>
               <th width="100" class="text-center">SỐ LƯỢNG</th>
               <th width="160" class="text-end">GIÁ BÁN</th>
-              <th width="130" class="text-center">TRẠNG THÁI</th>
-              <th width="80" class="text-center">HÀNH ĐỘNG</th>
+              <th width="140" class="text-center">TRẠNG THÁI</th>
+              <th width="120" class="text-center">HÀNH ĐỘNG</th>
             </tr>
           </thead>
           <tbody>
@@ -934,6 +828,7 @@ onUnmounted(() => {
                         <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                       </svg>
                     </div>
+                    <span v-if="hasProductDiscount(item)" class="image-discount-badge">{{ item.discount }}</span>
                   </div>
                   <div class="product-details-col">
                     <span class="name-plain-text">{{ item.tenSanPham }}</span>
@@ -955,16 +850,16 @@ onUnmounted(() => {
                 <span v-else>{{ formatProductPrice(item) }}</span>
               </td>
               <td class="text-center">
-                <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
-                  <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
-                  <span class="slider round"></span>
-                </label>
-                <div class="status-label" :class="{ active: item.trangThai }">
+                <span class="simple-status-badge" :class="item.trangThai ? 'status-active' : 'status-inactive'">
                   {{ item.trangThai ? 'Kinh doanh' : 'Ngưng kinh doanh' }}
-                </div>
+                </span>
               </td>
               <td class="text-center">
                 <div class="action-btns">
+                  <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
+                    <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
+                    <span class="slider round"></span>
+                  </label>
                   <button class="act-btn view-btn" title="Xem chi tiết sản phẩm" @click="viewProductDetails(item)">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -1182,152 +1077,6 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- Modal Import Excel -->
-    <transition name="modal-fade">
-      <div v-if="isImportModalOpen" class="modal-backdrop" @click.self="isImportModalOpen = false">
-        <div class="modal-box modal-import-excel">
-          <div class="modal-header">
-            <div class="modal-title-group">
-              <span class="modal-icon-badge excel-badge">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                  <line x1="12" y1="18" x2="12" y2="12"></line>
-                  <polyline points="9 15 12 12 15 15"></polyline>
-                </svg>
-              </span>
-              <div>
-                <h3 class="modal-title">Nhập Sản phẩm từ File Excel</h3>
-                <p class="modal-subtitle">Tải dữ liệu danh sách sản phẩm và các biến thể vào hệ thống</p>
-              </div>
-            </div>
-            <button class="btn-close-modal" @click="isImportModalOpen = false" title="Đóng">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          </div>
-
-          <div class="modal-body import-body">
-            <!-- Bước 1: Tải file mẫu -->
-            <div class="template-download-card">
-              <div class="template-info">
-                <div class="template-icon">📄</div>
-                <div>
-                  <h4 class="template-heading">Chưa có file dữ liệu đúng chuẩn?</h4>
-                  <p class="template-desc">Tải về mẫu file Excel có sẵn cấu trúc cột và dữ liệu mẫu để nhập liệu chính xác nhất.</p>
-                </div>
-              </div>
-              <button class="btn btn-download-template" @click="downloadTemplate" :disabled="isDownloadingTemplate">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="7 10 12 15 17 10"></polyline>
-                  <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-                {{ isDownloadingTemplate ? 'Đang tải...' : 'Tải file mẫu (.xlsx)' }}
-              </button>
-            </div>
-
-            <!-- Bước 2: Vùng Upload / Kéo thả file -->
-            <input
-              ref="fileInputExcelRef"
-              type="file"
-              accept=".xlsx,.xls"
-              style="display: none;"
-              @change="onFileExcelChange"
-            />
-
-            <div
-              class="dropzone-box"
-              :class="{ 'has-file': selectedImportFile }"
-              @dragover.prevent
-              @dragenter.prevent
-              @drop.prevent="onDropExcelFile"
-              @click="triggerSelectFile"
-            >
-              <div v-if="!selectedImportFile" class="dropzone-empty">
-                <div class="dropzone-icon">
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                    <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path>
-                    <path d="M12 12v9"></path>
-                    <path d="m16 16-4-4-4 4"></path>
-                  </svg>
-                </div>
-                <h4 class="dropzone-title">Kéo & thả file Excel vào đây, hoặc <span class="highlight">bấm để chọn</span></h4>
-                <p class="dropzone-hint">Hỗ trợ các tệp định dạng .xlsx hoặc .xls (Dung lượng tối đa 10MB)</p>
-              </div>
-
-              <div v-else class="dropzone-file-info" @click.stop>
-                <div class="file-icon-wrap">📊</div>
-                <div class="file-meta">
-                  <span class="file-name">{{ selectedImportFile.name }}</span>
-                  <span class="file-size">{{ (selectedImportFile.size / 1024).toFixed(1) }} KB</span>
-                </div>
-                <button class="btn-remove-file" type="button" @click="selectedImportFile = null; importResult = null" title="Hủy chọn file">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <!-- Lưu ý tính năng -->
-            <div class="import-notice-box">
-              <div class="notice-title">💡 Lưu ý quan trọng:</div>
-              <ul class="notice-list">
-                <li>Các cột có dấu <strong>(*)</strong> là bắt buộc phải có dữ liệu.</li>
-                <li>Hệ thống <strong>tự động nhận diện hoặc tạo mới</strong> các thuộc tính chưa có (Thương hiệu, Loại giày, Màu sắc, Size...).</li>
-                <li>Nếu sản phẩm và biến thể đã tồn tại, hệ thống sẽ <strong>tự động cộng dồn số lượng tồn kho</strong>.</li>
-              </ul>
-            </div>
-
-            <!-- Kết quả import (nếu có) -->
-            <div v-if="importResult" class="import-result-card" :class="{ 'has-errors': importResult.soDongThatBai > 0 }">
-              <h4 class="result-heading">
-                <span v-if="importResult.soDongThanhCong > 0">✅ Hoàn tất xử lý:</span>
-                <span v-else>⚠️ Chưa có dữ liệu hợp lệ:</span>
-                Đã nhập thành công {{ importResult.soDongThanhCong }} / {{ importResult.tongSoDong }} dòng
-              </h4>
-              <div class="result-stats-row">
-                <div class="stat-pill success">Sản phẩm mới: <strong>{{ importResult.soSanPhamMoi }}</strong></div>
-                <div class="stat-pill primary">Biến thể mới: <strong>{{ importResult.soBienTheMoi }}</strong></div>
-                <div class="stat-pill info">Cộng dồn kho: <strong>{{ importResult.soBienTheCapNhat }}</strong></div>
-                <div v-if="importResult.soDongThatBai > 0" class="stat-pill danger">Bỏ qua / Lỗi: <strong>{{ importResult.soDongThatBai }}</strong></div>
-              </div>
-
-              <!-- Danh sách chi tiết lỗi nếu có -->
-              <div v-if="importResult.danhSachLoi && importResult.danhSachLoi.length" class="result-errors-box">
-                <div class="errors-title">Chi tiết dòng cần kiểm tra:</div>
-                <ul class="errors-list">
-                  <li v-for="(err, idx) in importResult.danhSachLoi" :key="idx">{{ err }}</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="isImportModalOpen = false" :disabled="isImporting">
-              {{ importResult ? 'Đóng' : 'Hủy bỏ' }}
-            </button>
-            <button
-              class="btn btn-submit-import"
-              :disabled="!selectedImportFile || isImporting"
-              @click="submitImportExcel"
-            >
-              <svg v-if="!isImporting" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-              </svg>
-              <span v-else class="spinner-small"></span>
-              {{ isImporting ? 'Đang xử lý dữ liệu...' : 'Bắt đầu Nhập dữ liệu' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
   </div>
 </template>
 

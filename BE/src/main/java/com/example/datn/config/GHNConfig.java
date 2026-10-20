@@ -49,15 +49,15 @@ public class GHNConfig {
     @Value("${app.ghn.timeout-ms:10000}")
     private int timeoutMs = 10000;
 
+    public boolean daCauHinh() {
+        return apiUrl != null && !apiUrl.isBlank()
+            && token != null && !token.isBlank()
+            && shopId != null && !shopId.isBlank();
+    }
+
     public void kiemTraCauHinh() {
-        if (apiUrl == null || apiUrl.isBlank()) {
-            throw new IllegalArgumentException("Chưa cấu hình GHN: thiếu biến môi trường GHN_API_URL");
-        }
-        if (token == null || token.isBlank()) {
-            throw new IllegalArgumentException("Chưa cấu hình GHN: thiếu biến môi trường GHN_TOKEN");
-        }
-        if (shopId == null || shopId.isBlank()) {
-            throw new IllegalArgumentException("Chưa cấu hình GHN: thiếu biến môi trường GHN_SHOP_ID");
+        if (!daCauHinh()) {
+            throw new IllegalArgumentException("Chưa cấu hình GHN: thiếu biến môi trường GHN_TOKEN hoặc GHN_SHOP_ID");
         }
     }
 }

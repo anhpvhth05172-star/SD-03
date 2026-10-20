@@ -411,7 +411,8 @@ const executeDeleteFast = async (item) => {
       </div>
     </div>
 
-    <!-- Horizontal Tabs Navigation Bar -->
+    <!-- Horizontal Tabs Navigation Bar (Đã ẩn theo yêu cầu) -->
+    <!--
     <div class="tabs-nav-bar">
       <button
         v-for="t in tabs"
@@ -424,6 +425,7 @@ const executeDeleteFast = async (item) => {
         <span class="tab-count-badge">{{ (attributesData[t.id] || []).length }}</span>
       </button>
     </div>
+    -->
 
     <!-- Filter Card -->
     <div class="filter-card">

@@ -1,7 +1,7 @@
 <script setup>
 import { formatDateTime } from "@/utils/format";
 import axios from "axios";
-import { inject, onMounted, ref } from "vue";
+import { inject, onMounted, reactive, ref } from "vue";
 import Swal from "sweetalert2";
 
 const showFilter = ref(true);
@@ -14,11 +14,34 @@ const totalPages = ref(0);
 const totalElements = ref(0);
 const togglingId = ref(null); // id đợt đang đổi trạng thái (khóa switch)
 
+/* ---------------- Bộ lọc ---------------- */
+const filter = reactive({
+  ten: "",
+  trangThai: "",
+  tuNgay: "",
+  denNgay: "",
+});
+
 const getData = async (p = 0) => {
   try {
-    const res = await axios.get(apiDiscountEvent + "admin/dot-giam-gia", {
-      params: { page: p, size: pageSize },
-    });
+    const params = {
+      page: p,
+      size: pageSize,
+    };
+    if (filter.ten && filter.ten.trim()) {
+      params.ten = filter.ten.trim();
+    }
+    if (filter.trangThai !== "") {
+      params.trangThai = filter.trangThai === "1";
+    }
+    if (filter.tuNgay) {
+      params.tuNgay = filter.tuNgay;
+    }
+    if (filter.denNgay) {
+      params.denNgay = filter.denNgay;
+    }
+
+    const res = await axios.get(apiDiscountEvent + "admin/dot-giam-gia", { params });
     if (res.status === 200) {
       listEvent.value = res.data.content;
       page.value = res.data.number;
@@ -28,6 +51,18 @@ const getData = async (p = 0) => {
   } catch (error) {
     console.error(error);
   }
+};
+
+const handleApplyFilter = () => {
+  getData(0);
+};
+
+const handleResetFilter = () => {
+  filter.ten = "";
+  filter.trangThai = "";
+  filter.tuNgay = "";
+  filter.denNgay = "";
+  getData(0);
 };
 
 const goToPage = (p) => {
@@ -171,12 +206,17 @@ onMounted(() => getData(0));
       <div v-show="showFilter" class="filter-row">
         <div class="f-item">
           <label>Tên đợt giảm giá</label>
-          <input type="text" placeholder="Nhập tên đợt giảm giá" />
+          <input
+            v-model="filter.ten"
+            type="text"
+            placeholder="Nhập tên đợt giảm giá"
+            @keyup.enter="handleApplyFilter"
+          />
         </div>
 
         <div class="f-item">
           <label>Trạng thái</label>
-          <select>
+          <select v-model="filter.trangThai">
             <option value="" label="Tất cả"></option>
             <option value="1" label="Đang hoạt động"></option>
             <option value="0" label="Ngừng hoạt động"></option>
@@ -186,19 +226,19 @@ onMounted(() => getData(0));
         <div class="f-item">
           <label>Từ ngày</label>
           <div class="date-box">
-            <input type="date" />
+            <input v-model="filter.tuNgay" type="date" />
           </div>
         </div>
 
         <div class="f-item">
           <label>Đến ngày</label>
           <div class="date-box">
-            <input type="date" />
+            <input v-model="filter.denNgay" type="date" />
           </div>
         </div>
 
         <div class="filter-actions">
-          <button class="btn-reset" type="button" aria-label="Đặt lại">
+          <button class="btn-reset" type="button" aria-label="Đặt lại" @click="handleResetFilter" title="Đặt lại bộ lọc">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -211,7 +251,7 @@ onMounted(() => getData(0));
               <path d="M20 4.5V11h-6.5" />
             </svg>
           </button>
-          <button class="btn-apply" type="button">
+          <button class="btn-apply" type="button" @click="handleApplyFilter">
             <svg
               viewBox="0 0 24 24"
               fill="none"

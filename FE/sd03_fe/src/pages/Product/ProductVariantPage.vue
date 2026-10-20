@@ -2,6 +2,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import QRCode from 'qrcode'
+import QuickAddModal from '@/components/QuickAddModal.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import CurrencyInput from '@/components/CurrencyInput.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
@@ -600,6 +601,54 @@ const addForm = reactive({
   existingColorImage: null
 })
 
+// Quick Add Modal state
+const isQuickAddModalOpen = ref(false)
+const quickAddModalType = ref('color')
+
+const openQuickAdd = (type) => {
+  quickAddModalType.value = type
+  isQuickAddModalOpen.value = true
+}
+
+const handleQuickAttributeAdded = async (item) => {
+  try {
+    const endpoint = item.type === 'color' ? 'mau_sac' : 'kich_co'
+    const payload = {
+      ten: item.name.trim(),
+      moTa: item.code || item.description || '',
+      trangThai: true
+    }
+
+    const res = await fetch(`${API_BASE}/attributes/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    if (res.ok) {
+      const saved = await res.json()
+      if (item.type === 'color') {
+        const newCol = { id: saved.id, ten: saved.ten, tenMau: saved.ten, ma: saved.moTa || item.code || '#111827' }
+        colorsList.value.push(newCol)
+        addForm.idMauSac = saved.id
+        onAddColorChange()
+        showToastNotice('Thành công', `Đã lưu màu sắc mới: ${saved.ten}`, 'success')
+      } else {
+        const newSz = { id: saved.id, ten: saved.ten, tenKichCo: saved.ten }
+        sizesList.value.push(newSz)
+        addForm.idKichCo = saved.id
+        showToastNotice('Thành công', `Đã lưu kích cỡ mới: ${saved.ten}`, 'success')
+      }
+    } else {
+      const errData = await res.json().catch(() => ({}))
+      showToastNotice('Lỗi', errData.message || 'Không thể lưu thuộc tính', 'danger')
+    }
+  } catch (err) {
+    console.error('Quick add attribute error:', err)
+    showToastNotice('Lỗi kết nối', 'Không thể thêm nhanh thuộc tính', 'danger')
+  }
+}
+
 const openAddVariantModal = () => {
   addFormError.value = ''
   addForm.idSanPham = route.query.idSanPham ? Number(route.query.idSanPham) : (productsList.value.length > 0 ? productsList.value[0].id : '')
@@ -1141,9 +1190,8 @@ onUnmounted(() => {
               <th width="80" class="text-center">Kích cỡ</th>
               <th width="100" class="text-center">Số lượng</th>
               <th width="130" class="text-end">Giá bán</th>
-              <th width="80" class="text-center">Giảm</th>
-              <th width="150" class="text-center">Trạng thái</th>
-              <th width="140" class="text-center">Hành động</th>
+              <th width="140" class="text-center">Trạng thái</th>
+              <th width="160" class="text-center">Hành động</th>
             </tr>
           </thead>
           <tbody>
@@ -1158,7 +1206,6 @@ onUnmounted(() => {
                 <td class="text-center"><div class="skel-box skel-num"></div></td>
                 <td class="text-center"><div class="skel-box skel-num"></div></td>
                 <td><div class="skel-box skel-text"></div></td>
-                <td class="text-center"><div class="skel-box skel-num"></div></td>
                 <td class="text-center"><div class="skel-box skel-pill"></div></td>
                 <td class="text-center"><div class="skel-box skel-actions"></div></td>
               </tr>
@@ -1175,11 +1222,14 @@ onUnmounted(() => {
                   <span class="sku-badge">{{ item.maCtsp || `SPCT0${item.id}` }}</span>
                 </td>
                 <td class="text-center">
-                  <img v-if="item.img" :src="item.img" alt="Thumbnail" class="variant-thumb" @error="item.img = null" />
-                  <div v-else class="variant-thumb-placeholder" :style="{ backgroundColor: getColorHex(item) + '22', color: getColorHex(item) }">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                      <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                    </svg>
+                  <div class="variant-thumb-wrapper">
+                    <img v-if="item.img" :src="item.img" alt="Thumbnail" class="variant-thumb" @error="item.img = null" />
+                    <div v-else class="variant-thumb-placeholder" :style="{ backgroundColor: getColorHex(item) + '22', color: getColorHex(item) }">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                      </svg>
+                    </div>
+                    <span v-if="hasDiscount(item)" class="image-discount-badge">{{ item.discount }}</span>
                   </div>
                 </td>
                 <td>
@@ -1203,21 +1253,19 @@ onUnmounted(() => {
                   </div>
                   <span v-else>{{ formatPrice(item.price || 0) }}</span>
                 </td>
-                <td class="text-center discount-val">
-                  <span v-if="hasDiscount(item)" class="badge-discount-pill">{{ item.discount }}</span>
-                  <span v-else class="text-muted">-</span>
-                </td>
                 <td class="text-center">
-                  <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
-                    <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
-                    <span class="slider round"></span>
-                  </label>
-                  <div class="status-label" :class="{ active: item.trangThai }">
+                  <span class="simple-status-badge" :class="item.trangThai ? 'status-active' : 'status-inactive'">
                     {{ item.trangThai ? 'Kinh doanh' : 'Ngưng kinh doanh' }}
-                  </div>
+                  </span>
                 </td>
                 <td class="text-center">
                   <div class="action-icon-group">
+                    <!-- Switch Toggle -->
+                    <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
+                      <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
+                      <span class="slider round"></span>
+                    </label>
+
                     <!-- QR Button -->
                     <button class="act-circle-btn qr-btn" title="Xem & tải mã QR" @click="openSingleQrModal(item)">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1250,7 +1298,7 @@ onUnmounted(() => {
 
             <!-- Empty State -->
             <tr v-else>
-              <td colspan="12" class="empty-state-cell">
+              <td colspan="11" class="empty-state-cell">
                 <div class="empty-state-box">
                   <div class="empty-icon">👟</div>
                   <div class="empty-title">Không tìm thấy biến thể nào</div>
@@ -1464,7 +1512,10 @@ onUnmounted(() => {
               </div>
 
               <div class="form-group">
-                <label class="form-lbl">Màu sắc <span class="required">*</span></label>
+                <div class="field-label-row">
+                  <label class="form-lbl">Màu sắc <span class="required">*</span></label>
+                  <button type="button" class="btn-quick-add-link" @click="openQuickAdd('color')" title="Thêm nhanh màu sắc">+ Thêm nhanh</button>
+                </div>
                 <SearchableSelect
                   v-model="addForm.idMauSac"
                   :options="colorsList"
@@ -1478,7 +1529,10 @@ onUnmounted(() => {
               </div>
 
               <div class="form-group">
-                <label class="form-lbl">Kích cỡ <span class="required">*</span></label>
+                <div class="field-label-row">
+                  <label class="form-lbl">Kích cỡ <span class="required">*</span></label>
+                  <button type="button" class="btn-quick-add-link" @click="openQuickAdd('size')" title="Thêm nhanh kích cỡ">+ Thêm nhanh</button>
+                </div>
                 <SearchableSelect
                   v-model="addForm.idKichCo"
                   :options="sizesList"
@@ -1587,6 +1641,14 @@ onUnmounted(() => {
         </div>
       </div>
     </transition>
+
+    <!-- Quick Add Modal for Color and Size -->
+    <QuickAddModal
+      :is-open="isQuickAddModalOpen"
+      :type="quickAddModalType"
+      @close="isQuickAddModalOpen = false"
+      @add="handleQuickAttributeAdded"
+    />
   </div>
 </template>
 
