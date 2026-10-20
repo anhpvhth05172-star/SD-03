@@ -51,8 +51,6 @@ const loaiDonOptions = [
 
 const trangThaiOptions = computed(() => tabs.map((t) => ({ id: t.key, ten: t.label })))
 
-const showFilter = ref(true)
-
 const todayLocal = () => {
   const d = new Date()
   const p = (x) => String(x).padStart(2, '0')
@@ -279,16 +277,7 @@ onMounted(load)
     </div>
 
     <div class="filter-box">
-      <div class="status-tabs-row">
-        <button class="btn-reset-filter" type="button" @click="showFilter = !showFilter">
-          {{ showFilter ? 'Ẩn bộ lọc' : 'Hiện bộ lọc' }}
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path :d="showFilter ? 'M6 14.5l6-6 6 6' : 'M6 9.5l6 6 6-6'" />
-          </svg>
-        </button>
-      </div>
-
-      <div v-show="showFilter">
+      <div>
         <div class="filters-grid">
           <div class="filter-col filter-col-search">
             <label class="filter-lbl">Tìm kiếm hóa đơn</label>
@@ -337,11 +326,6 @@ onMounted(load)
           <div class="filter-col">
             <label class="filter-lbl">Từ ngày</label>
             <input v-model="fTuNgay" type="date" class="form-control" @change="applyFilter" />
-          </div>
-
-          <div class="filter-col">
-            <label class="filter-lbl">Đến ngày</label>
-            <input v-model="fDenNgay" type="date" class="form-control" @change="applyFilter" />
           </div>
 
           <div class="filter-actions">
