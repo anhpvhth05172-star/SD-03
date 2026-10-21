@@ -843,7 +843,7 @@ onMounted(async () => {
                 </span>
               </div>
               <h3 class="profile-name">{{ detailData.tenTaiKhoan }}</h3>
-              <p class="profile-email-sub"><i class="bi bi-envelope"></i> {{ detailData.email || 'Chưa cập nhật email' }}</p>
+              <p class="profile-email-sub">{{ detailData.email || 'Chưa cập nhật email' }}</p>
             </div>
           </div>
         </div>
@@ -852,24 +852,22 @@ onMounted(async () => {
         <div class="profile-modal-body">
           <!-- Nhóm 1: Thông tin cá nhân & liên hệ -->
           <div class="info-section-group">
-            <h4 class="section-group-title">
-              <i class="bi bi-person-lines-fill"></i> Thông tin liên hệ & Cá nhân
-            </h4>
+            <h4 class="section-group-title">Thông tin liên hệ & Cá nhân</h4>
             <div class="info-grid-2">
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-telephone"></i> Số điện thoại</span>
+                <span class="info-cell-label">Số điện thoại</span>
                 <span class="info-cell-value">{{ detailData.soDienThoai || 'Chưa cập nhật' }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-gender-ambiguous"></i> Giới tính</span>
+                <span class="info-cell-label">Giới tính</span>
                 <span class="info-cell-value">{{ gioiTinhLabel(detailData.gioiTinh) }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-calendar3"></i> Ngày sinh</span>
+                <span class="info-cell-label">Ngày sinh</span>
                 <span class="info-cell-value">{{ formatDate(detailData.ngaySinh) || '—' }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-calendar-check"></i> Ngày vào làm</span>
+                <span class="info-cell-label">Ngày vào làm</span>
                 <span class="info-cell-value">{{ formatDate(detailData.ngayTao) || '—' }}</span>
               </div>
             </div>
@@ -877,9 +875,7 @@ onMounted(async () => {
 
           <!-- Nhóm 2: Địa chỉ nơi ở -->
           <div class="info-section-group">
-            <h4 class="section-group-title">
-              <i class="bi bi-geo-alt-fill text-danger"></i> Địa chỉ nơi ở
-            </h4>
+            <h4 class="section-group-title">Địa chỉ nơi ở</h4>
             <div class="address-box-card">
               <p class="address-text">{{ formatEmployeeAddress(detailData) || 'Chưa cập nhật địa chỉ' }}</p>
             </div>
@@ -887,7 +883,7 @@ onMounted(async () => {
 
           <!-- Metadata thời gian -->
           <div class="modal-time-footer">
-            <span><i class="bi bi-clock-history"></i> Cập nhật gần nhất: {{ formatDateTime(detailData.ngayCapNhat) || '—' }}</span>
+            <span>Cập nhật gần nhất: {{ formatDateTime(detailData.ngayCapNhat) || '—' }}</span>
             <span v-if="detailData.nguoiCapNhat">Bởi: <b>{{ detailData.nguoiCapNhat }}</b></span>
           </div>
         </div>
@@ -900,7 +896,7 @@ onMounted(async () => {
           </button>
           <button
             v-if="!isAccountProtected(detailData)"
-            class="btn-profile-edit"
+            class="btn-profile-secondary"
             type="button"
             @click="doiMkNhanVienId = detailData.id"
           >
@@ -1664,8 +1660,8 @@ onMounted(async () => {
   background: #ffffff;
   width: 100%;
   max-width: 560px;
-  border-radius: 20px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
   overflow: hidden;
   animation: modalCardIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1689,7 +1685,7 @@ onMounted(async () => {
 }
 
 .profile-modal-banner.employee-theme {
-  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 50%, #fecdd3 100%);
+  background: #ffffff;
 }
 
 .btn-banner-close {
@@ -1746,7 +1742,7 @@ onMounted(async () => {
 .profile-avatar-initials {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #f43f5e, #e11d48);
+  background: #cc0000;
   color: #ffffff;
   font-size: 26px;
   font-weight: 700;
@@ -1773,18 +1769,17 @@ onMounted(async () => {
 .badge-code {
   font-size: 11.5px;
   font-weight: 700;
-  color: #e11d48;
-  background: #ffffff;
+  color: #cc0000;
+  background: #fef2f2;
   padding: 2px 8px;
   border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .badge-role {
   font-size: 11.5px;
   font-weight: 600;
   color: #475569;
-  background: rgba(255, 255, 255, 0.7);
+  background: #f1f5f9;
   padding: 2px 8px;
   border-radius: 6px;
 }
@@ -1822,19 +1817,13 @@ onMounted(async () => {
 
 .section-group-title {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #475569;
+  letter-spacing: 0;
+  color: #0f172a;
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.section-group-title i {
-  font-size: 14px;
-  color: #e11d48;
 }
 
 .info-grid-2 {
@@ -1844,9 +1833,9 @@ onMounted(async () => {
 }
 
 .info-cell {
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   padding: 10px 14px;
   display: flex;
   flex-direction: column;
@@ -1854,34 +1843,30 @@ onMounted(async () => {
 }
 
 .info-cell-label {
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 500;
-  color: #64748b;
+  color: #94a3b8;
   display: flex;
   align-items: center;
   gap: 5px;
 }
 
-.info-cell-label i {
-  font-size: 12px;
-}
-
 .info-cell-value {
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   color: #1e293b;
 }
 
 .address-box-card {
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   padding: 12px 14px;
 }
 
 .address-text {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   color: #1e293b;
   line-height: 1.5;
@@ -1917,20 +1902,37 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   padding: 9px 18px;
-  border-radius: 9999px;
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  border-radius: 8px;
+  background: var(--red);
   color: #ffffff;
   border: none;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.2);
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
 }
 
 .btn-profile-edit:hover {
-  opacity: 0.94;
-  transform: translateY(-1px);
+  background: #a30000;
+}
+
+.btn-profile-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn-profile-secondary:hover {
+  background: #f8fafc;
 }
 
 .btn-profile-delete {
@@ -1938,9 +1940,9 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   padding: 9px 18px;
-  border-radius: 9999px;
+  border-radius: 8px;
   background: #ffffff;
-  color: #ef4444;
+  color: #cc0000;
   border: 1px solid #fecaca;
   font-size: 13px;
   font-weight: 600;
@@ -1955,7 +1957,7 @@ onMounted(async () => {
 
 .btn-profile-close {
   padding: 9px 20px;
-  border-radius: 9999px;
+  border-radius: 8px;
   background: #f1f5f9;
   color: #475569;
   border: 1px solid #e2e8f0;
