@@ -3,6 +3,7 @@ import axios from "axios";
 import { inject, onMounted, ref } from "vue";
 import Swal from "sweetalert2";
 import PaginationBar from "@/components/PaginationBar.vue";
+import SearchableSelect from "@/components/SearchableSelect.vue";
 
 const apiDiscountEvent = inject("baseAPI");
 
@@ -25,6 +26,12 @@ const emptyFilter = () => ({
 const filter = ref(emptyFilter());
 // Giá trị đã bấm "Áp dụng" (dùng cho phân trang, đổi trạng thái, v.v.)
 const applied = ref(emptyFilter());
+
+const trangThaiFilterOptions = [
+  { value: null, label: "Tất cả" },
+  { value: 1, label: "Đang hoạt động" },
+  { value: 0, label: "Ngừng hoạt động" },
+];
 
 const getData = async (p = 0) => {
   try {
@@ -216,11 +223,14 @@ onMounted(() => getData(0));
 
         <div class="f-item">
           <label>Trạng thái</label>
-          <select v-model="filter.trangThai">
-            <option :value="null">Tất cả</option>
-            <option :value="1">Đang hoạt động</option>
-            <option :value="0">Ngừng hoạt động</option>
-          </select>
+          <SearchableSelect
+            v-model="filter.trangThai"
+            :options="trangThaiFilterOptions"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả"
+            search-placeholder="Tìm..."
+          />
         </div>
 
         <div class="f-item">

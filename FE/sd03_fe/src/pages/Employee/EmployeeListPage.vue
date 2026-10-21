@@ -11,6 +11,7 @@ import {
 } from '@/api/employee'
 import DoiMatKhauModal from '@/components/DoiMatKhauModal.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import { exportExcel, fetchAllPages } from '@/utils/export'
 import { takeFlashWithMeta } from '@/utils/flash'
 import { avatarColor, formatDate, formatDateTime, initialsOf } from '@/utils/format'
@@ -40,6 +41,17 @@ const size = ref(5) // Khớp 5 dòng như trong ảnh mẫu
 const fKeyword = ref('')
 const fVaiTro = ref('')
 const fTrangThai = ref('')
+
+const vaiTroFilterOptions = computed(() => [
+  { value: '', label: 'Tất cả vai trò' },
+  ...vaiTros.value.map((v) => ({ value: v.id, label: v.ten })),
+])
+
+const trangThaiFilterOptions = [
+  { value: '', label: 'Tất cả' },
+  { value: 'active', label: 'Hoạt động' },
+  { value: 'locked', label: 'Đã khóa' },
+]
 
 const detailData = ref(null)
 const doiMkNhanVienId = ref(null)
@@ -573,19 +585,26 @@ onMounted(async () => {
 
         <!-- Dropdown Vai trò -->
         <div class="select-wrap">
-          <select v-model="fVaiTro" class="filter-select" @change="applyFilter">
-            <option value="">Tất cả vai trò</option>
-            <option v-for="vt in vaiTros" :key="vt.id" :value="vt.id">{{ vt.ten }}</option>
-          </select>
+          <SearchableSelect
+            v-model="fVaiTro"
+            :options="vaiTroFilterOptions"
+            value-key="value"
+            label-key="label"
+            placeholder="Tất cả vai trò"
+            search-placeholder="Tìm vai trò..."
+            @change="(v) => { fVaiTro = v ?? ''; applyFilter() }" />
         </div>
 
         <!-- Dropdown Trạng thái -->
         <div class="select-wrap">
-          <select v-model="fTrangThai" class="filter-select" @change="applyFilter">
-            <option value="">Tất cả</option>
-            <option value="active">Hoạt động</option>
-            <option value="locked">Đã khóa</option>
-          </select>
+          <SearchableSelect
+            v-model="fTrangThai"
+            :options="trangThaiFilterOptions"
+            value-key="value"
+            label-key="label"
+            placeholder="Tất cả"
+            search-placeholder="Tìm trạng thái..."
+            @change="(v) => { fTrangThai = v ?? ''; applyFilter() }" />
         </div>
       </div>
 
@@ -1209,27 +1228,7 @@ onMounted(async () => {
 /* Dropdown bộ lọc */
 .select-wrap {
   flex-shrink: 0;
-}
-
-.filter-select {
-  height: 42px;
   min-width: 140px;
-  padding: 0 32px 0 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 9px;
-  font-size: 13.5px;
-  color: #334155;
-  background: #ffffff url("data:image/svg2+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 10px center;
-  background-size: 14px;
-  appearance: none;
-  outline: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.filter-select:focus {
-  border-color: #f43f5e;
-  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
 }
 
 /* Hàng nút hành động bộ lọc bên phải */

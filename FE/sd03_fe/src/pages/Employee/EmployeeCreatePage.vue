@@ -760,13 +760,14 @@ onMounted(async () => {
 
             <div class="form-group">
               <label class="form-label">Vai trò <span class="req">*</span></label>
-              <div class="select-wrapper">
-                <select v-model="form.idVaiTro" class="form-select" @change="cham('idVaiTro')">
-                  <option value="" disabled>Chọn vai trò</option>
-                  <option v-for="v in vaiTros" :key="v.id" :value="v.id">{{ v.ten }}</option>
-                </select>
-                <i class="bi bi-chevron-down select-arrow"></i>
-              </div>
+              <SearchableSelect
+                v-model="form.idVaiTro"
+                :options="vaiTros.map((v) => ({ value: v.id, label: v.ten }))"
+                value-key="value"
+                label-key="label"
+                placeholder="Chọn vai trò"
+                search-placeholder="Tìm vai trò..."
+                @change="(v) => { form.idVaiTro = v === null ? '' : v; cham('idVaiTro') }" />
               <p v-if="hienLoi('idVaiTro', loiVaiTro)" class="input-error">{{ loiVaiTro }}</p>
             </div>
 
@@ -1152,9 +1153,8 @@ onMounted(async () => {
   margin-left: 2px;
 }
 
-/* Inputs & Selects */
-.form-input,
-.form-select {
+/* Inputs */
+.form-input {
   height: 42px;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -1172,8 +1172,7 @@ onMounted(async () => {
   color: #94a3b8;
 }
 
-.form-input:focus,
-.form-select:focus {
+.form-input:focus {
   border-color: #f43f5e;
   box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
 }
@@ -1187,28 +1186,6 @@ onMounted(async () => {
   font-size: 11.5px;
   color: #ef4444;
   font-weight: 500;
-}
-
-/* Custom Select Dropdown wrapper */
-.select-wrapper {
-  position: relative;
-  width: 100%;
-}
-
-.form-select {
-  appearance: none;
-  cursor: pointer;
-  padding-right: 36px;
-}
-
-.select-arrow {
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  font-size: 11px;
-  color: #64748b;
 }
 
 /* Cụm nút hành động */

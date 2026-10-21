@@ -19,6 +19,7 @@ import {
 import { updateInvoiceStatus } from '@/api/invoice'
 import { notifyError, notifyConfirm, notifySuccess } from '@/utils/notify'
 import { taoVaTaiPdf } from '@/utils/pdf'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -325,6 +326,16 @@ const kichCoOptions = computed(() => {
   for (const l of data.value?.chiTiet || []) if (l.tenKichCo) set.add(l.tenKichCo)
   return [...set]
 })
+
+const mauLocOptions = computed(() => [
+  { value: '', label: 'Tất cả màu sắc' },
+  ...mauOptions.value.map((m) => ({ value: m, label: m })),
+])
+
+const kichCoLocOptions = computed(() => [
+  { value: '', label: 'Tất cả kích cỡ' },
+  ...kichCoOptions.value.map((k) => ({ value: k, label: k })),
+])
 
 const chiTietLoc = computed(() => {
   let list = data.value?.chiTiet || []
@@ -714,14 +725,24 @@ onBeforeUnmount(() => {
                 </svg>
                 <input v-model="timKiemSp" type="text" placeholder="Tìm theo tên hoặc SKU..." />
               </div>
-              <select v-model="locMau" class="filter-select">
-                <option value="">Tất cả màu sắc</option>
-                <option v-for="m in mauOptions" :key="m" :value="m">{{ m }}</option>
-              </select>
-              <select v-model="locKichCo" class="filter-select">
-                <option value="">Tất cả kích cỡ</option>
-                <option v-for="k in kichCoOptions" :key="k" :value="k">{{ k }}</option>
-              </select>
+              <SearchableSelect
+                v-model="locMau"
+                :options="mauLocOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="Tất cả màu sắc"
+                search-placeholder="Tìm màu sắc..."
+                style="width: auto; min-width: 160px"
+                @change="(v) => { locMau = v ?? '' }" />
+              <SearchableSelect
+                v-model="locKichCo"
+                :options="kichCoLocOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="Tất cả kích cỡ"
+                search-placeholder="Tìm kích cỡ..."
+                style="width: auto; min-width: 160px"
+                @change="(v) => { locKichCo = v ?? '' }" />
             </div>
 
             <div class="table-wrap">
@@ -1299,22 +1320,6 @@ button.stepper-step.is-next:disabled {
 
 .filter-search input::placeholder {
   color: #94a3b8;
-}
-
-.filter-select {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 8px 11px;
-  font-size: 12.5px;
-  color: #334155;
-  background: #fff;
-  cursor: pointer;
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.filter-select:focus {
-  border-color: #dc2626;
 }
 
 .btn-primary {

@@ -1193,22 +1193,32 @@ onUnmounted(() => {
 
               <div class="form-group">
                 <label class="form-lbl">Màu sắc</label>
-                <select v-model="editForm.idMauSac" class="modal-select select-disabled" disabled>
-                  <option value="" disabled>-- Chọn màu sắc --</option>
-                  <option v-for="c in colorsList" :key="c.id" :value="c.id">
-                    {{ c.ten || c.tenMau }}
-                  </option>
-                </select>
+                <SearchableSelect
+                  v-model="editForm.idMauSac"
+                  :options="colorsList"
+                  label-key="ten"
+                  value-key="id"
+                  color-key="ma"
+                  placeholder="-- Chọn màu sắc --"
+                  search-placeholder="Tìm màu sắc..."
+                  :allow-clear="false"
+                  disabled
+                />
               </div>
 
               <div class="form-group">
                 <label class="form-lbl">Kích cỡ</label>
-                <select v-model="editForm.idKichCo" class="modal-select select-disabled" disabled>
-                  <option value="" disabled>-- Chọn kích cỡ --</option>
-                  <option v-for="s in sizesList" :key="s.id" :value="s.id">
-                    {{ s.ten || s.tenKichCo }}
-                  </option>
-                </select>
+                <SearchableSelect
+                  v-model="editForm.idKichCo"
+                  :options="sizesList"
+                  label-key="ten"
+                  value-key="id"
+                  prefix="Size "
+                  placeholder="-- Chọn kích cỡ --"
+                  search-placeholder="Tìm size..."
+                  :allow-clear="false"
+                  disabled
+                />
               </div>
 
               <div class="form-group">

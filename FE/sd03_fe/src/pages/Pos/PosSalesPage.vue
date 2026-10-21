@@ -7,6 +7,7 @@ import { getProvinces, getWards, getServices, tinhPhi } from '@/api/shipping'
 import { DS_63_TINH_THANH } from '@/api/diaGioi'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import { formatVnd } from '@/utils/format'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 
 import { getUser } from '@/utils/auth'
 import { tenVaiTro } from '@/utils/session'
@@ -491,6 +492,31 @@ const resetModalFilters = () => {
   modalFilters.priceRange = ''
   modalCurrentPage.value = 0
 }
+
+const brandFilterOptions = computed(() => [
+  { value: '', label: 'Tất cả thương hiệu' },
+  ...(brandsList.value || []).map(b => ({ value: b.id || b.ten, label: b.ten || b.tenThuongHieu }))
+])
+const categoryFilterOptions = computed(() => [
+  { value: '', label: 'Tất cả thể loại' },
+  ...(categoriesList.value || []).map(c => ({ value: c.id || c.ten, label: c.ten || c.tenLoaiGiay }))
+])
+const colorFilterOptions = computed(() => [
+  { value: '', label: 'Tất cả màu sắc' },
+  ...(colorsList.value || []).map(m => ({ value: m.id || m.ten || m.tenMau, label: m.ten || m.tenMau }))
+])
+const sizeFilterOptions = computed(() => [
+  { value: '', label: 'Tất cả kích cỡ' },
+  ...(sizesList.value || []).map(s => ({ value: s.id || s.ten || s.tenKichCo, label: s.ten || s.tenKichCo }))
+])
+const priceFilterOptions = [
+  { value: '', label: 'Tất cả mức giá' },
+  { value: '<1m', label: 'Dưới 1.000.000 ₫' },
+  { value: '1m-3m', label: '1.000.000 - 3.000.000 ₫' },
+  { value: '3m-5m', label: '3.000.000 - 5.000.000 ₫' },
+  { value: '>5m', label: 'Trên 5.000.000 ₫' }
+]
+const pageSizeSelectOptions = pageSizeOptions.map(sz => ({ value: sz, label: `${sz} / trang` }))
 
 const filteredModalVariants = computed(() => {
   let list = allProducts.value || []
@@ -1077,6 +1103,32 @@ const tinhPhiVanChuyen = async () => {
 
 const onWardChange = () => { tinhPhiVanChuyen() }
 const onServiceChange = () => { tinhPhiVanChuyen() }
+
+const provincesForSelect = computed(() =>
+  (provincesList.value || []).map(p => ({ value: p.id, label: p.name, raw: p }))
+)
+const wardsForSelect = computed(() =>
+  (wardsList.value || []).map(w => ({ value: w.id, label: w.name, raw: w }))
+)
+const serviceOptionsForOrder = computed(() => {
+  const d = currentOrder.value?.deliveryInfo
+  return (d?.services || []).map(s => ({
+    value: s.serviceTypeId,
+    label: s.shortName || ('Dịch vụ ' + s.serviceTypeId)
+  }))
+})
+const onProvinceSelectChange = (val, opt) => {
+  const d = currentOrder.value?.deliveryInfo
+  if (!d) return
+  d.province = opt ? opt.raw : null
+  onProvinceChange()
+}
+const onWardSelectChange = (val, opt) => {
+  const d = currentOrder.value?.deliveryInfo
+  if (!d) return
+  d.ward = opt ? opt.raw : null
+  onWardChange()
+}
 
 watch(() => currentOrder.value?.cart?.length, () => {
   const d = currentOrder.value?.deliveryInfo
@@ -1838,18 +1890,39 @@ onUnmounted(() => {
             <div class="drawer-title">Thông tin nhận hàng</div>
             <input type="text" class="del-input" placeholder="Tên người nhận hàng..." v-model="currentOrder.deliveryInfo.recipientName" />
             <input type="text" class="del-input" placeholder="Số điện thoại người nhận..." v-model="currentOrder.deliveryInfo.recipientPhone" />
-            <select class="del-input" v-model="currentOrder.deliveryInfo.province" @change="onProvinceChange">
-              <option :value="null" disabled>Chọn Tỉnh / Thành phố...</option>
-              <option v-for="p in provincesList" :key="p.id" :value="p">{{ p.name }}</option>
-            </select>
-            <select class="del-input" v-model="currentOrder.deliveryInfo.ward" @change="onWardChange" :disabled="!currentOrder.deliveryInfo.province || currentOrder.deliveryInfo.wardsLoading">
-              <option :value="null" disabled>{{ currentOrder.deliveryInfo.wardsLoading ? 'Đang tải phường/xã...' : 'Chọn Phường / Xã...' }}</option>
-              <option v-for="w in wardsList" :key="w.id" :value="w">{{ w.name }}</option>
-            </select>
+            <SearchableSelect
+              :model-value="currentOrder.deliveryInfo.province ? currentOrder.deliveryInfo.province.id : null"
+              :options="provincesForSelect"
+              value-key="value"
+              label-key="label"
+              placeholder="Chọn Tỉnh / Thành phố..."
+              search-placeholder="Tìm tỉnh thành..."
+              :allow-clear="false"
+              @change="onProvinceSelectChange"
+            />
+            <SearchableSelect
+              :model-value="currentOrder.deliveryInfo.ward ? currentOrder.deliveryInfo.ward.id : null"
+              :options="wardsForSelect"
+              value-key="value"
+              label-key="label"
+              :placeholder="currentOrder.deliveryInfo.wardsLoading ? 'Đang tải phường/xã...' : 'Chọn Phường / Xã...'"
+              search-placeholder="Tìm phường xã..."
+              :disabled="!currentOrder.deliveryInfo.province || currentOrder.deliveryInfo.wardsLoading"
+              :allow-clear="false"
+              @change="onWardSelectChange"
+            />
             <input type="text" class="del-input" placeholder="Số nhà, tên đường chi tiết..." v-model="currentOrder.deliveryInfo.recipientAddress" />
-            <select v-if="currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length" class="del-input" v-model="currentOrder.deliveryInfo.serviceTypeId" @change="onServiceChange">
-              <option v-for="s in currentOrder.deliveryInfo.services" :key="s.serviceTypeId" :value="s.serviceTypeId">{{ s.shortName || ('Dịch vụ ' + s.serviceTypeId) }}</option>
-            </select>
+            <SearchableSelect
+              v-if="currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length"
+              v-model="currentOrder.deliveryInfo.serviceTypeId"
+              :options="serviceOptionsForOrder"
+              value-key="value"
+              label-key="label"
+              placeholder="Chọn dịch vụ vận chuyển..."
+              search-placeholder="Tìm dịch vụ..."
+              :allow-clear="false"
+              @change="onServiceChange"
+            />
             <div v-if="currentOrder.deliveryInfo.feeLoading" class="fee-info">
               Đang tính phí vận chuyển với GHN...
             </div>
@@ -2072,41 +2145,63 @@ onUnmounted(() => {
               <!-- Lưới 5 ô Select bộ lọc -->
               <div class="modal-5-selects-grid">
                 <div class="filter-select-wrap">
-                  <select v-model="modalFilters.idThuongHieu" class="filter-select" :class="{ active: !!modalFilters.idThuongHieu }">
-                    <option value="">Tất cả thương hiệu</option>
-                    <option v-for="b in brandsList" :key="b.id" :value="b.id || b.ten">{{ b.ten || b.tenThuongHieu }}</option>
-                  </select>
+                  <SearchableSelect
+                    v-model="modalFilters.idThuongHieu"
+                    :options="brandFilterOptions"
+                    value-key="value"
+                    label-key="label"
+                    placeholder="Tất cả thương hiệu"
+                    search-placeholder="Tìm thương hiệu..."
+                    @change="v => { modalFilters.idThuongHieu = v === null ? '' : v }"
+                  />
                 </div>
 
                 <div class="filter-select-wrap">
-                  <select v-model="modalFilters.idLoaiGiay" class="filter-select" :class="{ active: !!modalFilters.idLoaiGiay }">
-                    <option value="">Tất cả thể loại</option>
-                    <option v-for="c in categoriesList" :key="c.id" :value="c.id || c.ten">{{ c.ten || c.tenLoaiGiay }}</option>
-                  </select>
+                  <SearchableSelect
+                    v-model="modalFilters.idLoaiGiay"
+                    :options="categoryFilterOptions"
+                    value-key="value"
+                    label-key="label"
+                    placeholder="Tất cả thể loại"
+                    search-placeholder="Tìm thể loại..."
+                    @change="v => { modalFilters.idLoaiGiay = v === null ? '' : v }"
+                  />
                 </div>
 
                 <div class="filter-select-wrap">
-                  <select v-model="modalFilters.idMauSac" class="filter-select" :class="{ active: !!modalFilters.idMauSac }">
-                    <option value="">Tất cả màu sắc</option>
-                    <option v-for="m in colorsList" :key="m.id" :value="m.id || m.ten || m.tenMau">{{ m.ten || m.tenMau }}</option>
-                  </select>
+                  <SearchableSelect
+                    v-model="modalFilters.idMauSac"
+                    :options="colorFilterOptions"
+                    value-key="value"
+                    label-key="label"
+                    placeholder="Tất cả màu sắc"
+                    search-placeholder="Tìm màu sắc..."
+                    @change="v => { modalFilters.idMauSac = v === null ? '' : v }"
+                  />
                 </div>
 
                 <div class="filter-select-wrap">
-                  <select v-model="modalFilters.idKichCo" class="filter-select" :class="{ active: !!modalFilters.idKichCo }">
-                    <option value="">Tất cả kích cỡ</option>
-                    <option v-for="s in sizesList" :key="s.id" :value="s.id || s.ten || s.tenKichCo">{{ s.ten || s.tenKichCo }}</option>
-                  </select>
+                  <SearchableSelect
+                    v-model="modalFilters.idKichCo"
+                    :options="sizeFilterOptions"
+                    value-key="value"
+                    label-key="label"
+                    placeholder="Tất cả kích cỡ"
+                    search-placeholder="Tìm kích cỡ..."
+                    @change="v => { modalFilters.idKichCo = v === null ? '' : v }"
+                  />
                 </div>
 
                 <div class="filter-select-wrap">
-                  <select v-model="modalFilters.priceRange" class="filter-select" :class="{ active: !!modalFilters.priceRange }">
-                    <option value="">Tất cả mức giá</option>
-                    <option value="<1m">Dưới 1.000.000 ₫</option>
-                    <option value="1m-3m">1.000.000 - 3.000.000 ₫</option>
-                    <option value="3m-5m">3.000.000 - 5.000.000 ₫</option>
-                    <option value=">5m">Trên 5.000.000 ₫</option>
-                  </select>
+                  <SearchableSelect
+                    v-model="modalFilters.priceRange"
+                    :options="priceFilterOptions"
+                    value-key="value"
+                    label-key="label"
+                    placeholder="Tất cả mức giá"
+                    search-placeholder="Tìm mức giá..."
+                    @change="v => { modalFilters.priceRange = v === null ? '' : v }"
+                  />
                 </div>
               </div>
             </div>
@@ -2225,9 +2320,15 @@ onUnmounted(() => {
           <div class="pos-prod-footer pos-prod-footer-with-action">
             <div class="pos-modal-page-size">
               <span class="page-size-label">Hiển thị:</span>
-              <select v-model.number="modalPageSize" class="page-size-select">
-                <option v-for="sz in pageSizeOptions" :key="sz" :value="sz">{{ sz }} / trang</option>
-              </select>
+              <SearchableSelect
+                v-model="modalPageSize"
+                :options="pageSizeSelectOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="Số dòng / trang"
+                search-placeholder="Tìm số dòng..."
+                :allow-clear="false"
+              />
               <span class="page-size-total">Tổng <strong>{{ modalTotalElements }}</strong> sản phẩm</span>
             </div>
 

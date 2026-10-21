@@ -3,6 +3,7 @@ import { reactive, computed, watch, inject, ref } from "vue";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { useRouter } from "vue-router";
+import SearchableSelect from "@/components/SearchableSelect.vue";
 
 const router = useRouter();
 const baseAPI = inject("baseAPI");
@@ -10,6 +11,11 @@ const saving = ref(false);
 
 const LOAI_GIAM = { percent: "PERCENT", cash: "AMOUNT" };
 const PHAM_VI = { public: "CONG_KHAI", private: "CA_NHAN" };
+
+const discountTypeOptions = [
+  { value: "percent", label: "Giảm theo %" },
+  { value: "cash", label: "Giảm theo số tiền" },
+];
 
 /* Mã phiếu: ảnh không có ô nhập nên tự sinh, backend vẫn nhận maPhieuGiamGia */
 const randomCode = () => {
@@ -369,10 +375,15 @@ const submit = async () => {
           <!-- Loại giảm -->
           <div class="field">
             <label>Loại giảm <b class="req">*</b></label>
-            <select v-model="form.discountType">
-              <option value="percent">Giảm theo %</option>
-              <option value="cash">Giảm theo số tiền</option>
-            </select>
+            <SearchableSelect
+              v-model="form.discountType"
+              :options="discountTypeOptions"
+              label-key="label"
+              value-key="value"
+              placeholder="Chọn loại giảm"
+              search-placeholder="Tìm..."
+              :allow-clear="false"
+            />
           </div>
 
           <!-- Giá trị giảm -->
@@ -684,7 +695,6 @@ const submit = async () => {
 }
 
 .field input,
-.field select,
 .field textarea {
   width: 100%;
   padding: 0.7rem 0.9rem;
@@ -702,7 +712,6 @@ const submit = async () => {
   resize: vertical;
 }
 .field input:focus,
-.field select:focus,
 .field textarea:focus {
   border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);

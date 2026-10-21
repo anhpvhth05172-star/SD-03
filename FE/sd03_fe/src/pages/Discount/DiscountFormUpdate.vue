@@ -11,6 +11,7 @@ import {
 import axios from "axios";
 import Swal from "sweetalert2";
 import { useRouter, useRoute } from "vue-router";
+import SearchableSelect from "@/components/SearchableSelect.vue";
 
 const router = useRouter();
 const route = useRoute();
@@ -407,10 +408,17 @@ const submit = async () => {
           <!-- Trạng thái -->
           <div class="field" style="display: none">
             <label>Trạng thái</label>
-            <select v-model="form.status">
-              <option :value="true">Đang hoạt động</option>
-              <option :value="false">Ngừng hoạt động</option>
-            </select>
+            <SearchableSelect
+              v-model="form.status"
+              :options="[
+                { value: true, label: 'Đang hoạt động' },
+                { value: false, label: 'Ngừng hoạt động' },
+              ]"
+              label-key="label"
+              value-key="value"
+              placeholder="Chọn trạng thái..."
+              :allow-clear="false"
+            />
           </div>
 
           <!-- Tên phiếu -->
@@ -473,10 +481,17 @@ const submit = async () => {
           <!-- Loại giảm -->
           <div class="field">
             <label>Loại giảm <b class="req">*</b></label>
-            <select v-model="form.discountType">
-              <option value="percent">Giảm theo %</option>
-              <option value="cash">Giảm theo số tiền</option>
-            </select>
+            <SearchableSelect
+              v-model="form.discountType"
+              :options="[
+                { value: 'percent', label: 'Giảm theo %' },
+                { value: 'cash', label: 'Giảm theo số tiền' },
+              ]"
+              label-key="label"
+              value-key="value"
+              placeholder="Chọn loại giảm..."
+              :allow-clear="false"
+            />
           </div>
 
           <!-- Đơn hàng tối thiểu -->
@@ -823,7 +838,6 @@ const submit = async () => {
 }
 
 .field input,
-.field select,
 .field textarea {
   width: 100%;
   padding: 0.7rem 0.9rem;
@@ -841,7 +855,6 @@ const submit = async () => {
   resize: vertical;
 }
 .field input:focus,
-.field select:focus,
 .field textarea:focus {
   border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);

@@ -3,6 +3,7 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import { computed, inject, onMounted, reactive, ref } from "vue";
 import PaginationBar from "@/components/PaginationBar.vue";
+import SearchableSelect from "@/components/SearchableSelect.vue";
 
 const apiDiscount = inject("baseAPI");
 
@@ -238,44 +239,68 @@ onMounted(() => getData(0));
         </div>
 
         <div class="f-item">
-          <label for="f-type">Loại giảm</label>
-          <select
-            id="f-type"
+          <label>Loại giảm</label>
+          <SearchableSelect
             v-model="filter.discountType"
-            class="f-control f-select"
-          >
-            <option value="">Tất cả</option>
-            <option value="PERCENT">Giảm theo %</option>
-            <option value="AMOUNT">Giảm tiền (VNĐ)</option>
-          </select>
+            :options="[
+              { value: '', label: 'Tất cả' },
+              { value: 'PERCENT', label: 'Giảm theo %' },
+              { value: 'AMOUNT', label: 'Giảm tiền (VNĐ)' },
+            ]"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả"
+            search-placeholder="Tìm loại giảm..."
+            @change="
+              (v) => {
+                filter.discountType = v === null || v === undefined ? '' : v;
+              }
+            "
+          />
         </div>
 
         <div class="f-item">
-          <label for="f-status">Trạng thái</label>
-          <select
-            id="f-status"
+          <label>Trạng thái</label>
+          <SearchableSelect
             v-model="filter.status"
-            class="f-control f-select"
-          >
-            <option value="">Tất cả</option>
-            <option value="active">Đang hoạt động</option>
-            <option value="upcoming">Sắp diễn ra</option>
-            <option value="expired">Hết hạn</option>
-            <option value="inactive">Ngừng hoạt động</option>
-          </select>
+            :options="[
+              { value: '', label: 'Tất cả' },
+              { value: 'active', label: 'Đang hoạt động' },
+              { value: 'upcoming', label: 'Sắp diễn ra' },
+              { value: 'expired', label: 'Hết hạn' },
+              { value: 'inactive', label: 'Ngừng hoạt động' },
+            ]"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả"
+            search-placeholder="Tìm trạng thái..."
+            @change="
+              (v) => {
+                filter.status = v === null || v === undefined ? '' : v;
+              }
+            "
+          />
         </div>
 
         <div class="f-item">
-          <label for="f-scope">Loại phiếu</label>
-          <select
-            id="f-scope"
+          <label>Loại phiếu</label>
+          <SearchableSelect
             v-model="filter.scope"
-            class="f-control f-select"
-          >
-            <option value="">Tất cả</option>
-            <option value="CONG_KHAI">Công khai</option>
-            <option value="CA_NHAN">Cá nhân</option>
-          </select>
+            :options="[
+              { value: '', label: 'Tất cả' },
+              { value: 'CONG_KHAI', label: 'Công khai' },
+              { value: 'CA_NHAN', label: 'Cá nhân' },
+            ]"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả"
+            search-placeholder="Tìm loại phiếu..."
+            @change="
+              (v) => {
+                filter.scope = v === null || v === undefined ? '' : v;
+              }
+            "
+          />
         </div>
 
         <div class="f-item">
@@ -627,17 +652,6 @@ onMounted(() => getData(0));
 .f-control:focus {
   border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
-}
-
-/* Select có mũi tên riêng */
-.f-select {
-  appearance: none;
-  padding-right: 2.3rem;
-  cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23374151' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.8rem center;
-  background-size: 16px;
 }
 
 /* Cụm nút: reset (chỉ icon) + Áp dụng */

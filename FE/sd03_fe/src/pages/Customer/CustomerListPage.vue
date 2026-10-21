@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import CustomerAddressModal from '@/components/CustomerAddressModal.vue'
 import DoiMatKhauModal from '@/components/DoiMatKhauModal.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import { getCustomer, listCustomers, updateCustomerStatus, deleteCustomer } from '@/api/customer'
 import { exportExcel, fetchAllPages } from '@/utils/export'
 import { takeFlashWithMeta } from '@/utils/flash'
@@ -24,6 +25,11 @@ const size = ref(5) // Khớp 5 dòng như trong ảnh mẫu
 
 const fKeyword = ref('')
 const fTrangThai = ref('')
+const trangThaiOptions = [
+  { value: '', label: 'Tất cả' },
+  { value: 'active', label: 'Hoạt động' },
+  { value: 'locked', label: 'Đã khóa' },
+]
 const detailData = ref(null)
 
 let searchTimeout = null
@@ -262,11 +268,15 @@ onMounted(() => {
         </div>
 
         <div class="select-status-wrap">
-          <select v-model="fTrangThai" class="select-status" @change="applyFilter">
-            <option value="">Tất cả</option>
-            <option value="active">Hoạt động</option>
-            <option value="locked">Đã khóa</option>
-          </select>
+          <SearchableSelect
+            v-model="fTrangThai"
+            :options="trangThaiOptions"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả"
+            search-placeholder="Tìm..."
+            @change="(v) => { fTrangThai = (v === null || v === undefined) ? '' : v; applyFilter() }"
+          />
         </div>
         <button class="btn-action-outline" type="button" @click="resetFilter">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -652,26 +662,6 @@ onMounted(() => {
 
 .select-status-wrap {
   flex-shrink: 0;
-}
-
-.select-status {
-  height: 40px;
-  min-width: 110px;
-  padding: 0 28px 0 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 13.5px;
-  color: #334155;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 10px center;
-  background-size: 14px;
-  appearance: none;
-  cursor: pointer;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.select-status:focus {
-  border-color: #f43f5e;
 }
 
 .btn-action-outline {

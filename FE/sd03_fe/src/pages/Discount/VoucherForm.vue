@@ -596,21 +596,41 @@ const submit = async () => {
           </div>
           <div class="dg-field">
             <label>Kích cỡ</label>
-            <select v-model="sizeFilter" class="dg-round">
-              <option value="">Tất cả</option>
-              <option v-for="s in sizeOptions" :key="s" :value="s">
-                {{ s }}
-              </option>
-            </select>
+            <SearchableSelect
+              v-model="sizeFilter"
+              :options="[
+                { value: '', label: 'Tất cả' },
+                ...sizeOptions.map((s) => ({ value: s, label: s })),
+              ]"
+              label-key="label"
+              value-key="value"
+              placeholder="Tất cả"
+              search-placeholder="Tìm kích cỡ..."
+              @change="
+                (v) => {
+                  sizeFilter = v === null || v === undefined ? '' : v;
+                }
+              "
+            />
           </div>
           <div class="dg-field">
             <label>Màu sắc</label>
-            <select v-model="colorFilter" class="dg-round">
-              <option value="">Tất cả</option>
-              <option v-for="c in colorOptions" :key="c" :value="c">
-                {{ c }}
-              </option>
-            </select>
+            <SearchableSelect
+              v-model="colorFilter"
+              :options="[
+                { value: '', label: 'Tất cả' },
+                ...colorOptions.map((c) => ({ value: c, label: c })),
+              ]"
+              label-key="label"
+              value-key="value"
+              placeholder="Tất cả"
+              search-placeholder="Tìm màu sắc..."
+              @change="
+                (v) => {
+                  colorFilter = v === null || v === undefined ? '' : v;
+                }
+              "
+            />
           </div>
           <div class="dg-field">
             <label>Thương hiệu</label>
@@ -865,8 +885,7 @@ const submit = async () => {
 .dg-req {
   color: var(--red);
 }
-.dg-field input,
-.dg-field select {
+.dg-field input {
   width: 100%;
   padding: 0.7rem 0.9rem;
   border: 1px solid var(--line);
@@ -879,8 +898,7 @@ const submit = async () => {
     border-color 0.15s,
     box-shadow 0.15s;
 }
-.dg-field input:focus,
-.dg-field select:focus {
+.dg-field input:focus {
   border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
 }
@@ -890,9 +908,6 @@ const submit = async () => {
 .dg-field input.dg-pill {
   border-radius: 999px;
   padding-left: 1.1rem;
-}
-.dg-field select.dg-round {
-  border-radius: 12px;
 }
 
 .dg-affix {

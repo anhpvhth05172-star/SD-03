@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import PaginationBar from '@/components/PaginationBar.vue'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import { listEmployees } from '@/api/employee'
 import { API_BASE } from '@/api/http'
 import { formatVnd } from '@/utils/format'
@@ -377,6 +378,20 @@ watch(locThuongHieu, (list) => {
   }
 })
 
+const thuongHieuOptions = computed(() => [
+  { value: '', label: 'Tất cả thương hiệu' },
+  ...locThuongHieu.value.map((t) => ({ value: t, label: t }))
+])
+
+const onThuongHieuChange = (val) => {
+  thuongHieuChon.value = val ?? ''
+}
+
+const onTonKhoSpChange = (val) => {
+  tonKhoSp.value = val ?? ''
+  pageSp.value = 0
+}
+
 onMounted(async () => {
   bang.value = taoBangNgay()
   capNhatLuc.value = gioHienTai()
@@ -452,18 +467,30 @@ onMounted(async () => {
         </div>
         <div class="field-block">
           <label class="field-label">Tổng quan</label>
-          <select v-model="kieuTongQuan" class="filter-select">
-            <option value="ngay">Theo ngày</option>
-            <option value="tuan">Theo tuần</option>
-            <option value="thang">Theo tháng</option>
-          </select>
+          <SearchableSelect
+            v-model="kieuTongQuan"
+            :options="[
+              { value: 'ngay', label: 'Theo ngày' },
+              { value: 'tuan', label: 'Theo tuần' },
+              { value: 'thang', label: 'Theo tháng' }
+            ]"
+            label-key="label"
+            value-key="value"
+            :allow-clear="false"
+            placeholder="Theo ngày"
+          />
         </div>
         <div class="field-block">
           <label class="field-label">Thương hiệu</label>
-          <select v-model="thuongHieuChon" class="filter-select">
-            <option value="">Tất cả thương hiệu</option>
-            <option v-for="t in locThuongHieu" :key="t" :value="t">{{ t }}</option>
-          </select>
+          <SearchableSelect
+            v-model="thuongHieuChon"
+            :options="thuongHieuOptions"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả thương hiệu"
+            search-placeholder="Tìm thương hiệu..."
+            @change="onThuongHieuChange"
+          />
         </div>
         <div class="field-block">
           <label class="field-label">Tìm theo thương hiệu</label>
@@ -633,10 +660,17 @@ onMounted(async () => {
               <button type="button" class="seg-btn" :class="{ 'is-active': thMode === 'tron' }" @click="thMode = 'tron'">Tròn</button>
               <button type="button" class="seg-btn" :class="{ 'is-active': thMode === 'duong' }" @click="thMode = 'duong'">Đường</button>
             </div>
-            <select v-model="thTheo" class="filter-select filter-select-sm">
-              <option value="doanhThu">Theo doanh thu</option>
-              <option value="soDon">Theo số đơn</option>
-            </select>
+            <SearchableSelect
+              v-model="thTheo"
+              :options="[
+                { value: 'doanhThu', label: 'Theo doanh thu' },
+                { value: 'soDon', label: 'Theo số đơn' }
+              ]"
+              label-key="label"
+              value-key="value"
+              :allow-clear="false"
+              placeholder="Theo doanh thu"
+            />
           </div>
         </div>
 
@@ -776,11 +810,18 @@ onMounted(async () => {
         </div>
         <div class="field-block">
           <label class="field-label">Sắp xếp</label>
-          <select v-model="sortNv" class="filter-select wide">
-            <option value="doanhThuCao">Doanh thu cao nhất</option>
-            <option value="doanhThuThap">Doanh thu thấp nhất</option>
-            <option value="donNhieu">Đơn hàng nhiều nhất</option>
-          </select>
+          <SearchableSelect
+            v-model="sortNv"
+            :options="[
+              { value: 'doanhThuCao', label: 'Doanh thu cao nhất' },
+              { value: 'doanhThuThap', label: 'Doanh thu thấp nhất' },
+              { value: 'donNhieu', label: 'Đơn hàng nhiều nhất' }
+            ]"
+            label-key="label"
+            value-key="value"
+            :allow-clear="false"
+            placeholder="Doanh thu cao nhất"
+          />
         </div>
         <div class="field-block field-reset">
           <label class="field-label">&nbsp;</label>
@@ -879,20 +920,36 @@ onMounted(async () => {
         </div>
         <div class="field-block">
           <label class="field-label">Tồn kho</label>
-          <select v-model="tonKhoSp" class="filter-select wide" @change="pageSp = 0">
-            <option value="">Tất cả tồn kho</option>
-            <option value="con">Còn hàng</option>
-            <option value="sapHet">Sắp hết hàng</option>
-            <option value="het">Hết hàng</option>
-          </select>
+          <SearchableSelect
+            v-model="tonKhoSp"
+            :options="[
+              { value: '', label: 'Tất cả tồn kho' },
+              { value: 'con', label: 'Còn hàng' },
+              { value: 'sapHet', label: 'Sắp hết hàng' },
+              { value: 'het', label: 'Hết hàng' }
+            ]"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả tồn kho"
+            search-placeholder="Tìm trạng thái tồn..."
+            @change="onTonKhoSpChange"
+          />
         </div>
         <div class="field-block">
           <label class="field-label">Sắp xếp</label>
-          <select v-model="sortSp" class="filter-select wide" @change="pageSp = 0">
-            <option value="banChay">Bán chạy nhất</option>
-            <option value="doanhThu">Doanh thu cao nhất</option>
-            <option value="tonKho">Tồn kho cao nhất</option>
-          </select>
+          <SearchableSelect
+            v-model="sortSp"
+            :options="[
+              { value: 'banChay', label: 'Bán chạy nhất' },
+              { value: 'doanhThu', label: 'Doanh thu cao nhất' },
+              { value: 'tonKho', label: 'Tồn kho cao nhất' }
+            ]"
+            label-key="label"
+            value-key="value"
+            :allow-clear="false"
+            placeholder="Bán chạy nhất"
+            @change="pageSp = 0"
+          />
         </div>
         <div class="field-block field-reset">
           <label class="field-label">&nbsp;</label>
@@ -1177,39 +1234,6 @@ onMounted(async () => {
 
 .input-search::placeholder {
   color: #94a3b8;
-}
-
-.filter-select {
-  height: 42px;
-  min-width: 150px;
-  padding: 0 32px 0 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 9px;
-  font-size: 13.5px;
-  color: #334155;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 10px center;
-  background-size: 14px;
-  appearance: none;
-  outline: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: inherit;
-}
-
-.filter-select:focus {
-  border-color: #f43f5e;
-  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
-}
-
-.filter-select.wide {
-  min-width: 190px;
-}
-
-.filter-select-sm {
-  height: 34px;
-  min-width: 150px;
-  font-size: 12.5px;
-  border-radius: 8px;
 }
 
 .field-reset {
