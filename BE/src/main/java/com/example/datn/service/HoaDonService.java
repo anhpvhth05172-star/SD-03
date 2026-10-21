@@ -1,5 +1,6 @@
 package com.example.datn.service;
 
+import com.example.datn.dto.CaLamViecDto;
 import com.example.datn.dto.HoaDon.ChiTietHoaDonDTO;
 import com.example.datn.dto.HoaDon.ChiTietHoaDonRequest;
 import com.example.datn.dto.SanPham.FormDataResponse;
@@ -42,9 +43,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class HoaDonService {
@@ -111,6 +117,9 @@ public class HoaDonService {
     private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository;
     private final DiaChiKhachHangRepository diaChiKhachHangRepository;
     private final GHNService ghnService;
+
+    @Autowired
+    private GiaoCaService giaoCaService;
 
     public HoaDonService(
         HoaDonRepository hoaDonRepository,
@@ -311,6 +320,7 @@ public class HoaDonService {
     @Transactional
     public HoaDonDTO create(HoaDonRequest req) {
         validateHeader(req, null);
+        CaLamViecDto caDangMo = chuanBiTaoHdTaiQuay(req);
         xacDinhPhiVanChuyenOnline(req);
         PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
         if (phieu != null) {
@@ -318,6 +328,9 @@ public class HoaDonService {
         }
         HoaDon hoaDon = new HoaDon();
         fillHeader(hoaDon, req);
+        if (caDangMo != null) {
+            hoaDon.setIdCaLamViec(caDangMo.getId());
+        }
         List<DongTinh> lines = tinhToanVaLuu(hoaDon, req);
         hoaDon = hoaDonRepository.save(hoaDon);
         luuDiaChiKhachHangVaoSo(hoaDon);
@@ -776,6 +789,35 @@ public class HoaDonService {
                 hoaDon.setSoDienThoaiKhachHang(hoaDon.getKhachHang().getSoDienThoai());
             }
         }
+    }
+
+    private CaLamViecDto chuanBiTaoHdTaiQuay(HoaDonRequest req) {
+        if (!"TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon()))) {
+            return null;
+        }
+        Long idNhanVienSession = idNhanVienSession();
+        if (idNhanVienSession == null) {
+            return null;
+        }
+        req.setIdNhanVien(idNhanVienSession);
+        CaLamViecDto ca = giaoCaService.getDangMoOf(idNhanVienSession);
+        if (ca == null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "CA_CHUA_MO: Chưa mở ca — vui lòng mở ca để bán tại quầy");
+        }
+        return ca;
+    }
+
+    private static Long idNhanVienSession() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof Long id)) {
+            return null;
+        }
+        boolean laNhanVienOrAdmin = auth.getAuthorities().stream().anyMatch(a ->
+            "ROLE_NHAN_VIEN".equals(a.getAuthority())
+                || "ROLE_ADMIN".equals(a.getAuthority()));
+        return laNhanVienOrAdmin ? id : null;
     }
 
     private KhachHang timKhachHang(Long id) {
