@@ -93,7 +93,7 @@ public class HoaDonService {
     private static final Map<String, List<String>> TRANSITION_MAP_POS = new HashMap<>();
     static {
         TRANSITION_MAP_POS.put("CHO_XAC_NHAN", List.of("DA_HOAN_THANH"));
-        TRANSITION_MAP_POS.put("DA_HOAN_THANH", List.of());
+        TRANSITION_MAP_POS.put("DA_HOAN_THANH", List.of("DA_HOAN_TIEN"));
         TRANSITION_MAP_POS.put("DA_HUY", List.of());
         TRANSITION_MAP_POS.put("DA_HOAN_TIEN", List.of());
     }

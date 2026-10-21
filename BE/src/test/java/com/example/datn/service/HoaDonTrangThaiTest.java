@@ -339,13 +339,13 @@ class HoaDonTrangThaiTest {
     }
 
     @Test
-    void getTiepTheoPos_DaHoanThanh_Rong() {
+    void getTiepTheoPos_DaHoanThanh_CoHoanTien() {
         when(hoaDonRepository.findById(HD_ID)).thenReturn(Optional.of(pos("DA_HOAN_THANH")));
         when(chiTietHoaDonRepository.findByHoaDonId(anyLong())).thenReturn(List.of());
 
         HoaDonDTO dto = service.get(HD_ID);
 
-        assertThat(dto.getTrangThaiTiepTheo()).isEmpty();
+        assertThat(dto.getTrangThaiTiepTheo()).containsExactly("Đã hoàn tiền");
     }
 
     @Test
