@@ -329,12 +329,6 @@ onMounted(load)
           </div>
 
           <div class="filter-actions">
-            <button class="btn-apply" type="button" @click="applyFilter">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                <path d="M4 6h16M7 12h10M10 18h4" />
-              </svg>
-              Áp dụng
-            </button>
             <button class="btn-reset-filter" type="button" @click="resetFilter">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 11a8 8 0 1 0-.9 4.5" />
