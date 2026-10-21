@@ -588,7 +588,7 @@ onMounted(() => getData(0));
   gap: 1rem;
 }
 .filter-count {
-  font-size: 0.9rem;
+  font-size: 11.5px;
   color: var(--muted);
 }
 .filter-toggle {
@@ -727,6 +727,7 @@ onMounted(() => getData(0));
   background: var(--red);
   color: #fff;
   font: inherit;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
