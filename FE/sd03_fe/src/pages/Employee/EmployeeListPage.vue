@@ -2,7 +2,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  deleteEmployee,
   getEmployee,
   getEmployeeFormData,
   importEmployeesConfirm,
@@ -15,7 +14,7 @@ import { exportExcel, fetchAllPages } from '@/utils/export'
 import { takeFlashWithMeta } from '@/utils/flash'
 import { avatarColor, formatDate, formatDateTime, initialsOf } from '@/utils/format'
 import { getAvatarSrc, onAvatarError } from '@/utils/avatar'
-import { notifySuccess, notifyWarning, notifyError, notifyConfirm, notifyDeleteConfirm } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import { API_BASE } from '@/api/http'
 
 const router = useRouter()
@@ -517,18 +516,6 @@ const toggleStatus = async (row) => {
   }
 }
 
-const removeEmployee = async (row) => {
-  const ok = await notifyDeleteConfirm(row.tenTaiKhoan || row.maNhanVien)
-  if (!ok) return
-  try {
-    await deleteEmployee(row.id)
-    notifySuccess(`Đã xóa nhân viên "${row.tenTaiKhoan}" thành công!`)
-    await load()
-  } catch (e) {
-    notifyError('Không thể xóa nhân viên', e.message)
-  }
-}
-
 onMounted(async () => {
   const { message, type } = takeFlashWithMeta()
   flashMsg.value = message
@@ -902,15 +889,6 @@ onMounted(async () => {
           >
             <i class="bi bi-key"></i>
             <span>Đổi mật khẩu</span>
-          </button>
-          <button
-            v-if="!isAccountProtected(detailData)"
-            class="btn-profile-delete"
-            type="button"
-            @click="removeEmployee(detailData); detailData = null"
-          >
-            <i class="bi bi-trash3"></i>
-            <span>Xóa tài khoản</span>
           </button>
           <button class="btn-profile-close" type="button" @click="detailData = null">
             Đóng
@@ -1933,26 +1911,6 @@ onMounted(async () => {
 
 .btn-profile-secondary:hover {
   background: #f8fafc;
-}
-
-.btn-profile-delete {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 18px;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #cc0000;
-  border: 1px solid #fecaca;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-profile-delete:hover {
-  background: #fef2f2;
-  border-color: #f87171;
 }
 
 .btn-profile-close {

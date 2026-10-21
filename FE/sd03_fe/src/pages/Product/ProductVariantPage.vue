@@ -5,7 +5,7 @@ import QRCode from 'qrcode'
 import QuickAddModal from '@/components/QuickAddModal.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import CurrencyInput from '@/components/CurrencyInput.vue'
-import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
 import { API_ORIGIN } from '@/api/http'
@@ -758,82 +758,6 @@ const saveEditVariant = async () => {
   }
 }
 
-// ==========================================
-// CONFIRM MODAL STATE
-// ==========================================
-const confirmModal = reactive({
-  isOpen: false,
-  title: '',
-  message: '',
-  confirmText: 'Xác nhận xóa',
-  cancelText: 'Hủy bỏ',
-  variant: 'danger',
-  onConfirm: null
-})
-
-const openConfirmModal = ({ title, message, confirmText = 'Xác nhận', cancelText = 'Hủy bỏ', variant = 'danger', onConfirm }) => {
-  confirmModal.title = title
-  confirmModal.message = message
-  confirmModal.confirmText = confirmText
-  confirmModal.cancelText = cancelText
-  confirmModal.variant = variant
-  confirmModal.onConfirm = onConfirm
-  confirmModal.isOpen = true
-}
-
-const handleConfirmAction = async () => {
-  const callback = confirmModal.onConfirm
-  confirmModal.isOpen = false
-  if (callback) {
-    callback()
-  }
-}
-
-const handleCancelConfirm = () => {
-  confirmModal.isOpen = false
-}
-
-const confirmDeleteVariant = (item) => {
-  const itemCode = item.maCtsp || `SKU-${item.id}`
-  openConfirmModal({
-    title: 'Xác nhận xóa biến thể sản phẩm',
-    message: `Bạn có chắc chắn muốn xóa biến thể "${itemCode}" (${item.color || 'Màu mặc định'} - Size ${item.size || 'Mặc định'}) không? Thao tác này sẽ xóa vĩnh viễn biến thể khỏi hệ thống.`,
-    confirmText: 'Xóa ngay',
-    cancelText: 'Hủy bỏ',
-    variant: 'danger',
-    onConfirm: () => executeDeleteVariant(item)
-  })
-}
-
-const executeDeleteVariant = async (item) => {
-  const targetId = item.id
-  const originalList = [...variants.value]
-  const targetIdx = variants.value.findIndex(v => v.id === targetId)
-  if (targetIdx !== -1) {
-    variants.value.splice(targetIdx, 1)
-  }
-  if (totalElements.value > 0) totalElements.value--
-
-  showToastNotice('Đã xóa', `Đã xóa biến thể "${item.maCtsp || `ID ${targetId}`}" thành công!`, 'success')
-
-  try {
-    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/${targetId}`, { method: 'DELETE' })
-    if (res.ok) {
-      fetchVariants(false)
-    } else {
-      const err = await res.json().catch(() => ({}))
-      variants.value = originalList
-      if (totalElements.value >= 0) totalElements.value++
-      showToastNotice('Không thể xóa', err.message || 'Không thể xóa biến thể do có hóa đơn hoặc dữ liệu liên quan!', 'danger')
-    }
-  } catch (e) {
-    console.error('Delete variant error:', e)
-    variants.value = originalList
-    if (totalElements.value >= 0) totalElements.value++
-    showToastNotice('Lỗi kết nối', 'Không thể kết nối máy chủ', 'danger')
-  }
-}
-
 const resetFilters = () => {
   filters.search = ''
   filters.idMauSac = ''
@@ -1124,14 +1048,6 @@ onUnmounted(() => {
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                      </svg>
-                    </button>
-
-                    <!-- Delete Button -->
-                    <button class="act-circle-btn del-btn" title="Xóa biến thể" @click="confirmDeleteVariant(item)">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                       </svg>
                     </button>
                   </div>
@@ -1450,35 +1366,6 @@ onUnmounted(() => {
             <button class="btn btn-primary" @click="saveAddVariant" :disabled="isSubmittingAdd">
               <span v-if="isSubmittingAdd">Đang lưu...</span>
               <span v-else>+ Thêm biến thể</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- Confirmation Modal Dialog -->
-    <transition name="fade">
-      <div v-if="confirmModal.isOpen" class="modal-backdrop modal-backdrop-blur" @click.self="handleCancelConfirm">
-        <div class="confirm-modal-box">
-          <button class="confirm-close-btn" @click="handleCancelConfirm" title="Đóng">✕</button>
-
-          <div class="confirm-hero-badge badge-danger">
-            <div class="confirm-icon-glow">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-              </svg>
-            </div>
-          </div>
-
-          <h3 class="confirm-title">{{ confirmModal.title }}</h3>
-          <p class="confirm-message">{{ confirmModal.message }}</p>
-
-          <div class="confirm-actions">
-            <button class="btn-cancel" @click="handleCancelConfirm">
-              {{ confirmModal.cancelText }}
-            </button>
-            <button class="btn-submit btn-danger" @click="handleConfirmAction">
-              {{ confirmModal.confirmText }}
             </button>
           </div>
         </div>
