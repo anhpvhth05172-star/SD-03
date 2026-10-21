@@ -519,12 +519,21 @@ const executeDeleteFast = async (item) => {
                 <span v-else class="text-slate-desc">{{ item.mo_ta || '—' }}</span>
               </td>
               <td>
-                <span class="badge-pill"
-                  :class="{ 'badge-active': item.trang_thai === 'Hoạt động', 'badge-inactive': item.trang_thai === 'Ngừng hoạt động' }"
-                  @click="toggleStatusFast(item)" title="Click để đổi trạng thái tức thì">
-                  <span class="dot"></span>
-                  {{ item.trang_thai }}
-                </span>
+                <div class="status-switch-cell">
+                  <label class="switch" :title="'Đổi trạng thái ' + item.ten">
+                    <input
+                      type="checkbox"
+                      :checked="item.trang_thai === 'Hoạt động'"
+                      @click.prevent="toggleStatusFast(item)"
+                    />
+                    <span class="slider"></span>
+                  </label>
+                  <span class="badge-pill"
+                    :class="{ 'badge-active': item.trang_thai === 'Hoạt động', 'badge-inactive': item.trang_thai === 'Ngừng hoạt động' }">
+                    <span class="dot"></span>
+                    {{ item.trang_thai }}
+                  </span>
+                </div>
               </td>
               <td class="text-center">
                 <div class="action-btns">
@@ -689,3 +698,66 @@ const executeDeleteFast = async (item) => {
 </template>
 
 <style scoped src="@/assets/styles/AttributeCategoryPage.css"></style>
+
+<style scoped>
+.status-switch-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 21px;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #cbd5e1;
+  border-radius: 999px;
+  transition: 0.25s;
+}
+
+.slider::before {
+  position: absolute;
+  content: "";
+  width: 15px;
+  height: 15px;
+  left: 3px;
+  top: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.25s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.switch input:checked + .slider {
+  background-color: #16a34a;
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(17px);
+}
+
+.switch input:disabled + .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch input:focus-visible + .slider {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+</style>

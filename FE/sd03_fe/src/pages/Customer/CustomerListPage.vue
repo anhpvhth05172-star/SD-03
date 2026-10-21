@@ -359,14 +359,10 @@ onMounted(() => {
                 </td>
                 <td class="text-center">
                   <div class="action-buttons-group">
-                    <button class="btn-icon is-power" type="button"
-                      :title="row.trangThai ? 'Khóa tài khoản' : 'Kích hoạt tài khoản'" @click="toggleStatus(row)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-                        <line x1="12" y1="2" x2="12" y2="12"></line>
-                      </svg>
-                    </button>
+                    <label class="switch" :title="row.trangThai ? 'Khóa tài khoản' : 'Kích hoạt tài khoản'">
+                      <input type="checkbox" :checked="row.trangThai" @click.prevent="toggleStatus(row)" />
+                      <span class="slider"></span>
+                    </label>
                     <button class="btn-icon is-location" type="button" title="Quản lý địa chỉ"
                       @click="openAddress(row)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
@@ -930,18 +926,6 @@ onMounted(() => {
   height: 14px;
 }
 
-/* Nút Power (đỏ/hồng) */
-.btn-icon.is-power {
-  background: #fff1f2;
-  color: #f43f5e;
-  border: 1px solid #ffe4e6;
-}
-
-.btn-icon.is-power:hover {
-  background: #f43f5e;
-  color: #ffffff;
-}
-
 /* Nút Location Pin (xanh dương) */
 .btn-icon.is-location {
   background: #f0f9ff;
@@ -1450,5 +1434,60 @@ onMounted(() => {
 .btn-profile-close:hover {
   background: #e2e8f0;
   color: #0f172a;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 21px;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #cbd5e1;
+  border-radius: 999px;
+  transition: 0.25s;
+}
+
+.slider::before {
+  position: absolute;
+  content: "";
+  width: 15px;
+  height: 15px;
+  left: 3px;
+  top: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.25s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.switch input:checked + .slider {
+  background-color: #16a34a;
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(17px);
+}
+
+.switch input:disabled + .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch input:focus-visible + .slider {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 </style>
