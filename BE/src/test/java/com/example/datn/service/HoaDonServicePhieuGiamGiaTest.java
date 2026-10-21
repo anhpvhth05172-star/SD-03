@@ -22,6 +22,7 @@ import com.example.datn.entity.PhieuGiamGia;
 import com.example.datn.entity.PhuongThucThanhToan;
 import com.example.datn.entity.SanPhamChiTiet;
 import com.example.datn.repository.ChiTietHoaDonRepository;
+import com.example.datn.repository.DiaChiKhachHangRepository;
 import com.example.datn.repository.HoaDonRepository;
 import com.example.datn.repository.KhachHangRepository;
 import com.example.datn.repository.LichSuHoaDonRepository;
@@ -58,6 +59,8 @@ class HoaDonServicePhieuGiamGiaTest {
     private final LichSuHoaDonRepository lichSuHoaDonRepository = mock(LichSuHoaDonRepository.class);
     private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository =
         mock(LichSuSuDungPhieuGiamGiaRepository.class);
+    private final DiaChiKhachHangRepository diaChiKhachHangRepository =
+        mock(DiaChiKhachHangRepository.class);
     private final GHNService ghnService = mock(GHNService.class);
 
     private final HoaDonService service = new HoaDonService(
@@ -70,6 +73,7 @@ class HoaDonServicePhieuGiamGiaTest {
         sanPhamChiTietRepository,
         lichSuHoaDonRepository,
         lichSuSuDungRepository,
+        diaChiKhachHangRepository,
         ghnService
     );
 

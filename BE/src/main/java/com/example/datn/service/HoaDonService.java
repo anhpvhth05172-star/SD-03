@@ -9,6 +9,7 @@ import com.example.datn.dto.HoaDon.LichSuHoaDonDTO;
 import com.example.datn.dto.Common.PageResponse;
 import com.example.datn.dto.ShippingFeeRequest;
 import com.example.datn.entity.ChiTietHoaDon;
+import com.example.datn.entity.DiaChiKhachHang;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.entity.LichSuHoaDon;
@@ -19,6 +20,7 @@ import com.example.datn.entity.PhuongThucThanhToan;
 import com.example.datn.entity.SanPhamChiTiet;
 import com.example.datn.repository.ChiTietHoaDonRepository;
 import com.example.datn.repository.HoaDonRepository;
+import com.example.datn.repository.DiaChiKhachHangRepository;
 import com.example.datn.repository.KhachHangRepository;
 import com.example.datn.repository.LichSuHoaDonRepository;
 import com.example.datn.repository.LichSuSuDungPhieuGiamGiaRepository;
@@ -107,6 +109,7 @@ public class HoaDonService {
     private final SanPhamChiTietRepository sanPhamChiTietRepository;
     private final LichSuHoaDonRepository lichSuHoaDonRepository;
     private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository;
+    private final DiaChiKhachHangRepository diaChiKhachHangRepository;
     private final GHNService ghnService;
 
     public HoaDonService(
@@ -119,6 +122,7 @@ public class HoaDonService {
         SanPhamChiTietRepository sanPhamChiTietRepository,
         LichSuHoaDonRepository lichSuHoaDonRepository,
         LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository,
+        DiaChiKhachHangRepository diaChiKhachHangRepository,
         GHNService ghnService
     ) {
         this.hoaDonRepository = hoaDonRepository;
@@ -130,6 +134,7 @@ public class HoaDonService {
         this.sanPhamChiTietRepository = sanPhamChiTietRepository;
         this.lichSuHoaDonRepository = lichSuHoaDonRepository;
         this.lichSuSuDungRepository = lichSuSuDungRepository;
+        this.diaChiKhachHangRepository = diaChiKhachHangRepository;
         this.ghnService = ghnService;
     }
 
@@ -315,11 +320,36 @@ public class HoaDonService {
         fillHeader(hoaDon, req);
         List<DongTinh> lines = tinhToanVaLuu(hoaDon, req);
         hoaDon = hoaDonRepository.save(hoaDon);
+        luuDiaChiKhachHangVaoSo(hoaDon);
         luuCacDong(hoaDon, lines, req);
         if (phieu != null) {
             ghiLichSuSuDung(hoaDon, phieu);
         }
         return toFullDTO(hoaDon);
+    }
+
+    /**
+     * Mua hàng có địa chỉ nhận mà khách chưa có sổ địa chỉ -> lưu làm địa chỉ mặc định.
+     * Khách đã có địa chỉ thì không đụng vào.
+     */
+    private void luuDiaChiKhachHangVaoSo(HoaDon hoaDon) {
+        KhachHang khachHang = hoaDon.getKhachHang();
+        String diaChi = hoaDon.getDiaChiNhanHang();
+        if (khachHang == null || khachHang.getId() == null || isBlank(diaChi)) {
+            return;
+        }
+        if (diaChiKhachHangRepository.findFirstByKhachHangIdAndMacDinhTrue(khachHang.getId()).isPresent()) {
+            return;
+        }
+        DiaChiKhachHang diaChiMoi = new DiaChiKhachHang();
+        diaChiMoi.setKhachHang(khachHang);
+        diaChiMoi.setMaDiaChi(String.format("DC%03d-%02d", khachHang.getId(),
+            diaChiKhachHangRepository.countByKhachHangId(khachHang.getId()) + 1));
+        diaChiMoi.setTenChiChi(khachHang.getTenKhachHang());
+        diaChiMoi.setDiaChiCuThe(diaChi.trim());
+        diaChiMoi.setMacDinh(true);
+        diaChiMoi.setTrangThai(true);
+        diaChiKhachHangRepository.save(diaChiMoi);
     }
 
     @Transactional

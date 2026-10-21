@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.datn.dto.KhachHang.KhachHangDTO;
@@ -225,34 +227,49 @@ class KhachHangServiceTest {
     }
 
     @Test
-    void tuChoiKhiThieuDiaChiTrenCaTaoVaCapNhat() {
+    void taoKhachHangDeTrongDiaChiVanTaoDuocVaKhongSinhSoDiaChi() {
         KhachHangService service = service();
 
-        KhachHangRequest khongTinh = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
-        khongTinh.setTinhThanhPho("  ");
-        assertEquals("Tỉnh/Thành phố không được để trống",
-            assertThrows(IllegalArgumentException.class, () -> service.create(khongTinh)).getMessage());
+        KhachHangRequest khongDiaChi = yeuCau("Nguyễn Thơ Bính", LocalDate.now().minusYears(20), "");
+        khongDiaChi.setTinhThanhPho("  ");
+        khongDiaChi.setPhuong(null);
+        khongDiaChi.setDiaChiCuThe("");
 
-        KhachHangRequest khongPhuong = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
-        khongPhuong.setPhuong(null);
-        assertEquals("Phường/Xã không được để trống",
-            assertThrows(IllegalArgumentException.class, () -> service.create(khongPhuong)).getMessage());
+        KhachHangDTO dto = service.create(khongDiaChi);
 
-        KhachHangRequest khongSoNha = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
-        khongSoNha.setDiaChiCuThe("");
-        assertEquals("Địa chỉ cụ thể không được để trống",
-            assertThrows(IllegalArgumentException.class, () -> service.create(khongSoNha)).getMessage());
+        assertEquals("Nguyễn Thơ Bính", dto.getTenKhachHang());
+        verify(diaChiRepository, never()).save(any(com.example.datn.entity.DiaChiKhachHang.class));
+    }
 
-        // Cập nhật cũng bắt buộc đủ địa chỉ, không chỉ lúc tạo.
+    @Test
+    void capNhatDeTrongDiaChiKhongDongVaoSoDiaChi() {
+        KhachHangService service = service();
+
         KhachHang daCo = new KhachHang();
         daCo.setId(9L);
-        daCo.setTenKhachHang("Nguyễn Thị Bình");
+        daCo.setTenKhachHang("Nguyễn Thơ Bính");
         when(khachHangRepository.findById(9L)).thenReturn(Optional.of(daCo));
 
-        KhachHangRequest suaKhongSoNha = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
-        suaKhongSoNha.setDiaChiCuThe(null);
-        assertEquals("Địa chỉ cụ thể không được để trống",
-            assertThrows(IllegalArgumentException.class, () -> service.update(9L, suaKhongSoNha)).getMessage());
+        KhachHangRequest suaKhongDiaChi = yeuCau("Nguyễn Thơ Bính", LocalDate.now().minusYears(20), "");
+        suaKhongDiaChi.setTinhThanhPho(null);
+        suaKhongDiaChi.setPhuong("  ");
+        suaKhongDiaChi.setDiaChiCuThe(null);
+
+        service.update(9L, suaKhongDiaChi);
+
+        verify(diaChiRepository, never()).save(any(com.example.datn.entity.DiaChiKhachHang.class));
+        verify(diaChiRepository, never())
+            .findFirstByKhachHangIdAndMacDinhTrue(any());
+    }
+
+    @Test
+    void vanTaoDiaChiMacDinhKhiNhapDiaChi() {
+        KhachHangService service = service();
+
+        KhachHangRequest coDiaChi = yeuCau("Nguyễn Thơ Bính", LocalDate.now().minusYears(20), "");
+        service.create(coDiaChi);
+
+        verify(diaChiRepository).save(any(com.example.datn.entity.DiaChiKhachHang.class));
     }
 
     @Test
