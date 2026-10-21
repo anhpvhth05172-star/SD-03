@@ -9,6 +9,7 @@ import {
   TRANG_THAI_ONLINE,
   TRANG_THAI_POS,
   TRANG_THAI_GIAO_THAT_BAI,
+  TRANG_THAI_KET_THUC,
   isTerminal as isTerminalOf,
   laPos,
   nhanBuoc,
@@ -36,6 +37,7 @@ const showHistory = ref(false)
 const historyLoading = ref(false)
 const historyError = ref('')
 const historyList = ref([])
+const lichSuKetThuc = ref([])
 
 const TRANG_THAI_CODE = {
   'Chờ xác nhận': 'CHO_XAC_NHAN',
@@ -86,6 +88,34 @@ const stepsList = computed(() => {
   return laPos(data.value) ? TRANG_THAI_POS : TRANG_THAI_ONLINE
 })
 
+const trangThaiTruocKetThuc = computed(() => {
+  const ls = lichSuKetThuc.value
+  if (!Array.isArray(ls) || !ls.length || !data.value) return null
+  const cur = data.value
+  const last = [...ls]
+    .reverse()
+    .find(
+      (e) => e.trangThaiSau === cur.trangThai || e.maTrangThaiSau === cur.maTrangThai,
+    )
+  return (last && last.trangThaiTruoc) || null
+})
+
+const visibleSteps = computed(() => {
+  const list = stepsList.value
+  if (!data.value) return list
+  const cur = list.indexOf(data.value.trangThai)
+  if (cur >= 0) return list.slice(0, Math.min(cur + 2, list.length))
+  if (TRANG_THAI_KET_THUC.includes(data.value.trangThai)) {
+    const truoc = trangThaiTruocKetThuc.value
+    let base
+    if (truoc === 'Giao hàng thất bại') base = TRANG_THAI_GIAO_THAT_BAI
+    else if (truoc && list.includes(truoc)) base = list.slice(0, list.indexOf(truoc) + 1)
+    else base = list.slice(0, 1)
+    return [...base, data.value.trangThai]
+  }
+  return list.slice(0, 1)
+})
+
 const isTerminal = computed(() => !!data.value && isTerminalOf(data.value))
 
 const tiepTheoList = computed(() => trangThaiTiepTheoOf(data.value))
@@ -103,7 +133,7 @@ const laTrangThaiHienTai = (ten) => data.value?.trangThai === ten
 const laTrangThaiTiepTheo = (ten) => tiepTheoList.value.includes(ten)
 
 const laDaQua = (ten) => {
-  const list = stepsList.value
+  const list = visibleSteps.value
   const cur = list.indexOf(data.value?.trangThai)
   const i = list.indexOf(ten)
   return cur > -1 && i > -1 && i < cur
@@ -312,6 +342,14 @@ const load = async () => {
       khInfo.value = null
     }
   }
+  lichSuKetThuc.value = []
+  if (TRANG_THAI_KET_THUC.includes(data.value?.trangThai)) {
+    try {
+      lichSuKetThuc.value = await getInvoiceHistory(data.value.id)
+    } catch {
+      lichSuKetThuc.value = []
+    }
+  }
   await genQr()
   loading.value = false
 }
@@ -495,22 +533,40 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <template v-else>
-              <div class="stepper">
+            <div class="stepper">
                 <div
-                  v-for="(s, i) in stepsList"
+                  v-for="(s, i) in visibleSteps"
                   :key="s"
                   class="stepper-step"
                   :class="{
                     'is-done': laDaQua(s),
                     'is-active': laTrangThaiHienTai(s),
-                    'is-fail': s === 'Giao hàng thất bại',
+                    'is-fail':
+                      s === 'Giao hàng thất bại' ||
+                      s === 'Đã hủy' ||
+                      s === 'Đã hoàn tiền',
                     'is-next': laTrangThaiTiepTheo(s) && !laDaQua(s),
                   }"
                   :title="laTrangThaiHienTai(s) ? 'Trạng thái hiện tại' : (laDaQua(s) ? 'Đã hoàn thành' : undefined)"
                 >
                   <span class="stepper-node">
-                    <svg v-if="i === 0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg
+                      v-if="
+                        s === 'Giao hàng thất bại' ||
+                        s === 'Đã hủy' ||
+                        s === 'Đã hoàn tiền'
+                      "
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M15 9l-6 6M9 9l6 6" />
+                    </svg>
+                    <svg v-else-if="i === 0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <circle cx="12" cy="12" r="9" />
                       <path d="M12 7v5l3 2" />
                     </svg>
@@ -526,10 +582,6 @@ onBeforeUnmount(() => {
                       <path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" />
                       <circle cx="7" cy="18" r="2" />
                       <circle cx="17" cy="18" r="2" />
-                    </svg>
-                    <svg v-else-if="s === 'Giao hàng thất bại'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M15 9l-6 6M9 9l6 6" />
                     </svg>
                     <svg v-else-if="i === 4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M20 6L9 17l-5-5" />
@@ -552,7 +604,6 @@ onBeforeUnmount(() => {
                 Cập nhật lần cuối: {{ formatDateTime(data.ngayCapNhat) }}
                 <template v-if="chot(data.nguoiCapNhat)"> • {{ data.nguoiCapNhat }}</template>
               </p>
-            </template>
           </section>
 
           <div class="info-row">
