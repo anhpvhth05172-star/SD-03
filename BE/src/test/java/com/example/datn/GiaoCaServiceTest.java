@@ -9,7 +9,6 @@ import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.NhanVien;
 import com.example.datn.entity.PhuongThucThanhToan;
 import com.example.datn.entity.VaiTro;
-import com.example.datn.repository.CaLamViecRepository;
 import com.example.datn.repository.HoaDonRepository;
 import com.example.datn.repository.LichSuCaRepository;
 import com.example.datn.repository.NhanVienRepository;
@@ -42,9 +41,6 @@ class GiaoCaServiceTest {
     private HoaDonService hoaDonService;
 
     @Autowired
-    private CaLamViecRepository caLamViecRepository;
-
-    @Autowired
     private LichSuCaRepository lichSuCaRepository;
 
     @Autowired
@@ -66,6 +62,7 @@ class GiaoCaServiceTest {
     private final List<Long> idNVTao = new ArrayList<>();
     private final List<Long> idHDTao = new ArrayList<>();
 
+    private Long idVaiTroTao;
     private NhanVien nv1;
     private NhanVien nv2;
     private PhuongThucThanhToan ptMat;
@@ -73,13 +70,8 @@ class GiaoCaServiceTest {
 
     @BeforeEach
     void setUp() {
-        VaiTro vaiTro = vaiTroRepository.findById(3L).orElseGet(() -> {
-            VaiTro vt = new VaiTro();
-            vt.setMaVaiTro("TGC_STAFF_" + System.nanoTime());
-            vt.setTenVaiTro("Test Giao Ca Staff");
-            vt.setTrangThai(true);
-            return vaiTroRepository.save(vt);
-        });
+        idVaiTroTao = null;
+        VaiTro vaiTro = taoHayTimVaiTro();
         nv1 = taoNhanVien("testgc", vaiTro);
         nv2 = taoNhanVien("testgc", vaiTro);
         ptMat = timPhuongThuc("Tiền mặt");
@@ -104,6 +96,28 @@ class GiaoCaServiceTest {
             jdbcTemplate.update("DELETE FROM nhan_vien WHERE id = ?", idNv);
         }
         idNVTao.clear();
+        if (idVaiTroTao != null) {
+            jdbcTemplate.update("DELETE FROM vai_tro WHERE id = ?", idVaiTroTao);
+            idVaiTroTao = null;
+        }
+    }
+
+    private VaiTro taoHayTimVaiTro() {
+        VaiTro coSan = vaiTroRepository.findByMaVaiTro("STAFF");
+        if (coSan != null) {
+            return coSan;
+        }
+        VaiTro hienTai = vaiTroRepository.findByMaVaiTro("TGC_STAFF");
+        if (hienTai != null) {
+            return hienTai;
+        }
+        VaiTro vt = new VaiTro();
+        vt.setMaVaiTro("TGC_STAFF");
+        vt.setTenVaiTro("Test Giao Ca Staff");
+        vt.setTrangThai(true);
+        VaiTro saved = vaiTroRepository.save(vt);
+        idVaiTroTao = saved.getId();
+        return saved;
     }
 
     @Test
@@ -213,6 +227,39 @@ class GiaoCaServiceTest {
     }
 
     @Test
+    void ketCa_boQuaHoaDonDaXoaMem_khongChan() {
+        CaLamViecDto ca = giaoCaService.moCa(777000L, null);
+        idCaTao.add(ca.getId());
+
+        HoaDon hdDaXoa = taoHoaDon(
+            "TAI_QUAY", "CHO_XAC_NHAN", ptMat, new BigDecimal("99999"), ca.getId());
+        jdbcTemplate.update("UPDATE hoa_don SET da_xoa = 1 WHERE id = ?", hdDaXoa.getId());
+
+        CaLamViecDto ketQua = giaoCaService.ketCa(ca.getId(), 777000L, null, null);
+
+        assertThat(ketQua.getTrangThai()).isEqualTo("DA_KET_CA");
+        assertThat(ketQua.getTienDuKien()).isEqualByComparingTo(new BigDecimal("777000"));
+    }
+
+    @Test
+    void ketCa_chanHoaDonDangXuLy_maGachNgang() {
+        CaLamViecDto ca = giaoCaService.moCa(50000L, null);
+        idCaTao.add(ca.getId());
+
+        HoaDon hdDo = taoHoaDon(
+            "TAI_QUAY", "CHO_XAC_NHAN", ptMat, new BigDecimal("99999"), ca.getId());
+
+        assertThatThrownBy(() -> giaoCaService.ketCa(ca.getId(), 50000L, null, null))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> {
+                ResponseStatusException rs = (ResponseStatusException) ex;
+                assertThat(rs.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                assertThat(rs.getReason()).contains("CON_HD_DANG_XU_LY");
+                assertThat(rs.getReason()).contains(hdDo.getMaHoaDon());
+            });
+    }
+
+    @Test
     void lichSu_adminThayDu_NVChiThayCuaMinh() {
         CaLamViecDto ca1 = giaoCaService.moCa(10000L, null);
         idCaTao.add(ca1.getId());
@@ -225,7 +272,7 @@ class GiaoCaServiceTest {
         jdbcTemplate.update(
             "UPDATE ca_lam_viec SET trang_thai = 'DA_KET_CA' WHERE id = ?", ca2.getId());
 
-        var trangQuanTri = giaoCaService.lichSu(0, 10, null, null, null, null, 1L, true);
+        var trangQuanTri = giaoCaService.lichSu(0, 10, null, null, null, null, nv1.getId(), true);
         assertThat(trangQuanTri.getTotalElements()).isGreaterThanOrEqualTo(2);
         assertThat(trangQuanTri.getContent())
             .extracting(CaLamViecDto::getId)

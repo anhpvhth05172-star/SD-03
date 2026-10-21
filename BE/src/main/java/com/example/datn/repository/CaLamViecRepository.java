@@ -1,6 +1,7 @@
 package com.example.datn.repository;
 
 import com.example.datn.entity.CaLamViec;
+import com.example.datn.entity.HoaDon;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -105,11 +106,12 @@ public interface CaLamViecRepository extends JpaRepository<CaLamViec, Long> {
         SELECT h FROM HoaDon h
         WHERE h.idCaLamViec = :idCa AND h.loaiDon = 'TAI_QUAY'
           AND h.trangThai NOT IN ('DA_HOAN_THANH', 'DA_HUY', 'DA_HOAN_TIEN')
+          AND h.daXoa = false
         """)
-    List<com.example.datn.entity.HoaDon> hoaDonDangXuLy(@Param("idCa") Long idCa);
+    List<HoaDon> hoaDonDangXuLy(@Param("idCa") Long idCa);
 
     @Query("SELECT h FROM HoaDon h WHERE h.idCaLamViec = :idCa ORDER BY h.ngayTao DESC, h.id DESC")
-    List<com.example.datn.entity.HoaDon> hoaDonGanDay(
+    List<HoaDon> hoaDonGanDay(
         @Param("idCa") Long idCa,
         Pageable pageable
     );

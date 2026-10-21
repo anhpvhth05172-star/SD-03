@@ -185,7 +185,7 @@ public class GiaoCaService {
         List<HoaDon> dangXuLy = caLamViecRepository.hoaDonDangXuLy(idCa);
         if (!dangXuLy.isEmpty()) {
             String maCacHd = dangXuLy.stream().map(HoaDon::getMaHoaDon).reduce((a, b) -> a + " " + b).orElse("");
-            throw bad("CON_HD_DANG_XU LY", "Còn hóa đơn đang xử lý: " + maCacHd);
+            throw bad("CON_HD_DANG_XU_LY", "Còn hóa đơn đang xử lý: " + maCacHd);
         }
     }
 
