@@ -375,7 +375,12 @@ onMounted(() => {
                         <circle cx="12" cy="10" r="3"></circle>
                       </svg>
                     </button>
-                    <button class="btn-text-edit" type="button" title="Sửa" @click="openDetail(row)">Sửa</button>
+                    <button class="btn-icon is-edit" type="button" title="Sửa" @click="openDetail(row)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3"></path>
+                      </svg>
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -949,35 +954,15 @@ onMounted(() => {
   color: #ffffff;
 }
 
-/* Nút Edit (tím) */
+/* Nút Edit (đỏ) */
 .btn-icon.is-edit {
-  background: #f5f3ff;
-  color: #8b5cf6;
-  border: 1px solid #ede9fe;
+  background: #fef2f2;
+  color: #cc0000;
+  border: 1px solid #fecaca;
 }
 
 .btn-icon.is-edit:hover {
-  background: #8b5cf6;
-  color: #ffffff;
-}
-
-/* Nút Sửa (chữ) */
-.btn-text-edit {
-  min-width: 46px;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 14px;
-  background: #f5f3ff;
-  color: #8b5cf6;
-  border: 1px solid #ede9fe;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-text-edit:hover {
-  background: #8b5cf6;
+  background: #cc0000;
   color: #ffffff;
 }
 
