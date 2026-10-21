@@ -38,6 +38,7 @@ const isAllSelected = computed({
 
 const filters = reactive({
   search: '',
+  idSanPham: '',
   idMauSac: '',
   idKichCo: '',
   trangThai: ''
@@ -76,6 +77,9 @@ const buildParams = (pageIndex) => {
 
   if (filters.search && filters.search.trim()) {
     params.append('search', filters.search.trim())
+  }
+  if (filters.idSanPham) {
+    params.append('idSanPham', filters.idSanPham)
   }
   if (filters.idMauSac) {
     params.append('idMauSac', filters.idMauSac)
@@ -760,6 +764,7 @@ const saveEditVariant = async () => {
 
 const resetFilters = () => {
   filters.search = ''
+  filters.idSanPham = ''
   filters.idMauSac = ''
   filters.idKichCo = ''
   filters.trangThai = ''
@@ -866,6 +871,19 @@ onUnmounted(() => {
       </div>
 
       <div class="filter-row-bottom">
+        <div class="filter-col">
+          <label class="filter-lbl">Sản phẩm</label>
+          <SearchableSelect
+            v-model="filters.idSanPham"
+            :options="productsList"
+            label-key="tenSanPham"
+            value-key="id"
+            placeholder="Tất cả sản phẩm"
+            search-placeholder="Tìm sản phẩm..."
+            @change="onFilterChange"
+          />
+        </div>
+
         <div class="filter-col">
           <label class="filter-lbl">Màu sắc</label>
           <SearchableSelect
