@@ -674,19 +674,17 @@ const submit = async () => {
                 <th>Thương hiệu</th>
                 <th>Chất liệu</th>
                 <th class="dg-right">Giá bán</th>
-                <th class="dg-center">% giảm</th>
                 <th class="dg-right">Giá sau giảm</th>
-                <th class="dg-right">Tồn</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="!variants.length">
-                <td colspan="13" class="dg-empty">
+                <td colspan="11" class="dg-empty">
                   Chọn sản phẩm ở trên để xem các biến thể.
                 </td>
               </tr>
               <tr v-else-if="!filteredVariants.length">
-                <td colspan="13" class="dg-empty">Không có biến thể phù hợp</td>
+                <td colspan="11" class="dg-empty">Không có biến thể phù hợp</td>
               </tr>
               <tr
                 v-for="(v, i) in filteredVariants"
@@ -728,10 +726,6 @@ const submit = async () => {
                 <td>{{ v.tenThuongHieu }}</td>
                 <td>{{ v.chatLieu }}</td>
                 <td class="dg-right">{{ money(v.giaBan) }}</td>
-                <td class="dg-center">
-                  <template v-if="validPercent">{{ form.percent }}%</template>
-                  <span v-else class="dg-muted">—</span>
-                </td>
                 <td class="dg-right">
                   <template v-if="validPercent">
                     <span class="dg-sale">{{ money(afterDiscount(v)) }}</span>
@@ -746,7 +740,6 @@ const submit = async () => {
                   </template>
                   <span v-else class="dg-muted">—</span>
                 </td>
-                <td class="dg-right">{{ v.soLuong }}</td>
               </tr>
             </tbody>
           </table>
