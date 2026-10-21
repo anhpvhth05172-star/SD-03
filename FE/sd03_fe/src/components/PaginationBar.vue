@@ -1,6 +1,5 @@
 <script setup>
 import { computed } from 'vue'
-import SearchableSelect from '@/components/SearchableSelect.vue'
 
 const props = defineProps({
   page: { type: Number, required: true },
@@ -15,17 +14,9 @@ const props = defineProps({
 
 const emit = defineEmits(['change', 'size-change'])
 
-const sizeOptions = computed(() => props.sizes.map((s) => ({ value: s, label: String(s) })))
-
 const onPage = (p) => {
   if (p < 0 || p >= props.totalPages || p === props.page) return
   emit('change', p)
-}
-
-const onSize = (val) => {
-  const n = Number(val)
-  if (!n || n === props.pageSize) return
-  emit('size-change', n)
 }
 
 const pages = computed(() => {
@@ -50,43 +41,38 @@ const pages = computed(() => {
 
 <template>
   <div class="pagination-bar">
-    <span class="pb-info">
-      Hiển thị <strong>{{ from }}-{{ to }}</strong> trong tổng số
-      <strong>{{ totalElements }}</strong
-      ><span v-if="label">{{ " " + label }}</span>
-    </span>
-    <div class="pb-controls">
-      <nav class="pb-nav" aria-label="Phân trang">
-        <button class="pb-btn" type="button" :disabled="page <= 0" title="Trang đầu" @click="onPage(0)">«</button>
-        <button class="pb-btn" type="button" :disabled="page <= 0" title="Trang trước" @click="onPage(page - 1)">‹</button>
-        <template v-for="(p, i) in pages" :key="'pb-' + i">
-          <span v-if="p === null" class="pb-ellipsis">…</span>
-          <button
-            v-else
-            class="pb-btn"
-            :class="{ 'is-active': p === page }"
-            type="button"
-            :aria-current="p === page ? 'page' : undefined"
-            @click="onPage(p)"
-          >
-            {{ p + 1 }}
-          </button>
-        </template>
-        <button class="pb-btn" type="button" :disabled="page >= totalPages - 1" title="Trang sau" @click="onPage(page + 1)">›</button>
-        <button class="pb-btn" type="button" :disabled="page >= totalPages - 1" title="Trang cuối" @click="onPage(totalPages - 1)">»</button>
-      </nav>
-      <div class="pb-size">
-        <SearchableSelect
-          :model-value="pageSize"
-          :options="sizeOptions"
-          label-key="label"
-          value-key="value"
-          placeholder="Số dòng"
-          search-placeholder="Tìm số dòng..."
-          @change="onSize"
-        />
-      </div>
-    </div>
+    <span class="pb-info">Hiển thị {{ from }} - {{ to }} / {{ totalElements }}{{ label ? ' ' + label : '' }}</span>
+    <nav class="pb-nav" aria-label="Phân trang">
+      <button class="pb-btn pb-arrow" type="button" :disabled="page <= 0" title="Trang trước" @click="onPage(page - 1)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </button>
+      <template v-for="(p, i) in pages" :key="'pb-' + i">
+        <span v-if="p === null" class="pb-ellipsis">…</span>
+        <button
+          v-else
+          class="pb-btn pb-page"
+          :class="{ 'is-active': p === page }"
+          type="button"
+          :aria-current="p === page ? 'page' : undefined"
+          @click="onPage(p)"
+        >
+          {{ p + 1 }}
+        </button>
+      </template>
+      <button
+        class="pb-btn pb-arrow"
+        type="button"
+        :disabled="page >= totalPages - 1"
+        title="Trang sau"
+        @click="onPage(page + 1)"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18l6-6-6-6" />
+        </svg>
+      </button>
+    </nav>
   </div>
 </template>
 
@@ -97,56 +83,56 @@ const pages = computed(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 16px;
-  border-top: 1px solid #e2e8f0;
+  padding: 14px 20px;
+  border-top: 1px solid #eef2f6;
 }
 
 .pb-info {
-  font-size: 13px;
-  color: #475569;
-}
-
-.pb-info strong {
-  color: #0f172a;
-}
-
-.pb-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  font-size: 13.5px;
+  color: #334155;
 }
 
 .pb-nav {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .pb-btn {
-  min-width: 30px;
-  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
   padding: 0 6px;
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: #fff;
-  color: #334155;
-  font-size: 13px;
+  color: #64748b;
+  font-size: 13.5px;
   line-height: 1;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
-.pb-btn:hover:not(:disabled):not(.is-active) {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+.pb-arrow svg {
+  width: 16px;
+  height: 16px;
 }
 
-.pb-btn.is-active {
-  background: #cc0000;
-  border-color: #cc0000;
+.pb-btn:hover:not(:disabled):not(.is-active) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+.pb-page.is-active {
+  background: #1e293b;
+  border-color: #1e293b;
   color: #fff;
   font-weight: 600;
+  min-width: 38px;
+  height: 38px;
 }
 
 .pb-btn:disabled {
@@ -163,9 +149,5 @@ const pages = computed(() => {
   padding: 0 2px;
   color: #94a3b8;
   font-size: 13px;
-}
-
-.pb-size {
-  width: 130px;
 }
 </style>
