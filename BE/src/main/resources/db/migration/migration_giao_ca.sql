@@ -1,5 +1,6 @@
 -- Migration giao/ket ca (P1) — Tao bang ca_lam_viec, lich_su_ca; them cot hoa_don.id_ca_lam_viec
 SET QUOTED_IDENTIFIER ON;
+-- NOTE: chay bang sqlcmd -f 65001 (file UTF-8, chu Viet co dau)
 
 -- 1. Bang ca_lam_viec
 IF OBJECT_ID('dbo.ca_lam_viec', 'U') IS NULL
