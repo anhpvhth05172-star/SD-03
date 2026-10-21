@@ -4,6 +4,7 @@ import com.example.datn.config.QuyenGuard;
 import com.example.datn.dto.NhanVien.GuiEmailHangLoatRequest;
 import com.example.datn.dto.NhanVien.GuiEmailHangLoatResponse;
 import com.example.datn.dto.NhanVien.NhanVienDTO;
+import com.example.datn.dto.NhanVien.NhanVienExcelImportResult;
 import com.example.datn.dto.NhanVien.NhanVienFormDataResponse;
 import com.example.datn.dto.NhanVien.NhanVienRequest;
 import com.example.datn.dto.NhanVien.NhanVienImportPreviewResponse;
@@ -15,7 +16,9 @@ import java.time.LocalDate;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,10 +26,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/nhan-vien")
@@ -36,10 +39,10 @@ public class NhanVienController {
     private final NhanVienService nhanVienService;
     private final NhanVienImportService nhanVienImportService;
     private final QuyenGuard quyenGuard;
+    private final com.example.datn.service.AuthService authService;
 
     @GetMapping
     public PageResponse<NhanVienDTO> list(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
         @RequestParam(required = false) String keyword,
         @RequestParam(required = false) Long idVaiTro,
         @RequestParam(required = false) String trangThai,
@@ -48,25 +51,40 @@ public class NhanVienController {
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "10") int size
     ) {
-        quyenGuard.canQuanLyNhanVien(vaiTro);
+        quyenGuard.canQuanLyNhanVien();
         return nhanVienService.list(keyword, idVaiTro, trangThai, tuNgay, denNgay, page, size);
     }
 
     @GetMapping("/form-data")
-    public NhanVienFormDataResponse formData(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro
-    ) {
-        quyenGuard.canQuanLyNhanVien(vaiTro);
+    public NhanVienFormDataResponse formData() {
+        quyenGuard.canQuanLyNhanVien();
         return nhanVienService.formData();
     }
 
     @GetMapping("/ma-tu-dong")
-    public Map<String, String> maNhanVienTuDong(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
-        @RequestParam(required = false) String ten
-    ) {
-        quyenGuard.canQuanLyNhanVien(vaiTro);
+    public Map<String, String> maNhanVienTuDong(@RequestParam(required = false) String ten) {
+        quyenGuard.canQuanLyNhanVien();
         return Map.of("ma", nhanVienService.maNhanVienTuDong(ten));
+    }
+
+    @GetMapping("/excel/template")
+    public ResponseEntity<byte[]> downloadExcelTemplate() {
+        quyenGuard.canQuanLyNhanVien();
+        byte[] bytes = nhanVienService.downloadExcelTemplate();
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename=\"Mau_Import_Nhan_Vien.xlsx\"")
+            .contentType(MediaType.parseMediaType(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .body(bytes);
+    }
+
+    @PostMapping(value = "/excel/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<NhanVienExcelImportResult> importExcel(
+        @RequestParam("file") MultipartFile file
+    ) {
+        quyenGuard.canQuanLyNhanVien();
+        return ResponseEntity.ok(nhanVienService.importFromExcel(file));
     }
 
     @GetMapping("/check-email")
@@ -78,37 +96,28 @@ public class NhanVienController {
     }
 
     @GetMapping("/{id}")
-    public NhanVienDTO get(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
-        @PathVariable Long id
-    ) {
-        quyenGuard.canQuanLyNhanVien(vaiTro);
+    public NhanVienDTO get(@PathVariable Long id) {
+        quyenGuard.canQuanLyNhanVien();
         return nhanVienService.get(id);
     }
 
     @PostMapping
-    public ResponseEntity<NhanVienDTO> create(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
-        @RequestBody NhanVienRequest request
-    ) {
-        quyenGuard.canQuanLyNhanVien(vaiTro);
+    public ResponseEntity<NhanVienDTO> create(@RequestBody NhanVienRequest request) {
+        quyenGuard.canQuanLyNhanVien();
         return ResponseEntity.status(HttpStatus.CREATED).body(nhanVienService.create(request));
     }
 
     @PostMapping("/gui-email-hang-loat")
     public GuiEmailHangLoatResponse guiEmailHangLoat(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
         @RequestBody GuiEmailHangLoatRequest request
     ) {
-        quyenGuard.canQuanLyNhanVien(vaiTro);
+        quyenGuard.canQuanLyNhanVien();
         return nhanVienService.guiEmailHangLoat(request);
     }
 
     @GetMapping("/import/mau")
-    public ResponseEntity<byte[]> taiFileMauImport(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro
-    ) {
-        quyenGuard.canQuanLyNhanVien(vaiTro);
+    public ResponseEntity<byte[]> taiFileMauImport() {
+        quyenGuard.canQuanLyNhanVien();
         return ResponseEntity.ok()
             .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
                 "attachment; filename=\"mau-nhan-vien.xlsx\"")
@@ -119,48 +128,48 @@ public class NhanVienController {
 
     @PostMapping("/import/xem-truoc")
     public NhanVienImportPreviewResponse xemTruocImport(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
         @RequestParam("file") org.springframework.web.multipart.MultipartFile file
     ) {
-        quyenGuard.canQuanLyNhanVien(vaiTro);
+        quyenGuard.canQuanLyNhanVien();
         return nhanVienImportService.xemTruoc(file);
     }
 
     @PostMapping("/import/xac-nhan")
     public NhanVienImportKetQuaResponse xacNhanImport(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
         @RequestParam("file") org.springframework.web.multipart.MultipartFile file
     ) {
-        quyenGuard.canQuanLyNhanVien(vaiTro);
+        quyenGuard.canQuanLyNhanVien();
         return nhanVienImportService.xacNhan(file);
     }
 
     @PutMapping("/{id}")
-    public NhanVienDTO update(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
-        @PathVariable Long id,
-        @RequestBody NhanVienRequest request
-    ) {
-        quyenGuard.canQuanLyNhanVien(vaiTro);
+    public NhanVienDTO update(@PathVariable Long id, @RequestBody NhanVienRequest request) {
+        quyenGuard.canQuanLyNhanVien();
         return nhanVienService.update(id, request);
     }
 
     @PutMapping("/{id}/trang-thai")
     public NhanVienDTO capNhatTrangThai(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
         @PathVariable Long id,
         @RequestParam String trangThai
     ) {
-        quyenGuard.canQuanLyNhanVien(vaiTro);
+        quyenGuard.canQuanLyNhanVien();
         return nhanVienService.capNhatTrangThai(id, trangThai);
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(
-        @RequestHeader(value = QuyenGuard.HEADER_VAI_TRO, required = false) String vaiTro,
-        @PathVariable Long id
+    @PutMapping("/{id}/doi-mat-khau")
+    public ResponseEntity<Map<String, String>> doiMatKhau(
+        @PathVariable Long id,
+        @RequestBody com.example.datn.dto.Auth.DoiMatKhauRequest request
     ) {
-        quyenGuard.canQuanLyNhanVien(vaiTro);
+        quyenGuard.canQuanLyNhanVien();
+        authService.doiMatKhauNhanVien(id, request.getMatKhauMoi(), request.getXacNhan());
+        return ResponseEntity.ok(Map.of("message", "Đổi mật khẩu thành công"));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        quyenGuard.canQuanLyNhanVien();
         nhanVienService.delete(id);
         return ResponseEntity.noContent().build();
     }

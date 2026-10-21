@@ -1,15 +1,14 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-// Tạm comment phần phiên đăng nhập/JWT (không xóa)
-// import { dangXuat, getRefreshToken, getUser } from '../utils/auth'
-// import { huyPhien } from '../api/auth'
+import { dangXuat, getRefreshToken, getUser } from '../utils/auth'
+import { huyPhien } from '../api/auth'
+import { tenVaiTro } from '../utils/session'
 
 defineProps({
   title: { type: String, default: '' },
 })
 
-/* Tạm comment trạng thái người dùng + nút đăng xuất (không xóa)
 const route = useRoute()
 const router = useRouter()
 const nguoiDung = ref(getUser())
@@ -18,17 +17,18 @@ watch(route, () => {
   nguoiDung.value = getUser()
 })
 
+const tenHienThi = () => nguoiDung.value?.tenTaiKhoan || 'Admin'
+
 const xulyDangXuat = async () => {
   const refreshToken = getRefreshToken()
   try {
     if (refreshToken) await huyPhien(refreshToken)
   } catch {
-    dangXuat()
+    // Bỏ qua lỗi gọi API đăng xuất phía server.
   }
   dangXuat()
   router.push('/dang-nhap')
 }
-*/
 </script>
 
 <template>
@@ -46,16 +46,17 @@ const xulyDangXuat = async () => {
     <div class="auth-box">
       <div class="user-profile-badge">
         <div class="avatar-circle">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
             <circle cx="12" cy="7" r="4"></circle>
           </svg>
         </div>
         <div class="user-meta">
-          <span class="user-name">Admin</span>
-          <span class="user-role-text">Duc</span>
+          <span class="user-name">{{ tenHienThi() }}</span>
+          <span class="user-role-text">{{ tenVaiTro() }}</span>
         </div>
+        <button type="button" class="btn-logout" @click="xulyDangXuat">Đăng xuất</button>
       </div>
     </div>
   </header>
@@ -144,5 +145,22 @@ const xulyDangXuat = async () => {
   font-size: 10.5px;
   color: #64748b;
   line-height: 1.2;
+}
+
+.btn-logout {
+  margin-left: 4px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 16px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.btn-logout:hover {
+  background: #fef2f2;
+  border-color: #fecaca;
 }
 </style>

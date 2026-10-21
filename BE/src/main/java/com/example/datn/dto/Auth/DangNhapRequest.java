@@ -13,4 +13,5 @@ public class DangNhapRequest {
 
     private String taiKhoan;
     private String matKhau;
+    private Boolean ghiNhoDangNhap;
 }

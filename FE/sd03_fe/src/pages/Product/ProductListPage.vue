@@ -1,7 +1,9 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
+import { formatNumber, formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
 
 const router = useRouter()
@@ -225,6 +227,7 @@ const resetFilters = () => {
   activeTab.value = 'ALL'
   currentPage.value = 0
   fetchProducts()
+  showToastNotice('Thành công', 'Đã đặt lại bộ lọc về mặc định', 'success')
 }
 
 const changePage = (p) => {
@@ -245,6 +248,18 @@ const formatProductPrice = (item) => {
     return `${formatPrice(item.giaBanMin)} - ${formatPrice(item.giaBanMax)}`
   }
   return formatPrice(item.giaBan || 0)
+}
+
+const hasProductDiscount = (item) => {
+  return item && item.discount && item.discount !== '-' && item.discount !== '0%'
+}
+
+const formatProductDiscountedPrice = (item) => {
+  if (!item) return '0 ₫'
+  if (item.giaSauGiamMin && item.giaSauGiamMax && item.giaSauGiamMin !== item.giaSauGiamMax) {
+    return `${formatPrice(item.giaSauGiamMin)} - ${formatPrice(item.giaSauGiamMax)}`
+  }
+  return formatPrice(item.giaSauGiamMin || item.giaBan || 0)
 }
 
 const toggleStatus = async (item) => {
@@ -595,7 +610,6 @@ onUnmounted(() => {
       <div class="status-tabs-row">
         <div class="tabs-group">
           <button class="status-tab" :class="{ active: activeTab === 'ALL' }" @click="selectTab('ALL')">
-            <span class="tab-icon">📦</span>
             Tất cả
             <span class="tab-pill">{{ totalElements }}</span>
           </button>
@@ -610,6 +624,14 @@ onUnmounted(() => {
         </div>
 
         <div class="page-actions">
+          <button class="btn btn-reset-filter" @click="resetFilters" title="Đặt lại bộ lọc về mặc định">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6"></path>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+            Đặt lại bộ lọc
+          </button>
+
           <button class="btn btn-outline-refresh" @click="reloadAllData" :class="{ 'is-loading': isLoading }" title="Tải lại dữ liệu">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="23 4 23 10 17 10"></polyline>
@@ -669,18 +691,28 @@ onUnmounted(() => {
 
           <div class="filter-col">
             <label class="filter-lbl">Thương hiệu</label>
-            <select v-model="filters.idThuongHieu" class="form-select" @change="onFilterChange">
-              <option value="">Tất cả thương hiệu</option>
-              <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.ten }}</option>
-            </select>
+            <SearchableSelect
+              v-model="filters.idThuongHieu"
+              :options="brands"
+              label-key="ten"
+              value-key="id"
+              placeholder="Tất cả thương hiệu"
+              search-placeholder="Tìm thương hiệu..."
+              @change="onFilterChange"
+            />
           </div>
 
           <div class="filter-col">
             <label class="filter-lbl">Loại giày</label>
-            <select v-model="filters.idLoaiGiay" class="form-select" @change="onFilterChange">
-              <option value="">Tất cả loại giày</option>
-              <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.ten }}</option>
-            </select>
+            <SearchableSelect
+              v-model="filters.idLoaiGiay"
+              :options="categories"
+              label-key="ten"
+              value-key="id"
+              placeholder="Tất cả loại giày"
+              search-placeholder="Tìm loại giày..."
+              @change="onFilterChange"
+            />
           </div>
         </div>
       </transition>
@@ -707,25 +739,55 @@ onUnmounted(() => {
           <thead>
             <tr>
               <th width="60" class="text-center">STT</th>
-              <th width="130">MÃ SẢN PHẨM</th>
-              <th width="280">TÊN SẢN PHẨM</th>
-              <th width="150">THƯƠNG HIỆU</th>
-              <th width="150">LOẠI GIÀY</th>
-              <th width="110" class="text-center">SỐ LƯỢNG</th>
+              <th width="120">MÃ SẢN PHẨM</th>
+              <th width="320">SẢN PHẨM</th>
+              <th width="140">THƯƠNG HIỆU</th>
+              <th width="140">LOẠI GIÀY</th>
+              <th width="100" class="text-center">SỐ LƯỢNG</th>
               <th width="160" class="text-end">GIÁ BÁN</th>
-              <th width="140" class="text-center">TRẠNG THÁI</th>
-              <th width="90" class="text-center">HÀNH ĐỘNG</th>
+              <th width="130" class="text-center">TRẠNG THÁI</th>
+              <th width="80" class="text-center">HÀNH ĐỘNG</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(item, idx) in products" :key="item.id">
               <td class="text-center text-muted">{{ currentPage * pageSize + idx + 1 }}</td>
               <td class="code-plain-text">{{ item.maSanPham || `SP0${item.id}` }}</td>
-              <td class="name-plain-text">{{ item.tenSanPham }}</td>
+              <td>
+                <div class="product-cell-wrapper">
+                  <div class="product-thumbnail-box">
+                    <img
+                      v-if="item.hinhAnhDaiDien"
+                      :src="item.hinhAnhDaiDien"
+                      :alt="item.tenSanPham"
+                      class="product-thumb-img"
+                      @error="item.hinhAnhDaiDien = null"
+                    />
+                    <div v-else class="product-thumb-placeholder">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                      </svg>
+                    </div>
+                  </div>
+                  <div class="product-details-col">
+                    <span class="name-plain-text">{{ item.tenSanPham }}</span>
+                    <span v-if="item.doiTuong" class="target-badge">{{ item.doiTuong }}</span>
+                  </div>
+                </div>
+              </td>
               <td class="attr-plain-text">{{ item.tenThuongHieu || '---' }}</td>
               <td class="attr-plain-text">{{ item.tenLoaiGiay || '---' }}</td>
-              <td class="text-center qty-plain-text">{{ item.soLuong !== undefined && item.soLuong !== null ? item.soLuong : 0 }}</td>
-              <td class="text-end price-plain-text">{{ formatProductPrice(item) }}</td>
+              <td class="text-center qty-plain-text">{{ formatNumber(item.soLuong !== undefined && item.soLuong !== null ? item.soLuong : 0) }}</td>
+              <td class="text-end price-plain-text">
+                <div v-if="hasProductDiscount(item)" class="product-price-discount-box">
+                  <div class="product-sale-price-row">
+                    <span class="product-sale-price">{{ formatProductDiscountedPrice(item) }}</span>
+                    <span class="badge-discount-pill">{{ item.discount }}</span>
+                  </div>
+                  <span class="product-original-price">{{ formatProductPrice(item) }}</span>
+                </div>
+                <span v-else>{{ formatProductPrice(item) }}</span>
+              </td>
               <td class="text-center">
                 <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
                   <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
@@ -830,56 +892,88 @@ onUnmounted(() => {
 
               <div class="form-group">
                 <label class="form-label">Thương hiệu <span class="req">*</span></label>
-                <select v-model="editForm.idThuongHieu" class="modal-select" :class="{ 'has-error': editErrors.idThuongHieu }">
-                  <option value="" disabled>-- Chọn thương hiệu --</option>
-                  <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.ten }}</option>
-                </select>
+                <SearchableSelect
+                  v-model="editForm.idThuongHieu"
+                  :options="brands"
+                  label-key="ten"
+                  value-key="id"
+                  placeholder="-- Chọn thương hiệu --"
+                  search-placeholder="Tìm thương hiệu..."
+                  :has-error="!!editErrors.idThuongHieu"
+                />
                 <span v-if="editErrors.idThuongHieu" class="err-msg">{{ editErrors.idThuongHieu }}</span>
               </div>
 
               <div class="form-group">
                 <label class="form-label">Loại giày <span class="req">*</span></label>
-                <select v-model="editForm.idLoaiGiay" class="modal-select" :class="{ 'has-error': editErrors.idLoaiGiay }">
-                  <option value="" disabled>-- Chọn loại giày --</option>
-                  <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.ten }}</option>
-                </select>
+                <SearchableSelect
+                  v-model="editForm.idLoaiGiay"
+                  :options="categories"
+                  label-key="ten"
+                  value-key="id"
+                  placeholder="-- Chọn loại giày --"
+                  search-placeholder="Tìm loại giày..."
+                  :has-error="!!editErrors.idLoaiGiay"
+                />
                 <span v-if="editErrors.idLoaiGiay" class="err-msg">{{ editErrors.idLoaiGiay }}</span>
               </div>
 
               <div class="form-group">
                 <label class="form-label">Chất liệu <span class="req">*</span></label>
-                <select v-model="editForm.idChatLieu" class="modal-select" :class="{ 'has-error': editErrors.idChatLieu }">
-                  <option value="" disabled>-- Chọn chất liệu --</option>
-                  <option v-for="m in materials" :key="m.id" :value="m.id">{{ m.ten }}</option>
-                </select>
+                <SearchableSelect
+                  v-model="editForm.idChatLieu"
+                  :options="materials"
+                  label-key="ten"
+                  value-key="id"
+                  placeholder="-- Chọn chất liệu --"
+                  search-placeholder="Tìm chất liệu..."
+                  :has-error="!!editErrors.idChatLieu"
+                />
                 <span v-if="editErrors.idChatLieu" class="err-msg">{{ editErrors.idChatLieu }}</span>
               </div>
 
               <div class="form-group">
                 <label class="form-label">Kiểu dáng <span class="req">*</span></label>
-                <select v-model="editForm.idKieuDang" class="modal-select" :class="{ 'has-error': editErrors.idKieuDang }">
-                  <option value="" disabled>-- Chọn kiểu dáng --</option>
-                  <option v-for="s in styles" :key="s.id" :value="s.id">{{ s.ten }}</option>
-                </select>
+                <SearchableSelect
+                  v-model="editForm.idKieuDang"
+                  :options="styles"
+                  label-key="ten"
+                  value-key="id"
+                  placeholder="-- Chọn kiểu dáng --"
+                  search-placeholder="Tìm kiểu dáng..."
+                  :has-error="!!editErrors.idKieuDang"
+                />
                 <span v-if="editErrors.idKieuDang" class="err-msg">{{ editErrors.idKieuDang }}</span>
               </div>
 
               <div class="form-group">
                 <label class="form-label">Xuất xứ <span class="req">*</span></label>
-                <select v-model="editForm.idXuatXu" class="modal-select" :class="{ 'has-error': editErrors.idXuatXu }">
-                  <option value="" disabled>-- Chọn xuất xứ --</option>
-                  <option v-for="o in origins" :key="o.id" :value="o.id">{{ o.ten }}</option>
-                </select>
+                <SearchableSelect
+                  v-model="editForm.idXuatXu"
+                  :options="origins"
+                  label-key="ten"
+                  value-key="id"
+                  placeholder="-- Chọn xuất xứ --"
+                  search-placeholder="Tìm xuất xứ..."
+                  :has-error="!!editErrors.idXuatXu"
+                />
                 <span v-if="editErrors.idXuatXu" class="err-msg">{{ editErrors.idXuatXu }}</span>
               </div>
 
               <div class="form-group">
                 <label class="form-label">Đối tượng sử dụng</label>
-                <select v-model="editForm.doiTuong" class="modal-select">
-                  <option value="Nam">Nam</option>
-                  <option value="Nữ">Nữ</option>
-                  <option value="Unisex">Tất cả (Unisex)</option>
-                </select>
+                <SearchableSelect
+                  v-model="editForm.doiTuong"
+                  :options="[
+                    { value: 'Nam', label: 'Nam' },
+                    { value: 'Nữ', label: 'Nữ' },
+                    { value: 'Unisex', label: 'Tất cả (Unisex)' }
+                  ]"
+                  label-key="label"
+                  value-key="value"
+                  placeholder="Chọn đối tượng..."
+                  :allow-clear="false"
+                />
               </div>
 
               <div class="form-group span-2">

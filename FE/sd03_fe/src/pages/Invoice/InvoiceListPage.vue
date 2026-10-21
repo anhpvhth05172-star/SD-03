@@ -1,10 +1,10 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import { listInvoices, exportInvoices } from '@/api/invoice'
 import {
   avatarColor,
-  formatDate,
   formatDateTime,
   formatVnd,
   initialsOf,
@@ -24,19 +24,8 @@ const tabs = [
   { key: 'DA_HOAN_THANH', label: 'Đã hoàn thành' },
   { key: 'DA_HUY', label: 'Đã hủy' },
   { key: 'DA_HOAN_TIEN', label: 'Đã hoàn tiền' },
+  { key: 'GIAO_HANG_THAT_BAI', label: 'Giao hàng thất bại' },
 ]
-
-const tabDot = {
-  ALL: '',
-  CHO_XAC_NHAN: 'dot-amber',
-  DA_XAC_NHAN: 'dot-sky',
-  CHO_GIAO_HANG: 'dot-blue',
-  DANG_GIAO_HANG: 'dot-teal',
-  DA_GIAO_HANG: 'dot-green',
-  DA_HOAN_THANH: 'dot-green',
-  DA_HUY: 'dot-gray',
-  DA_HOAN_TIEN: 'dot-rose',
-}
 
 const activeTab = ref('ALL')
 
@@ -53,6 +42,14 @@ const fMa = ref('')
 const fTuNgay = ref('')
 const fDenNgay = ref('')
 const fLoaiDon = ref('')
+
+const loaiDonOptions = [
+  { id: '', ten: 'Tất cả' },
+  { id: 'Tại quầy', ten: 'Tại quầy' },
+  { id: 'Online', ten: 'Online' },
+]
+
+const trangThaiOptions = computed(() => tabs.map((t) => ({ id: t.key, ten: t.label })))
 
 const showFilter = ref(true)
 
@@ -96,8 +93,6 @@ const showNotFound = () => {
   totalPages.value = 0
 }
 
-const appliedRange = ref('')
-
 const load = async () => {
   const params = buildParams()
   if (!params) {
@@ -105,10 +100,6 @@ const load = async () => {
     notifyWarning('Khoảng ngày không hợp lệ', 'Vui lòng kiểm tra lại ngày bắt đầu và ngày kết thúc')
     return
   }
-  const parts = []
-  if (params.tuNgay) parts.push(`từ ${formatDate(params.tuNgay)}`)
-  if (params.denNgay) parts.push(`đến ${formatDate(params.denNgay)}`)
-  appliedRange.value = parts.join(' ')
   loading.value = true
   try {
     const data = await listInvoices(params)
@@ -141,7 +132,7 @@ const resetFilter = () => {
 }
 
 const selectTab = (key) => {
-  activeTab.value = key
+  activeTab.value = key || 'ALL'
   page.value = 0
   load()
 }
@@ -215,7 +206,7 @@ const statusPill = (value) => {
   if (['Đã xác nhận'].includes(value)) return 'inv-pill-sky'
   if (['Chờ giao hàng'].includes(value)) return 'inv-pill-blue'
   if (['Đang giao hàng'].includes(value)) return 'inv-pill-teal'
-  if (['Đã hủy', 'Đã hoàn tiền'].includes(value)) return 'inv-pill-red'
+  if (['Đã hủy', 'Đã hoàn tiền', 'Giao hàng thất bại'].includes(value)) return 'inv-pill-red'
   if (['Chờ xác nhận'].includes(value)) return 'inv-pill-amber'
   return 'inv-pill-gray'
 }
@@ -289,20 +280,6 @@ onMounted(load)
 
     <div class="filter-box">
       <div class="status-tabs-row">
-        <div class="tabs-group">
-          <button
-            v-for="tab in tabs"
-            :key="tab.key"
-            type="button"
-            class="status-tab"
-            :class="{ active: activeTab === tab.key }"
-            @click="selectTab(tab.key)"
-          >
-            <span v-if="tabDot[tab.key]" class="dot" :class="tabDot[tab.key]"></span>
-            <span v-else class="tab-icon">📄</span>
-            {{ tab.label }}
-          </button>
-        </div>
         <button class="btn-reset-filter" type="button" @click="showFilter = !showFilter">
           {{ showFilter ? 'Ẩn bộ lọc' : 'Hiện bộ lọc' }}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -332,12 +309,29 @@ onMounted(load)
           </div>
 
           <div class="filter-col">
+            <label class="filter-lbl">Trạng thái</label>
+            <SearchableSelect
+              v-model="activeTab"
+              :options="trangThaiOptions"
+              value-key="id"
+              label-key="ten"
+              placeholder="Tất cả trạng thái"
+              search-placeholder="Tìm trạng thái..."
+              @change="selectTab"
+            />
+          </div>
+
+          <div class="filter-col">
             <label class="filter-lbl">Loại đơn</label>
-            <select v-model="fLoaiDon" class="form-select" @change="applyFilter">
-              <option value="">Tất cả</option>
-              <option value="Tại quầy">Tại quầy</option>
-              <option value="Online">Online</option>
-            </select>
+            <SearchableSelect
+              v-model="fLoaiDon"
+              :options="loaiDonOptions"
+              value-key="id"
+              label-key="ten"
+              placeholder="Tất cả loại đơn"
+              search-placeholder="Tìm loại đơn..."
+              @change="applyFilter"
+            />
           </div>
 
           <div class="filter-col">
@@ -364,7 +358,6 @@ onMounted(load)
               </svg>
               Đặt lại
             </button>
-            <span v-if="appliedRange" class="foot-info">Khoảng thời gian: {{ appliedRange }}</span>
           </div>
         </div>
       </div>

@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/loai-giay")
 @RequiredArgsConstructor
-@CrossOrigin(originPatterns = "*")
 public class LoaiGiayController {
 
     private final LoaiGiayService loaiGiayService;

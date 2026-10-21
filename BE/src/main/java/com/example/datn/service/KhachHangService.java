@@ -10,6 +10,7 @@ import com.example.datn.entity.DiaChiKhachHang;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.repository.DiaChiKhachHangRepository;
 import com.example.datn.repository.KhachHangRepository;
+import com.example.datn.repository.PhienDangNhapRepository;
 import com.example.datn.util.DoTuoi;
 import com.example.datn.util.MaNhanVien;
 import java.math.BigDecimal;
@@ -69,13 +70,23 @@ public class KhachHangService {
     private final DiaChiKhachHangRepository diaChiKhachHangRepository;
     private final EmailService emailService;
     private final TransactionTemplate transactionTemplate;
+    private final PhienDangNhapRepository phienDangNhapRepository;
 
     public KhachHangService(
         KhachHangRepository khachHangRepository,
         DiaChiKhachHangRepository diaChiKhachHangRepository,
         PlatformTransactionManager transactionManager
     ) {
-        this(khachHangRepository, diaChiKhachHangRepository, null, transactionManager);
+        this(khachHangRepository, diaChiKhachHangRepository, null, null, transactionManager);
+    }
+
+    public KhachHangService(
+        KhachHangRepository khachHangRepository,
+        DiaChiKhachHangRepository diaChiKhachHangRepository,
+        EmailService emailService,
+        PlatformTransactionManager transactionManager
+    ) {
+        this(khachHangRepository, diaChiKhachHangRepository, emailService, null, transactionManager);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -83,11 +94,13 @@ public class KhachHangService {
         KhachHangRepository khachHangRepository,
         DiaChiKhachHangRepository diaChiKhachHangRepository,
         EmailService emailService,
+        PhienDangNhapRepository phienDangNhapRepository,
         PlatformTransactionManager transactionManager
     ) {
         this.khachHangRepository = khachHangRepository;
         this.diaChiKhachHangRepository = diaChiKhachHangRepository;
         this.emailService = emailService;
+        this.phienDangNhapRepository = phienDangNhapRepository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         // Mỗi lần thử là một transaction riêng để có thể thử lại sau khi rollback.
         this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -139,7 +152,7 @@ public class KhachHangService {
                     return toFullDTO(khachHang);
                 });
                 if (dto != null) {
-                    dto.setEmailGuiThanhCong(guiEmailThongTinTaiKhoan(dto));
+                    dto.setEmailGuiThanhCong(guiEmailThongTinTaiKhoan(dto, req));
                     return dto;
                 }
             } catch (DataIntegrityViolationException ex) {
@@ -153,7 +166,7 @@ public class KhachHangService {
      * Gửi email thông tin tài khoản và trả về đúng trạng thái nhà cung cấp mail trả về.
      * Trả về false khi thiếu dịch vụ email hoặc thiếu địa chỉ nhận, tuyệt đối không báo thành công giả.
      */
-    private boolean guiEmailThongTinTaiKhoan(KhachHangDTO dto) {
+    private boolean guiEmailThongTinTaiKhoan(KhachHangDTO dto, KhachHangRequest req) {
         if (emailService == null) {
             log.warn("Bỏ qua gửi email thông tin tài khoản cho khách hàng {}: chưa cấu hình dịch vụ email",
                 dto.getMaKhachHang());
@@ -164,12 +177,13 @@ public class KhachHangService {
                 dto.getMaKhachHang());
             return false;
         }
+        String matKhau = req != null && !isBlank(req.getMatKhau()) ? req.getMatKhau().trim() : MAT_KHAU_MAC_DINH;
         return emailService.guiMailDangKyThanhCong(
             dto.getEmail(),
             dto.getTenKhachHang(),
             dto.getMaKhachHang(),
             dto.getTenTaiKhoan(),
-            MAT_KHAU_MAC_DINH
+            matKhau
         );
     }
 
@@ -206,10 +220,25 @@ public class KhachHangService {
     @Transactional
     public KhachHangDTO capNhatTrangThai(Long id, String trangThaiMoi) {
         KhachHang khachHang = findOrThrow(id);
-        khachHang.setTrangThai(toTrangThai(trangThaiMoi));
+        Boolean parsedStatus = toTrangThai(trangThaiMoi);
+        if (parsedStatus == null) {
+            throw new IllegalArgumentException("Vui lòng chọn trạng thái tài khoản");
+        }
+        boolean active = parsedStatus;
+        khachHang.setTrangThai(active);
         khachHang.setNgayCapNhat(LocalDateTime.now());
         khachHang.setNguoiCapNhat("admin");
-        return toFullDTO(khachHangRepository.save(khachHang));
+        KhachHang saved = khachHangRepository.save(khachHang);
+        if (!active && phienDangNhapRepository != null) {
+            var phienDangNhaps = phienDangNhapRepository.findByIdKhachHangAndRevokedFalse(id);
+            LocalDateTime now = LocalDateTime.now();
+            phienDangNhaps.forEach(phien -> {
+                phien.setRevoked(true);
+                phien.setNgayDangXuat(now);
+            });
+            phienDangNhapRepository.saveAll(phienDangNhaps);
+        }
+        return toFullDTO(saved);
     }
 
     /** Mã khách hàng đề xuất theo họ tên (chưa tính các mã đã tồn tại trên FE). */
@@ -338,6 +367,16 @@ public class KhachHangService {
         checkLength(req.getPhuong(), 100, "Phường");
         checkLength(req.getDiaChiCuThe(), 255, "Địa chỉ cụ thể");
         checkLength(req.getNguoiCapNhat(), 100, "Người cập nhật");
+        // Địa chỉ là bắt buộc ở cả tạo lẫn cập nhật để không sinh ra khách hàng không có nơi giao hàng.
+        if (isBlank(req.getTinhThanhPho())) {
+            throw new IllegalArgumentException("Tỉnh/Thành phố không được để trống");
+        }
+        if (isBlank(req.getPhuong())) {
+            throw new IllegalArgumentException("Phường/Xã không được để trống");
+        }
+        if (isBlank(req.getDiaChiCuThe())) {
+            throw new IllegalArgumentException("Địa chỉ cụ thể không được để trống");
+        }
         if (!isBlank(req.getTenTaiKhoan())) {
             String tk = req.getTenTaiKhoan().trim();
             boolean trung = excludeId == null
@@ -449,7 +488,7 @@ public class KhachHangService {
         boolean coTinh = !isBlank(req.getTinhThanhPho());
         boolean coPhuong = !isBlank(req.getPhuong());
         if (!coDiaChiCuThe && !coTinh && !coPhuong) {
-            return;
+            throw new IllegalArgumentException("Địa chỉ khách hàng không được để trống");
         }
 
         String diaChiCuThe = coDiaChiCuThe

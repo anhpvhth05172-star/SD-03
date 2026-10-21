@@ -80,6 +80,11 @@ const menu = [
       { label: 'Đợt giảm giá', path: '/dot-giam-gia' },
     ],
   },
+  {
+    label: 'Chat khách hàng',
+    path: '/chat',
+    iconType: 'chat',
+  },
 ]
 
 const openState = ref({})
@@ -169,6 +174,11 @@ const visibleMenu = computed(() => menu.filter((item) => !item.adminOnly || laAd
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
+              </svg>
+
+              <svg v-else-if="item.iconType === 'chat'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
             </div>
             <span class="nav-text">{{ item.label }}</span>

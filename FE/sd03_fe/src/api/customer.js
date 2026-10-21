@@ -22,6 +22,9 @@ export const checkCustomerEmail = (email, excludeId) =>
 export const updateCustomerStatus = (id, trangThai) =>
   http.put(`/khach-hang/${id}/trang-thai`, null, { params: { trangThai } }).then((r) => r.data)
 
+export const changeCustomerPassword = (id, matKhauMoi, xacNhan) =>
+  http.put(`/khach-hang/${id}/doi-mat-khau`, { matKhauMoi, xacNhan }).then((r) => r.data)
+
 export const listAddresses = (idKhachHang) =>
   http.get(`/khach-hang/${idKhachHang}/dia-chi`).then((r) => r.data)
 

@@ -14,7 +14,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/san-pham-chi-tiet")
-@CrossOrigin(originPatterns = "*")
 @RequiredArgsConstructor
 @Validated
 public class SanPhamChiTietController {

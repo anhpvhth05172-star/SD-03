@@ -1,8 +1,6 @@
 package com.example.datn.controller;
 
-import com.example.datn.dto.DotGiamGia.DotGiamGiaDetailResponse;
-import com.example.datn.dto.DotGiamGia.DotGiamGiaRequest;
-import com.example.datn.dto.DotGiamGia.SanPhamChiTietOptionResponse;
+import com.example.datn.dto.DotGiamGia.*;
 import com.example.datn.entity.DotGiamGia;
 import com.example.datn.service.DotGiamGiaService;
 import com.example.datn.service.impls.DotGiamGiaChiTietService;
@@ -23,7 +21,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/admin/dot-giam-gia")
-@CrossOrigin("*")
 public class DotGiamGiaRestController {
 
     @Autowired
@@ -59,30 +56,18 @@ public class DotGiamGiaRestController {
 //        return dotGiamGiaService.detailDotGiamGia(id);
 //    }
 
-    @PutMapping("/update")
-    public String updateDGG(@RequestBody DotGiamGia dotGiamGia) {
-        dotGiamGiaService.updateDotGiamGia(dotGiamGia);
-
-        return "Sua thanh cong";
-    }
-
     @PutMapping("/{id}/trang-thai")
-    public String doiTrangThai(@PathVariable Long id, @RequestBody java.util.Map<String, Boolean> body) {
+    public String doiTrangThaiTheoPath(@PathVariable Long id, @RequestBody java.util.Map<String, Boolean> body) {
         if (body == null || body.get("trangThai") == null) {
             throw new IllegalArgumentException("Vui lòng chọn trạng thái");
         }
-        DotGiamGia dgg = dotGiamGiaService.detailDotGiamGia(id);
-        if (dgg == null) {
-            throw new IllegalArgumentException("Không tìm thấy đợt giảm giá");
-        }
-        dgg.setTrangThai(body.get("trangThai"));
-        dotGiamGiaService.updateDotGiamGia(dgg);
+        serviceFinal.doiTrangThai(id, body.get("trangThai"));
         return "ok";
     }
 
     @GetMapping("/san-pham-chi-tiet/for-discount")
-    public List<SanPhamChiTietOptionResponse> danhSachSanPham() {
-        return serviceFinal.layDanhSachSanPham();
+    public List<SanPhamChiTietOptionResponse> danhSachSanPham(Long excutedId) {
+        return serviceFinal.layDanhSachSanPham(excutedId);
     }
 
     @PostMapping("/add")
@@ -94,5 +79,18 @@ public class DotGiamGiaRestController {
     @GetMapping("/detail/{id}")
     public DotGiamGiaDetailResponse chiTiet(@PathVariable Long id) {
         return serviceFinal.chiTiet(id);
+    }
+    @PutMapping("/change-status/{id}")
+    public ResponseEntity<DotGiamGiaTrangThaiResponse> doiTrangThai(
+            @PathVariable Long id,
+            @RequestBody DotGiamGiaTrangThaiRequest request) {
+        Boolean ketQua = serviceFinal.doiTrangThai(id, request.getTrangThai());
+        return ResponseEntity.ok(new DotGiamGiaTrangThaiResponse(id, ketQua));
+    }
+
+    @PutMapping("/update/{id}")
+    public ResponseEntity<Long> capNhat(@PathVariable Long id,
+                                        @RequestBody DotGiamGiaRequest request) {
+        return ResponseEntity.ok(serviceFinal.capNhat(id, request));
     }
 }

@@ -239,13 +239,13 @@ class HoaDonPhiVanChuyenGhnTest {
     }
 
     @Test
-    void taiQuay_KhongGoiGHN() {
+    void taiQuay_KhongGoiGHN_VaPhiBiDongBang0() {
         when(sanPhamChiTietRepository.findById(SPCT_ID)).thenReturn(Optional.of(spct()));
 
         HoaDonDTO dto = service.create(yeuCau("Tại quầy"));
 
         assertThat(dto.getId()).isEqualTo(HD_ID);
-        assertThat(dto.getPhiVanChuyen()).isEqualByComparingTo("50000");
+        assertThat(dto.getPhiVanChuyen()).isEqualByComparingTo("0");
         verifyNoInteractions(ghnService);
     }
 

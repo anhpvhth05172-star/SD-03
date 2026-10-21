@@ -1,9 +1,9 @@
 <script setup>
 import axios from "axios";
 import { inject, onMounted, ref } from "vue";
+import Swal from "sweetalert2";
 
 const showFilter = ref(true);
-
 const apiDiscountEvent = inject("baseAPI");
 
 const listEvent = ref([]);
@@ -11,21 +11,64 @@ const page = ref(0);
 const pageSize = 8;
 const totalPages = ref(0);
 const totalElements = ref(0);
+const togglingId = ref(null); // id đợt đang đổi trạng thái (khóa switch)
+const lastUpdated = ref(null); // thời điểm tải dữ liệu gần nhất
+
+// ========== Bộ lọc ==========
+const emptyFilter = () => ({
+  ten: "",
+  trangThai: null,
+  tuNgay: "",
+  denNgay: "",
+});
+// Giá trị đang nhập trên form
+const filter = ref(emptyFilter());
+// Giá trị đã bấm "Áp dụng" (dùng cho phân trang, đổi trạng thái, v.v.)
+const applied = ref(emptyFilter());
 
 const getData = async (p = 0) => {
   try {
+    const params = { page: p, size: pageSize };
+    const f = applied.value;
+    if (f.ten.trim()) params.ten = f.ten.trim();
+    if (f.trangThai !== null) params.trangThai = f.trangThai;
+    if (f.tuNgay) params.tuNgay = f.tuNgay; // yyyy-MM-dd
+    if (f.denNgay) params.denNgay = f.denNgay;
+
     const res = await axios.get(apiDiscountEvent + "admin/dot-giam-gia", {
-      params: { page: p, size: pageSize },
+      params,
     });
     if (res.status === 200) {
       listEvent.value = res.data.content;
       page.value = res.data.number;
       totalPages.value = res.data.totalPages;
       totalElements.value = res.data.totalElements;
+      lastUpdated.value = new Date();
     }
   } catch (error) {
     console.error(error);
   }
+};
+
+const applyFilter = () => {
+  const { tuNgay, denNgay } = filter.value;
+  if (tuNgay && denNgay && tuNgay > denNgay) {
+    Swal.fire({
+      icon: "warning",
+      title: "Khoảng ngày không hợp lệ",
+      text: "'Từ ngày' không được lớn hơn 'Đến ngày'",
+      confirmButtonColor: "#cc0000",
+    });
+    return;
+  }
+  applied.value = { ...filter.value };
+  getData(0); // luôn về trang đầu khi lọc mới
+};
+
+const resetFilter = () => {
+  filter.value = emptyFilter();
+  applied.value = emptyFilter();
+  getData(0);
 };
 
 const goToPage = (p) => {
@@ -33,10 +76,19 @@ const goToPage = (p) => {
   getData(p);
 };
 
+// ========== Hiển thị ==========
 const formatDate = (s) => (s ? new Date(s).toLocaleDateString("vi-VN") : "");
 
+const formatUpdated = (d) =>
+  d
+    ? `${d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} ${d.toLocaleDateString("vi-VN")}`
+    : "";
+
+const isEnded = (d) => !!d.ngayKetThuc && new Date() > new Date(d.ngayKetThuc);
+const isOn = (d) => !!d.trangThai && !isEnded(d);
+
 const getStatus = (d) => {
-  if (!d.trangThai) return "Đã kết thúc";
+  if (!d.trangThai) return "Ngừng hoạt động";
   const now = new Date();
   if (now < new Date(d.ngayBatDau)) return "Sắp diễn ra";
   if (now > new Date(d.ngayKetThuc)) return "Đã kết thúc";
@@ -49,15 +101,62 @@ const statusPill = (value) => {
   return "pill-gray";
 };
 
-const colors = [
-  "#cc0000",
-  "#3b82f6",
-  "#f59e0b",
-  "#8b5cf6",
-  "#14b8a6",
-  "#22c55e",
-];
-const avatarColor = (id) => colors[id % colors.length];
+// ========== Đổi trạng thái bằng switch (đồng bộ với back-end) ==========
+const toggleStatus = async (item) => {
+  if (togglingId.value !== null) return;
+
+  const newStatus = !item.trangThai;
+
+  const result = await Swal.fire({
+    title: newStatus ? "Bật đợt giảm giá?" : "Tắt đợt giảm giá?",
+    text: newStatus
+      ? `Bạn muốn kích hoạt đợt "${item.tenDotGiamGia}"?`
+      : `Bạn muốn ngừng đợt "${item.tenDotGiamGia}"?`,
+    icon: "question",
+    showCancelButton: true,
+    confirmButtonColor: "#cc0000",
+    cancelButtonColor: "#6b7280",
+    confirmButtonText: newStatus ? "Bật" : "Tắt",
+    cancelButtonText: "Hủy",
+  });
+
+  // Bấm Hủy: không làm gì, switch vẫn theo dữ liệu cũ
+  if (!result.isConfirmed) return;
+
+  togglingId.value = item.id;
+  try {
+    const res = await axios.put(
+      apiDiscountEvent + `admin/dot-giam-gia/change-status/${item.id}`,
+      { trangThai: newStatus },
+    );
+
+    // Lấy trạng thái thật từ back-end
+    if (typeof res.data?.trangThai === "boolean") {
+      item.trangThai = res.data.trangThai;
+    }
+
+    // Tải lại trang hiện tại (giữ nguyên bộ lọc đã áp dụng)
+    await getData(page.value);
+
+    await Swal.fire({
+      icon: "success",
+      title: newStatus ? "Đã bật đợt giảm giá" : "Đã tắt đợt giảm giá",
+      timer: 1200,
+      showConfirmButton: false,
+    });
+  } catch (error) {
+    // Lỗi: tải lại để switch quay về đúng trạng thái trong DB
+    await getData(page.value);
+    Swal.fire({
+      icon: "error",
+      title: "Thất bại",
+      text: error.response?.data?.message || "Không thể đổi trạng thái",
+      confirmButtonColor: "#cc0000",
+    });
+  } finally {
+    togglingId.value = null;
+  }
+};
 
 onMounted(() => getData(0));
 </script>
@@ -86,6 +185,7 @@ onMounted(() => getData(0));
       </RouterLink>
     </div>
 
+    <!-- ===== TÌM KIẾM & BỘ LỌC ===== -->
     <section class="panel">
       <div class="panel-head">
         <span class="panel-icon">
@@ -119,58 +219,52 @@ onMounted(() => getData(0));
       <div v-show="showFilter" class="filter-row">
         <div class="f-item">
           <label>Tên đợt giảm giá</label>
-          <input type="text" placeholder="Nhập tên đợt giảm giá" />
+          <input
+            v-model="filter.ten"
+            type="text"
+            placeholder="Nhập tên đợt giảm giá"
+            @keyup.enter="applyFilter"
+          />
         </div>
 
         <div class="f-item">
           <label>Trạng thái</label>
-          <select>
-            <option value="" label="Tất cả"></option>
-            <option value="1" label="Đang hoạt động"></option>
-            <option value="0" label="Ngừng hoạt động"></option>
+          <select v-model="filter.trangThai">
+            <option :value="null">Tất cả</option>
+            <option :value="1">Đang hoạt động</option>
+            <option :value="0">Ngừng hoạt động</option>
           </select>
         </div>
 
         <div class="f-item">
           <label>Từ ngày</label>
           <div class="date-box">
-            <input type="text" placeholder="dd/mm/yyyy" />
-            <svg
-              class="date-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.7"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect x="3.8" y="5.5" width="16.4" height="14.5" rx="2" />
-              <path d="M8 3.2v4.2M16 3.2v4.2M3.8 10h16.4" />
-            </svg>
+            <input
+              v-model="filter.tuNgay"
+              type="date"
+              :max="filter.denNgay || undefined"
+            />
           </div>
         </div>
 
         <div class="f-item">
           <label>Đến ngày</label>
           <div class="date-box">
-            <input type="text" placeholder="dd/mm/yyyy" />
-            <svg
-              class="date-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.7"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect x="3.8" y="5.5" width="16.4" height="14.5" rx="2" />
-              <path d="M8 3.2v4.2M16 3.2v4.2M3.8 10h16.4" />
-            </svg>
+            <input
+              v-model="filter.denNgay"
+              type="date"
+              :min="filter.tuNgay || undefined"
+            />
           </div>
         </div>
 
         <div class="filter-actions">
-          <button class="btn-reset" type="button" aria-label="Đặt lại">
+          <button
+            class="btn-reset"
+            type="button"
+            aria-label="Đặt lại"
+            @click="resetFilter"
+          >
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -183,7 +277,7 @@ onMounted(() => getData(0));
               <path d="M20 4.5V11h-6.5" />
             </svg>
           </button>
-          <button class="btn-apply" type="button">
+          <button class="btn-apply" type="button" @click="applyFilter">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -199,6 +293,7 @@ onMounted(() => getData(0));
       </div>
     </section>
 
+    <!-- ===== DANH SÁCH ===== -->
     <section class="panel">
       <div class="panel-head">
         <span class="panel-icon is-red">
@@ -211,7 +306,9 @@ onMounted(() => getData(0));
         <h3 class="panel-title">Danh sách đợt giảm giá</h3>
         <span class="count-pill">{{ totalElements }} đợt</span>
         <div class="panel-right">
-          <span class="panel-meta">Cập nhật lúc 08:32 25/05/2026</span>
+          <span v-if="lastUpdated" class="panel-meta"
+            >Cập nhật lúc {{ formatUpdated(lastUpdated) }}</span
+          >
         </div>
       </div>
 
@@ -219,39 +316,24 @@ onMounted(() => getData(0));
         <table class="data-table">
           <thead>
             <tr>
-              <th>Đợt giảm giá</th>
-              <th>Thời gian áp dụng</th>
-              <th>Mức giảm</th>
-              <th>Mô tả</th>
+              <th>STT</th>
+              <th>Mã ĐGG</th>
+              <th>Tên ĐGG</th>
+              <th>Giá trị giảm</th>
+              <th>Ngày bắt đầu</th>
+              <th>Ngày kết thúc</th>
               <th>Trạng thái</th>
-              <th>Thao tác</th>
+              <th>Hành động</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="d in listEvent" :key="d.id">
-              <td>
-                <div class="entity">
-                  <span
-                    class="entity-avatar"
-                    :style="{ background: avatarColor(d.id) }"
-                    >{{ d.maDotGiamGia.slice(-2) }}</span
-                  >
-                  <div class="entity-info">
-                    <div class="entity-line">
-                      <span class="entity-name">{{ d.tenDotGiamGia }}</span>
-                      <span class="entity-code">{{ d.maDotGiamGia }}</span>
-                    </div>
-                    <div class="entity-sub">
-                      Tạo ngày {{ formatDate(d.ngayTao) }}
-                    </div>
-                  </div>
-                </div>
-              </td>
-              <td>
-                {{ formatDate(d.ngayBatDau) }} - {{ formatDate(d.ngayKetThuc) }}
-              </td>
+            <tr v-for="(d, i) in listEvent" :key="d.id">
+              <td>{{ page * pageSize + i + 1 }}</td>
+              <td>{{ d.maDotGiamGia }}</td>
+              <td>{{ d.tenDotGiamGia }}</td>
               <td class="cell-strong">{{ d.phanTramGiam }}%</td>
-              <td>{{ d.moTa }}</td>
+              <td>{{ formatDate(d.ngayBatDau) }}</td>
+              <td>{{ formatDate(d.ngayKetThuc) }}</td>
               <td>
                 <span class="pill" :class="statusPill(getStatus(d))">{{
                   getStatus(d)
@@ -259,26 +341,30 @@ onMounted(() => getData(0));
               </td>
               <td>
                 <div class="act-group">
-                  <RouterLink
-                    :to="`/admin/dot-giam-gia/detail/${d.id}`"
-                    class="act-btn"
-                    type="button"
-                    aria-label="Chi tiết"
+                  <!-- SWITCH TRẠNG THÁI: hiển thị theo dữ liệu back-end -->
+                  <label
+                    class="switch"
+                    :class="{
+                      'is-disabled': isEnded(d) || togglingId === d.id,
+                    }"
+                    :title="
+                      isEnded(d)
+                        ? 'Đợt đã kết thúc'
+                        : d.trangThai
+                          ? 'Đang bật'
+                          : 'Đang tắt'
+                    "
                   >
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <path
-                        d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"
-                      />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  </RouterLink>
+                    <input
+                      type="checkbox"
+                      :checked="isOn(d)"
+                      :disabled="isEnded(d) || togglingId === d.id"
+                      @click.prevent="toggleStatus(d)"
+                    />
+                    <span class="slider"></span>
+                  </label>
+
+                  <!-- NÚT SỬA -->
                   <RouterLink
                     :to="`/admin/dot-giam-gia/update/${d.id}`"
                     class="act-btn is-red"
@@ -302,7 +388,7 @@ onMounted(() => getData(0));
               </td>
             </tr>
             <tr v-if="!listEvent.length">
-              <td colspan="7" style="text-align: center">Không có dữ liệu</td>
+              <td colspan="8" style="text-align: center">Không có dữ liệu</td>
             </tr>
           </tbody>
         </table>
@@ -368,4 +454,59 @@ onMounted(() => getData(0));
   </div>
 </template>
 
-<style scoped></style>
+<style scoped>
+/* ===== Switch ===== */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #d1d5db;
+  border-radius: 999px;
+  transition: 0.25s;
+}
+
+.slider::before {
+  content: "";
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.25s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.switch input:checked + .slider {
+  background-color: green;
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(20px);
+}
+
+.switch input:focus-visible + .slider {
+  box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.25);
+}
+
+/* Khóa switch khi đợt đã kết thúc hoặc đang gọi API */
+.switch.is-disabled .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+</style>

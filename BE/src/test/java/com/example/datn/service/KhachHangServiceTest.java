@@ -38,6 +38,9 @@ class KhachHangServiceTest {
         when(khachHangRepository.save(any(KhachHang.class))).thenAnswer(inv -> inv.getArgument(0));
         when(khachHangRepository.thongKeTheoKhachHang(any())).thenReturn(List.of());
         when(diaChiRepository.findByKhachHangIdOrderByMacDinhDescIdDesc(any())).thenReturn(List.of());
+        when(diaChiRepository.findFirstByKhachHangIdAndMacDinhTrue(any())).thenReturn(Optional.empty());
+        when(diaChiRepository.save(any(com.example.datn.entity.DiaChiKhachHang.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
         return new KhachHangService(khachHangRepository, diaChiRepository, emailService,
             mock(PlatformTransactionManager.class));
     }
@@ -50,6 +53,9 @@ class KhachHangServiceTest {
         req.setSoDienThoai("0901234567");
         req.setGioiTinh("NU");
         req.setNgaySinh(ngaySinh);
+        req.setTinhThanhPho("Thành phố Hà Nội");
+        req.setPhuong("Phường Kim Mã");
+        req.setDiaChiCuThe("Số 1, đường Phố Huế");
         return req;
     }
 
@@ -216,6 +222,37 @@ class KhachHangServiceTest {
         KhachHangRequest maSai = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "1abc");
         assertTrue(assertThrows(IllegalArgumentException.class, () -> service.create(maSai))
             .getMessage().startsWith("Mã khách hàng không hợp lệ"));
+    }
+
+    @Test
+    void tuChoiKhiThieuDiaChiTrenCaTaoVaCapNhat() {
+        KhachHangService service = service();
+
+        KhachHangRequest khongTinh = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
+        khongTinh.setTinhThanhPho("  ");
+        assertEquals("Tỉnh/Thành phố không được để trống",
+            assertThrows(IllegalArgumentException.class, () -> service.create(khongTinh)).getMessage());
+
+        KhachHangRequest khongPhuong = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
+        khongPhuong.setPhuong(null);
+        assertEquals("Phường/Xã không được để trống",
+            assertThrows(IllegalArgumentException.class, () -> service.create(khongPhuong)).getMessage());
+
+        KhachHangRequest khongSoNha = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
+        khongSoNha.setDiaChiCuThe("");
+        assertEquals("Địa chỉ cụ thể không được để trống",
+            assertThrows(IllegalArgumentException.class, () -> service.create(khongSoNha)).getMessage());
+
+        // Cập nhật cũng bắt buộc đủ địa chỉ, không chỉ lúc tạo.
+        KhachHang daCo = new KhachHang();
+        daCo.setId(9L);
+        daCo.setTenKhachHang("Nguyễn Thị Bình");
+        when(khachHangRepository.findById(9L)).thenReturn(Optional.of(daCo));
+
+        KhachHangRequest suaKhongSoNha = yeuCau("Nguyễn Thị Bình", LocalDate.now().minusYears(20), "");
+        suaKhongSoNha.setDiaChiCuThe(null);
+        assertEquals("Địa chỉ cụ thể không được để trống",
+            assertThrows(IllegalArgumentException.class, () -> service.update(9L, suaKhongSoNha)).getMessage());
     }
 
     @Test

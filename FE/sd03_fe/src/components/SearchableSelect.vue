@@ -1,279 +1,328 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { removeVietnameseTones } from '@/utils/format'
 
 const props = defineProps({
-  modelValue: { type: [String, Number], default: '' },
-  options: { type: Array, default: () => [] },
-  placeholder: { type: String, default: 'Chọn...' },
-  disabled: { type: Boolean, default: false },
-  searchable: { type: Boolean, default: true },
-  clearable: { type: Boolean, default: false },
-  // v-model.number trên component: Vue truyền modifier vào đây, tự xử lý như native
-  modelModifiers: { type: Object, default: () => ({}) },
+  modelValue: {
+    type: [String, Number, Boolean, null, undefined],
+    default: null
+  },
+  options: {
+    type: Array,
+    default: () => []
+  },
+  valueKey: {
+    type: String,
+    default: 'id'
+  },
+  labelKey: {
+    type: String,
+    default: 'ten'
+  },
+  placeholder: {
+    type: String,
+    default: 'Chọn giá trị...'
+  },
+  searchPlaceholder: {
+    type: String,
+    default: 'Gõ để tìm kiếm...'
+  },
+  disabled: {
+    type: Boolean,
+    default: false
+  },
+  allowClear: {
+    type: Boolean,
+    default: true
+  },
+  hasError: {
+    type: Boolean,
+    default: false
+  },
+  colorKey: {
+    type: String,
+    default: 'ma'
+  },
+  prefix: {
+    type: String,
+    default: ''
+  }
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
 
-const rootRef = ref(null)
-const searchRef = ref(null)
-const open = ref(false)
-const keyword = ref('')
-const cursor = ref(0)
+const isOpen = ref(false)
+const searchQuery = ref('')
+const activeIndex = ref(-1)
+const selectContainer = ref(null)
+const searchInput = ref(null)
+const optionsList = ref(null)
 
-const rawModel = computed(() =>
-  props.modelValue == null ? '' : props.modelValue
-)
+const getOptionValue = (opt) => {
+  if (opt === null || opt === undefined) return null
+  if (typeof opt !== 'object') return opt
+  if (props.valueKey in opt) return opt[props.valueKey]
+  if ('value' in opt) return opt.value
+  if ('id' in opt) return opt.id
+  return opt
+}
 
-const selectedLabel = computed(() => {
-  const hit = props.options.find((o) => String(o.value) === String(rawModel.value))
-  return hit ? hit.label : ''
+const getOptionLabel = (opt) => {
+  if (opt === null || opt === undefined) return ''
+  if (typeof opt !== 'object') return String(opt)
+  if (props.labelKey in opt) return opt[props.labelKey]
+  if ('label' in opt) return opt.label
+  if ('ten' in opt) return opt.ten
+  if ('tenMau' in opt) return opt.tenMau
+  if ('tenKichCo' in opt) return opt.tenKichCo
+  if ('name' in opt) return opt.name
+  return String(opt)
+}
+
+const getOptionColor = (opt) => {
+  if (!opt || typeof opt !== 'object') return null
+  if (props.colorKey && opt[props.colorKey]) return opt[props.colorKey]
+  if (opt.ma && String(opt.ma).startsWith('#')) return opt.ma
+  if (opt.colorCode) return opt.colorCode
+  return null
+}
+
+const selectedOption = computed(() => {
+  if (props.modelValue === null || props.modelValue === undefined || props.modelValue === '') {
+    return null
+  }
+  return props.options.find(opt => {
+    const val = getOptionValue(opt)
+    return String(val) === String(props.modelValue)
+  }) || null
 })
 
-// Giống native select: giá trị khớp option nào thì hiển thị label của option đó
-// (kể cả option rỗng "Tất cả"); không khớp thì hiển thị placeholder.
-const displayLabel = computed(() => selectedLabel.value || '')
+const displayLabel = computed(() => {
+  if (!selectedOption.value) return ''
+  const lbl = getOptionLabel(selectedOption.value)
+  return props.prefix ? `${props.prefix}${lbl}` : lbl
+})
 
-const normalize = (s) =>
-  String(s == null ? '' : s)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
+const filteredOptions = computed(() => {
+  if (!searchQuery.value || !searchQuery.value.trim()) {
+    return props.options
+  }
+  const query = removeVietnameseTones(searchQuery.value)
+  return props.options.filter(opt => {
+    const lbl = removeVietnameseTones(getOptionLabel(opt))
+    return lbl.includes(query)
+  })
+})
 
-// v-model.number: chuyển giá trị số dạng chuỗi về number trước khi emit
-const coerce = (v) => {
-  if (props.modelModifiers && props.modelModifiers.number) {
-    if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) {
-      return Number(v)
+const toggleDropdown = () => {
+  if (props.disabled) return
+  if (isOpen.value) {
+    closeDropdown()
+  } else {
+    openDropdown()
+  }
+}
+
+const openDropdown = () => {
+  if (props.disabled) return
+  isOpen.value = true
+  searchQuery.value = ''
+  activeIndex.value = -1
+
+  nextTick(() => {
+    if (searchInput.value) {
+      searchInput.value.focus()
     }
-  }
-  return v
+  })
 }
 
-const filtered = computed(() => {
-  const q = normalize(keyword.value.trim())
-  if (!q) return props.options
-  return props.options.filter(
-    (o) => normalize(o.label).includes(q) || normalize(String(o.value)).includes(q)
-  )
-})
-
-const clampCursor = () => {
-  const list = filtered.value
-  if (!list.length) {
-    cursor.value = 0
-    return
-  }
-  if (cursor.value >= list.length || list[cursor.value]?.disabled) {
-    cursor.value = firstEnabled()
-  }
+const closeDropdown = () => {
+  isOpen.value = false
+  searchQuery.value = ''
+  activeIndex.value = -1
 }
 
-const firstEnabled = () => {
-  const idx = filtered.value.findIndex((o) => !o.disabled)
-  return idx === -1 ? 0 : idx
+const selectOption = (opt) => {
+  const val = getOptionValue(opt)
+  emit('update:modelValue', val)
+  emit('change', val, opt)
+  closeDropdown()
 }
 
-watch(filtered, () => {
-  cursor.value = firstEnabled()
-})
+const clearSelection = (e) => {
+  e.stopPropagation()
+  emit('update:modelValue', null)
+  emit('change', null, null)
+}
 
-// di chuyển con trỏ, bỏ qua option disabled
-const moveCursor = (dir) => {
-  const list = filtered.value
-  if (!list.length) return
-  let i = cursor.value
-  for (let n = 0; n < list.length; n++) {
-    i = (i + dir + list.length) % list.length
-    if (!list[i].disabled) {
-      cursor.value = i
-      return
+const handleKeyDown = (e) => {
+  if (!isOpen.value) {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+      e.preventDefault()
+      openDropdown()
     }
-  }
-}
-
-const toggle = () => {
-  if (props.disabled) return
-  open.value = !open.value
-  if (open.value) {
-    keyword.value = ''
-    cursor.value = 0
-    nextTick(() => searchRef.value && searchRef.value.focus())
-  }
-}
-
-const close = (refocus = false) => {
-  open.value = false
-  keyword.value = ''
-  if (refocus) nextTick(() => rootRef.value && rootRef.value.focus())
-}
-
-const choose = (opt) => {
-  if (opt.disabled) return
-  close(true)
-  if (String(opt.value) !== String(rawModel.value)) {
-    emit('update:modelValue', coerce(opt.value))
-    emit('change', coerce(opt.value))
-  }
-}
-
-const chooseCursor = () => {
-  const hit = filtered.value[cursor.value]
-  if (hit) choose(hit)
-}
-
-const clear = () => {
-  if (props.disabled) return
-  close(true)
-  if (rawModel.value !== '') {
-    emit('update:modelValue', '')
-    emit('change', '')
-  }
-}
-
-const onRootClick = (e) => {
-  if (props.disabled) return
-  // click vào nút clear / dropdown đã stopPropagation riêng
-  toggle()
-}
-
-const onRootKeydown = (e) => {
-  if (props.disabled) return
-  if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
-    e.preventDefault()
-    toggle()
     return
   }
-  if (e.key === 'ArrowDown' && !open.value) {
-    e.preventDefault()
-    toggle()
-    return
-  }
-  // gõ ký tự khi đang đóng -> mở và bắt đầu tìm kiếm ngay
-  if (!open.value && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    open.value = true
-    keyword.value = e.key
-    cursor.value = 0
-    e.preventDefault()
-    nextTick(() => searchRef.value && searchRef.value.focus())
-  }
-}
 
-const onSearchKeydown = (e) => {
   if (e.key === 'Escape') {
-    e.stopPropagation()
-    close(true)
-  } else if (e.key === 'ArrowDown') {
     e.preventDefault()
-    moveCursor(1)
-  } else if (e.key === 'ArrowUp') {
+    closeDropdown()
+    return
+  }
+
+  if (e.key === 'ArrowDown') {
     e.preventDefault()
-    moveCursor(-1)
-  } else if (e.key === 'Enter') {
+    if (activeIndex.value < filteredOptions.value.length - 1) {
+      activeIndex.value++
+      scrollToActiveOption()
+    }
+    return
+  }
+
+  if (e.key === 'ArrowUp') {
     e.preventDefault()
-    chooseCursor()
-  } else if (e.key === 'Tab') {
-    close(false)
+    if (activeIndex.value > 0) {
+      activeIndex.value--
+      scrollToActiveOption()
+    }
+    return
+  }
+
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    if (activeIndex.value >= 0 && activeIndex.value < filteredOptions.value.length) {
+      selectOption(filteredOptions.value[activeIndex.value])
+    }
+    return
   }
 }
 
-const onDocMousedown = (e) => {
-  if (open.value && rootRef.value && !rootRef.value.contains(e.target)) close(false)
+const scrollToActiveOption = () => {
+  nextTick(() => {
+    if (!optionsList.value) return
+    const activeEl = optionsList.value.querySelector('.searchable-option.is-active')
+    if (activeEl) {
+      activeEl.scrollIntoView({ block: 'nearest' })
+    }
+  })
+}
+
+const handleClickOutside = (e) => {
+  if (selectContainer.value && !selectContainer.value.contains(e.target)) {
+    closeDropdown()
+  }
 }
 
 onMounted(() => {
-  document.addEventListener('mousedown', onDocMousedown)
-})
-onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', onDocMousedown)
+  document.addEventListener('mousedown', handleClickOutside)
 })
 
-watch(
-  () => props.disabled,
-  (v) => {
-    if (v) close(false)
-  }
-)
-
-watch(
-  () => props.options,
-  () => clampCursor()
-)
+onUnmounted(() => {
+  document.removeEventListener('mousedown', handleClickOutside)
+})
 </script>
 
 <template>
-  <div
-    ref="rootRef"
-    class="ss"
-    :class="{ 'is-open': open, 'is-disabled': disabled }"
-    role="combobox"
-    :tabindex="disabled ? -1 : 0"
-    :aria-expanded="open"
-    :aria-disabled="disabled"
-    aria-haspopup="listbox"
-    @click="onRootClick"
-    @keydown="onRootKeydown"
+  <div 
+    ref="selectContainer" 
+    class="searchable-select" 
+    :class="{ 
+      'is-open': isOpen, 
+      'is-disabled': disabled,
+      'has-error': hasError 
+    }"
+    @keydown="handleKeyDown"
   >
-    <span class="ss-value" :class="{ 'is-placeholder': !displayLabel }">
-      {{ displayLabel || placeholder }}
-    </span>
-    <span class="ss-actions" @click.stop>
-      <span
-        v-if="clearable && displayLabel && !disabled"
-        class="ss-clear"
-        role="button"
-        tabindex="-1"
-        title="Bỏ chọn"
-        @click="clear"
-        @keydown.enter.stop.prevent="clear"
-      >×</span>
-      <svg class="ss-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="6 9 12 15 18 9"></polyline>
-      </svg>
-    </span>
-
-    <div v-if="open" class="ss-dropdown" @click.stop>
-      <div v-if="searchable" class="ss-search-wrap">
-        <input
-          ref="searchRef"
-          v-model="keyword"
-          type="text"
-          class="ss-search"
-          placeholder="Tìm kiếm..."
-          autocomplete="off"
-          @keydown="onSearchKeydown"
-        />
+    <!-- Main Display Trigger -->
+    <div 
+      class="select-trigger" 
+      @click="toggleDropdown"
+      tabindex="0"
+    >
+      <div class="selected-content">
+        <template v-if="selectedOption">
+          <span 
+            v-if="getOptionColor(selectedOption)" 
+            class="color-dot-indicator" 
+            :style="{ backgroundColor: getOptionColor(selectedOption) }"
+          ></span>
+          <span class="selected-text">{{ displayLabel }}</span>
+        </template>
+        <span v-else class="placeholder-text">{{ placeholder }}</span>
       </div>
-      <ul class="ss-list" role="listbox">
-        <li v-if="filtered.length === 0" class="ss-empty">Không tìm thấy kết quả phù hợp</li>
-        <li
-          v-for="(opt, idx) in filtered"
-          :key="String(opt.value)"
-          class="ss-option"
-          :class="{
-            'is-active': String(opt.value) === String(rawModel),
-            'is-cursor': idx === cursor,
-            'is-disabled': !!opt.disabled,
-          }"
-          role="option"
-          :aria-disabled="!!opt.disabled"
-          :aria-selected="String(opt.value) === String(rawModel)"
-          @mousemove="cursor = idx"
-          @click="choose(opt)"
+
+      <div class="actions-group">
+        <button 
+          v-if="allowClear && selectedOption && !disabled" 
+          type="button" 
+          class="clear-btn" 
+          @click="clearSelection" 
+          title="Xóa lựa chọn"
         >
-          <span class="ss-option-label">{{ opt.label }}</span>
-          <svg
-            v-if="String(opt.value) === String(rawModel)"
-            class="ss-check"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="20 6 9 17 4 12"></polyline>
+          ✕
+        </button>
+        <span class="chevron-icon">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
+        </span>
+      </div>
+    </div>
+
+    <!-- Dropdown Menu -->
+    <div v-show="isOpen" class="dropdown-popover">
+      <!-- Search Input -->
+      <div class="search-box">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input 
+          ref="searchInput"
+          v-model="searchQuery" 
+          type="text" 
+          class="search-input" 
+          :placeholder="searchPlaceholder"
+          @click.stop
+        />
+        <button 
+          v-if="searchQuery" 
+          type="button" 
+          class="clear-search-btn" 
+          @click.stop="searchQuery = ''"
+        >
+          ✕
+        </button>
+      </div>
+
+      <!-- Options List -->
+      <ul ref="optionsList" class="options-list">
+        <li 
+          v-for="(opt, idx) in filteredOptions" 
+          :key="getOptionValue(opt) ?? idx"
+          class="searchable-option"
+          :class="{
+            'is-selected': String(getOptionValue(opt)) === String(modelValue),
+            'is-active': idx === activeIndex
+          }"
+          @click="selectOption(opt)"
+          @mouseenter="activeIndex = idx"
+        >
+          <span 
+            v-if="getOptionColor(opt)" 
+            class="color-dot-indicator" 
+            :style="{ backgroundColor: getOptionColor(opt) }"
+          ></span>
+          <span class="option-label">
+            {{ prefix ? `${prefix}${getOptionLabel(opt)}` : getOptionLabel(opt) }}
+          </span>
+          <span v-if="String(getOptionValue(opt)) === String(modelValue)" class="check-icon">
+            ✓
+          </span>
+        </li>
+
+        <li v-if="filteredOptions.length === 0" class="no-options">
+          Không tìm thấy kết quả phù hợp
         </li>
       </ul>
     </div>
@@ -281,156 +330,249 @@ watch(
 </template>
 
 <style scoped>
-/*
- * Style của ô chọn (root .ss) được đặt trong assets/main.css (global, không scoped)
- * để các class style theo trang (scoped) luôn ghi đè đúng như với <select> cũ.
- * Style dưới đây chỉ dành cho các phần bên trong.
- */
-.ss-value {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.ss-value.is-placeholder {
-  color: #94a3b8;
-}
-
-.ss-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: #64748b;
-  flex-shrink: 0;
-}
-
-.ss-clear {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  color: #94a3b8;
-  font-size: 16px;
-  line-height: 1;
-}
-
-.ss-clear:hover {
-  background: #fee2e2;
-  color: #ef4444;
-}
-
-.ss-caret {
-  width: 16px;
-  height: 16px;
-  transition: transform 0.15s;
-  flex-shrink: 0;
-}
-
-.ss.is-open .ss-caret {
-  transform: rotate(180deg);
-}
-
-.ss-dropdown {
-  position: absolute;
-  z-index: 300;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
-  overflow: hidden;
-}
-
-.ss-search-wrap {
-  padding: 8px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.ss-search {
+.searchable-select {
+  position: relative;
   width: 100%;
-  padding: 8px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 13.5px;
-  color: #0f172a;
-  background: #fff;
-  outline: none;
-  box-sizing: border-box;
+  font-family: inherit;
+  user-select: none;
 }
 
-.ss-search:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
-}
-
-.ss-list {
-  list-style: none;
-  margin: 0;
-  padding: 6px;
-  max-height: 260px;
-  overflow-y: auto;
-}
-
-.ss-option {
+.select-trigger {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 9px 10px;
-  border-radius: 6px;
-  font-size: 14px;
-  color: #1e293b;
+  min-height: 40px;
+  padding: 8px 12px;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
   cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
 }
 
-.ss-option.is-cursor {
-  background: #f1f5f9;
+.select-trigger:hover:not(.is-disabled) {
+  border-color: #9ca3af;
 }
 
-.ss-option.is-disabled {
-  color: #cbd5e1;
+.searchable-select.is-open .select-trigger {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
+.searchable-select.has-error .select-trigger {
+  border-color: #dc2626;
+  background-color: #fef2f2;
+}
+
+.searchable-select.is-disabled .select-trigger {
+  background-color: #f3f4f6;
   cursor: not-allowed;
+  opacity: 0.7;
 }
 
-.ss-option.is-disabled.is-cursor {
-  background: transparent;
+.selected-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: #1f2937;
+  flex: 1;
 }
 
-.ss-option.is-active {
-  background: #eef2ff;
-  color: #4338ca;
+.color-dot-indicator {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.selected-text {
+  font-weight: 500;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.placeholder-text {
+  color: #9ca3af;
+}
+
+.actions-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.clear-btn {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.clear-btn:hover {
+  color: #ef4444;
+  background-color: #fee2e2;
+}
+
+.chevron-icon {
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  transition: transform 0.2s ease;
+}
+
+.searchable-select.is-open .chevron-icon {
+  transform: rotate(180deg);
+}
+
+/* Dropdown Popover */
+.dropdown-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  z-index: 1050;
+  overflow: hidden;
+  animation: fadeInDown 0.15s ease-out;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid #f3f4f6;
+  background-color: #f9fafb;
+}
+
+.search-icon {
+  position: absolute;
+  left: 18px;
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  padding: 6px 28px 6px 28px;
+  font-size: 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.search-input:focus {
+  border-color: #dc2626;
+}
+
+.clear-search-btn {
+  position: absolute;
+  right: 18px;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.clear-search-btn:hover {
+  color: #4b5563;
+}
+
+.options-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.options-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.options-list::-webkit-scrollbar-thumb {
+  background-color: #e5e7eb;
+  border-radius: 3px;
+}
+
+.options-list::-webkit-scrollbar-thumb:hover {
+  background-color: #d1d5db;
+}
+
+.searchable-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.searchable-option:hover,
+.searchable-option.is-active {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+
+.searchable-option.is-selected {
+  background-color: #fee2e2;
+  color: #b91c1c;
   font-weight: 600;
 }
 
-.ss-option.is-active.is-cursor {
-  background: #e0e7ff;
-}
-
-.ss-option-label {
+.option-label {
   flex: 1;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ss-check {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
+.check-icon {
+  color: #dc2626;
+  font-weight: bold;
+  font-size: 13px;
 }
 
-.ss-empty {
-  padding: 14px 10px;
+.no-options {
+  padding: 16px 12px;
   text-align: center;
-  color: #94a3b8;
   font-size: 13px;
+  color: #9ca3af;
 }
 </style>

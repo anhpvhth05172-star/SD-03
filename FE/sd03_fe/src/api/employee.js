@@ -22,6 +22,9 @@ export const suggestEmployeeCode = (ten) =>
 export const updateEmployeeStatus = (id, trangThai) =>
   http.put(`/nhan-vien/${id}/trang-thai`, null, { params: { trangThai } }).then((r) => r.data)
 
+export const changeEmployeePassword = (id, matKhauMoi, xacNhan) =>
+  http.put(`/nhan-vien/${id}/doi-mat-khau`, { matKhauMoi, xacNhan }).then((r) => r.data)
+
 export const checkEmployeeEmail = (email, excludeId) =>
   http.get('/nhan-vien/check-email', { params: { email, excludeId } }).then((r) => r.data)
 

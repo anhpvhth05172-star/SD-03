@@ -15,6 +15,7 @@ import {
 } from '@/constants/invoiceStatus'
 import { updateInvoiceStatus } from '@/api/invoice'
 import { notifyError, notifyConfirm, notifySuccess } from '@/utils/notify'
+import { taoVaTaiPdf } from '@/utils/pdf'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,6 +29,7 @@ const qrReady = ref(false)
 const updatingStatus = ref(false)
 const showStatusMenu = ref(false)
 const statusMenuRef = ref(null)
+const printSheetRef = ref(null)
 const showHistory = ref(false)
 const historyLoading = ref(false)
 const historyError = ref('')
@@ -42,6 +44,7 @@ const TRANG_THAI_CODE = {
   'Đã hoàn thành': 'DA_HOAN_THANH',
   'Đã hủy': 'DA_HUY',
   'Đã hoàn tiền': 'DA_HOAN_TIEN',
+  'Giao hàng thất bại': 'GIAO_HANG_THAT_BAI',
 }
 
 const qrPayload = computed(() => {
@@ -84,6 +87,14 @@ const isTerminal = computed(() => !!data.value && isTerminalOf(data.value))
 
 const tiepTheoList = computed(() => trangThaiTiepTheoOf(data.value))
 
+const tiepTheoMenuList = computed(() => tiepTheoList.value.filter((tt) => tt !== 'Đã hủy'))
+
+const laChoXacNhan = computed(() => data.value?.maTrangThai === 'CHO_XAC_NHAN')
+
+const coTheHuy = computed(
+  () => laChoXacNhan.value && tiepTheoList.value.includes('Đã hủy'),
+)
+
 const laTrangThaiHienTai = (ten) => data.value?.trangThai === ten
 
 const laTrangThaiTiepTheo = (ten) => tiepTheoList.value.includes(ten)
@@ -101,6 +112,8 @@ const chuyenTrangThai = async (ten) => {
   const code = TRANG_THAI_CODE[ten]
   if (!code) return
   showStatusMenu.value = false
+  const trangThaiTruoc =
+    data.value.maTrangThai || TRANG_THAI_CODE[data.value.trangThai] || ''
   const hienTai = data.value.trangThai || '—'
   const ma = data.value.maHoaDon || `#${data.value.id}`
   const ok = await notifyConfirm(
@@ -112,9 +125,16 @@ const chuyenTrangThai = async (ten) => {
   if (!ok) return
   updatingStatus.value = true
   try {
-    await updateInvoiceStatus(data.value.id, code)
-    notifySuccess('Đã cập nhật trạng thái', `${hienTai} → ${ten}`)
+    const ketQua = await updateInvoiceStatus(data.value.id, code)
+    if (code === 'GIAO_HANG_THAT_BAI' && ketQua?.maTrangThai === 'DA_HUY') {
+      notifySuccess('Giao hàng thất bại lần 3 — đơn hàng đã tự động hủy', `${hienTai} → Đã hủy`)
+    } else {
+      notifySuccess('Đã cập nhật trạng thái', `${hienTai} → ${ten}`)
+    }
     await load()
+    if (trangThaiTruoc === 'CHO_XAC_NHAN' && code === 'DA_XAC_NHAN') {
+      await taiPdfHienTai()
+    }
   } catch (e) {
     notifyError('Cập nhật thất bại', e.message || 'Không thể chuyển trạng thái')
   } finally {
@@ -125,6 +145,28 @@ const chuyenTrangThai = async (ten) => {
 const toggleStatusMenu = () => {
   if (updatingStatus.value) return
   showStatusMenu.value = !showStatusMenu.value
+}
+
+const huyDon = async () => {
+  if (!data.value || updatingStatus.value || !coTheHuy.value) return
+  const ma = data.value.maHoaDon || `#${data.value.id}`
+  const ok = await notifyConfirm(
+    'Xác nhận hủy đơn?',
+    `Hóa đơn ${ma}\nHủy khi ở trạng thái Chờ xác nhận. Sau khi hủy, đơn không thể tiếp tục xử lý.`,
+    'Xác nhận hủy',
+    'Giữ đơn',
+  )
+  if (!ok) return
+  updatingStatus.value = true
+  try {
+    await updateInvoiceStatus(data.value.id, 'DA_HUY')
+    notifySuccess('Đã hủy đơn', `Hóa đơn ${ma} → Đã hủy`)
+    await load()
+  } catch (e) {
+    notifyError('Hủy đơn thất bại', e.message || 'Không thể hủy đơn')
+  } finally {
+    updatingStatus.value = false
+  }
 }
 
 const chonMenu = (ten) => {
@@ -195,6 +237,19 @@ const tenGiamGia = computed(() => {
 })
 
 const chot = (v) => v !== null && v !== undefined && v !== ''
+
+const thongTinPhieu = computed(() => {
+  const d = data.value
+  if (!d) return ''
+  const parts = []
+  if (chot(d.maPhieuGiamGia)) parts.push(d.maPhieuGiamGia)
+  const ten = d.tenGiamGiaUngDung || d.tenPhieuGiamGia
+  if (chot(ten)) parts.push(ten)
+  if (chot(d.loaiGiamGia) && d.giaTriGiam !== null && d.giaTriGiam !== undefined) {
+    parts.push(d.loaiGiamGia === 'PERCENT' ? `${d.giaTriGiam}%` : formatVnd(d.giaTriGiam))
+  }
+  return parts.join(' · ') || 'Không áp dụng'
+})
 
 const timKiemSp = ref('')
 const locMau = ref('')
@@ -275,6 +330,20 @@ const inHoaDon = async () => {
   window.print()
 }
 
+const taiPdfHienTai = async () => {
+  if (!data.value) return
+  const ma = data.value.maHoaDon || `HD${data.value.id}`
+  try {
+    await nextTick()
+    await taoVaTaiPdf(printSheetRef.value, `${ma}.pdf`)
+  } catch (e) {
+    notifyError(
+      'Tải PDF thất bại',
+      `${e?.message || 'Không tạo được file PDF'}. Trạng thái hóa đơn không bị ảnh hưởng; có thể dùng nút "In hóa đơn".`,
+    )
+  }
+}
+
 watch(() => route.params.id, load)
 onMounted(() => {
   load()
@@ -312,7 +381,7 @@ onBeforeUnmount(() => {
 
     <div v-else-if="data" class="inv-layout">
       <div class="inv-print-area">
-        <article class="invoice-print-sheet print-only" :style="{ '--receipt-zoom': printZoom }">
+        <article ref="printSheetRef" class="invoice-print-sheet print-only" :style="{ '--receipt-zoom': printZoom }">
           <header class="receipt-header">
             <div class="receipt-header-top">
               <div class="receipt-brand-block">
@@ -370,8 +439,8 @@ onBeforeUnmount(() => {
 
           <section class="receipt-totals">
             <p><span>Tiền hàng</span><strong>{{ formatVnd(tienHang) }}</strong></p>
-            <p v-if="coGiamGia"><span>Giảm giá <small>({{ tenGiamGia }})</small></span><strong>− {{ formatVnd(data.tienGiam) }}</strong></p>
-            <p><span>Phí vận chuyển</span><strong>{{ formatVnd(data.phiVanChuyen) }}</strong></p>
+            <p v-if="coGiamGia"><span>Giảm giá <small>({{ thongTinPhieu }})</small></span><strong>− {{ formatVnd(data.tienGiam) }}</strong></p>
+            <p v-if="Number(data.phiVanChuyen) > 0"><span>Phí vận chuyển</span><strong>{{ formatVnd(data.phiVanChuyen) }}</strong></p>
             <p class="receipt-grand-total"><span>Tổng thanh toán</span><strong>{{ formatVnd(data.tienSauGiamGia) }}</strong></p>
             <p><span>Thanh toán</span><strong>{{ data.tenPhuongThucThanhToan || '—' }}</strong></p>
           </section>
@@ -631,6 +700,10 @@ onBeforeUnmount(() => {
                 <span>Tổng tiền hàng</span>
                 <span>{{ formatVnd(tienHang) }}</span>
               </div>
+              <div class="sum-row" v-if="coGiamGia">
+                <span>Phiếu giảm giá</span>
+                <span class="sum-voucher" :title="tenGiamGia">{{ thongTinPhieu }}</span>
+              </div>
               <div class="sum-row">
                 <span>Giảm giá</span>
                 <span v-if="coGiamGia" class="sum-discount">
@@ -638,7 +711,7 @@ onBeforeUnmount(() => {
                 </span>
                 <span v-else>− 0 ₫</span>
               </div>
-              <div class="sum-row">
+              <div class="sum-row" v-if="Number(data.phiVanChuyen) > 0">
                 <span>Phí vận chuyển</span>
                 <span>+ {{ formatVnd(data.phiVanChuyen) }}</span>
               </div>
@@ -683,7 +756,7 @@ onBeforeUnmount(() => {
               </svg>
               In hóa đơn
             </button>
-            <div v-if="!isTerminal && tiepTheoList.length" ref="statusMenuRef" class="status-menu-wrap">
+            <div v-if="!isTerminal && tiepTheoMenuList.length" ref="statusMenuRef" class="status-menu-wrap">
               <button
                 class="btn btn-outline"
                 type="button"
@@ -700,7 +773,7 @@ onBeforeUnmount(() => {
               </button>
               <div v-if="showStatusMenu" class="status-menu" role="menu">
                 <button
-                  v-for="tt in tiepTheoList"
+                  v-for="tt in tiepTheoMenuList"
                   :key="tt"
                   class="status-menu-item"
                   type="button"
@@ -711,6 +784,19 @@ onBeforeUnmount(() => {
                 </button>
               </div>
             </div>
+            <button
+              v-if="coTheHuy"
+              class="btn btn-outline btn-huy-don"
+              type="button"
+              :disabled="updatingStatus"
+              @click="huyDon"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M15 9l-6 6M9 9l6 6" />
+              </svg>
+              {{ updatingStatus ? 'Đang xử lý...' : 'Hủy đơn' }}
+            </button>
             <button class="btn btn-outline" type="button" @click="router.push('/hoa-don')">
               Quay lại danh sách
             </button>
@@ -956,14 +1042,14 @@ button.stepper-step.is-next {
 }
 
 button.stepper-step.is-next:hover:not(:disabled) .stepper-node {
-  background: #fef2f2;
-  border-color: #dc2626;
-  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.1);
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.15);
   transform: scale(1.08);
 }
 
 button.stepper-step.is-next:hover:not(:disabled) .stepper-label {
-  color: #dc2626;
+  color: #475569;
 }
 
 button.stepper-step.is-next:disabled {
@@ -1025,9 +1111,9 @@ button.stepper-step.is-next:disabled {
 }
 
 .stepper-step.is-next .stepper-node {
-  border-color: #fca5a5;
-  background: #fef2f2;
-  color: #dc2626;
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #94a3b8;
 }
 
 .stepper-label {
@@ -1187,6 +1273,22 @@ button.stepper-step.is-next:disabled {
   color: #1e293b;
 }
 
+.btn-huy-don {
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.btn-huy-don:hover {
+  background: #fef2f2;
+  border-color: #f87171;
+  color: #b91c1c;
+}
+
+.btn-huy-don:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .status-updated {
   margin-top: 10px;
   font-size: 11.5px;
@@ -1285,6 +1387,13 @@ button.stepper-step.is-next:disabled {
 
 .sum-discount {
   color: #15803d !important;
+}
+
+.sum-voucher {
+  color: #1d4ed8 !important;
+  font-size: 12.5px !important;
+  text-align: right;
+  word-break: break-word;
 }
 
 .sum-final {

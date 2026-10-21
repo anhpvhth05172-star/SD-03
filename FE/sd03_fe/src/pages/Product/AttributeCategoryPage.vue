@@ -1,9 +1,12 @@
 <script setup>
 import { ref, computed, reactive, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
+import { removeVietnameseTones } from '@/utils/format'
 
 const route = useRoute()
+const router = useRouter()
 const API_BASE = 'http://localhost:8080/api/v1/attributes'
 
 const showToast = (msg, type = 'success') => {
@@ -42,15 +45,15 @@ const getTabFromRoute = () => {
 const activeTab = ref(getTabFromRoute())
 
 const tabs = [
-  { id: 'thuong_hieu', label: 'Thương hiệu', icon: '', codePrefix: 'TH' },
-  { id: 'xuat_xu', label: 'Xuất xứ', icon: '', codePrefix: 'XX' },
-  { id: 'chat_lieu', label: 'Chất liệu', icon: '', codePrefix: 'CL' },
-  { id: 'kieu_dang', label: 'Kiểu dáng', icon: '', codePrefix: 'KD' },
-  { id: 'loai_giay', label: 'Loại giày', icon: '', codePrefix: 'LG' },
-  { id: 'kich_co', label: 'Kích cỡ', icon: '', codePrefix: 'KC' },
-  { id: 'mau_sac', label: 'Màu sắc', icon: '', codePrefix: 'MS' },
-  { id: 'than_giay', label: 'Thân giày', icon: '', codePrefix: 'TG' },
-  { id: 'de_giay', label: 'Đế giày', icon: '', codePrefix: 'DG' }
+  { id: 'thuong_hieu', label: 'Thương hiệu', codePrefix: 'TH', placeholder: 'Ví dụ: Nike, Adidas, Puma...' },
+  { id: 'xuat_xu', label: 'Xuất xứ', codePrefix: 'XX', placeholder: 'Ví dụ: Việt Nam, Mỹ, Nhật Bản...' },
+  { id: 'chat_lieu', label: 'Chất liệu', codePrefix: 'CL', placeholder: 'Ví dụ: Da thật, Vải dệt Knit, Cao su...' },
+  { id: 'kieu_dang', label: 'Kiểu dáng', codePrefix: 'KD', placeholder: 'Ví dụ: Cổ thấp (Low-top), Cổ cao...' },
+  { id: 'loai_giay', label: 'Loại giày', codePrefix: 'LG', placeholder: 'Ví dụ: Giày chạy bộ, Giày bóng rổ...' },
+  { id: 'kich_co', label: 'Kích cỡ', codePrefix: 'KC', placeholder: 'Ví dụ: 39, 40, 40.5, 41, 42...' },
+  { id: 'mau_sac', label: 'Màu sắc', codePrefix: 'MS', placeholder: 'Ví dụ: Trắng đỏ, Đen tuyền, Xanh navy...' },
+  { id: 'than_giay', label: 'Thân giày', codePrefix: 'TG', placeholder: 'Ví dụ: Lưới thoáng khí Mesh...' },
+  { id: 'de_giay', label: 'Đế giày', codePrefix: 'DG', placeholder: 'Ví dụ: Đệm EVA, Zoom Air, Cao su đúc...' }
 ]
 
 const attributesData = reactive({
@@ -89,9 +92,26 @@ const fetchAttributes = async (category) => {
   }
 }
 
+const fetchAllAttributeCounts = async () => {
+  for (const t of tabs) {
+    if (t.id !== activeTab.value) {
+      fetchAttributes(t.id)
+    }
+  }
+}
+
+const switchTab = (tabId) => {
+  activeTab.value = tabId
+  const slug = Object.keys(slugToIdMap).find(k => slugToIdMap[k] === tabId)
+  if (slug && route.params.category !== slug) {
+    router.push(`/thuoc-tinh/${slug}`)
+  }
+}
+
 onMounted(() => {
   activeTab.value = getTabFromRoute()
   fetchAttributes(activeTab.value)
+  fetchAllAttributeCounts()
 })
 
 watch(() => route.params.category, () => {
@@ -108,6 +128,19 @@ watch(activeTab, (newCategory) => {
 const searchQuery = ref('')
 const statusFilter = ref('Tất cả')
 
+const resetFilters = () => {
+  searchQuery.value = ''
+  statusFilter.value = 'Tất cả'
+  currentPage.value = 1
+  showToast('Đã đặt lại bộ lọc về mặc định', 'success')
+}
+
+const copyHex = (hex) => {
+  if (!hex) return
+  navigator.clipboard.writeText(hex.toUpperCase())
+  showToast(`Đã sao chép mã màu ${hex.toUpperCase()}!`, 'success')
+}
+
 const currentPage = ref(1)
 const pageSize = ref(5)
 const pageSizeOptions = [5, 10, 20, 50]
@@ -123,10 +156,10 @@ const currentTabItems = computed(() => {
       return false
     }
     if (searchQuery.value.trim()) {
-      const q = searchQuery.value.toLowerCase().trim()
-      const matchTen = item.ten ? item.ten.toLowerCase().includes(q) : false
-      const matchMa = item.ma ? item.ma.toLowerCase().includes(q) : false
-      const matchMoTa = item.mo_ta ? item.mo_ta.toLowerCase().includes(q) : false
+      const q = removeVietnameseTones(searchQuery.value)
+      const matchTen = item.ten ? removeVietnameseTones(item.ten).includes(q) : false
+      const matchMa = item.ma ? removeVietnameseTones(item.ma).includes(q) : false
+      const matchMoTa = item.mo_ta ? removeVietnameseTones(item.mo_ta).includes(q) : false
       if (!matchTen && !matchMa && !matchMoTa) return false
     }
     return true
@@ -363,7 +396,6 @@ const executeDeleteFast = async (item) => {
     <div class="page-header-row">
       <div class="page-title-box">
         <h1 class="page-title">
-          <span v-if="activeTabInfo.icon" style="margin-right: 8px;">{{ activeTabInfo.icon }}</span>
           Quản lý {{ activeTabInfo.label }}
         </h1>
         <p class="page-subtitle">
@@ -379,6 +411,21 @@ const executeDeleteFast = async (item) => {
       </div>
     </div>
 
+    <!-- Horizontal Tabs Navigation Bar -->
+    <div class="tabs-nav-bar">
+      <button
+        v-for="t in tabs"
+        :key="t.id"
+        class="attr-tab-btn"
+        :class="{ active: activeTab === t.id }"
+        @click="switchTab(t.id)"
+      >
+        <span class="tab-label">{{ t.label }}</span>
+        <span class="tab-count-badge">{{ (attributesData[t.id] || []).length }}</span>
+      </button>
+    </div>
+
+    <!-- Filter Card -->
     <div class="filter-card">
       <div class="filter-row">
         <div class="search-box">
@@ -387,21 +434,45 @@ const executeDeleteFast = async (item) => {
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
-          <input v-model="searchQuery" type="text" class="filter-input"
-            :placeholder="`Tìm kiếm ${activeTabInfo.label.toLowerCase()} theo tên hoặc mã...`" />
+          <input 
+            v-model="searchQuery" 
+            type="text" 
+            class="filter-input"
+            :placeholder="`Tìm kiếm ${activeTabInfo.label.toLowerCase()} theo tên hoặc mã...`" 
+          />
+          <button v-if="searchQuery" class="clear-search-btn" @click="searchQuery = ''" title="Xóa tìm kiếm">×</button>
         </div>
 
-        <div class="status-filter">
-          <label class="filter-lbl">Trạng thái:</label>
-          <select v-model="statusFilter" class="filter-select">
-            <option value="Tất cả">Tất cả trạng thái</option>
-            <option value="Hoạt động">Hoạt động</option>
-            <option value="Ngừng hoạt động">Ngừng hoạt động</option>
-          </select>
+        <div class="filter-right-actions">
+          <div class="status-filter">
+            <label class="filter-lbl">Trạng thái:</label>
+            <div style="min-width: 175px;">
+              <SearchableSelect
+                v-model="statusFilter"
+                :options="[
+                  { value: 'Tất cả', label: 'Tất cả trạng thái' },
+                  { value: 'Hoạt động', label: 'Hoạt động' },
+                  { value: 'Ngừng hoạt động', label: 'Ngừng hoạt động' }
+                ]"
+                label-key="label"
+                value-key="value"
+                :allow-clear="false"
+              />
+            </div>
+          </div>
+
+          <button class="btn-reset-filter" @click="resetFilters" title="Đặt lại bộ lọc về mặc định">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6"></path>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+            Đặt lại bộ lọc
+          </button>
         </div>
       </div>
     </div>
 
+    <!-- Table Card -->
     <div class="table-card">
       <div class="table-header">
         <div class="table-title">
@@ -426,21 +497,23 @@ const executeDeleteFast = async (item) => {
             <tr v-for="(item, index) in paginatedItems" :key="item.id">
               <td class="text-center text-slate">{{ getIndex(index) }}</td>
               <td>
-                <span class="code-pill">{{ item.ma || (activeTabInfo.codePrefix + String(item.id).padStart(2, '0'))
-                  }}</span>
+                <span class="code-pill">{{ (item.ma || (activeTabInfo.codePrefix + String(item.id).padStart(3, '0'))).toUpperCase() }}</span>
               </td>
               <td>
                 <div class="name-col">
-                  <span class="name-main">{{ item.ten }}</span>
+                  <span v-if="activeTab === 'kich_co'" class="size-pill-tag">
+                    Size {{ item.ten }}
+                  </span>
+                  <span v-else class="name-main">{{ item.ten }}</span>
                 </div>
               </td>
               <td>
-                <div v-if="activeTab === 'mau_sac'" class="color-preview-cell">
+                <div v-if="activeTab === 'mau_sac'" class="color-preview-cell" @click="copyHex(item.mo_ta)" title="Click để sao chép mã màu">
                   <span class="color-circle"
                     :style="{ backgroundColor: (item.mo_ta && item.mo_ta.startsWith('#')) ? item.mo_ta : '#64748b', border: item.mo_ta === '#ffffff' ? '1px solid #cbd5e1' : 'none' }"></span>
-                  <span class="color-hex">{{ item.mo_ta || '#64748b' }}</span>
+                  <span class="color-hex">{{ (item.mo_ta || '#64748B').toUpperCase() }}</span>
                 </div>
-                <span v-else class="text-slate-desc">{{ item.mo_ta || '---' }}</span>
+                <span v-else class="text-slate-desc">{{ item.mo_ta || '—' }}</span>
               </td>
               <td>
                 <span class="badge-pill"
@@ -518,7 +591,7 @@ const executeDeleteFast = async (item) => {
 
           <div class="modal-body">
             <div v-if="formError" class="form-error-alert">
-              <span>⚠️ {{ formError }}</span>
+              <span>{{ formError }}</span>
             </div>
 
             <div class="form-group margin-bottom">
@@ -529,14 +602,14 @@ const executeDeleteFast = async (item) => {
             <div class="form-group margin-bottom">
               <label class="form-lbl">Tên {{ activeTabInfo.label }} <span class="required">*</span></label>
               <input v-model="modalForm.ten" type="text" class="form-inp"
-                :placeholder="`Nhập tên ${activeTabInfo.label.toLowerCase()}...`" autofocus />
+                :placeholder="activeTabInfo.placeholder || `Nhập tên ${activeTabInfo.label.toLowerCase()}...`" autofocus />
             </div>
 
             <div v-if="activeTab === 'mau_sac'" class="form-group margin-bottom">
               <label class="form-lbl">Mã màu HEX đại diện</label>
               <div class="color-input-row">
                 <input v-model="modalForm.mo_ta" type="color" class="color-picker-box" />
-                <input v-model="modalForm.mo_ta" type="text" class="form-inp" placeholder="#HEX color code" />
+                <input v-model="modalForm.mo_ta" type="text" class="form-inp" placeholder="#HEX (vd: #D92D20)" @input="modalForm.mo_ta = modalForm.mo_ta ? modalForm.mo_ta.toUpperCase() : ''" />
               </div>
             </div>
 
@@ -548,10 +621,16 @@ const executeDeleteFast = async (item) => {
 
             <div class="form-group">
               <label class="form-lbl">Trạng thái</label>
-              <select v-model="modalForm.trang_thai" class="form-inp">
-                <option value="Hoạt động">Hoạt động</option>
-                <option value="Ngừng hoạt động">Ngừng hoạt động</option>
-              </select>
+              <SearchableSelect
+                v-model="modalForm.trang_thai"
+                :options="[
+                  { value: 'Hoạt động', label: 'Hoạt động' },
+                  { value: 'Ngừng hoạt động', label: 'Ngừng hoạt động' }
+                ]"
+                label-key="label"
+                value-key="value"
+                :allow-clear="false"
+              />
             </div>
           </div>
 

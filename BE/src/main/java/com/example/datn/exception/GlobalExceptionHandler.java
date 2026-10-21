@@ -128,6 +128,23 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(
+        org.springframework.web.server.ResponseStatusException ex
+    ) {
+        HttpStatus status = ex.getStatusCode() instanceof HttpStatus hs
+            ? hs
+            : HttpStatus.INTERNAL_SERVER_ERROR;
+        String reason = ex.getReason() == null ? ex.getMessage() : ex.getReason();
+        ErrorResponse response = ErrorResponse.builder()
+                .status(status.value())
+                .message(reason)
+                .timestamp(LocalDateTime.now())
+                .build();
+
+        return ResponseEntity.status(status).body(response);
+    }
+
     @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupported(
             org.springframework.web.HttpRequestMethodNotSupportedException ex) {

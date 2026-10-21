@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/mau-sac")
 @RequiredArgsConstructor
-@CrossOrigin(originPatterns = "*")
 public class MauSacController {
 
     private final MauSacService mauSacService;
