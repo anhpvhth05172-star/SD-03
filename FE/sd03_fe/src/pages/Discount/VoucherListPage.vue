@@ -155,7 +155,13 @@ const goToPage = (p) => {
 const formatDiscount = (v) =>
   v <= 100 ? v + "%" : v.toLocaleString("vi-VN") + "đ";
 
-const formatDate = (s) => (s ? new Date(s).toLocaleDateString("vi-VN") : "");
+const formatDate = (s) => {
+  if (!s) return "";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return String(s);
+  const p = (x) => String(x).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 
 const getStatus = (d) => {
   const now = new Date();

@@ -76,7 +76,13 @@ const goToPage = (p) => {
 };
 
 // ========== Hiển thị ==========
-const formatDate = (s) => (s ? new Date(s).toLocaleDateString("vi-VN") : "");
+const formatDate = (s) => {
+  if (!s) return "";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return String(s);
+  const p = (x) => String(x).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 
 const formatUpdated = (d) =>
   d
