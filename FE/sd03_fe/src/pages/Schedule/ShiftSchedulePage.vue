@@ -226,10 +226,15 @@ const luuForm = () => {
               </td>
               <td class="text-center">
                 <div class="action-buttons-group">
-                  <label class="switch" :title="ca.dangBat ? 'Tắt ca làm' : 'Bật ca làm'">
-                    <input type="checkbox" :checked="ca.dangBat" @click.prevent="doiTrangThaiBtn(ca)" />
-                    <span class="slider"></span>
-                  </label>
+                  <button
+                    class="btn-action-circle"
+                    :class="ca.dangBat ? 'is-toggle-on' : 'is-toggle-off'"
+                    type="button"
+                    :title="ca.dangBat ? 'Tắt ca làm' : 'Bật ca làm'"
+                    @click="doiTrangThaiBtn(ca)"
+                  >
+                    <i class="bi" :class="ca.dangBat ? 'bi-toggle2-off' : 'bi-toggle2-on'"></i>
+                  </button>
                   <button class="btn-action-circle is-view" type="button" title="Chỉnh sửa" @click="moFormSua(ca)">
                     <i class="bi bi-pencil"></i>
                   </button>
@@ -690,6 +695,29 @@ const luuForm = () => {
   transform: scale(1.08);
 }
 
+.btn-action-circle.is-toggle-on {
+  background: #ecfdf5;
+  color: #059669;
+  border-color: #a7f3d0;
+}
+
+.btn-action-circle.is-toggle-on:hover {
+  background: #d1fae5;
+  transform: scale(1.08);
+}
+
+.btn-action-circle.is-toggle-off {
+  background: #f1f5f9;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+}
+
+.btn-action-circle.is-toggle-off:hover {
+  background: #e2e8f0;
+  color: #64748b;
+  transform: scale(1.08);
+}
+
 /* Modal */
 .modal-backdrop {
   position: fixed;
@@ -933,60 +961,5 @@ const luuForm = () => {
   .stat-pills {
     width: 100%;
   }
-}
-
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 38px;
-  height: 21px;
-  flex-shrink: 0;
-  margin: 0;
-}
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  inset: 0;
-  background-color: #cbd5e1;
-  border-radius: 999px;
-  transition: 0.25s;
-}
-
-.slider::before {
-  position: absolute;
-  content: "";
-  width: 15px;
-  height: 15px;
-  left: 3px;
-  top: 3px;
-  background-color: white;
-  border-radius: 50%;
-  transition: 0.25s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.switch input:checked + .slider {
-  background-color: #16a34a;
-}
-
-.switch input:checked + .slider::before {
-  transform: translateX(17px);
-}
-
-.switch input:disabled + .slider {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.switch input:focus-visible + .slider {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
 }
 </style>

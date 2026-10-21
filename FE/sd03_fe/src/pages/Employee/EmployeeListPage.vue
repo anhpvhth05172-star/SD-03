@@ -753,19 +753,17 @@ onMounted(async () => {
                 </td>
                 <td class="text-center">
                   <div class="action-buttons-group">
-                    <!-- Nút 1: On/Off (Switch) -->
-                    <label
-                      class="switch"
+                    <!-- Nút 1: On/Off (Power) -->
+                    <button
+                      class="btn-action-circle"
+                      :class="isAccountProtected(row) ? 'is-disabled' : 'is-power-active'"
+                      type="button"
+                      :disabled="isAccountProtected(row)"
                       :title="isAccountProtected(row) ? 'Tài khoản Quản trị viên (không thể đổi trạng thái)' : (row.trangThai ? 'Khóa tài khoản' : 'Kích hoạt tài khoản')"
+                      @click="!isAccountProtected(row) ? toggleStatus(row) : null"
                     >
-                      <input
-                        type="checkbox"
-                        :checked="row.trangThai"
-                        :disabled="isAccountProtected(row)"
-                        @click.prevent="isAccountProtected(row) ? null : toggleStatus(row)"
-                      />
-                      <span class="slider"></span>
-                    </label>
+                      <i class="bi bi-power"></i>
+                    </button>
 
                     <!-- Nút 2: Mắt (Xem chi tiết) -->
                     <button
@@ -1478,6 +1476,19 @@ onMounted(async () => {
   pointer-events: none !important;
   opacity: 0.45 !important;
   box-shadow: none !important;
+}
+
+/* Nút On/Off khi là Nhân viên: MÀU ĐỎ */
+.btn-action-circle.is-power-active {
+  background: #f8fafc;
+  color: #dc2626;
+  border-color: #fee2e2;
+}
+
+.btn-action-circle.is-power-active:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+  transform: scale(1.08);
 }
 
 /* Nút Mắt (Xem chi tiết): Xám đậm */
@@ -2497,60 +2508,5 @@ onMounted(async () => {
 
 .action-field textarea {
   resize: vertical;
-}
-
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 38px;
-  height: 21px;
-  flex-shrink: 0;
-  margin: 0;
-}
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  inset: 0;
-  background-color: #cbd5e1;
-  border-radius: 999px;
-  transition: 0.25s;
-}
-
-.slider::before {
-  position: absolute;
-  content: "";
-  width: 15px;
-  height: 15px;
-  left: 3px;
-  top: 3px;
-  background-color: white;
-  border-radius: 50%;
-  transition: 0.25s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.switch input:checked + .slider {
-  background-color: #16a34a;
-}
-
-.switch input:checked + .slider::before {
-  transform: translateX(17px);
-}
-
-.switch input:disabled + .slider {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.switch input:focus-visible + .slider {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
 }
 </style>

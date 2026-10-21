@@ -32,7 +32,6 @@ const qrDataUrl = ref('')
 const qrReady = ref(false)
 const updatingStatus = ref(false)
 const showStatusMenu = ref(false)
-const switchTrangThai = ref(false)
 const statusMenuRef = ref(null)
 const printSheetRef = ref(null)
 const showHistory = ref(false)
@@ -177,29 +176,9 @@ const chuyenTrangThai = async (ten) => {
   }
 }
 
-const onSwitchChange = async (e) => {
-  if (updatingStatus.value) {
-    switchTrangThai.value = false
-    return
-  }
-  const on = e.target.checked
-  if (!on) {
-    switchTrangThai.value = false
-    showStatusMenu.value = false
-    return
-  }
-  switchTrangThai.value = true
-  const menu = tiepTheoMenuList.value
-  if (!menu.length) {
-    switchTrangThai.value = false
-    return
-  }
-  if (menu.length === 1) {
-    await chuyenTrangThai(menu[0])
-    switchTrangThai.value = false
-  } else {
-    showStatusMenu.value = true
-  }
+const toggleStatusMenu = () => {
+  if (updatingStatus.value) return
+  showStatusMenu.value = !showStatusMenu.value
 }
 
 const huyDon = async () => {
@@ -224,26 +203,21 @@ const huyDon = async () => {
   }
 }
 
-const chonMenu = async (ten) => {
+const chonMenu = (ten) => {
   showStatusMenu.value = false
-  await chuyenTrangThai(ten)
-  switchTrangThai.value = false
+  chuyenTrangThai(ten)
 }
 
 const onDocClick = (e) => {
   if (!showStatusMenu.value) return
   const el = statusMenuRef.value
-  if (el && !el.contains(e.target)) {
-    showStatusMenu.value = false
-    switchTrangThai.value = false
-  }
+  if (el && !el.contains(e.target)) showStatusMenu.value = false
 }
 
 const onEscape = (e) => {
   if (e.key !== 'Escape') return
   if (showStatusMenu.value) {
     showStatusMenu.value = false
-    switchTrangThai.value = false
     return
   }
   if (showHistory.value) showHistory.value = false
@@ -863,15 +837,15 @@ onBeforeUnmount(() => {
               In hóa đơn
             </button>
             <div v-if="!isTerminal && tiepTheoMenuList.length" ref="statusMenuRef" class="status-menu-wrap">
-              <label class="switch" title="Chuyển trạng thái bước kế tiếp">
-                <input
-                  type="checkbox"
-                  :checked="switchTrangThai"
-                  :disabled="updatingStatus"
-                  @change="onSwitchChange"
-                />
-                <span class="slider"></span>
-              </label>
+              <button class="btn btn-outline" type="button" :disabled="updatingStatus" @click="toggleStatusMenu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+                {{ updatingStatus ? 'Đang xử lý...' : 'Chuyển trạng thái' }}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
               <div v-if="showStatusMenu" class="status-menu" role="menu">
                 <button
                   v-for="tt in tiepTheoMenuList"
@@ -2226,60 +2200,5 @@ button.stepper-step.is-next:disabled {
   .history-overlay {
     display: none !important;
   }
-}
-
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 38px;
-  height: 21px;
-  flex-shrink: 0;
-  margin: 0;
-}
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  inset: 0;
-  background-color: #cbd5e1;
-  border-radius: 999px;
-  transition: 0.25s;
-}
-
-.slider::before {
-  position: absolute;
-  content: "";
-  width: 15px;
-  height: 15px;
-  left: 3px;
-  top: 3px;
-  background-color: white;
-  border-radius: 50%;
-  transition: 0.25s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.switch input:checked + .slider {
-  background-color: #16a34a;
-}
-
-.switch input:checked + .slider::before {
-  transform: translateX(17px);
-}
-
-.switch input:disabled + .slider {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.switch input:focus-visible + .slider {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
 }
 </style>
