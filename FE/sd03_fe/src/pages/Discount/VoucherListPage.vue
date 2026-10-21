@@ -2,12 +2,13 @@
 import axios from "axios";
 import Swal from "sweetalert2";
 import { computed, inject, onMounted, reactive, ref } from "vue";
+import PaginationBar from "@/components/PaginationBar.vue";
 
 const apiDiscount = inject("baseAPI");
 
 const listDiscount = ref([]);
 const page = ref(0);
-const pageSize = 8;
+const pageSize = ref(10);
 const totalPages = ref(0);
 const totalElements = ref(0);
 
@@ -48,7 +49,7 @@ const getData = async (p = 0) => {
     const res = await axios.get(apiDiscount + "admin/phieu-giam-gia", {
       params: {
         page: p,
-        size: pageSize,
+        size: pageSize.value,
         // ⚠️ đổi tên param cho khớp backend
         keyword: applied.keyword || undefined,
         loaiGiamGia: applied.discountType || undefined,
@@ -149,6 +150,11 @@ const toggleTrangThai = async (item) => {
 const goToPage = (p) => {
   if (p < 0 || p >= totalPages.value || p === page.value) return;
   getData(p);
+};
+
+const onSizeChange = (s) => {
+  pageSize.value = s;
+  getData(0);
 };
 
 /* ---------------- Định dạng ---------------- */
@@ -431,62 +437,17 @@ onMounted(() => getData(0));
         </table>
       </div>
 
-      <div class="panel-foot">
-        <span class="foot-text">
-          Hiển thị {{ listDiscount.length ? page * pageSize + 1 : 0 }}-{{
-            page * pageSize + listDiscount.length
-          }}
-          trong {{ totalElements }} phiếu giảm giá
-        </span>
-        <div class="pager">
-          <button
-            class="page-btn"
-            type="button"
-            aria-label="Trang trước"
-            :disabled="page === 0"
-            @click="goToPage(page - 1)"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M14.5 6l-6 6 6 6" />
-            </svg>
-          </button>
-          <button
-            v-for="p in totalPages"
-            :key="p"
-            class="page-btn"
-            :class="{ 'is-active': p - 1 === page }"
-            type="button"
-            @click="goToPage(p - 1)"
-          >
-            {{ p }}
-          </button>
-          <button
-            class="page-btn"
-            type="button"
-            aria-label="Trang sau"
-            :disabled="page >= totalPages - 1"
-            @click="goToPage(page + 1)"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M9.5 6l6 6-6 6" />
-            </svg>
-          </button>
-        </div>
-      </div>
+      <PaginationBar
+        :page="page"
+        :total-pages="totalPages"
+        :total-elements="totalElements"
+        :page-size="pageSize"
+        :from="listDiscount.length ? page * pageSize + 1 : 0"
+        :to="page * pageSize + listDiscount.length"
+        label="phiếu giảm giá"
+        @change="goToPage"
+        @size-change="onSizeChange"
+      />
     </section>
   </div>
 </template>

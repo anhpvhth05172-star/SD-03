@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import SearchableSelect from '@/components/SearchableSelect.vue'
+import PaginationBar from '@/components/PaginationBar.vue'
 import { listInvoices, exportInvoices } from '@/api/invoice'
 import {
   avatarColor,
@@ -141,7 +142,8 @@ const goPage = (p) => {
   load()
 }
 
-const onPageSizeChange = () => {
+const onPageSizeChange = (s) => {
+  pageSize.value = s
   page.value = 0
   load()
 }
@@ -347,12 +349,6 @@ onMounted(load)
           <h2 class="card-title">Danh sách hóa đơn</h2>
           <span class="items-count-pill">{{ invoices.length }}/{{ totalElements }} hóa đơn</span>
         </div>
-        <div class="head-right">
-          <span class="page-size-label">Hiển thị:</span>
-          <select v-model="pageSize" class="page-size-select" @change="onPageSizeChange">
-            <option v-for="s in pageSizeOptions" :key="s" :value="s">{{ s }} bản ghi/trang</option>
-          </select>
-        </div>
       </div>
 
       <div class="table-responsive">
@@ -448,29 +444,19 @@ onMounted(load)
         </table>
       </div>
 
-      <div v-if="totalPages > 1" class="table-card-foot">
-        <span class="foot-info">
-          Hiển thị <strong>{{ footFrom }} - {{ footTo }}</strong> trong tổng số
-          <strong>{{ totalElements }}</strong> hóa đơn
-        </span>
-        <div class="foot-pager">
-          <button class="pager-btn" type="button" :disabled="page === 0" @click="goPage(page - 1)">
-            ‹ Trước
-          </button>
-          <button
-            v-for="p in pageList"
-            :key="p"
-            type="button"
-            class="pager-btn num-btn"
-            :class="{ active: p === page + 1 }"
-            @click="goPage(p - 1)"
-          >
-            {{ p }}
-          </button>
-          <button class="pager-btn" type="button" :disabled="page + 1 >= totalPages" @click="goPage(page + 1)">
-            Sau ›
-          </button>
-        </div>
+      <div class="table-card-foot">
+        <PaginationBar
+          :page="page"
+          :total-pages="totalPages"
+          :total-elements="totalElements"
+          :page-size="pageSize"
+          :from="footFrom"
+          :to="footTo"
+          :sizes="pageSizeOptions"
+          label="hóa đơn"
+          @change="goPage"
+          @size-change="onPageSizeChange"
+        />
       </div>
     </div>
   </div>

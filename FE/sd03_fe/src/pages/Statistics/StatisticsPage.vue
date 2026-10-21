@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import PaginationBar from '@/components/PaginationBar.vue'
 import { listEmployees } from '@/api/employee'
 import { API_BASE } from '@/api/http'
 import { formatVnd } from '@/utils/format'
@@ -291,18 +292,6 @@ const mauAvarta = (id) => {
 }
 
 /* ---------------------------------- Phân trang ---------------------------------- */
-const danhSachTrang = (tong, hienTai) => {
-  const cur = hienTai + 1
-  let start = Math.max(1, Math.min(cur - 2, Math.max(1, tong - 4)))
-  const end = Math.min(tong, start + 4)
-  start = Math.max(1, end - 4)
-  const out = []
-  for (let p = start; p <= end; p++) out.push(p)
-  return out
-}
-const trangNv = computed(() => danhSachTrang(tongTrangNv.value, pageNv.value))
-const trangSp = computed(() => danhSachTrang(tongTrangSp.value, pageSp.value))
-
 const datTrangNv = (p) => {
   if (p < 0 || p >= tongTrangNv.value || p === pageNv.value) return
   pageNv.value = p
@@ -840,35 +829,18 @@ onMounted(async () => {
         </table>
       </div>
 
-      <div class="table-pagination-row">
-        <div class="pagination-summary">
-          Hiển thị <strong>{{ dongNv.length }}</strong> trong tổng số
-          <strong>{{ nhanVienLoc.length }}</strong> nhân viên
-        </div>
-        <div class="pagination-size-wrap">
-          <select v-model="sizeNv" class="pagination-select" @change="pageNv = 0">
-            <option :value="5">5</option>
-            <option :value="10">10</option>
-            <option :value="20">20</option>
-          </select>
-        </div>
-        <div class="pagination-nav-wrap">
-          <button class="pagination-nav-btn" type="button" :disabled="pageNv === 0" @click="datTrangNv(0)">K</button>
-          <button class="pagination-nav-btn" type="button" :disabled="pageNv === 0" @click="datTrangNv(pageNv - 1)">&lt;</button>
-          <button
-            v-for="p in trangNv"
-            :key="'nv' + p"
-            class="pagination-num-btn"
-            :class="{ 'is-active': p === pageNv + 1 }"
-            type="button"
-            @click="datTrangNv(p - 1)"
-          >
-            {{ p }}
-          </button>
-          <button class="pagination-nav-btn" type="button" :disabled="pageNv + 1 >= tongTrangNv" @click="datTrangNv(pageNv + 1)">&gt;</button>
-          <button class="pagination-nav-btn" type="button" :disabled="pageNv + 1 >= tongTrangNv" @click="datTrangNv(tongTrangNv - 1)">L</button>
-        </div>
-      </div>
+      <PaginationBar
+        :page="pageNv"
+        :total-pages="tongTrangNv"
+        :total-elements="nhanVienLoc.length"
+        :page-size="sizeNv"
+        :from="dongNv.length ? pageNv * sizeNv + 1 : 0"
+        :to="pageNv * sizeNv + dongNv.length"
+        :sizes="[5, 10, 20]"
+        label="nhân viên"
+        @change="datTrangNv"
+        @size-change="(s) => { sizeNv = s; pageNv = 0 }"
+      />
     </div>
 
     <!-- TỔNG QUAN SẢN PHẨM -->
@@ -979,35 +951,18 @@ onMounted(async () => {
         </table>
       </div>
 
-      <div class="table-pagination-row">
-        <div class="pagination-summary">
-          Hiển thị <strong>{{ dongSp.length }}</strong> trong tổng số
-          <strong>{{ sanPhamLoc.length }}</strong> sản phẩm
-        </div>
-        <div class="pagination-size-wrap">
-          <select v-model="sizeSp" class="pagination-select" @change="pageSp = 0">
-            <option :value="5">5</option>
-            <option :value="10">10</option>
-            <option :value="20">20</option>
-          </select>
-        </div>
-        <div class="pagination-nav-wrap">
-          <button class="pagination-nav-btn" type="button" :disabled="pageSp === 0" @click="datTrangSp(0)">K</button>
-          <button class="pagination-nav-btn" type="button" :disabled="pageSp === 0" @click="datTrangSp(pageSp - 1)">&lt;</button>
-          <button
-            v-for="p in trangSp"
-            :key="'sp' + p"
-            class="pagination-num-btn"
-            :class="{ 'is-active': p === pageSp + 1 }"
-            type="button"
-            @click="datTrangSp(p - 1)"
-          >
-            {{ p }}
-          </button>
-          <button class="pagination-nav-btn" type="button" :disabled="pageSp + 1 >= tongTrangSp" @click="datTrangSp(pageSp + 1)">&gt;</button>
-          <button class="pagination-nav-btn" type="button" :disabled="pageSp + 1 >= tongTrangSp" @click="datTrangSp(tongTrangSp - 1)">L</button>
-        </div>
-      </div>
+      <PaginationBar
+        :page="pageSp"
+        :total-pages="tongTrangSp"
+        :total-elements="sanPhamLoc.length"
+        :page-size="sizeSp"
+        :from="dongSp.length ? pageSp * sizeSp + 1 : 0"
+        :to="pageSp * sizeSp + dongSp.length"
+        :sizes="[5, 10, 20]"
+        label="sản phẩm"
+        @change="datTrangSp"
+        @size-change="(s) => { sizeSp = s; pageSp = 0 }"
+      />
     </div>
   </div>
 </template>
@@ -1779,94 +1734,6 @@ onMounted(async () => {
   color: #ef4444;
 }
 
-/* Phân trang */
-.table-pagination-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid #f8fafc;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.pagination-summary {
-  flex: 1;
-  text-align: center;
-  font-size: 13px;
-  color: #64748b;
-  min-width: 200px;
-}
-
-.pagination-summary strong {
-  color: #1f2937;
-  font-weight: 700;
-}
-
-.pagination-size-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.pagination-select {
-  height: 32px;
-  padding: 0 24px 0 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 6px center;
-  background-size: 12px;
-  appearance: none;
-  font-size: 13px;
-  color: #334155;
-  cursor: pointer;
-  outline: none;
-  font-family: inherit;
-}
-
-.pagination-nav-wrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.pagination-nav-btn,
-.pagination-num-btn {
-  height: 30px;
-  min-width: 30px;
-  padding: 0 6px;
-  border-radius: 6px;
-  border: 1px solid #f1f5f9;
-  background: #ffffff;
-  color: #475569;
-  font-size: 13px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-family: inherit;
-}
-
-.pagination-nav-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.pagination-num-btn.is-active {
-  background: #e11d48;
-  color: #ffffff;
-  border-color: #e11d48;
-  font-weight: 600;
-}
-
-.pagination-num-btn:hover:not(.is-active),
-.pagination-nav-btn:hover:not(:disabled) {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-}
-
 @media (max-width: 1199px) {
   .charts-grid {
     grid-template-columns: 1fr;
@@ -1902,15 +1769,6 @@ onMounted(async () => {
 
   .field-block.grow {
     min-width: 0;
-  }
-
-  .table-pagination-row {
-    justify-content: center;
-  }
-
-  .pagination-summary {
-    order: -1;
-    width: 100%;
   }
 }
 </style>

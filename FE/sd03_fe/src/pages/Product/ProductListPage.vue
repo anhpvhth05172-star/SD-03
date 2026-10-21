@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import SearchableSelect from '@/components/SearchableSelect.vue'
+import PaginationBar from '@/components/PaginationBar.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
@@ -269,6 +270,12 @@ const changePage = (p) => {
     currentPage.value = p
     fetchProducts()
   }
+}
+
+const onSizeChange = (s) => {
+  pageSize.value = s
+  currentPage.value = 0
+  fetchProducts()
 }
 
 const formatPrice = (val) => {
@@ -643,12 +650,6 @@ onUnmounted(() => {
           <span class="items-count-pill">{{ products.length }}/{{ totalElements }} sản phẩm</span>
           <span v-if="selectedIds.length > 0" class="selected-badge">Đã chọn: {{ selectedIds.length }}</span>
         </div>
-        <div class="head-right">
-          <span class="page-size-label">Hiển thị:</span>
-          <select v-model="pageSize" class="page-size-select" @change="fetchProducts">
-            <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }} bản ghi/trang</option>
-          </select>
-        </div>
       </div>
 
       <div class="table-responsive">
@@ -759,26 +760,18 @@ onUnmounted(() => {
 
       <!-- Pagination -->
       <div v-if="totalPages > 1" class="table-card-foot">
-        <span class="foot-info">
-          Hiển thị <strong>{{ products.length ? currentPage * pageSize + 1 : 0 }} - {{ currentPage * pageSize + products.length }}</strong> trong tổng số <strong>{{ totalElements }}</strong> mặt hàng
-        </span>
-        <div class="foot-pager">
-          <button class="pager-btn" :disabled="currentPage === 0" @click="changePage(currentPage - 1)">
-            ‹ Trước
-          </button>
-          <button
-            v-for="p in totalPages"
-            :key="p"
-            class="pager-btn num-btn"
-            :class="{ active: p - 1 === currentPage }"
-            @click="changePage(p - 1)"
-          >
-            {{ p }}
-          </button>
-          <button class="pager-btn" :disabled="currentPage >= totalPages - 1" @click="changePage(currentPage + 1)">
-            Sau ›
-          </button>
-        </div>
+        <PaginationBar
+          :page="currentPage"
+          :total-pages="totalPages"
+          :total-elements="totalElements"
+          :page-size="pageSize"
+          :sizes="pageSizeOptions"
+          :from="products.length ? currentPage * pageSize + 1 : 0"
+          :to="currentPage * pageSize + products.length"
+          label="sản phẩm"
+          @change="changePage"
+          @size-change="onSizeChange"
+        />
       </div>
     </div>
 

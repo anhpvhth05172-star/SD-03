@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import PaginationBar from '@/components/PaginationBar.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import { removeVietnameseTones } from '@/utils/format'
@@ -178,12 +179,6 @@ const paginatedItems = computed(() => {
 
 const getIndex = (indexOnPage) => {
   return (currentPage.value - 1) * pageSize.value + indexOnPage + 1
-}
-
-const goToPage = (p) => {
-  if (p >= 1 && p <= totalPages.value) {
-    currentPage.value = p
-  }
 }
 
 const activeTabInfo = computed(() => {
@@ -562,35 +557,19 @@ const executeDeleteFast = async (item) => {
         </table>
       </div>
 
-      <div v-if="currentTabItems.length > 0" class="pagination-footer">
-        <div class="pagination-info">
-          Hiển thị <strong>{{ (currentPage - 1) * pageSize + 1 }}</strong> - <strong>{{ Math.min(currentPage * pageSize,
-            currentTabItems.length) }}</strong> trên tổng số <strong>{{ currentTabItems.length }}</strong> {{
-              activeTabInfo.label.toLowerCase() }}
-        </div>
-
-        <div class="pagination-controls">
-          <div class="page-size-selector">
-            <label class="page-size-lbl">Hiển thị:</label>
-            <select v-model="pageSize" class="page-size-select">
-              <option v-for="opt in pageSizeOptions" :key="opt" :value="opt">{{ opt }} mục / trang</option>
-            </select>
-          </div>
-
-          <div class="page-btn-group">
-            <button class="page-nav-btn" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">
-              ‹ Trước
-            </button>
-            <button v-for="p in totalPages" :key="p" class="page-num-btn" :class="{ active: currentPage === p }"
-              @click="goToPage(p)">
-              {{ p }}
-            </button>
-            <button class="page-nav-btn" :disabled="currentPage === totalPages" @click="goToPage(currentPage + 1)">
-              Sau ›
-            </button>
-          </div>
-        </div>
-      </div>
+      <PaginationBar
+        v-if="currentTabItems.length > 0"
+        :page="currentPage - 1"
+        :total-pages="totalPages"
+        :total-elements="currentTabItems.length"
+        :page-size="pageSize"
+        :from="paginatedItems.length ? (currentPage - 1) * pageSize + 1 : 0"
+        :to="(currentPage - 1) * pageSize + paginatedItems.length"
+        :sizes="pageSizeOptions"
+        label="thuộc tính"
+        @change="(p) => { currentPage = p + 1 }"
+        @size-change="(s) => { pageSize = s; currentPage = 1 }"
+      />
     </div>
 
     <transition name="fade">
