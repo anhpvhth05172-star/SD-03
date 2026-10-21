@@ -305,7 +305,7 @@ public class HoaDonService {
         validateHeader(req, null);
         xacDinhPhiVanChuyenOnline(req);
         PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
-        if (phieu != null) {
+        if (phieu != null && req.getIdKhachHang() != null) {
             kiemTraGioiHanSuDung(phieu, req.getIdKhachHang(), null);
         }
         HoaDon hoaDon = new HoaDon();
@@ -340,7 +340,7 @@ public class HoaDonService {
         fillHeader(hoaDon, req);
         PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
         lichSuSuDungRepository.deleteByHoaDonId(hoaDon.getId());
-        if (phieu != null) {
+        if (phieu != null && req.getIdKhachHang() != null) {
             kiemTraGioiHanSuDung(phieu, req.getIdKhachHang(), hoaDon.getId());
         }
         List<DongTinh> lines = tinhToanVaLuu(hoaDon, req);
@@ -841,7 +841,8 @@ public class HoaDonService {
         if (!Boolean.TRUE.equals(phieu.getTrangThai())) {
             throw new IllegalArgumentException("Phiếu giảm giá không hoạt động");
         }
-        if (req.getIdKhachHang() == null) {
+        boolean laPos = "TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon()));
+        if (!laPos && req.getIdKhachHang() == null) {
             throw new IllegalArgumentException("Vui lòng chọn khách hàng để sử dụng phiếu giảm giá");
         }
         return phieu;

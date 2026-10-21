@@ -12,7 +12,6 @@ const navigateToAdd = () => {
   router.push('/san-pham/them')
 }
 
-// State
 const products = ref([])
 const isLoading = ref(false)
 const totalElements = ref(0)
@@ -41,8 +40,14 @@ const filters = reactive({
   idChatLieu: '',
   idKieuDang: '',
   idXuatXu: '',
-  doiTuong: ''
+  doiTuong: '',
+  trangThai: ''
 })
+
+const statusOptions = [
+  { value: true, label: 'Kinh doanh' },
+  { value: false, label: 'Ngưng kinh doanh' }
+]
 
 const isFilterExpanded = ref(true)
 
@@ -55,7 +60,6 @@ const origins = ref([])
 let debounceTimer = null
 let currentAbortController = null
 
-// Quick edit modal state
 const isEditModalOpen = ref(false)
 const isUpdating = ref(false)
 const editErrors = reactive({
@@ -70,6 +74,30 @@ const editErrors = reactive({
 const editForm = reactive({
   id: null,
   maSanPham: '',
+  tenSanPham: '',
+  idThuongHieu: '',
+  idLoaiGiay: '',
+  idChatLieu: '',
+  idKieuDang: '',
+  idXuatXu: '',
+  doiTuong: 'Nam',
+  tinhNang: '',
+  moTa: '',
+  trangThai: true
+})
+
+const isQuickAddModalOpen = ref(false)
+const isSubmittingQuickAdd = ref(false)
+const quickAddErrors = reactive({
+  tenSanPham: '',
+  idThuongHieu: '',
+  idLoaiGiay: '',
+  idChatLieu: '',
+  idKieuDang: '',
+  idXuatXu: ''
+})
+
+const quickAddForm = reactive({
   tenSanPham: '',
   idThuongHieu: '',
   idLoaiGiay: '',
@@ -99,6 +127,7 @@ const activeFilterCount = computed(() => {
   if (filters.keyword && filters.keyword.trim()) count++
   if (filters.idThuongHieu) count++
   if (filters.idLoaiGiay) count++
+  if (filters.trangThai !== '' && filters.trangThai !== null && filters.trangThai !== undefined) count++
   return count
 })
 
@@ -111,7 +140,6 @@ const normalizeAttributeList = (data) => {
 }
 
 const fetchOptions = async () => {
-  // Thử endpoint gom tất cả tùy chọn lọc
   try {
     const bulkRes = await fetch(`${API_BASE}/attributes/all-filter-options`)
     if (bulkRes.ok) {
@@ -131,7 +159,6 @@ const fetchOptions = async () => {
     console.warn('Lỗi gọi all-filter-options, chuyển sang gọi từng danh mục:', e)
   }
 
-  // Fallback: Gọi song song từng danh mục thuộc tính
   try {
     const [resTH, resLG, resCL, resKD, resXX] = await Promise.allSettled([
       fetch(`${API_BASE}/attributes/thuong_hieu`),
@@ -184,8 +211,11 @@ const buildQueryParams = (pageIndex) => {
   if (filters.idXuatXu) params.append('idXuatXu', filters.idXuatXu)
   if (filters.doiTuong) params.append('doiTuong', filters.doiTuong)
 
-  if (activeTab.value === 'ACTIVE') params.append('trangThai', 'true')
-  else if (activeTab.value === 'INACTIVE') params.append('trangThai', 'false')
+  if (filters.trangThai === true || filters.trangThai === 'true') {
+    params.append('trangThai', 'true')
+  } else if (filters.trangThai === false || filters.trangThai === 'false') {
+    params.append('trangThai', 'false')
+  }
 
   return params
 }
@@ -251,6 +281,7 @@ const resetFilters = () => {
   filters.idKieuDang = ''
   filters.idXuatXu = ''
   filters.doiTuong = ''
+  filters.trangThai = ''
   activeTab.value = 'ALL'
   currentPage.value = 0
   fetchProducts()
@@ -557,8 +588,6 @@ const exportToExcel = async () => {
 }
 
 
-
-// Quick edit functions
 const openQuickEdit = (item) => {
   editForm.id = item.id
   editForm.maSanPham = item.maSanPham || `SP0${item.id}`
@@ -573,7 +602,6 @@ const openQuickEdit = (item) => {
   editForm.moTa = item.moTa || ''
   editForm.trangThai = item.trangThai !== false
 
-  // Reset errors
   Object.keys(editErrors).forEach(k => editErrors[k] = '')
   isEditModalOpen.value = true
 }
@@ -648,6 +676,138 @@ const submitQuickEdit = async () => {
   }
 }
 
+const openQuickAdd = () => {
+  quickAddForm.tenSanPham = ''
+  quickAddForm.idThuongHieu = ''
+  quickAddForm.idLoaiGiay = ''
+  quickAddForm.idChatLieu = ''
+  quickAddForm.idKieuDang = ''
+  quickAddForm.idXuatXu = ''
+  quickAddForm.doiTuong = 'Nam'
+  quickAddForm.tinhNang = ''
+  quickAddForm.moTa = ''
+  quickAddForm.trangThai = true
+
+  Object.keys(quickAddErrors).forEach(k => (quickAddErrors[k] = ''))
+  isQuickAddModalOpen.value = true
+}
+
+const validateQuickAddForm = () => {
+  let valid = true
+  Object.keys(quickAddErrors).forEach(k => (quickAddErrors[k] = ''))
+
+  if (!quickAddForm.tenSanPham || !quickAddForm.tenSanPham.trim()) {
+    quickAddErrors.tenSanPham = 'Tên sản phẩm không được để trống'
+    valid = false
+  }
+  if (!quickAddForm.idThuongHieu) {
+    quickAddErrors.idThuongHieu = 'Vui lòng chọn Thương hiệu'
+    valid = false
+  }
+  if (!quickAddForm.idLoaiGiay) {
+    quickAddErrors.idLoaiGiay = 'Vui lòng chọn Loại giày'
+    valid = false
+  }
+  if (!quickAddForm.idChatLieu) {
+    quickAddErrors.idChatLieu = 'Vui lòng chọn Chất liệu'
+    valid = false
+  }
+  if (!quickAddForm.idKieuDang) {
+    quickAddErrors.idKieuDang = 'Vui lòng chọn Kiểu dáng'
+    valid = false
+  }
+  if (!quickAddForm.idXuatXu) {
+    quickAddErrors.idXuatXu = 'Vui lòng chọn Xuất xứ'
+    valid = false
+  }
+  return valid
+}
+
+const submitQuickAdd = async () => {
+  if (!validateQuickAddForm()) return
+
+  isSubmittingQuickAdd.value = true
+  const payload = {
+    tenSanPham: quickAddForm.tenSanPham.trim(),
+    idThuongHieu: Number(quickAddForm.idThuongHieu),
+    idLoaiGiay: Number(quickAddForm.idLoaiGiay),
+    idChatLieu: Number(quickAddForm.idChatLieu),
+    idKieuDang: Number(quickAddForm.idKieuDang),
+    idXuatXu: Number(quickAddForm.idXuatXu),
+    doiTuong: quickAddForm.doiTuong,
+    tinhNang: quickAddForm.tinhNang ? quickAddForm.tinhNang.trim() : '',
+    moTa: quickAddForm.moTa ? quickAddForm.moTa.trim() : '',
+    trangThai: quickAddForm.trangThai
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/san-pham`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    if (res.ok) {
+      showToastNotice('Thành công', `Đã thêm sản phẩm "${quickAddForm.tenSanPham}" thành công!`, 'success')
+      isQuickAddModalOpen.value = false
+      fetchProducts()
+    } else {
+      const errData = await res.json().catch(() => ({}))
+      showToastNotice('Lỗi thêm sản phẩm', errData.message || 'Không thể tạo sản phẩm mới', 'danger')
+    }
+  } catch (err) {
+    showToastNotice('Lỗi kết nối', 'Không thể kết nối máy chủ', 'danger')
+  } finally {
+    isSubmittingQuickAdd.value = false
+  }
+}
+
+const isGeneratingAi = ref(false)
+
+const generateAiContent = async (targetForm) => {
+  if (!targetForm.tenSanPham || !targetForm.tenSanPham.trim()) {
+    showToastNotice('Thiếu thông tin', 'Vui lòng nhập Tên sản phẩm trước khi sinh nội dung bằng AI', 'warning')
+    return
+  }
+
+  isGeneratingAi.value = true
+  try {
+    const brandObj = brands.value.find(b => b.id === Number(targetForm.idThuongHieu))
+    const catObj = categories.value.find(c => c.id === Number(targetForm.idLoaiGiay))
+    const matObj = materials.value.find(m => m.id === Number(targetForm.idChatLieu))
+    const styleObj = styles.value.find(s => s.id === Number(targetForm.idKieuDang))
+
+    const payload = {
+      tenSanPham: targetForm.tenSanPham.trim(),
+      thuongHieu: brandObj ? brandObj.ten : '',
+      loaiGiay: catObj ? catObj.ten : '',
+      chatLieu: matObj ? matObj.ten : '',
+      kieuDang: styleObj ? styleObj.ten : '',
+      doiTuong: targetForm.doiTuong || 'Nam'
+    }
+
+    const res = await fetch(`${API_BASE}/san-pham/ai-generate-content`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      if (data.tinhNang) targetForm.tinhNang = data.tinhNang
+      if (data.moTa) targetForm.moTa = data.moTa
+      showToastNotice('Thành công', '✨ Gemini AI đã tự động tạo tính năng và mô tả sản phẩm!', 'success')
+    } else {
+      showToastNotice('Lỗi', 'Không thể kết nối dịch vụ AI', 'danger')
+    }
+  } catch (err) {
+    console.error('AI generate error:', err)
+    showToastNotice('Lỗi kết nối', 'Không thể kết nối máy chủ AI', 'danger')
+  } finally {
+    isGeneratingAi.value = false
+  }
+}
+
 onMounted(() => {
   Promise.allSettled([fetchOptions(), fetchProducts()])
 })
@@ -660,35 +820,21 @@ onUnmounted(() => {
 
 <template>
   <div class="product-management-page">
-    <!-- Header Section -->
     <div class="page-top-row">
       <div class="page-intro">
-        <div class="breadcrumbs-tag">
-          <span>Trang chủ</span> / <span class="active">Quản lý sản phẩm</span>
-        </div>
         <h1 class="page-heading">
           Quản lý Sản phẩm
         </h1>
       </div>
     </div>
 
-    <!-- Filter Card -->
     <div class="filter-box">
-      <!-- Tabs and Action Header -->
       <div class="status-tabs-row">
-        <div class="tabs-group">
-          <button class="status-tab" :class="{ active: activeTab === 'ALL' }" @click="selectTab('ALL')">
-            Tất cả
-            <span class="tab-pill">{{ totalElements }}</span>
-          </button>
-          <button class="status-tab" :class="{ active: activeTab === 'ACTIVE' }" @click="selectTab('ACTIVE')">
-            <span class="dot green-dot"></span>
-            Kinh doanh
-          </button>
-          <button class="status-tab" :class="{ active: activeTab === 'INACTIVE' }" @click="selectTab('INACTIVE')">
-            <span class="dot gray-dot"></span>
-            Ngưng kinh doanh
-          </button>
+        <div class="status-combobox-wrap">
+          <label class="status-combobox-label">Trạng thái:</label>
+          <SearchableSelect v-model="filters.trangThai" :options="statusOptions" label-key="label" value-key="value"
+            placeholder="Tất cả trạng thái" search-placeholder="Tìm trạng thái..." :allow-clear="true"
+            @change="onFilterChange" class="status-combobox-select" />
         </div>
 
         <div class="page-actions">
@@ -700,7 +846,8 @@ onUnmounted(() => {
             Đặt lại bộ lọc
           </button>
 
-          <button class="btn btn-outline-refresh" @click="reloadAllData" :class="{ 'is-loading': isLoading }" title="Tải lại dữ liệu">
+          <button class="btn btn-outline-refresh" @click="reloadAllData" :class="{ 'is-loading': isLoading }"
+            title="Tải lại dữ liệu">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="23 4 23 10 17 10"></polyline>
               <polyline points="1 20 1 14 7 14"></polyline>
@@ -708,7 +855,8 @@ onUnmounted(() => {
             </svg>
             Làm mới
           </button>
-          <button class="btn btn-export-excel" @click="exportToExcel" :disabled="isExporting" title="Xuất danh sách sản phẩm ra file Excel">
+          <button class="btn btn-export-excel" @click="exportToExcel" :disabled="isExporting"
+            title="Xuất danh sách sản phẩm ra file Excel">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
@@ -717,6 +865,13 @@ onUnmounted(() => {
               <polyline points="10 9 9 9 8 9"></polyline>
             </svg>
             {{ isExporting ? 'Đang xuất...' : 'Xuất Excel' }}
+          </button>
+          <button class="btn btn-quick-add" @click="openQuickAdd" title="Thêm nhanh sản phẩm">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Thêm nhanh
           </button>
           <button class="btn btn-add-new" @click="navigateToAdd">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -728,57 +883,38 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Filter Controls Grid -->
       <transition name="collapse-fade">
         <div v-show="isFilterExpanded" class="filters-grid">
           <div class="filter-col span-2">
             <label class="filter-lbl">Tìm kiếm sản phẩm</label>
             <div class="search-wrap">
-              <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
               </svg>
-              <input
-                v-model="filters.keyword"
-                type="text"
-                class="form-control"
-                placeholder="Nhập tên hoặc mã sản phẩm (vd: SP001, Nike...)"
-                @input="onSearchInput"
-              />
-              <button v-if="filters.keyword" class="clear-search-btn" @click="filters.keyword = ''; onFilterChange()">×</button>
+              <input v-model="filters.keyword" type="text" class="form-control"
+                placeholder="Nhập tên hoặc mã sản phẩm (vd: SP001, Nike...)" @input="onSearchInput" />
+              <button v-if="filters.keyword" class="clear-search-btn"
+                @click="filters.keyword = ''; onFilterChange()">×</button>
             </div>
           </div>
 
           <div class="filter-col">
             <label class="filter-lbl">Thương hiệu</label>
-            <SearchableSelect
-              v-model="filters.idThuongHieu"
-              :options="brands"
-              label-key="ten"
-              value-key="id"
-              placeholder="Tất cả thương hiệu"
-              search-placeholder="Tìm thương hiệu..."
-              @change="onFilterChange"
-            />
+            <SearchableSelect v-model="filters.idThuongHieu" :options="brands" label-key="ten" value-key="id"
+              placeholder="Tất cả thương hiệu" search-placeholder="Tìm thương hiệu..." @change="onFilterChange" />
           </div>
 
           <div class="filter-col">
             <label class="filter-lbl">Loại giày</label>
-            <SearchableSelect
-              v-model="filters.idLoaiGiay"
-              :options="categories"
-              label-key="ten"
-              value-key="id"
-              placeholder="Tất cả loại giày"
-              search-placeholder="Tìm loại giày..."
-              @change="onFilterChange"
-            />
+            <SearchableSelect v-model="filters.idLoaiGiay" :options="categories" label-key="ten" value-key="id"
+              placeholder="Tất cả loại giày" search-placeholder="Tìm loại giày..." @change="onFilterChange" />
           </div>
         </div>
       </transition>
     </div>
 
-    <!-- Table Container -->
     <div class="table-container-card">
       <div class="table-card-head">
         <div class="head-left">
@@ -814,31 +950,15 @@ onUnmounted(() => {
               <td class="text-center text-muted">{{ currentPage * pageSize + idx + 1 }}</td>
               <td class="code-plain-text">{{ item.maSanPham || `SP0${item.id}` }}</td>
               <td>
-                <div class="product-cell-wrapper">
-                  <div class="product-thumbnail-box">
-                    <img
-                      v-if="item.hinhAnhDaiDien"
-                      :src="item.hinhAnhDaiDien"
-                      :alt="item.tenSanPham"
-                      class="product-thumb-img"
-                      @error="item.hinhAnhDaiDien = null"
-                    />
-                    <div v-else class="product-thumb-placeholder">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                        <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                      </svg>
-                    </div>
-                    <span v-if="hasProductDiscount(item)" class="image-discount-badge">{{ item.discount }}</span>
-                  </div>
-                  <div class="product-details-col">
-                    <span class="name-plain-text">{{ item.tenSanPham }}</span>
-                    <span v-if="item.doiTuong" class="target-badge">{{ item.doiTuong }}</span>
-                  </div>
+                <div class="product-details-col">
+                  <span class="name-plain-text">{{ item.tenSanPham }}</span>
+                  <span v-if="item.doiTuong" class="target-badge">{{ item.doiTuong }}</span>
                 </div>
               </td>
               <td class="attr-plain-text">{{ item.tenThuongHieu || '---' }}</td>
               <td class="attr-plain-text">{{ item.tenLoaiGiay || '---' }}</td>
-              <td class="text-center qty-plain-text">{{ formatNumber(item.soLuong !== undefined && item.soLuong !== null ? item.soLuong : 0) }}</td>
+              <td class="text-center qty-plain-text">{{ formatNumber(item.soLuong !== undefined && item.soLuong !== null
+                ? item.soLuong : 0) }}</td>
               <td class="text-end price-plain-text">
                 <div v-if="hasProductDiscount(item)" class="product-price-discount-box">
                   <div class="product-sale-price-row">
@@ -856,7 +976,8 @@ onUnmounted(() => {
               </td>
               <td class="text-center">
                 <div class="action-btns">
-                  <label class="switch-toggle" :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
+                  <label class="switch-toggle"
+                    :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
                     <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
                     <span class="slider round"></span>
                   </label>
@@ -870,22 +991,38 @@ onUnmounted(() => {
               </td>
             </tr>
 
-            <!-- Skeleton loader -->
             <template v-if="isLoading && products.length === 0">
               <tr v-for="n in 5" :key="`skel-${n}`" class="skel-row">
-                <td class="text-center"><div class="skel-box skel-code"></div></td>
-                <td><div class="skel-box skel-code"></div></td>
-                <td><div class="skel-box skel-title"></div></td>
-                <td><div class="skel-box skel-text"></div></td>
-                <td><div class="skel-box skel-text"></div></td>
-                <td class="text-center"><div class="skel-box skel-pill"></div></td>
-                <td class="text-end"><div class="skel-box skel-text"></div></td>
-                <td class="text-center"><div class="skel-box skel-pill"></div></td>
-                <td class="text-center"><div class="skel-box skel-btn"></div></td>
+                <td class="text-center">
+                  <div class="skel-box skel-code"></div>
+                </td>
+                <td>
+                  <div class="skel-box skel-code"></div>
+                </td>
+                <td>
+                  <div class="skel-box skel-title"></div>
+                </td>
+                <td>
+                  <div class="skel-box skel-text"></div>
+                </td>
+                <td>
+                  <div class="skel-box skel-text"></div>
+                </td>
+                <td class="text-center">
+                  <div class="skel-box skel-pill"></div>
+                </td>
+                <td class="text-end">
+                  <div class="skel-box skel-text"></div>
+                </td>
+                <td class="text-center">
+                  <div class="skel-box skel-pill"></div>
+                </td>
+                <td class="text-center">
+                  <div class="skel-box skel-btn"></div>
+                </td>
               </tr>
             </template>
 
-            <!-- Empty State -->
             <tr v-else-if="products.length === 0">
               <td colspan="9" class="empty-state-cell">
                 <div class="empty-state-box">
@@ -900,22 +1037,17 @@ onUnmounted(() => {
         </table>
       </div>
 
-      <!-- Pagination -->
       <div v-if="totalPages > 1" class="table-card-foot">
         <span class="foot-info">
-          Hiển thị <strong>{{ products.length ? currentPage * pageSize + 1 : 0 }} - {{ currentPage * pageSize + products.length }}</strong> trong tổng số <strong>{{ totalElements }}</strong> mặt hàng
+          Hiển thị <strong>{{ products.length ? currentPage * pageSize + 1 : 0 }} - {{ currentPage * pageSize +
+            products.length }}</strong> trong tổng số <strong>{{ totalElements }}</strong> mặt hàng
         </span>
         <div class="foot-pager">
           <button class="pager-btn" :disabled="currentPage === 0" @click="changePage(currentPage - 1)">
             ‹ Trước
           </button>
-          <button
-            v-for="p in totalPages"
-            :key="p"
-            class="pager-btn num-btn"
-            :class="{ active: p - 1 === currentPage }"
-            @click="changePage(p - 1)"
-          >
+          <button v-for="p in totalPages" :key="p" class="pager-btn num-btn" :class="{ active: p - 1 === currentPage }"
+            @click="changePage(p - 1)">
             {{ p }}
           </button>
           <button class="pager-btn" :disabled="currentPage >= totalPages - 1" @click="changePage(currentPage + 1)">
@@ -925,7 +1057,6 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Quick Edit Modal -->
     <transition name="modal-fade">
       <div v-if="isEditModalOpen" class="modal-overlay" @click.self="isEditModalOpen = false">
         <div class="modal-dialog">
@@ -941,120 +1072,90 @@ onUnmounted(() => {
             <div class="edit-grid">
               <div class="form-group span-2">
                 <label class="form-label">Tên sản phẩm <span class="req">*</span></label>
-                <input
-                  v-model="editForm.tenSanPham"
-                  type="text"
-                  class="modal-input"
-                  :class="{ 'has-error': editErrors.tenSanPham }"
-                  placeholder="Nhập tên sản phẩm..."
-                />
+                <input v-model="editForm.tenSanPham" type="text" class="modal-input"
+                  :class="{ 'has-error': editErrors.tenSanPham }" placeholder="Nhập tên sản phẩm..." />
                 <span v-if="editErrors.tenSanPham" class="err-msg">{{ editErrors.tenSanPham }}</span>
               </div>
 
               <div class="form-group">
                 <label class="form-label">Thương hiệu <span class="req">*</span></label>
-                <SearchableSelect
-                  v-model="editForm.idThuongHieu"
-                  :options="brands"
-                  label-key="ten"
-                  value-key="id"
-                  placeholder="-- Chọn thương hiệu --"
-                  search-placeholder="Tìm thương hiệu..."
-                  :has-error="!!editErrors.idThuongHieu"
-                />
+                <SearchableSelect v-model="editForm.idThuongHieu" :options="brands" label-key="ten" value-key="id"
+                  placeholder="-- Chọn thương hiệu --" search-placeholder="Tìm thương hiệu..."
+                  :has-error="!!editErrors.idThuongHieu" />
                 <span v-if="editErrors.idThuongHieu" class="err-msg">{{ editErrors.idThuongHieu }}</span>
               </div>
 
               <div class="form-group">
                 <label class="form-label">Loại giày <span class="req">*</span></label>
-                <SearchableSelect
-                  v-model="editForm.idLoaiGiay"
-                  :options="categories"
-                  label-key="ten"
-                  value-key="id"
-                  placeholder="-- Chọn loại giày --"
-                  search-placeholder="Tìm loại giày..."
-                  :has-error="!!editErrors.idLoaiGiay"
-                />
+                <SearchableSelect v-model="editForm.idLoaiGiay" :options="categories" label-key="ten" value-key="id"
+                  placeholder="-- Chọn loại giày --" search-placeholder="Tìm loại giày..."
+                  :has-error="!!editErrors.idLoaiGiay" />
                 <span v-if="editErrors.idLoaiGiay" class="err-msg">{{ editErrors.idLoaiGiay }}</span>
               </div>
 
               <div class="form-group">
                 <label class="form-label">Chất liệu <span class="req">*</span></label>
-                <SearchableSelect
-                  v-model="editForm.idChatLieu"
-                  :options="materials"
-                  label-key="ten"
-                  value-key="id"
-                  placeholder="-- Chọn chất liệu --"
-                  search-placeholder="Tìm chất liệu..."
-                  :has-error="!!editErrors.idChatLieu"
-                />
+                <SearchableSelect v-model="editForm.idChatLieu" :options="materials" label-key="ten" value-key="id"
+                  placeholder="-- Chọn chất liệu --" search-placeholder="Tìm chất liệu..."
+                  :has-error="!!editErrors.idChatLieu" />
                 <span v-if="editErrors.idChatLieu" class="err-msg">{{ editErrors.idChatLieu }}</span>
               </div>
 
               <div class="form-group">
                 <label class="form-label">Kiểu dáng <span class="req">*</span></label>
-                <SearchableSelect
-                  v-model="editForm.idKieuDang"
-                  :options="styles"
-                  label-key="ten"
-                  value-key="id"
-                  placeholder="-- Chọn kiểu dáng --"
-                  search-placeholder="Tìm kiểu dáng..."
-                  :has-error="!!editErrors.idKieuDang"
-                />
+                <SearchableSelect v-model="editForm.idKieuDang" :options="styles" label-key="ten" value-key="id"
+                  placeholder="-- Chọn kiểu dáng --" search-placeholder="Tìm kiểu dáng..."
+                  :has-error="!!editErrors.idKieuDang" />
                 <span v-if="editErrors.idKieuDang" class="err-msg">{{ editErrors.idKieuDang }}</span>
               </div>
 
               <div class="form-group">
                 <label class="form-label">Xuất xứ <span class="req">*</span></label>
-                <SearchableSelect
-                  v-model="editForm.idXuatXu"
-                  :options="origins"
-                  label-key="ten"
-                  value-key="id"
-                  placeholder="-- Chọn xuất xứ --"
-                  search-placeholder="Tìm xuất xứ..."
-                  :has-error="!!editErrors.idXuatXu"
-                />
+                <SearchableSelect v-model="editForm.idXuatXu" :options="origins" label-key="ten" value-key="id"
+                  placeholder="-- Chọn xuất xứ --" search-placeholder="Tìm xuất xứ..."
+                  :has-error="!!editErrors.idXuatXu" />
                 <span v-if="editErrors.idXuatXu" class="err-msg">{{ editErrors.idXuatXu }}</span>
               </div>
 
               <div class="form-group">
                 <label class="form-label">Đối tượng sử dụng</label>
-                <SearchableSelect
-                  v-model="editForm.doiTuong"
-                  :options="[
-                    { value: 'Nam', label: 'Nam' },
-                    { value: 'Nữ', label: 'Nữ' },
-                    { value: 'Unisex', label: 'Tất cả (Unisex)' }
-                  ]"
-                  label-key="label"
-                  value-key="value"
-                  placeholder="Chọn đối tượng..."
-                  :allow-clear="false"
-                />
+                <SearchableSelect v-model="editForm.doiTuong" :options="[
+                  { value: 'Nam', label: 'Nam' },
+                  { value: 'Nữ', label: 'Nữ' },
+                  { value: 'Unisex', label: 'Tất cả (Unisex)' }
+                ]" label-key="label" value-key="value" placeholder="Chọn đối tượng..." :allow-clear="false" />
+              </div>
+
+              <div class="form-group span-2 ai-magic-card">
+                <div class="ai-magic-content">
+                  <div class="ai-magic-info">
+                    <span class="ai-badge">Gemini AI Copilot</span>
+                    <span class="ai-magic-desc">Tự động sinh tính năng nổi bật và bài viết mô tả sản phẩm chuẩn
+                      SEO</span>
+                  </div>
+                  <button type="button" class="btn-ai-generate" :disabled="isGeneratingAi"
+                    @click="generateAiContent(editForm)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2.2">
+                      <path
+                        d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83">
+                      </path>
+                    </svg>
+                    {{ isGeneratingAi ? 'Đang tạo...' : '✨ Sinh mô tả bằng AI' }}
+                  </button>
+                </div>
               </div>
 
               <div class="form-group span-2">
                 <label class="form-label">Tính năng nổi bật</label>
-                <input
-                  v-model="editForm.tinhNang"
-                  type="text"
-                  class="modal-input"
-                  placeholder="Ví dụ: Êm ái, Chống trượt, Thoáng khí..."
-                />
+                <input v-model="editForm.tinhNang" type="text" class="modal-input"
+                  placeholder="Ví dụ: Êm ái, Chống trượt, Thoáng khí..." />
               </div>
 
               <div class="form-group span-2">
                 <label class="form-label">Mô tả sản phẩm</label>
-                <textarea
-                  v-model="editForm.moTa"
-                  class="modal-textarea"
-                  rows="3"
-                  placeholder="Nhập mô tả chi tiết sản phẩm..."
-                ></textarea>
+                <textarea v-model="editForm.moTa" class="modal-textarea" rows="3"
+                  placeholder="Nhập mô tả chi tiết sản phẩm..."></textarea>
               </div>
 
               <div class="form-group span-2 switch-row">
@@ -1071,6 +1172,126 @@ onUnmounted(() => {
             <button class="btn btn-secondary" @click="isEditModalOpen = false">Hủy bỏ</button>
             <button class="btn btn-primary" :disabled="isUpdating" @click="submitQuickEdit">
               {{ isUpdating ? 'Đang lưu...' : 'Lưu thay đổi' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <transition name="modal-fade">
+      <div v-if="isQuickAddModalOpen" class="modal-overlay" @click.self="isQuickAddModalOpen = false">
+        <div class="modal-dialog">
+          <div class="modal-header">
+            <div class="modal-title-group">
+              <h3 class="modal-title">Thêm nhanh sản phẩm</h3>
+            </div>
+            <button class="modal-close" @click="isQuickAddModalOpen = false">×</button>
+          </div>
+
+          <div class="modal-body">
+            <div class="edit-grid">
+              <div class="form-group span-2">
+                <label class="form-label">Tên sản phẩm <span class="req">*</span></label>
+                <input v-model="quickAddForm.tenSanPham" type="text" class="modal-input"
+                  :class="{ 'has-error': quickAddErrors.tenSanPham }" placeholder="Nhập tên sản phẩm..." />
+                <span v-if="quickAddErrors.tenSanPham" class="err-msg">{{ quickAddErrors.tenSanPham }}</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Thương hiệu <span class="req">*</span></label>
+                <SearchableSelect v-model="quickAddForm.idThuongHieu" :options="brands" label-key="ten" value-key="id"
+                  placeholder="-- Chọn thương hiệu --" search-placeholder="Tìm thương hiệu..."
+                  :has-error="!!quickAddErrors.idThuongHieu" />
+                <span v-if="quickAddErrors.idThuongHieu" class="err-msg">{{ quickAddErrors.idThuongHieu }}</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Loại giày <span class="req">*</span></label>
+                <SearchableSelect v-model="quickAddForm.idLoaiGiay" :options="categories" label-key="ten" value-key="id"
+                  placeholder="-- Chọn loại giày --" search-placeholder="Tìm loại giày..."
+                  :has-error="!!quickAddErrors.idLoaiGiay" />
+                <span v-if="quickAddErrors.idLoaiGiay" class="err-msg">{{ quickAddErrors.idLoaiGiay }}</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Chất liệu <span class="req">*</span></label>
+                <SearchableSelect v-model="quickAddForm.idChatLieu" :options="materials" label-key="ten" value-key="id"
+                  placeholder="-- Chọn chất liệu --" search-placeholder="Tìm chất liệu..."
+                  :has-error="!!quickAddErrors.idChatLieu" />
+                <span v-if="quickAddErrors.idChatLieu" class="err-msg">{{ quickAddErrors.idChatLieu }}</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Kiểu dáng <span class="req">*</span></label>
+                <SearchableSelect v-model="quickAddForm.idKieuDang" :options="styles" label-key="ten" value-key="id"
+                  placeholder="-- Chọn kiểu dáng --" search-placeholder="Tìm kiểu dáng..."
+                  :has-error="!!quickAddErrors.idKieuDang" />
+                <span v-if="quickAddErrors.idKieuDang" class="err-msg">{{ quickAddErrors.idKieuDang }}</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Xuất xứ <span class="req">*</span></label>
+                <SearchableSelect v-model="quickAddForm.idXuatXu" :options="origins" label-key="ten" value-key="id"
+                  placeholder="-- Chọn xuất xứ --" search-placeholder="Tìm xuất xứ..."
+                  :has-error="!!quickAddErrors.idXuatXu" />
+                <span v-if="quickAddErrors.idXuatXu" class="err-msg">{{ quickAddErrors.idXuatXu }}</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Đối tượng sử dụng</label>
+                <SearchableSelect v-model="quickAddForm.doiTuong" :options="[
+                  { value: 'Nam', label: 'Nam' },
+                  { value: 'Nữ', label: 'Nữ' },
+                  { value: 'Unisex', label: 'Tất cả (Unisex)' }
+                ]" label-key="label" value-key="value" placeholder="Chọn đối tượng..." :allow-clear="false" />
+              </div>
+
+              <div class="form-group span-2 ai-magic-card">
+                <div class="ai-magic-content">
+                  <div class="ai-magic-info">
+                    <span class="ai-badge">Gemini AI Copilot</span>
+                    <span class="ai-magic-desc">Tự động sinh tính năng nổi bật và bài viết mô tả sản phẩm chuẩn
+                      SEO</span>
+                  </div>
+                  <button type="button" class="btn-ai-generate" :disabled="isGeneratingAi"
+                    @click="generateAiContent(editForm)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2.2">
+                      <path
+                        d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83">
+                      </path>
+                    </svg>
+                    {{ isGeneratingAi ? 'Đang tạo...' : '✨ Sinh mô tả bằng AI' }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="form-group span-2">
+                <label class="form-label">Tính năng nổi bật</label>
+                <input v-model="quickAddForm.tinhNang" type="text" class="modal-input"
+                  placeholder="Ví dụ: Êm ái, Chống trượt, Thoáng khí..." />
+              </div>
+
+              <div class="form-group span-2">
+                <label class="form-label">Mô tả sản phẩm</label>
+                <textarea v-model="quickAddForm.moTa" class="modal-textarea" rows="3"
+                  placeholder="Nhập mô tả chi tiết sản phẩm..."></textarea>
+              </div>
+
+              <div class="form-group span-2 switch-row">
+                <label class="form-label mb-0">Trạng thái (Bật: Kinh doanh / Tắt: Ngưng kinh doanh)</label>
+                <label class="switch-toggle">
+                  <input type="checkbox" v-model="quickAddForm.trangThai" />
+                  <span class="slider round"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="isQuickAddModalOpen = false">Hủy bỏ</button>
+            <button class="btn btn-primary" :disabled="isSubmittingQuickAdd" @click="submitQuickAdd">
+              {{ isSubmittingQuickAdd ? 'Đang lưu...' : 'Thêm sản phẩm' }}
             </button>
           </div>
         </div>

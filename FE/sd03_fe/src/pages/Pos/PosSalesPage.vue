@@ -21,10 +21,10 @@ const clockTimer = ref(null)
 
 const toggleFullscreen = () => {
   if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(() => {})
+    document.documentElement.requestFullscreen().catch(() => { })
   } else {
     if (document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {})
+      document.exitFullscreen().catch(() => { })
     }
   }
 }
@@ -196,7 +196,7 @@ const getEffectivePrice = (item) => {
   return basePrice
 }
 
-const addToCart = (productVariant, qtyToAdd = 1) => {
+const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
   if (!currentOrder.value) {
     createNewOrder()
   }
@@ -219,16 +219,19 @@ const addToCart = (productVariant, qtyToAdd = 1) => {
   const cart = currentOrder.value.cart
   const existingItem = cart.find(i => i.idCtsp === productVariant.id)
   const effectivePrice = getEffectivePrice(productVariant)
+  const prodName = productVariant.tenSp || productVariant.tenSanPham || 'Sản phẩm'
 
   if (existingItem) {
     existingItem.quantity += qtyToAdd
   } else {
     cart.push({
       idCtsp: productVariant.id,
-      maSp: productVariant.maSp || `SP0${productVariant.id}`,
+      idSanPham: productVariant.idSanPham || productVariant.sanPham?.id || (targetProd ? targetProd.idSanPham : null),
+      maSp: productVariant.maSp || (targetProd ? targetProd.maSp : null) || `SP0${productVariant.id}`,
       maCtsp: productVariant.maCtsp || productVariant.maChiTietSanPham || `CTSP${productVariant.id}`,
-      name: productVariant.tenSp || productVariant.tenSanPham || 'Sản phẩm',
+      name: prodName,
       color: productVariant.color || productVariant.tenMau || '---',
+      colorHex: productVariant.colorHex || '',
       size: productVariant.size || productVariant.tenKichCo || '---',
       price: effectivePrice,
       originalPrice: Number(productVariant.price || productVariant.giaBan || 0),
@@ -238,12 +241,14 @@ const addToCart = (productVariant, qtyToAdd = 1) => {
     })
   }
 
-  notifySuccess('Đã thêm vào giỏ hàng', `${productVariant.tenSp || productVariant.tenSanPham || 'Sản phẩm'} (+${qtyToAdd})`, 1000)
+  if (!silent) {
+    notifySuccess('Thêm thành công', `Đã thêm "${prodName}" (+${qtyToAdd}) vào giỏ hàng`, 1500)
+  }
 }
 
-const updateCartItemQty = (item, newQty) => {
+const updateCartItemQty = async (item, newQty) => {
   if (newQty <= 0) {
-    removeCartItem(item)
+    await removeCartItem(item)
     return
   }
 
@@ -282,8 +287,17 @@ const updateCartItemQty = (item, newQty) => {
   }
 }
 
-const removeCartItem = (item) => {
+const removeCartItem = async (item) => {
   if (!currentOrder.value) return
+  const prodName = item.name || 'sản phẩm này'
+  const ok = await notifyConfirm(
+    'Xác nhận xóa sản phẩm?',
+    `Bạn có chắc chắn muốn xóa "${prodName}" khỏi giỏ hàng không?`,
+    'Xóa ngay',
+    'Giữ lại'
+  )
+  if (!ok) return
+
   const idx = currentOrder.value.cart.findIndex(i => i.idCtsp === item.idCtsp)
   if (idx !== -1) {
     const targetProd = allProducts.value.find(p => p.id === item.idCtsp)
@@ -292,6 +306,7 @@ const removeCartItem = (item) => {
       if (targetProd.soLuong !== undefined) targetProd.soLuong += item.quantity
     }
     currentOrder.value.cart.splice(idx, 1)
+    notifySuccess('Xóa thành công', `Đã xóa "${prodName}" khỏi giỏ hàng`, 1500)
   }
 }
 
@@ -337,7 +352,7 @@ const handleBarcodeSearchSubmit = async () => {
           }
         }
       }
-    } catch {}
+    } catch { }
   }
 
   if (found) {
@@ -402,10 +417,6 @@ const selectCustomer = (cust) => {
 const removeSelectedCustomer = () => {
   if (currentOrder.value) {
     currentOrder.value.customer = null
-    if (currentOrder.value.selectedVoucher) {
-      currentOrder.value.selectedVoucher = null
-      notifyWarning('Đã gỡ phiếu giảm giá', 'Phiếu giảm giá chỉ áp dụng cho khách hàng đã định danh.')
-    }
   }
 }
 
@@ -640,7 +651,7 @@ const confirmModalSelection = () => {
       outOfStock++
       return
     }
-    addToCart(p, 1)
+    addToCart(p, 1, true)
     added++
   })
 
@@ -653,7 +664,7 @@ const confirmModalSelection = () => {
       `Đã thêm ${added} dòng sản phẩm. Bỏ qua ${outOfStock} sản phẩm hết hàng.`
     )
   } else if (added > 0) {
-    notifySuccess('Thêm vào giỏ hàng', `Đã thêm ${added} dòng sản phẩm vào giỏ hàng.`)
+    notifySuccess('Thêm thành công', `Đã thêm ${added} sản phẩm vào giỏ hàng thành công!`, 1500)
   }
 }
 
@@ -662,7 +673,6 @@ const getShoeImage = (p) => {
   return 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=120&auto=format&fit=crop&q=60'
 }
 
-// Camera QR / Barcode Scanner Modal (F3)
 const isQrModalOpen = ref(false)
 const isCameraRunning = ref(false)
 const cameraError = ref('')
@@ -685,14 +695,13 @@ const playScannerBeep = () => {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.16)
     osc.start()
     osc.stop(ctx.currentTime + 0.16)
-  } catch {}
+  } catch { }
 }
 
 const findProductByScannedCode = (rawCode) => {
   if (!rawCode) return null
   let code = String(rawCode).trim()
 
-  // 1. Trường hợp quét mã QR biến thể dạng JSON { maCtsp, maSp, id, ... }
   if (code.startsWith('{') && code.endsWith('}')) {
     try {
       const parsed = JSON.parse(code)
@@ -705,10 +714,9 @@ const findProductByScannedCode = (rawCode) => {
         )
         if (found) return found
       }
-    } catch {}
+    } catch { }
   }
 
-  // 2. Trường hợp mã có tiền tố: ví dụ "CTSP:SP035-MS09-42"
   if (code.includes(':')) {
     const parts = code.split(':')
     const lastPart = parts[parts.length - 1].trim()
@@ -723,7 +731,6 @@ const findProductByScannedCode = (rawCode) => {
     }
   }
 
-  // 3. Quét mã CTSP, Barcode hoặc ID thông thường
   return allProducts.value.find(p =>
     (p.maCtsp && p.maCtsp.toLowerCase() === code.toLowerCase()) ||
     (p.maChiTietSanPham && p.maChiTietSanPham.toLowerCase() === code.toLowerCase()) ||
@@ -739,7 +746,6 @@ const handleScannedResult = async (decodedText) => {
 
   let found = findProductByScannedCode(decodedText)
 
-  // Nếu trong bộ nhớ chưa có, tra cứu trực tiếp từ backend
   if (!found) {
     try {
       const trimmed = String(decodedText).trim()
@@ -748,7 +754,7 @@ const handleScannedResult = async (decodedText) => {
         try {
           const parsed = JSON.parse(trimmed)
           searchKey = parsed.maCtsp || parsed.ma || parsed.id || trimmed
-        } catch {}
+        } catch { }
       }
       const res = await fetch(`${API_BASE}/san-pham-chi-tiet?search=${encodeURIComponent(searchKey)}&size=5`)
       if (res.ok) {
@@ -779,8 +785,6 @@ const handleScannedResult = async (decodedText) => {
     }
 
     addToCart(found, 1)
-
-    // Đợi 0.6s để người dùng thấy visual quét thành công rồi đóng modal
     await new Promise((resolve) => setTimeout(resolve, 600))
     await closeQrScanner()
     notifySuccess('Đã thêm sản phẩm', `Đã thêm "${found.tenSp || found.tenSanPham}" vào giỏ hàng`, 1500)
@@ -840,7 +844,7 @@ const startCameraScanner = async () => {
       (decodedText) => {
         handleScannedResult(decodedText)
       },
-      () => {}
+      () => { }
     )
   } catch (err) {
     console.warn('Lỗi bật Camera POS:', err)
@@ -850,7 +854,6 @@ const startCameraScanner = async () => {
 }
 
 const stopCameraScanner = async () => {
-  // Giải phóng MediaStream tracks
   try {
     const videoEls = document.querySelectorAll('#pos-camera-scanner-view video, video')
     videoEls.forEach((v) => {
@@ -859,7 +862,7 @@ const stopCameraScanner = async () => {
           try {
             track.stop()
             track.enabled = false
-          } catch {}
+          } catch { }
         })
         v.srcObject = null
       }
@@ -867,18 +870,17 @@ const stopCameraScanner = async () => {
         v.pause()
         v.removeAttribute('src')
         v.load()
-      } catch {}
+      } catch { }
     })
   } catch (err) {
     console.warn('Lỗi giải phóng media tracks camera:', err)
   }
 
-  // Tắt scanner html5QrScanner an toàn
   if (html5QrScanner) {
     try {
       if (html5QrScanner.isScanning) {
         await Promise.race([
-          html5QrScanner.stop().catch(() => {}),
+          html5QrScanner.stop().catch(() => { }),
           new Promise((resolve) => setTimeout(resolve, 400)),
         ])
       }
@@ -888,7 +890,7 @@ const stopCameraScanner = async () => {
 
     try {
       html5QrScanner.clear()
-    } catch {}
+    } catch { }
     html5QrScanner = null
   }
 
@@ -918,18 +920,294 @@ const handleManualCodeSubmit = () => {
   scannedCodeInput.value = ''
 }
 
+const isSwapModalOpen = ref(false)
+const swapCartItem = ref(null)
+const swapVariants = ref([])
+const isLoadingSwapVariants = ref(false)
+const selectedNewVariant = ref(null)
+const swapColorFilter = ref('ALL')
+
+const openSwapModal = async (item) => {
+  if (!item) return
+  swapCartItem.value = item
+  selectedNewVariant.value = null
+  swapColorFilter.value = 'ALL'
+  isSwapModalOpen.value = true
+  isLoadingSwapVariants.value = true
+
+  try {
+    let idSp = item.idSanPham
+    if (!idSp) {
+      const matchInAll = allProducts.value.find(p => p.id === item.idCtsp)
+      if (matchInAll && matchInAll.idSanPham) {
+        idSp = matchInAll.idSanPham
+        item.idSanPham = idSp
+      }
+    }
+
+    let variants = []
+    if (idSp) {
+      try {
+        const res = await fetch(`${API_BASE}/san-pham-chi-tiet/by-san-pham/${idSp}`)
+        if (res.ok) {
+          variants = await res.json()
+        }
+      } catch (err) {
+        console.warn('Cannot fetch variants by-san-pham, falling back to allProducts:', err)
+      }
+    }
+
+    if (!variants || variants.length === 0) {
+      variants = allProducts.value.filter(p => {
+        if (idSp && p.idSanPham === idSp) return true
+        if (item.maSp && p.maSp === item.maSp) return true
+        return false
+      })
+    }
+
+    swapVariants.value = (variants || []).map(v => {
+      const inAll = allProducts.value.find(p => p.id === v.id)
+      const currentStock = inAll
+        ? (inAll.stock !== undefined ? inAll.stock : (inAll.soLuong || 0))
+        : (v.stock !== undefined ? v.stock : (v.soLuong || 0))
+      return {
+        ...v,
+        currentStock: v.id === item.idCtsp ? currentStock + item.quantity : currentStock
+      }
+    })
+  } catch (err) {
+    console.error('Lỗi tải danh sách biến thể để đổi:', err)
+  } finally {
+    isLoadingSwapVariants.value = false
+  }
+}
+
+const availableSwapColors = computed(() => {
+  const set = new Set()
+  swapVariants.value.forEach(v => {
+    const c = v.color || v.tenMau
+    if (c) set.add(c)
+  })
+  return Array.from(set)
+})
+
+const filteredSwapVariants = computed(() => {
+  if (swapColorFilter.value === 'ALL') return swapVariants.value
+  return swapVariants.value.filter(v => (v.color || v.tenMau) === swapColorFilter.value)
+})
+
+const executeSwap = (newVariant) => {
+  if (!swapCartItem.value || !newVariant || !currentOrder.value) return
+  const currentItem = swapCartItem.value
+  if (newVariant.id === currentItem.idCtsp) {
+    notifyWarning('Biến thể trùng khớp', 'Bạn đang chọn đúng biến thể hiện tại!')
+    return
+  }
+
+  const targetNew = allProducts.value.find(p => p.id === newVariant.id)
+  const availableStock = targetNew
+    ? (targetNew.stock !== undefined ? targetNew.stock : (targetNew.soLuong || 0))
+    : (newVariant.stock !== undefined ? newVariant.stock : (newVariant.soLuong || 0))
+
+  if (availableStock < currentItem.quantity) {
+    notifyWarning('Tồn kho không đủ!', `Biến thể này chỉ còn ${availableStock} sản phẩm, không đủ số lượng ${currentItem.quantity} trong giỏ.`)
+    return
+  }
+
+  const targetOld = allProducts.value.find(p => p.id === currentItem.idCtsp)
+  if (targetOld) {
+    if (targetOld.stock !== undefined) targetOld.stock += currentItem.quantity
+    if (targetOld.soLuong !== undefined) targetOld.soLuong += currentItem.quantity
+  }
+
+  if (targetNew) {
+    if (targetNew.stock !== undefined) targetNew.stock -= currentItem.quantity
+    if (targetNew.soLuong !== undefined) targetNew.soLuong -= currentItem.quantity
+  }
+
+  const newEffectivePrice = getEffectivePrice(newVariant)
+  const newSize = newVariant.size || newVariant.tenKichCo || '---'
+  const newColor = newVariant.color || newVariant.tenMau || '---'
+
+  const existingInCart = currentOrder.value.cart.find(i => i.idCtsp === newVariant.id && i !== currentItem)
+  if (existingInCart) {
+    existingInCart.quantity += currentItem.quantity
+    const oldIdx = currentOrder.value.cart.findIndex(i => i === currentItem)
+    if (oldIdx !== -1) {
+      currentOrder.value.cart.splice(oldIdx, 1)
+    }
+    notifySuccess('Gộp biến thể thành công!', `Đã chuyển và gộp ${currentItem.quantity} sản phẩm vào Size ${newSize} - ${newColor}`, 2000)
+  } else {
+    currentItem.idCtsp = newVariant.id
+    currentItem.idSanPham = newVariant.idSanPham || currentItem.idSanPham
+    currentItem.maCtsp = newVariant.maCtsp || newVariant.maChiTietSanPham || `CTSP${newVariant.id}`
+    currentItem.name = newVariant.tenSp || newVariant.tenSanPham || currentItem.name
+    currentItem.color = newColor
+    currentItem.colorHex = newVariant.colorHex || ''
+    currentItem.size = newSize
+    currentItem.price = newEffectivePrice
+    currentItem.originalPrice = Number(newVariant.price || newVariant.giaBan || 0)
+    currentItem.discount = newVariant.discount || null
+    if (newVariant.img) {
+      currentItem.img = newVariant.img
+    }
+    notifySuccess('Đổi biến thể thành công!', `Đã đổi sang Size ${newSize} - Màu ${newColor}`, 2000)
+  }
+
+  isSwapModalOpen.value = false
+  swapCartItem.value = null
+  selectedNewVariant.value = null
+}
+
+const storeBankAccounts = ref([
+  {
+    id: 'MB',
+    name: 'MB Bank',
+    shortName: 'MB',
+    accountNo: '0987654321',
+    accountName: 'POLYSHOES STORE',
+    color: '#004b8d',
+    tag: 'Khuyên dùng'
+  },
+  {
+    id: 'VCB',
+    name: 'Vietcombank',
+    shortName: 'VCB',
+    accountNo: '1012345678',
+    accountName: 'POLYSHOES STORE',
+    color: '#005f33',
+    tag: 'Ngoại thương'
+  },
+  {
+    id: 'TCB',
+    name: 'Techcombank',
+    shortName: 'TCB',
+    accountNo: '19033445566011',
+    accountName: 'POLYSHOES STORE',
+    color: '#e01a22',
+    tag: 'Kỹ thương'
+  },
+  {
+    id: 'ACB',
+    name: 'ACB',
+    shortName: 'ACB',
+    accountNo: '23456789',
+    accountName: 'POLYSHOES STORE',
+    color: '#0070ba',
+    tag: 'Á Châu'
+  }
+])
+
+const selectedBank = ref(storeBankAccounts.value[0])
+const isCustomerDisplayMode = ref(false)
+const isPaymentSuccessAnim = ref(false)
+
 const isBankQrModalOpen = ref(false)
 const bankQrDataUrl = ref('')
+const vietQrNetworkUrl = ref('')
+const isQrImgFailed = ref(false)
+
+const bankTransferAmount = computed(() => {
+  if (!currentOrder.value) return 0
+  if (currentOrder.value.paymentMethod === 'KET_HOP') {
+    if (currentOrder.value.transferGiven > 0) return currentOrder.value.transferGiven
+    const remaining = finalTotal.value - (currentOrder.value.cashGiven || 0)
+    return remaining > 0 ? remaining : finalTotal.value
+  }
+  return finalTotal.value
+})
+
+const bankTransferMemo = computed(() => {
+  return currentOrder.value ? currentOrder.value.code : ''
+})
 
 const generateBankTransferQr = async () => {
-  if (finalTotal.value <= 0) return
-  const qrString = `2|99|0987654321|POLYSHOES|${currentOrder.value.code}|0|0|${finalTotal.value}|Thanh toan don hang ${currentOrder.value.code}`
+  if (finalTotal.value <= 0 || !currentOrder.value) return
+  isQrImgFailed.value = false
+  const amount = Math.round(bankTransferAmount.value)
+  const memo = bankTransferMemo.value
+  const bank = selectedBank.value || storeBankAccounts.value[0]
+
+  vietQrNetworkUrl.value = `https://img.vietqr.io/image/${bank.id}-${bank.accountNo}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(bank.accountName)}`
+
   try {
-    bankQrDataUrl.value = await QRCode.toDataURL(qrString, { width: 240, margin: 1 })
-    isBankQrModalOpen.value = true
+    const qrString = `2|99|${bank.accountNo}|${bank.accountName}|${memo}|0|0|${amount}|${memo}`
+    bankQrDataUrl.value = await QRCode.toDataURL(qrString, { width: 300, margin: 1 })
   } catch (err) {
-    console.error(err)
+    console.error('Lỗi sinh QR code offline:', err)
   }
+
+  isBankQrModalOpen.value = true
+}
+
+const selectBank = (bank) => {
+  selectedBank.value = bank
+  generateBankTransferQr()
+}
+
+const onQrImgError = () => {
+  isQrImgFailed.value = true
+}
+
+const playPaymentSuccessSound = () => {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    const playNote = (freq, startTime, duration) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'triangle'
+      osc.frequency.setValueAtTime(freq, startTime)
+      gain.gain.setValueAtTime(0, startTime)
+      gain.gain.linearRampToValueAtTime(0.4, startTime + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(startTime)
+      osc.stop(startTime + duration)
+    }
+    const now = ctx.currentTime
+    playNote(659.25, now, 0.22)
+    playNote(783.99, now + 0.12, 0.25)
+    playNote(1046.50, now + 0.24, 0.45)
+  } catch (e) {
+    console.warn('Audio chime unsupported:', e)
+  }
+}
+
+const copyToClipboard = async (text, label = 'nội dung') => {
+  if (!text) return
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(String(text))
+    } else {
+      const el = document.createElement('textarea')
+      el.value = String(text)
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      document.body.removeChild(el)
+    }
+    notifySuccess('Đã sao chép!', 'Đã chép ' + label + ' vào bộ nhớ tạm', 1500)
+  } catch (err) {
+    notifyWarning('Không thể sao chép', 'Vui lòng sao chép thủ công.')
+  }
+}
+
+const confirmBankPaymentReceived = () => {
+  if (currentOrder.value) {
+    if (currentOrder.value.paymentMethod === 'KET_HOP') {
+      currentOrder.value.transferGiven = bankTransferAmount.value
+    }
+  }
+  playPaymentSuccessSound()
+  isPaymentSuccessAnim.value = true
+  setTimeout(() => {
+    isPaymentSuccessAnim.value = false
+    isBankQrModalOpen.value = false
+    notifySuccess('Xác nhận thành công!', 'Đã ghi nhận thanh toán ' + formatVnd(bankTransferAmount.value) + ' cho hóa đơn ' + (currentOrder.value?.code || ''), 2500)
+  }, 900)
 }
 
 watch(() => currentOrder.value?.paymentMethod, (newMethod) => {
@@ -952,7 +1230,6 @@ const loadProvinces = async () => {
     console.warn('Backend /shipping/provinces failed, falling back to open-api...', e)
   }
 
-  // Fallback 1: Tra cứu trực tiếp từ Open API v1 mới nhất (chuẩn hành chính 2026)
   try {
     const res = await fetch('https://provinces.open-api.vn/api/v1/p/')
     if (res.ok) {
@@ -966,7 +1243,6 @@ const loadProvinces = async () => {
     console.warn('Open API fallback failed, using local Vietnam list...', err)
   }
 
-  // Fallback 2: Danh sách 63 tỉnh thành Việt Nam trong bộ nhớ
   provincesList.value = DS_63_TINH_THANH.map((p, idx) => ({
     id: p.subCodes?.[0] || (idx + 1),
     name: p.ten
@@ -995,7 +1271,6 @@ const onProvinceChange = async () => {
         return
       }
     } catch {
-      // Tiếp tục fallback bên dưới
     }
 
     try {
@@ -1019,7 +1294,6 @@ const onProvinceChange = async () => {
         }
       }
     } catch {
-      // fallback
     }
 
     wardsList.value = [
@@ -1164,9 +1438,26 @@ const filteredVouchers = computed(() => {
   )
 })
 
+const calculateVoucherDiscount = (voucher, currentSubTotal) => {
+  if (!voucher) return 0
+  const sub = currentSubTotal !== undefined ? currentSubTotal : subTotal.value
+  const minRequired = Number(voucher.hoaDonToiThieu || 0)
+  if (sub < minRequired) return 0
+
+  let discount = 0
+  if (voucher.loaiGiamGia === 'PERCENT' || voucher.loaiGiamGia === '%') {
+    discount = (sub * (Number(voucher.giaTriGiam) || 0)) / 100
+    if (voucher.giamToiDa && discount > Number(voucher.giamToiDa)) {
+      discount = Number(voucher.giamToiDa)
+    }
+  } else {
+    discount = Number(voucher.giaTriGiam) || 0
+  }
+  return Math.min(discount, sub)
+}
+
 const isVoucherEligible = (v) => {
   if (!currentOrder.value) return false
-  if (!currentOrder.value.customer) return false
   if (v.trangThai === false) return false
 
   const now = new Date()
@@ -1182,10 +1473,65 @@ const availableEligibleVouchersCount = computed(() => {
   return allVouchers.value.filter(v => isVoucherEligible(v)).length
 })
 
-const getVoucherIneligibilityReason = (v) => {
-  if (!currentOrder.value?.customer) {
-    return 'Cần chọn hoặc thêm khách hàng để dùng voucher'
+const bestVoucherSuggestion = computed(() => {
+  if (!currentOrder.value || subTotal.value <= 0 || allVouchers.value.length === 0) return null
+
+  const now = new Date()
+  const validVouchers = allVouchers.value.filter(v => {
+    if (v.trangThai === false) return false
+    if (v.ngayBatDau && new Date(v.ngayBatDau) > now) return false
+    if (v.ngayKetThuc && new Date(v.ngayKetThuc) < now) return false
+    if (v.soLuong && v.soLuongDaSuDung !== undefined && v.soLuongDaSuDung >= v.soLuong) return false
+    const minRequired = Number(v.hoaDonToiThieu || 0)
+    return subTotal.value >= minRequired
+  })
+
+  if (validVouchers.length === 0) return null
+
+  const sorted = [...validVouchers].sort((a, b) => {
+    const discA = calculateVoucherDiscount(a, subTotal.value)
+    const discB = calculateVoucherDiscount(b, subTotal.value)
+    if (discB !== discA) return discB - discA
+    return (Number(a.hoaDonToiThieu || 0)) - (Number(b.hoaDonToiThieu || 0))
+  })
+
+  const best = sorted[0]
+  const discountVal = calculateVoucherDiscount(best, subTotal.value)
+  if (discountVal <= 0) return null
+
+  return {
+    voucher: best,
+    discount: discountVal
   }
+})
+
+const sortedFilteredVouchers = computed(() => {
+  const list = [...filteredVouchers.value]
+  return list.sort((a, b) => {
+    const elA = isVoucherEligible(a)
+    const elB = isVoucherEligible(b)
+    if (elA && !elB) return -1
+    if (!elA && elB) return 1
+
+    if (elA && elB) {
+      const discA = calculateVoucherDiscount(a, subTotal.value)
+      const discB = calculateVoucherDiscount(b, subTotal.value)
+      if (discB !== discA) return discB - discA
+    }
+
+    return (Number(a.hoaDonToiThieu || 0)) - (Number(b.hoaDonToiThieu || 0))
+  })
+})
+
+const applyBestVoucher = () => {
+  if (!bestVoucherSuggestion.value) {
+    notifyWarning('Chưa có mã phù hợp', 'Không có phiếu giảm giá nào đủ điều kiện cho đơn hàng này.')
+    return
+  }
+  applyVoucher(bestVoucherSuggestion.value.voucher)
+}
+
+const getVoucherIneligibilityReason = (v) => {
   if (v.trangThai === false) {
     return 'Phiếu giảm giá tạm thời bị khóa'
   }
@@ -1220,10 +1566,6 @@ const openQuickCustomerFromVoucher = () => {
 
 const applyVoucher = (voucher) => {
   if (!currentOrder.value) return
-  if (!currentOrder.value.customer) {
-    notifyWarning('Yêu cầu khách hàng', 'Vui lòng chọn hoặc thêm khách hàng để áp dụng phiếu giảm giá!')
-    return
-  }
   if (!isVoucherEligible(voucher)) {
     notifyWarning('Chưa đủ điều kiện', getVoucherIneligibilityReason(voucher))
     return
@@ -1296,10 +1638,7 @@ const handleCheckout = async () => {
     return
   }
 
-  if (currentOrder.value.selectedVoucher && !currentOrder.value.customer) {
-    notifyWarning('Cần khách hàng', 'Vui lòng chọn hoặc thêm khách hàng để áp dụng phiếu giảm giá!')
-    return
-  }
+
 
   if (currentOrder.value.paymentMethod === 'TIEN_MAT') {
     if ((currentOrder.value.cashGiven || 0) < finalTotal.value) {
@@ -1393,7 +1732,8 @@ const handleCheckout = async () => {
       paymentMethod: currentOrder.value.paymentMethod,
       cashGiven: currentOrder.value.cashGiven,
       changeDue: Math.max(0, changeDue.value),
-      date: new Date().toLocaleString('vi-VN')
+      date: new Date().toLocaleString('vi-VN'),
+      staffName: staffName.value || 'Nhân viên quầy'
     }
 
     notifySuccess('Thanh toán thành công!', `Đã hoàn tất hóa đơn ${currentOrder.value.code}`)
@@ -1421,14 +1761,242 @@ const handleCheckout = async () => {
   }
 }
 
-const printReceipt = () => {
-  window.print()
+const formatPaymentMethodName = (method) => {
+  if (method === 'TIEN_MAT') return 'Tiền mặt'
+  if (method === 'CHUYEN_KHOAN') return 'Chuyển khoản (VietQR)'
+  if (method === 'KET_HOP') return 'Tiền mặt + Chuyển khoản'
+  return method || 'Tiền mặt'
 }
 
-// Keyboard listener (chỉ giữ Escape để đóng modal popup khi cần)
+const printReceipt = () => {
+  const printEl = document.getElementById('printable-receipt-content')
+  if (!printEl) {
+    notifyWarning('Không tìm thấy nội dung', 'Không thể lấy nội dung hóa đơn để in.')
+    return
+  }
+
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  iframe.style.opacity = '0'
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentWindow.document
+  doc.open()
+  doc.write(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Hoa_don_${completedInvoiceData.value?.code || 'POS'}</title>
+    <style>
+      @page {
+        size: 80mm auto;
+        margin: 4mm;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color: #0f172a;
+        background: #ffffff;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+      .thermal-receipt-box {
+        width: 100%;
+        padding: 4px;
+        background: #ffffff;
+      }
+      .receipt-header-center {
+        text-align: center;
+        padding-bottom: 8px;
+        border-bottom: 1px dashed #64748b;
+        margin-bottom: 8px;
+      }
+      .receipt-brand-logo {
+        font-size: 17px;
+        font-weight: 900;
+        letter-spacing: 0.5px;
+        margin-bottom: 3px;
+        color: #0f172a;
+      }
+      .receipt-sub-line {
+        font-size: 10.5px;
+        color: #475569;
+        margin: 2px 0;
+      }
+      .receipt-bill-heading {
+        text-align: center;
+        margin-bottom: 10px;
+        padding-bottom: 6px;
+        border-bottom: 1px dashed #64748b;
+      }
+      .receipt-bill-title {
+        font-size: 13.5px;
+        font-weight: 800;
+        color: #0f172a;
+      }
+      .receipt-barcode-code {
+        font-family: monospace;
+        font-size: 11px;
+        letter-spacing: 2px;
+        color: #475569;
+        margin-top: 2px;
+      }
+      .receipt-meta-info {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-bottom: 10px;
+        padding: 6px 8px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+      }
+      .meta-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+      }
+      .meta-k {
+        color: #475569;
+      }
+      .meta-v {
+        font-weight: 600;
+        color: #0f172a;
+      }
+      .receipt-items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+      }
+      .receipt-items-table thead tr {
+        border-top: 1px dashed #64748b;
+        border-bottom: 1px dashed #64748b;
+      }
+      .receipt-items-table th {
+        padding: 6px 0;
+        font-size: 10.5px;
+        font-weight: 700;
+        text-align: left;
+        text-transform: uppercase;
+        color: #475569;
+      }
+      .receipt-items-table tbody tr {
+        border-bottom: 1px solid #f1f5f9;
+      }
+      .receipt-items-table td {
+        padding: 5px 0;
+        font-size: 11.5px;
+        vertical-align: top;
+      }
+      .rc-item-name {
+        font-weight: 600;
+        color: #0f172a;
+      }
+      .rc-item-variant {
+        font-size: 10px;
+        color: #64748b;
+        margin-top: 1px;
+      }
+      .rc-item-qty {
+        text-align: center;
+        font-weight: 600;
+      }
+      .rc-item-price {
+        text-align: right;
+        color: #475569;
+      }
+      .rc-item-total {
+        text-align: right;
+        font-weight: 700;
+        color: #0f172a;
+      }
+      .receipt-totals-block {
+        border-top: 1px dashed #64748b;
+        padding-top: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .receipt-sum-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+      }
+      .sum-k {
+        color: #475569;
+      }
+      .sum-v {
+        font-weight: 600;
+        color: #0f172a;
+      }
+      .discount-val {
+        color: #dc2626;
+        font-weight: 700;
+      }
+      .grand-sum {
+        border-top: 1.5px solid #0f172a;
+        padding-top: 6px;
+        margin-top: 4px;
+      }
+      .grand-sum .sum-k {
+        font-size: 12.5px;
+        font-weight: 800;
+        color: #0f172a;
+      }
+      .grand-sum-val {
+        font-size: 15px;
+        font-weight: 900;
+        color: #dc2626;
+      }
+      .receipt-footer-notes {
+        text-align: center;
+        margin-top: 14px;
+        padding-top: 8px;
+        border-top: 1px dashed #64748b;
+      }
+      .rc-thank-txt {
+        font-size: 11.5px;
+        font-weight: 700;
+        margin: 0 0 2px;
+        color: #0f172a;
+      }
+      .rc-policy-txt {
+        font-size: 10px;
+        color: #64748b;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    ${printEl.outerHTML}
+  </body>
+</html>`)
+  doc.close()
+
+  iframe.contentWindow.focus()
+  setTimeout(() => {
+    iframe.contentWindow.print()
+    setTimeout(() => {
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe)
+      }
+    }, 2000)
+  }, 250)
+}
+
 const handleKeyDown = (e) => {
   if (e.key === 'Escape') {
     isProductModalOpen.value = false
+    isSwapModalOpen.value = false
     isQrModalOpen.value = false
     isAddCustomerModalOpen.value = false
     isBankQrModalOpen.value = false
@@ -1438,7 +2006,6 @@ const handleKeyDown = (e) => {
   }
 }
 
-// Initial Data Loading
 const loadInitialData = async () => {
   isLoadingData.value = true
   try {
@@ -1572,38 +2139,23 @@ onUnmounted(() => {
 
 <template>
   <div class="pos-page">
-    <!-- Main Workspace Grid -->
     <div class="pos-main-grid">
-      <!-- Left Column: Unified POS Workspace (Tabs + Toolbar + Cart Table + Summary) -->
       <div class="pos-col-left">
         <div class="pos-workspace-panel">
-          <!-- Horizontal Orders Tabs Bar -->
           <div class="pos-orders-tabs-bar">
             <div class="pos-tabs-scroll-area">
-              <button
-                class="btn-create-order-tab"
-                @click="createNewOrder"
-                :disabled="pendingOrders.length >= MAX_ORDERS"
-                title="Tạo hóa đơn chờ mới (Tối đa 5 hóa đơn)"
-              >
+              <button class="btn-create-order-tab" @click="createNewOrder"
+                :disabled="pendingOrders.length >= MAX_ORDERS" title="Tạo hóa đơn chờ mới (Tối đa 5 hóa đơn)">
                 <span>+ Thêm hóa đơn</span>
               </button>
 
-              <div
-                v-for="(order, idx) in pendingOrders"
-                :key="order.id"
-                class="pos-order-tab"
-                :class="{ active: activeOrderIndex === idx }"
-                @click="selectOrderTab(idx)"
-              >
+              <div v-for="(order, idx) in pendingOrders" :key="order.id" class="pos-order-tab"
+                :class="{ active: activeOrderIndex === idx }" @click="selectOrderTab(idx)">
                 <span class="tab-order-indicator"></span>
                 <span class="tab-order-name">{{ order.title }}</span>
+                <span class="tab-order-code" v-if="order.code">({{ order.code }})</span>
                 <span class="tab-cart-qty" v-if="order.cart.length > 0">{{ order.cart.length }}</span>
-                <button
-                  class="tab-close-icon"
-                  @click="closeOrderTab(idx, $event)"
-                  title="Đóng hóa đơn này"
-                >
+                <button class="tab-close-icon" @click="closeOrderTab(idx, $event)" title="Đóng hóa đơn này">
                   ×
                 </button>
               </div>
@@ -1615,24 +2167,14 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Main Cart Workspace Container -->
           <div class="pos-cart-main-container">
-            <!-- Action & Fast Search Toolbar -->
             <div class="cart-unified-toolbar">
               <div class="fast-search-container">
-                <input
-                  type="text"
-                  class="fast-search-input"
-                  placeholder="Quét mã barcode hoặc nhập mã CTSP / tên sản phẩm..."
-                  v-model="barcodeSearchText"
-                  @keydown.enter="handleBarcodeSearchSubmit"
-                />
-                <button
-                  v-if="barcodeSearchText"
-                  class="btn-clear-fast-search"
-                  @click="barcodeSearchText = ''"
-                  title="Xóa tìm kiếm"
-                >
+                <input type="text" class="fast-search-input"
+                  placeholder="Quét mã barcode hoặc nhập mã CTSP / tên sản phẩm..." v-model="barcodeSearchText"
+                  @keydown.enter="handleBarcodeSearchSubmit" />
+                <button v-if="barcodeSearchText" class="btn-clear-fast-search" @click="barcodeSearchText = ''"
+                  title="Xóa tìm kiếm">
                   ×
                 </button>
                 <button class="btn-fast-search-add" @click="handleBarcodeSearchSubmit" title="Thêm vào giỏ">
@@ -1641,26 +2183,23 @@ onUnmounted(() => {
               </div>
 
               <div class="cart-right-tools">
-                <button class="btn-tool-action btn-tool-camera" @click="openQrScanner" title="Quét mã sản phẩm qua Camera">
+                <button class="btn-tool-action btn-tool-camera" @click="openQrScanner"
+                  title="Quét mã sản phẩm qua Camera">
                   <span>Quét Camera</span>
                 </button>
 
-                <button class="btn-tool-action btn-tool-product" @click="openProductPicker" title="Mở danh mục chọn sản phẩm">
+                <button class="btn-tool-action btn-tool-product" @click="openProductPicker"
+                  title="Mở danh mục chọn sản phẩm">
                   <span>Chọn sản phẩm</span>
                 </button>
 
-                <button
-                  v-if="currentOrder && currentOrder.cart.length > 0"
-                  class="btn-tool-action btn-tool-clear"
-                  @click="clearCurrentCart"
-                  title="Làm trống toàn bộ giỏ hàng"
-                >
+                <button v-if="currentOrder && currentOrder.cart.length > 0" class="btn-tool-action btn-tool-clear"
+                  @click="clearCurrentCart" title="Làm trống toàn bộ giỏ hàng">
                   <span>Làm trống</span>
                 </button>
               </div>
             </div>
 
-            <!-- Cart Table (when items exist) -->
             <template v-if="currentOrder && currentOrder.cart.length > 0">
               <div class="cart-table-wrapper">
                 <table class="cart-table">
@@ -1672,7 +2211,7 @@ onUnmounted(() => {
                       <th width="130" class="text-center">SỐ LƯỢNG</th>
                       <th width="130" class="text-end">ĐƠN GIÁ</th>
                       <th width="140" class="text-end">THÀNH TIỀN</th>
-                      <th width="56" class="text-center">XÓA</th>
+                      <th width="70" class="text-center">THAO TÁC</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1683,21 +2222,33 @@ onUnmounted(() => {
                           <img v-if="item.img" :src="item.img" alt="Ảnh SP" class="prod-thumb-mini" />
                           <div class="prod-details">
                             <span class="prod-name-title" :title="item.name">{{ item.name }}</span>
-                            <span class="prod-code-pill">{{ item.maCtsp || item.maSp }}</span>
+                            <span class="prod-code-sub">Mã: {{ item.maCtsp || item.maSp }}</span>
                           </div>
                         </div>
                       </td>
                       <td class="text-center">
-                        <div class="variant-chips-wrap">
-                          <span class="badge-size-pill">Size {{ item.size }}</span>
-                          <span class="badge-color-pill">{{ item.color }}</span>
+                        <div class="variant-simple-text">
+                          <span class="variant-size-txt">Size {{ item.size }}</span>
+                          <span class="variant-sep">•</span>
+                          <span class="variant-color-txt">{{ item.color }}</span>
                         </div>
+                        <button type="button" class="btn-quick-swap-variant" @click="openSwapModal(item)"
+                          title="Đổi sang Size hoặc Màu khác của sản phẩm này">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.2">
+                            <path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4" />
+                          </svg>
+                          <span>Đổi size/màu</span>
+                        </button>
                       </td>
                       <td class="text-center">
                         <div class="qty-stepper-modern">
-                          <button class="step-btn" @click="updateCartItemQty(item, item.quantity - 1)" :disabled="item.quantity <= 1">−</button>
-                          <input type="number" class="step-input" v-model.number="item.quantity" @change="updateCartItemQty(item, item.quantity)" min="1" />
-                          <button class="step-btn" @click="updateCartItemQty(item, item.quantity + 1)" :disabled="getRemainingStock(item.idCtsp) <= 0">+</button>
+                          <button class="step-btn" @click="updateCartItemQty(item, item.quantity - 1)"
+                            :disabled="item.quantity <= 1">−</button>
+                          <input type="number" class="step-input" v-model.number="item.quantity"
+                            @change="updateCartItemQty(item, item.quantity)" min="1" />
+                          <button class="step-btn" @click="updateCartItemQty(item, item.quantity + 1)"
+                            :disabled="getRemainingStock(item.idCtsp) <= 0">+</button>
                         </div>
                         <div class="stock-hint-txt" v-if="getRemainingStock(item.idCtsp) < 10">
                           Còn lại: {{ getRemainingStock(item.idCtsp) }}
@@ -1706,7 +2257,8 @@ onUnmounted(() => {
                       <td class="text-end">
                         <div class="price-stack">
                           <span class="price-active">{{ formatVnd(item.price) }}</span>
-                          <span v-if="item.originalPrice && item.originalPrice > item.price" class="price-strikethrough">
+                          <span v-if="item.originalPrice && item.originalPrice > item.price"
+                            class="price-strikethrough">
                             {{ formatVnd(item.originalPrice) }}
                           </span>
                         </div>
@@ -1724,7 +2276,6 @@ onUnmounted(() => {
                 </table>
               </div>
 
-              <!-- Cart Footer Status Bar -->
               <div class="pos-cart-bottom-bar">
                 <div class="cart-items-indicator">
                   <span>Giỏ hàng: <strong>{{ totalCartQty }}</strong> sản phẩm</span>
@@ -1737,7 +2288,6 @@ onUnmounted(() => {
               </div>
             </template>
 
-            <!-- Empty State (when cart has no items) -->
             <div class="empty-cart-state" v-else>
               <div class="empty-cart-content">
                 <h5 class="empty-cart-title">Giỏ hàng đang trống</h5>
@@ -1751,9 +2301,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Right Column: Customer & Checkout Panel -->
       <div class="pos-col-right">
-        <!-- Customer Card -->
         <div class="pos-card customer-card">
           <div class="panel-card-head">
             <div class="head-title-wrap">
@@ -1766,18 +2314,9 @@ onUnmounted(() => {
 
           <div class="customer-search-area">
             <div class="customer-input-wrap">
-              <input
-                type="text"
-                class="input-cust-search"
-                placeholder="Tìm theo tên hoặc SĐT khách hàng..."
-                v-model="customerSearchQuery"
-                @focus="showCustomerDropdown = true"
-              />
-              <button
-                v-if="customerSearchQuery"
-                class="btn-clear-cust"
-                @click="customerSearchQuery = ''"
-              >
+              <input type="text" class="input-cust-search" placeholder="Tìm theo tên hoặc SĐT khách hàng..."
+                v-model="customerSearchQuery" @focus="showCustomerDropdown = true" />
+              <button v-if="customerSearchQuery" class="btn-clear-cust" @click="customerSearchQuery = ''">
                 ×
               </button>
             </div>
@@ -1795,7 +2334,6 @@ onUnmounted(() => {
             </ul>
           </div>
 
-          <!-- Selected Customer Box or Retail Guest -->
           <div v-if="currentOrder && currentOrder.customer" class="selected-customer-box">
             <div class="cust-box-left">
               <div class="cust-badge-avatar">
@@ -1816,7 +2354,6 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Order Checkout Info Card -->
         <div class="pos-card order-checkout-card">
           <div class="panel-card-head">
             <div class="head-title-wrap">
@@ -1831,22 +2368,27 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Delivery Drawer Box -->
           <div v-if="currentOrder && currentOrder.isDelivery" class="delivery-drawer-box">
             <div class="drawer-title">Thông tin nhận hàng</div>
-            <input type="text" class="del-input" placeholder="Tên người nhận hàng..." v-model="currentOrder.deliveryInfo.recipientName" />
-            <input type="text" class="del-input" placeholder="Số điện thoại người nhận..." v-model="currentOrder.deliveryInfo.recipientPhone" />
+            <input type="text" class="del-input" placeholder="Tên người nhận hàng..."
+              v-model="currentOrder.deliveryInfo.recipientName" />
+            <input type="text" class="del-input" placeholder="Số điện thoại người nhận..."
+              v-model="currentOrder.deliveryInfo.recipientPhone" />
             <select class="del-input" v-model="currentOrder.deliveryInfo.province" @change="onProvinceChange">
               <option :value="null" disabled>Chọn Tỉnh / Thành phố...</option>
               <option v-for="p in provincesList" :key="p.id" :value="p">{{ p.name }}</option>
             </select>
-            <select class="del-input" v-model="currentOrder.deliveryInfo.ward" @change="onWardChange" :disabled="!currentOrder.deliveryInfo.province || currentOrder.deliveryInfo.wardsLoading">
+            <select class="del-input" v-model="currentOrder.deliveryInfo.ward" @change="onWardChange"
+              :disabled="!currentOrder.deliveryInfo.province || currentOrder.deliveryInfo.wardsLoading">
               <option :value="null" disabled>{{ currentOrder.deliveryInfo.wardsLoading ? 'Đang tải phường/xã...' : 'Chọn Phường / Xã...' }}</option>
               <option v-for="w in wardsList" :key="w.id" :value="w">{{ w.name }}</option>
             </select>
-            <input type="text" class="del-input" placeholder="Số nhà, tên đường chi tiết..." v-model="currentOrder.deliveryInfo.recipientAddress" />
-            <select v-if="currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length" class="del-input" v-model="currentOrder.deliveryInfo.serviceTypeId" @change="onServiceChange">
-              <option v-for="s in currentOrder.deliveryInfo.services" :key="s.serviceTypeId" :value="s.serviceTypeId">{{ s.shortName || ('Dịch vụ ' + s.serviceTypeId) }}</option>
+            <input type="text" class="del-input" placeholder="Số nhà, tên đường chi tiết..."
+              v-model="currentOrder.deliveryInfo.recipientAddress" />
+            <select v-if="currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length"
+              class="del-input" v-model="currentOrder.deliveryInfo.serviceTypeId" @change="onServiceChange">
+              <option v-for="s in currentOrder.deliveryInfo.services" :key="s.serviceTypeId" :value="s.serviceTypeId">{{
+                s.shortName || ('Dịch vụ ' + s.serviceTypeId) }}</option>
             </select>
             <div v-if="currentOrder.deliveryInfo.feeLoading" class="fee-info">
               Đang tính phí vận chuyển với GHN...
@@ -1856,35 +2398,32 @@ onUnmounted(() => {
               <button type="button" class="fee-retry" @click="tinhPhiVanChuyen">Thử lại</button>
             </div>
             <div v-else-if="currentOrder.deliveryInfo.shippingFee > 0" class="fee-info">
-              Phí vận chuyển (GHN): <strong style="color: #d92d20;">{{ formatVnd(currentOrder.deliveryInfo.shippingFee) }}</strong>
+              Phí vận chuyển (GHN): <strong style="color: #d92d20;">{{ formatVnd(currentOrder.deliveryInfo.shippingFee)
+              }}</strong>
             </div>
           </div>
 
-          <!-- Voucher Section (Nhập mã trực tiếp & Mở modal danh sách) -->
           <div class="checkout-voucher-section" v-if="currentOrder">
             <div class="voucher-section-header">
               <span class="voucher-section-title">Phiếu giảm giá / Voucher</span>
-              <button
-                v-if="!currentOrder.selectedVoucher"
-                type="button"
-                class="btn-browse-vouchers"
-                @click="openVoucherModal"
-              >
+              <button v-if="!currentOrder.selectedVoucher" type="button" class="btn-browse-vouchers"
+                @click="openVoucherModal">
                 Danh sách
                 <span class="voucher-badge-num" v-if="allVouchers.length > 0">({{ allVouchers.length }})</span>
               </button>
             </div>
 
-            <!-- Khi đã áp dụng voucher -->
             <div v-if="currentOrder.selectedVoucher" class="selected-voucher-card">
               <div class="selected-voucher-content">
                 <div class="selected-voucher-top">
-                  <span class="selected-voucher-code">{{ currentOrder.selectedVoucher.ma || currentOrder.selectedVoucher.maPhieuGiamGia }}</span>
+                  <span class="selected-voucher-code">{{ currentOrder.selectedVoucher.ma ||
+                    currentOrder.selectedVoucher.maPhieuGiamGia }}</span>
                   <span class="selected-voucher-val">- {{ formatVnd(discountAmount) }}</span>
                 </div>
                 <div class="selected-voucher-desc">
                   {{ currentOrder.selectedVoucher.ten }}
-                  <span v-if="currentOrder.selectedVoucher.hoaDonToiThieu"> • Đơn từ {{ formatVnd(currentOrder.selectedVoucher.hoaDonToiThieu) }}</span>
+                  <span v-if="currentOrder.selectedVoucher.hoaDonToiThieu"> • Đơn từ {{
+                    formatVnd(currentOrder.selectedVoucher.hoaDonToiThieu) }}</span>
                 </div>
               </div>
               <button class="btn-remove-voucher-pill" @click="removeVoucher" title="Gỡ bỏ mã giảm giá">
@@ -1892,27 +2431,33 @@ onUnmounted(() => {
               </button>
             </div>
 
-            <!-- Khi chưa áp dụng voucher: Ô nhập mã trực tiếp -->
-            <div v-else class="voucher-input-group">
-              <input
-                type="text"
-                v-model="voucherInputCode"
-                class="voucher-quick-input"
-                placeholder="Nhập mã voucher (VD: GG005)..."
-                @keyup.enter="handleApplyManualVoucher"
-              />
-              <button
-                type="button"
-                class="btn-apply-manual-voucher"
-                :disabled="!voucherInputCode.trim()"
-                @click="handleApplyManualVoucher"
-              >
+            <div v-if="!currentOrder.selectedVoucher && bestVoucherSuggestion" class="checkout-best-voucher-box">
+              <div class="best-voucher-info-col">
+                <div class="best-line-top">
+                  <span class="best-tag-label">🔥 Gợi ý tốt nhất</span>
+                  <span class="best-discount-val">-{{ formatVnd(bestVoucherSuggestion.discount) }}</span>
+                </div>
+                <div class="best-line-sub">
+                  <span class="best-code-chip">{{ bestVoucherSuggestion.voucher.ma }}</span>
+                  <span class="best-sub-desc" :title="bestVoucherSuggestion.voucher.ten">{{
+                    bestVoucherSuggestion.voucher.ten
+                  }}</span>
+                </div>
+              </div>
+              <button type="button" class="btn-apply-best-quick" @click="applyBestVoucher">
+                Áp dụng
+              </button>
+            </div>
+            <div v-if="!currentOrder.selectedVoucher" class="voucher-input-group">
+              <input type="text" v-model="voucherInputCode" class="voucher-quick-input"
+                placeholder="Nhập mã voucher (VD: GG005)..." @keyup.enter="handleApplyManualVoucher" />
+              <button type="button" class="btn-apply-manual-voucher" :disabled="!voucherInputCode.trim()"
+                @click="handleApplyManualVoucher">
                 Áp dụng
               </button>
             </div>
           </div>
 
-          <!-- Billing Summary Block -->
           <div class="billing-summary-block">
             <div class="bill-row">
               <span class="bill-label">Tổng tiền hàng ({{ totalCartQty }} sản phẩm):</span>
@@ -1922,13 +2467,13 @@ onUnmounted(() => {
               <span class="bill-label">Giảm giá voucher:</span>
               <span class="bill-val">- {{ formatVnd(discountAmount) }}</span>
             </div>
-            <div v-if="currentOrder && currentOrder.isDelivery && currentOrder.deliveryInfo.shippingFee > 0" class="bill-row">
+            <div v-if="currentOrder && currentOrder.isDelivery && currentOrder.deliveryInfo.shippingFee > 0"
+              class="bill-row">
               <span class="bill-label">Phí vận chuyển:</span>
               <span class="bill-val">+ {{ formatVnd(currentOrder.deliveryInfo.shippingFee) }}</span>
             </div>
           </div>
 
-          <!-- Grand Total Hero Card -->
           <div class="grand-total-hero-card">
             <div class="hero-left">
               <span class="hero-lbl">KHÁCH PHẢI TRẢ</span>
@@ -1939,7 +2484,6 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Payment Methods -->
           <div class="payment-methods-block" v-if="currentOrder">
             <span class="pay-method-lbl">Hình thức thanh toán</span>
             <div class="pay-method-grid">
@@ -1958,12 +2502,12 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Cash Input & Quick Chips -->
           <div class="cash-settlement-box" v-if="currentOrder && currentOrder.paymentMethod !== 'CHUYEN_KHOAN'">
             <div class="cash-input-field">
               <span class="cash-label">Khách thanh toán tiền mặt</span>
               <div class="cash-input-wrap">
-                <input type="number" class="del-input cash-amount-inp" placeholder="Nhập số tiền khách đưa..." v-model.number="currentOrder.cashGiven" />
+                <input type="number" class="del-input cash-amount-inp" placeholder="Nhập số tiền khách đưa..."
+                  v-model.number="currentOrder.cashGiven" />
                 <span class="cash-currency-badge">₫</span>
               </div>
             </div>
@@ -1976,47 +2520,46 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Combined Mode: Additional Transfer Amount -->
           <div class="cash-settlement-box" v-if="currentOrder && currentOrder.paymentMethod === 'KET_HOP'">
             <div class="cash-input-field">
               <span class="cash-label">Số tiền chuyển khoản</span>
               <div class="cash-input-wrap">
-                <input type="number" class="del-input cash-amount-inp" placeholder="Nhập số tiền chuyển khoản..." v-model.number="currentOrder.transferGiven" />
+                <input type="number" class="del-input cash-amount-inp" placeholder="Nhập số tiền chuyển khoản..."
+                  v-model.number="currentOrder.transferGiven" />
                 <span class="cash-currency-badge">₫</span>
               </div>
             </div>
           </div>
 
-          <!-- Change Due Box -->
-          <div class="change-due-box" :class="changeDue >= 0 ? 'positive' : 'negative'" v-if="currentOrder && currentOrder.paymentMethod !== 'CHUYEN_KHOAN'">
+          <div class="change-due-box" :class="changeDue >= 0 ? 'positive' : 'negative'"
+            v-if="currentOrder && currentOrder.paymentMethod !== 'CHUYEN_KHOAN'">
             <span class="change-label">{{ changeDue >= 0 ? 'Tiền thừa trả khách:' : 'Khách còn thiếu:' }}</span>
-            <span class="change-value">{{ changeDue >= 0 ? formatVnd(changeDue) : formatVnd(Math.abs(changeDue)) }}</span>
+            <span class="change-value">{{ changeDue >= 0 ? formatVnd(changeDue) : formatVnd(Math.abs(changeDue))
+            }}</span>
           </div>
 
-          <!-- Bank QR Button -->
-          <div class="bank-qr-trigger-box" v-if="currentOrder && (currentOrder.paymentMethod === 'CHUYEN_KHOAN' || currentOrder.paymentMethod === 'KET_HOP')">
+          <div class="bank-qr-trigger-box"
+            v-if="currentOrder && (currentOrder.paymentMethod === 'CHUYEN_KHOAN' || currentOrder.paymentMethod === 'KET_HOP')">
             <button class="btn-show-bank-qr" @click="generateBankTransferQr">
               <span>Tạo mã QR chuyển khoản</span>
             </button>
           </div>
 
-          <!-- Order Note -->
           <div class="order-note-wrap" v-if="currentOrder">
             <span class="note-label">Ghi chú đơn hàng</span>
-            <input type="text" class="input-order-note" placeholder="Ghi chú thêm nếu cần..." v-model="currentOrder.note" />
+            <input type="text" class="input-order-note" placeholder="Ghi chú thêm nếu cần..."
+              v-model="currentOrder.note" />
           </div>
 
-          <!-- Action Buttons -->
           <div class="pos-final-actions">
-            <button class="btn-cancel-bill" @click="handleCancelOrder" :disabled="!currentOrder || currentOrder.cart.length === 0">
+            <button class="btn-cancel-bill" @click="handleCancelOrder"
+              :disabled="!currentOrder || currentOrder.cart.length === 0">
               Hủy đơn
             </button>
-            <button
-              class="btn-checkout-primary"
+            <button class="btn-checkout-primary"
               :class="{ ready: currentOrder && currentOrder.cart.length > 0 && !isProcessingCheckout }"
               @click="handleCheckout"
-              :disabled="!currentOrder || currentOrder.cart.length === 0 || isProcessingCheckout"
-            >
+              :disabled="!currentOrder || currentOrder.cart.length === 0 || isProcessingCheckout">
               <span v-if="isProcessingCheckout">Đang xử lý...</span>
               <template v-else>
                 <span>THANH TOÁN</span>
@@ -2050,55 +2593,60 @@ onUnmounted(() => {
           </div>
 
           <div class="pos-modal-body">
-            <!-- Modal Filters Toolbar (Hàng tìm kiếm + Lưới 5 ô Select cân đối, không cụt chữ) -->
             <div class="modal-prod-filter-bar">
               <div class="modal-filter-top-row">
                 <div class="modal-search-field">
-                  <input
-                    v-model="modalFilters.search"
-                    type="text"
-                    placeholder="Tìm theo tên, mã CTSP, mã sản phẩm..."
-                    class="modal-search-inp"
-                  />
-                  <button v-if="modalFilters.search" class="modal-clear-search-btn" @click="modalFilters.search = ''">×</button>
+                  <input v-model="modalFilters.search" type="text" placeholder="Tìm theo tên, mã CTSP, mã sản phẩm..."
+                    class="modal-search-inp" />
+                  <button v-if="modalFilters.search" class="modal-clear-search-btn"
+                    @click="modalFilters.search = ''">×</button>
                 </div>
                 <button class="btn-modal-reset-filter" @click="resetModalFilters" title="Đặt lại toàn bộ 5 bộ lọc">
                   Đặt lại bộ lọc
                 </button>
               </div>
-
-              <!-- Lưới 5 ô Select bộ lọc -->
               <div class="modal-5-selects-grid">
                 <div class="filter-select-wrap">
-                  <select v-model="modalFilters.idThuongHieu" class="filter-select" :class="{ active: !!modalFilters.idThuongHieu }">
+                  <select v-model="modalFilters.idThuongHieu" class="filter-select"
+                    :class="{ active: !!modalFilters.idThuongHieu }">
                     <option value="">Tất cả thương hiệu</option>
-                    <option v-for="b in brandsList" :key="b.id" :value="b.id || b.ten">{{ b.ten || b.tenThuongHieu }}</option>
+                    <option v-for="b in brandsList" :key="b.id" :value="b.id || b.ten">{{ b.ten || b.tenThuongHieu }}
+                    </option>
                   </select>
                 </div>
 
                 <div class="filter-select-wrap">
-                  <select v-model="modalFilters.idLoaiGiay" class="filter-select" :class="{ active: !!modalFilters.idLoaiGiay }">
+                  <select v-model="modalFilters.idLoaiGiay" class="filter-select"
+                    :class="{ active: !!modalFilters.idLoaiGiay }">
                     <option value="">Tất cả thể loại</option>
-                    <option v-for="c in categoriesList" :key="c.id" :value="c.id || c.ten">{{ c.ten || c.tenLoaiGiay }}</option>
+                    <option v-for="c in categoriesList" :key="c.id" :value="c.id || c.ten">{{ c.ten || c.tenLoaiGiay }}
+                    </option>
                   </select>
                 </div>
 
                 <div class="filter-select-wrap">
-                  <select v-model="modalFilters.idMauSac" class="filter-select" :class="{ active: !!modalFilters.idMauSac }">
+                  <select v-model="modalFilters.idMauSac" class="filter-select"
+                    :class="{ active: !!modalFilters.idMauSac }">
                     <option value="">Tất cả màu sắc</option>
-                    <option v-for="m in colorsList" :key="m.id" :value="m.id || m.ten || m.tenMau">{{ m.ten || m.tenMau }}</option>
+                    <option v-for="m in colorsList" :key="m.id" :value="m.id || m.ten || m.tenMau">{{ m.ten || m.tenMau
+                    }}
+                    </option>
                   </select>
                 </div>
 
                 <div class="filter-select-wrap">
-                  <select v-model="modalFilters.idKichCo" class="filter-select" :class="{ active: !!modalFilters.idKichCo }">
+                  <select v-model="modalFilters.idKichCo" class="filter-select"
+                    :class="{ active: !!modalFilters.idKichCo }">
                     <option value="">Tất cả kích cỡ</option>
-                    <option v-for="s in sizesList" :key="s.id" :value="s.id || s.ten || s.tenKichCo">{{ s.ten || s.tenKichCo }}</option>
+                    <option v-for="s in sizesList" :key="s.id" :value="s.id || s.ten || s.tenKichCo">{{ s.ten ||
+                      s.tenKichCo
+                    }}</option>
                   </select>
                 </div>
 
                 <div class="filter-select-wrap">
-                  <select v-model="modalFilters.priceRange" class="filter-select" :class="{ active: !!modalFilters.priceRange }">
+                  <select v-model="modalFilters.priceRange" class="filter-select"
+                    :class="{ active: !!modalFilters.priceRange }">
                     <option value="">Tất cả mức giá</option>
                     <option value="<1m">Dưới 1.000.000 ₫</option>
                     <option value="1m-3m">1.000.000 - 3.000.000 ₫</option>
@@ -2109,29 +2657,23 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <!-- Selection summary -->
             <div class="pos-prod-select-summary">
               <span class="select-summary-text">
                 Đã chọn <strong>{{ modalSelectedIds.length }}</strong> sản phẩm
                 <template v-if="filteredModalVariants.length === 0">(không có kết quả khớp bộ lọc)</template>
               </span>
-              <button v-if="modalSelectedIds.length > 0" class="btn-clear-selection"
-                @click="modalSelectedIds = []">Bỏ chọn tất cả</button>
+              <button v-if="modalSelectedIds.length > 0" class="btn-clear-selection" @click="modalSelectedIds = []">Bỏ
+                chọn
+                tất cả</button>
             </div>
 
-            <!-- Product Table -->
             <div class="pos-prod-table-wrap">
               <table class="pos-prod-table">
                 <thead>
                   <tr>
                     <th width="42" class="text-center">
-                      <input
-                        type="checkbox"
-                        class="custom-chk pos-chk"
-                        :checked="isAllPageSelected"
-                        @change="toggleSelectAllPage"
-                        title="Chọn tất cả trên trang này"
-                      />
+                      <input type="checkbox" class="custom-chk pos-chk" :checked="isAllPageSelected"
+                        @change="toggleSelectAllPage" title="Chọn tất cả trên trang này" />
                     </th>
                     <th width="45" class="text-center">STT</th>
                     <th width="64" class="text-center">ẢNH</th>
@@ -2146,8 +2688,8 @@ onUnmounted(() => {
                 </thead>
                 <tbody>
                   <tr v-for="(item, idx) in paginatedModalVariants" :key="item.id"
-                    :class="{ 'row-selected': isModalRowSelected(item.id) }"
-                    @click="handleSelectProductFromModal(item)" title="Click để thêm nhanh hoặc tick chọn">
+                    :class="{ 'row-selected': isModalRowSelected(item.id) }" @click="handleSelectProductFromModal(item)"
+                    title="Click để thêm nhanh hoặc tick chọn">
                     <td class="text-center" @click.stop>
                       <input type="checkbox" class="custom-chk pos-chk" :checked="isModalRowSelected(item.id)"
                         :disabled="(item.stock ?? item.soLuong ?? 0) <= 0" @change="toggleModalRow(item, $event)" />
@@ -2174,30 +2716,27 @@ onUnmounted(() => {
                       <span class="badge-size-tag">{{ item.size || item.tenKichCo || '---' }}</span>
                     </td>
                     <td class="text-center">
-                      <span
-                        class="stock-badge"
-                        :class="{
-                          'in-stock': (item.stock !== undefined ? item.stock : (item.soLuong || 0)) > 10,
-                          'low-stock': (item.stock !== undefined ? item.stock : (item.soLuong || 0)) > 0 && (item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 10,
-                          'zero-stock': (item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0
-                        }"
-                      >
+                      <span class="stock-badge" :class="{
+                        'in-stock': (item.stock !== undefined ? item.stock : (item.soLuong || 0)) > 10,
+                        'low-stock': (item.stock !== undefined ? item.stock : (item.soLuong || 0)) > 0 && (item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 10,
+                        'zero-stock': (item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0
+                      }">
                         {{ item.stock !== undefined ? item.stock : (item.soLuong || 0) }}
                       </span>
                     </td>
                     <td class="text-end">
                       <div class="prod-modal-price-box">
                         <span class="price-now">{{ formatVnd(getEffectivePrice(item)) }}</span>
-                        <span v-if="item.discount && item.discount !== '-'" class="price-was">{{ formatVnd(item.price || item.giaBan) }}</span>
+                        <span v-if="item.discount && item.discount !== '-'" class="price-was">{{ formatVnd(item.price ||
+                          item.giaBan) }}</span>
                       </div>
                     </td>
                     <td class="text-center" @click.stop>
-                      <button
-                        class="btn-select-add-cart"
+                      <button class="btn-select-add-cart"
                         :disabled="(item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0"
-                        @click="handleSelectProductFromModal(item)"
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        @click="handleSelectProductFromModal(item)">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2.5">
                           <line x1="12" y1="5" x2="12" y2="19"></line>
                           <line x1="5" y1="12" x2="19" y2="12"></line>
                         </svg>
@@ -2219,7 +2758,6 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Modal Footer: selection + confirm + pagination -->
           <div class="pos-prod-footer pos-prod-footer-with-action">
             <div class="pos-modal-page-size">
               <span class="page-size-label">Hiển thị:</span>
@@ -2275,61 +2813,57 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- Voucher Selector Modal -->
     <transition name="fade">
       <div v-if="isVoucherModalOpen" class="pos-modal-overlay" @click.self="isVoucherModalOpen = false">
-        <div class="pos-modal-dialog modal-md">
+        <div class="pos-modal-dialog modal-voucher-dialog">
           <div class="pos-modal-head">
             <div class="modal-head-title">
               <h3>Phiếu giảm giá khả dụng</h3>
-              <span class="modal-badge-count">{{ availableEligibleVouchersCount }}/{{ allVouchers.length }} khả dụng</span>
+              <span class="modal-badge-count">{{ availableEligibleVouchersCount }}/{{ allVouchers.length }} khả
+                dụng</span>
             </div>
             <button class="pos-modal-close" @click="isVoucherModalOpen = false" title="Đóng (Esc)">×</button>
           </div>
 
           <div class="pos-modal-body">
-            <!-- Thanh tìm kiếm & áp dụng nhanh trong modal -->
+            <div v-if="bestVoucherSuggestion" class="modal-best-voucher-banner">
+              <div class="best-banner-info-left">
+                <div class="best-badge-pill">
+                  <span class="pill-fire">🔥</span>
+                  <span>Đề xuất tốt nhất cho đơn hàng</span>
+                </div>
+                <div class="best-banner-title">
+                  <span class="best-code-tag">{{ bestVoucherSuggestion.voucher.ma }}</span>
+                  <span class="best-name-tag">{{ bestVoucherSuggestion.voucher.ten }}</span>
+                </div>
+                <div class="best-discount-statement">
+                  Tiết kiệm nhiều nhất: <strong>-{{ formatVnd(bestVoucherSuggestion.discount) }}</strong>
+                  <span class="best-subtotal-tag">(Tổng đơn: {{ formatVnd(subTotal) }})</span>
+                </div>
+              </div>
+              <button type="button" class="btn-apply-best-modal" @click="applyVoucher(bestVoucherSuggestion.voucher)">
+                Áp dụng mã này
+              </button>
+            </div>
+
             <div class="voucher-modal-search-bar">
-              <input
-                v-model="voucherSearchQuery"
-                type="text"
-                placeholder="Nhập mã hoặc tên phiếu giảm giá..."
-                class="voucher-search-inp"
-                @keyup.enter="handleModalSearchApply"
-              />
-              <button
-                v-if="voucherSearchQuery.trim()"
-                type="button"
-                class="btn-modal-apply-code"
-                @click="handleModalSearchApply"
-              >
+              <input v-model="voucherSearchQuery" type="text" placeholder="Nhập mã hoặc tên phiếu giảm giá..."
+                class="voucher-search-inp" @keyup.enter="handleModalSearchApply" />
+              <button v-if="voucherSearchQuery.trim()" type="button" class="btn-modal-apply-code"
+                @click="handleModalSearchApply">
                 Áp dụng mã
               </button>
             </div>
 
-            <!-- Cảnh báo nếu đang là khách lẻ kèm nút chọn/thêm nhanh -->
-            <div v-if="!currentOrder?.customer" class="voucher-customer-alert">
-              <div class="alert-content-wrap">
-                <span class="alert-title">Đang là khách lẻ</span>
-                <span class="alert-desc">Phiếu giảm giá chỉ áp dụng cho khách hàng đã định danh để tích điểm và ghi nhận lịch sử.</span>
-              </div>
-              <button type="button" class="btn-alert-pick-customer" @click="openQuickCustomerFromVoucher">
-                Thêm / Chọn khách ngay
-              </button>
-            </div>
 
-            <!-- Danh sách phiếu giảm giá -->
+
             <div class="voucher-cards-list">
-              <div
-                v-for="v in filteredVouchers"
-                :key="v.id"
-                class="voucher-card-item"
-                :class="{
-                  eligible: isVoucherEligible(v),
-                  selected: currentOrder?.selectedVoucher?.id === v.id,
-                  ineligible: !isVoucherEligible(v)
-                }"
-              >
+              <div v-for="v in sortedFilteredVouchers" :key="v.id" class="voucher-card-item" :class="{
+                eligible: isVoucherEligible(v),
+                selected: currentOrder?.selectedVoucher?.id === v.id,
+                ineligible: !isVoucherEligible(v),
+                isBestItem: bestVoucherSuggestion?.voucher?.id === v.id
+              }">
                 <div class="voucher-card-left">
                   <div class="voucher-discount-highlight">
                     {{ formatVoucherValue(v) }}
@@ -2337,11 +2871,17 @@ onUnmounted(() => {
                   <div class="voucher-type-sub">
                     {{ v.loaiGiamGia === 'PERCENT' || v.loaiGiamGia === '%' ? 'GIẢM %' : 'GIẢM TIỀN' }}
                   </div>
+                  <span v-if="bestVoucherSuggestion?.voucher?.id === v.id" class="best-ticket-star">
+                    ⭐ Tốt nhất
+                  </span>
                 </div>
 
                 <div class="voucher-card-body">
                   <div class="voucher-card-header-row">
                     <span class="voucher-card-code">{{ v.ma }}</span>
+                    <span v-if="bestVoucherSuggestion?.voucher?.id === v.id" class="badge-best-voucher-tag">
+                      🔥 Giảm nhiều nhất
+                    </span>
                     <span v-if="v.soLuong" class="voucher-card-remain">
                       Còn {{ Math.max(0, (v.soLuong || 0) - (v.soLuongDaSuDung || 0)) }} lượt
                     </span>
@@ -2351,6 +2891,11 @@ onUnmounted(() => {
                     <span>Đơn tối thiểu: <strong>{{ formatVnd(v.hoaDonToiThieu || 0) }}</strong></span>
                     <span v-if="v.giamToiDa"> • Tối đa: <strong>{{ formatVnd(v.giamToiDa) }}</strong></span>
                   </div>
+
+                  <div v-if="isVoucherEligible(v) && subTotal > 0" class="voucher-calc-saving">
+                    Tiết kiệm cho đơn này: <strong>-{{ formatVnd(calculateVoucherDiscount(v, subTotal)) }}</strong>
+                  </div>
+
                   <div class="voucher-card-date" v-if="v.ngayKetThuc">
                     Hạn dùng: {{ formatDateVn(v.ngayKetThuc) }}
                   </div>
@@ -2360,28 +2905,18 @@ onUnmounted(() => {
                 </div>
 
                 <div class="voucher-card-action">
-                  <button
-                    v-if="currentOrder?.selectedVoucher?.id === v.id"
-                    type="button"
-                    class="btn-voucher-applied"
-                    @click="removeVoucher"
-                    title="Bấm để gỡ bỏ voucher"
-                  >
+                  <button v-if="currentOrder?.selectedVoucher?.id === v.id" type="button" class="btn-voucher-applied"
+                    @click="removeVoucher" title="Bấm để gỡ bỏ voucher">
                     Đang dùng (Gỡ)
                   </button>
-                  <button
-                    v-else
-                    type="button"
-                    class="btn-apply-voucher"
-                    :disabled="!isVoucherEligible(v)"
-                    @click="applyVoucher(v)"
-                  >
+                  <button v-else type="button" class="btn-apply-voucher" :disabled="!isVoucherEligible(v)"
+                    @click="applyVoucher(v)">
                     Áp dụng
                   </button>
                 </div>
               </div>
 
-              <div v-if="filteredVouchers.length === 0" class="empty-vouchers-msg">
+              <div v-if="sortedFilteredVouchers.length === 0" class="empty-vouchers-msg">
                 Không tìm thấy phiếu giảm giá nào phù hợp với "{{ voucherSearchQuery }}".
               </div>
             </div>
@@ -2390,7 +2925,6 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- Camera QR Scanner Modal (F3) -->
     <transition name="fade">
       <div v-if="isQrModalOpen" class="pos-modal-overlay" @click.self="closeQrScanner">
         <div class="pos-modal-dialog modal-camera-dialog">
@@ -2412,14 +2946,9 @@ onUnmounted(() => {
 
           <div class="pos-modal-body">
             <div class="pos-camera-scan-wrap">
-              <!-- Khung Camera Viewport -->
               <div class="pos-camera-viewport">
                 <div id="pos-camera-scanner-view" class="pos-camera-stream-el"></div>
-
-                <!-- Tia laser chuyển động khi camera đang chạy -->
                 <div v-if="isCameraRunning && !scanSuccessAnim" class="pos-scanner-laser-line"></div>
-
-                <!-- 4 góc khung ngắm -->
                 <div class="pos-scanner-frame-overlay">
                   <span class="corner top-left"></span>
                   <span class="corner top-right"></span>
@@ -2427,7 +2956,6 @@ onUnmounted(() => {
                   <span class="corner bottom-right"></span>
                 </div>
 
-                <!-- Thông báo quét thành công trực tiếp trên camera -->
                 <div v-if="scanSuccessAnim" class="pos-scan-success-overlay">
                   <div class="success-icon-badge">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3">
@@ -2439,7 +2967,6 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <!-- Hướng dẫn & Trạng thái lỗi nếu có -->
               <p class="camera-guide-hint">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="10"></circle>
@@ -2458,15 +2985,10 @@ onUnmounted(() => {
                 <span>{{ cameraError }}</span>
               </div>
 
-              <!-- Nhập thủ công dự phòng nếu không quét được -->
               <div class="pos-manual-code-row">
-                <input
-                  v-model="scannedCodeInput"
-                  type="text"
-                  class="pos-manual-code-inp"
+                <input v-model="scannedCodeInput" type="text" class="pos-manual-code-inp"
                   placeholder="Hoặc nhập mã CTSP / Barcode thủ công rồi bấm Thêm..."
-                  @keyup.enter="handleManualCodeSubmit"
-                />
+                  @keyup.enter="handleManualCodeSubmit" />
                 <button class="btn-pos-manual-add" @click="handleManualCodeSubmit">
                   Thêm
                 </button>
@@ -2500,7 +3022,6 @@ onUnmounted(() => {
 
           <div class="pos-modal-body modal-customer-body">
             <div class="customer-form-grid">
-              <!-- Họ và tên -->
               <div class="cust-form-group">
                 <label class="cust-label">Họ và tên <span class="required-star">*</span></label>
                 <div class="cust-input-wrap">
@@ -2510,36 +3031,26 @@ onUnmounted(() => {
                       <circle cx="12" cy="7" r="4"></circle>
                     </svg>
                   </span>
-                  <input
-                    type="text"
-                    class="cust-input"
-                    placeholder="VD: Nguyễn Văn Anh"
-                    v-model="newCustomerForm.tenKhachHang"
-                    @keyup.enter="saveQuickCustomer"
-                  />
+                  <input type="text" class="cust-input" placeholder="VD: Nguyễn Văn Anh"
+                    v-model="newCustomerForm.tenKhachHang" @keyup.enter="saveQuickCustomer" />
                 </div>
               </div>
 
-              <!-- Số điện thoại -->
               <div class="cust-form-group">
                 <label class="cust-label">Số điện thoại <span class="required-star">*</span></label>
                 <div class="cust-input-wrap">
                   <span class="cust-input-icon">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                      <path
+                        d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z">
+                      </path>
                     </svg>
                   </span>
-                  <input
-                    type="tel"
-                    class="cust-input"
-                    placeholder="VD: 0912345678"
-                    v-model="newCustomerForm.soDienThoai"
-                    @keyup.enter="saveQuickCustomer"
-                  />
+                  <input type="tel" class="cust-input" placeholder="VD: 0912345678"
+                    v-model="newCustomerForm.soDienThoai" @keyup.enter="saveQuickCustomer" />
                 </div>
               </div>
 
-              <!-- Email -->
               <div class="cust-form-group">
                 <label class="cust-label">Email</label>
                 <div class="cust-input-wrap">
@@ -2549,16 +3060,11 @@ onUnmounted(() => {
                       <polyline points="22,6 12,13 2,6"></polyline>
                     </svg>
                   </span>
-                  <input
-                    type="email"
-                    class="cust-input"
-                    placeholder="VD: khachhang@gmail.com"
-                    v-model="newCustomerForm.email"
-                  />
+                  <input type="email" class="cust-input" placeholder="VD: khachhang@gmail.com"
+                    v-model="newCustomerForm.email" />
                 </div>
               </div>
 
-              <!-- Giới tính -->
               <div class="cust-form-group">
                 <label class="cust-label">Giới tính</label>
                 <div class="cust-gender-group">
@@ -2577,7 +3083,6 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <!-- Ngày sinh -->
               <div class="cust-form-group">
                 <label class="cust-label">Ngày sinh</label>
                 <div class="cust-input-wrap">
@@ -2589,15 +3094,10 @@ onUnmounted(() => {
                       <line x1="3" y1="10" x2="21" y2="10"></line>
                     </svg>
                   </span>
-                  <input
-                    type="date"
-                    class="cust-input"
-                    v-model="newCustomerForm.ngaySinh"
-                  />
+                  <input type="date" class="cust-input" v-model="newCustomerForm.ngaySinh" />
                 </div>
               </div>
 
-              <!-- Địa chỉ -->
               <div class="cust-form-group cust-full-span">
                 <label class="cust-label">Địa chỉ</label>
                 <div class="cust-input-wrap">
@@ -2607,17 +3107,13 @@ onUnmounted(() => {
                       <circle cx="12" cy="10" r="3"></circle>
                     </svg>
                   </span>
-                  <textarea
-                    rows="2"
-                    class="cust-textarea"
+                  <textarea rows="2" class="cust-textarea"
                     placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành..."
-                    v-model="newCustomerForm.diaChi"
-                  ></textarea>
+                    v-model="newCustomerForm.diaChi"></textarea>
                 </div>
               </div>
             </div>
 
-            <!-- Hint box -->
             <div class="cust-hint-card">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2">
                 <circle cx="12" cy="12" r="10"></circle>
@@ -2647,26 +3143,327 @@ onUnmounted(() => {
     </transition>
 
     <transition name="fade">
-      <div v-if="isBankQrModalOpen" class="pos-modal-overlay" @click.self="isBankQrModalOpen = false">
-        <div class="pos-modal-dialog modal-sm">
+      <div v-if="isSwapModalOpen" class="pos-modal-overlay" @click.self="isSwapModalOpen = false">
+        <div class="pos-modal-dialog modal-swap-variant">
           <div class="pos-modal-head">
-            <h3 class="pos-modal-title">Quét mã thanh toán ngân hàng</h3>
-            <button class="pos-modal-close" @click="isBankQrModalOpen = false">×</button>
+            <div class="swap-modal-head-titles">
+              <div class="swap-head-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="pos-modal-title">Đổi Size / Phối Màu (Smart Swap)</h3>
+                <span class="pos-modal-subtitle">Hoán đổi biến thể tức thì trên giỏ hàng không cần xóa đi thêm
+                  lại</span>
+              </div>
+            </div>
+            <button class="pos-modal-close" @click="isSwapModalOpen = false">×</button>
           </div>
 
           <div class="pos-modal-body">
-            <div class="vietqr-wrap">
-              <img v-if="bankQrDataUrl" :src="bankQrDataUrl" class="vietqr-img" alt="VietQR" />
-              <div class="vietqr-amount">{{ formatVnd(finalTotal) }}</div>
-              <div class="vietqr-memo">
-                Nội dung CK: <strong>Thanh toan don hang {{ currentOrder?.code }}</strong>
+            <div class="current-swap-banner" v-if="swapCartItem">
+              <div class="csb-left">
+                <img v-if="swapCartItem.img" :src="swapCartItem.img" alt="Ảnh SP" class="csb-img" />
+                <div v-else class="csb-no-img">👟</div>
+                <div class="csb-details">
+                  <span class="csb-title">{{ swapCartItem.name }}</span>
+                  <div class="csb-pills">
+                    <span class="csb-pill pill-code">Mã: {{ swapCartItem.maCtsp || swapCartItem.maSp }}</span>
+                    <span class="csb-pill pill-current">Đang chọn: <strong>Size {{ swapCartItem.size }}</strong> •
+                      <strong>{{ swapCartItem.color }}</strong></span>
+                    <span class="csb-pill pill-qty">Số lượng trong giỏ: <strong>{{ swapCartItem.quantity
+                    }}</strong></span>
+                  </div>
+                </div>
               </div>
+              <div class="csb-price-box">
+                <span class="csb-price-lbl">Đơn giá hiện tại:</span>
+                <span class="csb-price-val">{{ formatVnd(swapCartItem.price) }}</span>
+              </div>
+            </div>
+
+            <div class="swap-color-filter-bar" v-if="availableSwapColors.length > 1">
+              <span class="filter-bar-title">Lọc theo màu sắc:</span>
+              <div class="filter-chips-list">
+                <button type="button" class="swap-chip-btn" :class="{ active: swapColorFilter === 'ALL' }"
+                  @click="swapColorFilter = 'ALL'">
+                  Tất cả màu ({{ swapVariants.length }})
+                </button>
+                <button v-for="color in availableSwapColors" :key="color" type="button" class="swap-chip-btn"
+                  :class="{ active: swapColorFilter === color }" @click="swapColorFilter = color">
+                  {{ color }}
+                </button>
+              </div>
+            </div>
+
+            <div v-if="isLoadingSwapVariants" class="swap-loading-box">
+              <div class="spinner-sm"></div>
+              <span>Đang kiểm tra tồn kho các biến thể cùng dòng...</span>
+            </div>
+
+            <div v-else-if="filteredSwapVariants.length > 0" class="swap-variants-matrix">
+              <div v-for="variant in filteredSwapVariants" :key="variant.id" class="variant-swap-card" :class="{
+                'is-current-active': variant.id === swapCartItem?.idCtsp,
+                'is-card-selected': selectedNewVariant?.id === variant.id,
+                'is-stock-depleted': variant.id !== swapCartItem?.idCtsp && (variant.currentStock < (swapCartItem?.quantity || 1))
+              }"
+                @click="variant.id !== swapCartItem?.idCtsp && variant.currentStock >= (swapCartItem?.quantity || 1) && (selectedNewVariant = variant)">
+                <div class="vsc-top-bar">
+                  <span v-if="variant.id === swapCartItem?.idCtsp" class="badge-vsc current">Đang ở trong giỏ</span>
+                  <span v-else-if="variant.currentStock < (swapCartItem?.quantity || 1)"
+                    class="badge-vsc out-stock">Không
+                    đủ hàng</span>
+                  <span v-else class="badge-vsc in-stock">Còn {{ variant.currentStock }} đôi</span>
+
+                  <span class="vsc-color-pill">
+                    <span class="vsc-dot" :style="{ backgroundColor: variant.colorHex || '#64748b' }"></span>
+                    {{ variant.color || variant.tenMau }}
+                  </span>
+                </div>
+
+                <div class="vsc-body">
+                  <div class="vsc-size-display">
+                    <span class="size-large">{{ variant.size || variant.tenKichCo }}</span>
+                    <span class="size-sub">Kích cỡ</span>
+                  </div>
+
+                  <div class="vsc-price-col">
+                    <div class="vsc-price-val">{{ formatVnd(getEffectivePrice(variant)) }}</div>
+                    <div class="vsc-price-diff">
+                      <span v-if="getEffectivePrice(variant) === swapCartItem?.price" class="diff-tag same">Đồng
+                        giá</span>
+                      <span v-else-if="getEffectivePrice(variant) > swapCartItem?.price" class="diff-tag up">
+                        +{{ formatVnd(getEffectivePrice(variant) - swapCartItem?.price) }}
+                      </span>
+                      <span v-else class="diff-tag down">
+                        -{{ formatVnd(swapCartItem?.price - getEffectivePrice(variant)) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="vsc-foot">
+                  <button type="button" v-if="variant.id === swapCartItem?.idCtsp" class="btn-vsc-btn disabled-current"
+                    disabled>
+                    Dòng hiện tại
+                  </button>
+                  <button type="button" v-else-if="variant.currentStock < (swapCartItem?.quantity || 1)"
+                    class="btn-vsc-btn disabled-stock" disabled>
+                    Hết kho (Còn {{ variant.currentStock }})
+                  </button>
+                  <button type="button" v-else class="btn-vsc-btn select-action"
+                    :class="{ active: selectedNewVariant?.id === variant.id }"
+                    @click.stop="selectedNewVariant = variant">
+                    <span v-if="selectedNewVariant?.id === variant.id">✓ Đã chọn đổi</span>
+                    <span v-else>Chọn đổi sang đôi này</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="swap-empty-box">
+              <p>Không tìm thấy biến thể nào phù hợp theo bộ lọc này.</p>
             </div>
           </div>
 
           <div class="pos-modal-foot">
-            <button class="btn-pos-checkout ready" style="height: 36px; padding: 0 16px;"
-              @click="isBankQrModalOpen = false">Đã nhận tiền</button>
+            <button type="button" class="btn-cancel-modal" @click="isSwapModalOpen = false">
+              Hủy bỏ
+            </button>
+            <button type="button" class="btn-confirm-swap-action"
+              :disabled="!selectedNewVariant || selectedNewVariant.id === swapCartItem?.idCtsp"
+              @click="executeSwap(selectedNewVariant)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span v-if="selectedNewVariant">
+                Xác nhận đổi sang Size {{ selectedNewVariant.size || selectedNewVariant.tenKichCo }} ({{
+                  selectedNewVariant.color || selectedNewVariant.tenMau }})
+              </span>
+              <span v-else>Chọn 1 biến thể ở trên để đổi</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <transition name="fade">
+      <div v-if="isBankQrModalOpen" class="pos-modal-overlay" @click.self="isBankQrModalOpen = false">
+        <div class="pos-modal-dialog modal-bank-qr" :class="{ 'customer-mode-active': isCustomerDisplayMode }">
+          <div v-if="isPaymentSuccessAnim" class="bank-success-overlay">
+            <div class="bso-card">
+              <div class="bso-icon-ring">
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+              <h4 class="bso-title">THANH TOÁN THÀNH CÔNG!</h4>
+              <p class="bso-amount">{{ formatVnd(bankTransferAmount) }}</p>
+              <span class="bso-memo">Hóa đơn: {{ currentOrder?.code }}</span>
+            </div>
+          </div>
+
+          <div class="pos-modal-head">
+            <div class="bank-modal-head-titles">
+              <div class="title-with-badge">
+                <h3 class="pos-modal-title">Thanh toán chuyển khoản VietQR</h3>
+                <span class="napas-badge-head">Napas 24/7</span>
+              </div>
+              <span class="pos-modal-subtitle">Quét mã bằng app ngân hàng bất kỳ để tự động điền STK & Số tiền</span>
+            </div>
+            <div class="bank-modal-head-actions">
+              <button type="button" class="btn-toggle-customer-mode" :class="{ active: isCustomerDisplayMode }"
+                @click="isCustomerDisplayMode = !isCustomerDisplayMode"
+                title="Bật/Tắt chế độ màn hình lớn cho khách quét">
+                <span v-if="!isCustomerDisplayMode">🖥️ Chế độ cho khách</span>
+                <span v-else>📋 Chế độ thu ngân</span>
+              </button>
+              <button class="pos-modal-close" @click="isBankQrModalOpen = false">×</button>
+            </div>
+          </div>
+
+          <div class="pos-modal-body p-0">
+            <div class="bank-selector-pills-bar" v-if="!isCustomerDisplayMode">
+              <span class="bs-label">Chọn tài khoản nhận:</span>
+              <div class="bs-options">
+                <button v-for="b in storeBankAccounts" :key="b.id" type="button" class="bs-pill-btn"
+                  :class="{ active: selectedBank.id === b.id }" @click="selectBank(b)">
+                  <span class="bs-dot" :style="{ backgroundColor: b.color }"></span>
+                  <span class="bs-name">{{ b.name }}</span>
+                  <span class="bs-tag" v-if="b.tag">{{ b.tag }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div v-if="isCustomerDisplayMode" class="customer-qr-display-container">
+              <div class="cqr-header">
+                <div class="cqr-store-brand">POLYSHOES STORE</div>
+                <div class="cqr-prompt">Quý khách mở ứng dụng ngân hàng bất kỳ để quét mã</div>
+              </div>
+
+              <div class="cqr-card-big">
+                <div class="cqr-img-box">
+                  <img v-if="!isQrImgFailed && vietQrNetworkUrl" :src="vietQrNetworkUrl" @error="onQrImgError"
+                    class="cqr-img" alt="Mã VietQR lớn" />
+                  <img v-else-if="bankQrDataUrl" :src="bankQrDataUrl" class="cqr-img" alt="Mã QR Chuyển khoản" />
+                </div>
+                <div class="cqr-amount-box">
+                  <span class="cqr-amount-lbl">SỐ TIỀN THANH TOÁN</span>
+                  <span class="cqr-amount-val">{{ formatVnd(bankTransferAmount) }}</span>
+                </div>
+              </div>
+
+              <div class="cqr-bank-recap">
+                <span class="cqr-recap-item">Ngân hàng: <strong>{{ selectedBank.name }}</strong></span>
+                <span class="cqr-recap-sep">•</span>
+                <span class="cqr-recap-item">Chủ TK: <strong>{{ selectedBank.accountName }}</strong></span>
+                <span class="cqr-recap-sep">•</span>
+                <span class="cqr-recap-item">Nội dung CK: <strong>{{ currentOrder?.code }}</strong></span>
+              </div>
+            </div>
+
+            <div v-else class="bank-qr-layout">
+              <div class="bank-qr-visual-card">
+                <div class="vietqr-badge-header">
+                  <div class="vietqr-brand-logo">
+                    <span class="vietqr-text-viet">Viet</span><span class="vietqr-text-qr">QR</span>
+                  </div>
+                  <span class="bank-napas-tag">{{ selectedBank.shortName }} • Napas 247</span>
+                </div>
+
+                <div class="bank-qr-image-wrapper">
+                  <img v-if="!isQrImgFailed && vietQrNetworkUrl" :src="vietQrNetworkUrl" @error="onQrImgError"
+                    class="vietqr-render-img" alt="Mã VietQR" />
+                  <img v-else-if="bankQrDataUrl" :src="bankQrDataUrl" class="vietqr-render-img"
+                    alt="Mã QR Chuyển khoản" />
+                </div>
+
+                <div class="bank-qr-scan-guide">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 14 14"></polyline>
+                  </svg>
+                  <span>Tự động nhận diện STK & Số tiền</span>
+                </div>
+              </div>
+
+              <div class="bank-details-pane">
+                <div class="qr-amount-callout">
+                  <span class="amount-callout-label">Số tiền cần thanh toán</span>
+                  <div class="amount-callout-val">
+                    <span class="amount-number">{{ formatVnd(bankTransferAmount) }}</span>
+                    <button class="btn-copy-chip" @click="copyToClipboard(bankTransferAmount, 'số tiền')"
+                      title="Sao chép số tiền">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="bank-info-table">
+                  <div class="bank-info-row">
+                    <span class="info-k">Hóa đơn:</span>
+                    <span class="info-v highlight-order">{{ currentOrder?.title }} (<strong>{{ currentOrder?.code
+                    }}</strong>)</span>
+                  </div>
+
+                  <div class="bank-info-row">
+                    <span class="info-k">Ngân hàng:</span>
+                    <span class="info-v">
+                      <strong :style="{ color: selectedBank.color }">{{ selectedBank.name }}</strong>
+                    </span>
+                  </div>
+
+                  <div class="bank-info-row">
+                    <span class="info-k">Chủ tài khoản:</span>
+                    <span class="info-v strong-text">{{ selectedBank.accountName }}</span>
+                  </div>
+
+                  <div class="bank-info-row">
+                    <span class="info-k">Số tài khoản:</span>
+                    <div class="info-v-copy">
+                      <span class="copy-text-code">{{ selectedBank.accountNo }}</span>
+                      <button class="btn-copy-mini" @click="copyToClipboard(selectedBank.accountNo, 'số tài khoản')"
+                        title="Sao chép số tài khoản">
+                        Sao chép
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="bank-info-row">
+                    <span class="info-k">Nội dung CK:</span>
+                    <div class="info-v-copy">
+                      <span class="copy-text-code highlight-memo">{{ currentOrder?.code }}</span>
+                      <button class="btn-copy-mini"
+                        @click="copyToClipboard(currentOrder?.code, 'nội dung chuyển khoản')" title="Sao chép nội dung">
+                        Sao chép
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="bank-notice-alert">
+                  <span class="notice-icon">ℹ</span>
+                  <span>Nhấn <strong>Đã nhận tiền</strong> khi ứng dụng ngân hàng báo tiền về để hoàn tất.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pos-modal-foot bank-modal-foot">
+            <button class="btn-cancel-modal" @click="isBankQrModalOpen = false">
+              Đóng
+            </button>
+            <button class="btn-confirm-received" @click="confirmBankPaymentReceived">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Đã nhận tiền (Xác nhận) 🔔</span>
+            </button>
           </div>
         </div>
       </div>
@@ -2675,82 +3472,127 @@ onUnmounted(() => {
     <transition name="fade">
       <div v-if="isReceiptModalOpen && completedInvoiceData" class="pos-modal-overlay"
         @click.self="isReceiptModalOpen = false">
-        <div class="pos-modal-dialog modal-sm">
+        <div class="pos-modal-dialog modal-receipt-dialog">
           <div class="pos-modal-head">
-            <h3 class="pos-modal-title">Hóa đơn bán hàng</h3>
-            <button class="pos-modal-close" @click="isReceiptModalOpen = false">×</button>
+            <div class="receipt-head-text">
+              <h3 class="pos-modal-title">Hóa đơn bán hàng</h3>
+              <span class="receipt-head-sub">Xem trước & in hóa đơn thanh toán</span>
+            </div>
+            <button class="pos-modal-close" @click="isReceiptModalOpen = false" title="Đóng (Esc)">×</button>
           </div>
 
-          <div class="pos-modal-body">
-            <div class="thermal-receipt-box">
+          <div class="pos-modal-body receipt-modal-body">
+            <div class="thermal-receipt-box" id="printable-receipt-content">
+              <!-- Header tiệm -->
               <div class="receipt-header-center">
-                <h2 class="receipt-brand-title">POLYSHOES STORE</h2>
+                <div class="receipt-brand-logo">POLYSHOES STORE</div>
+                <p class="receipt-sub-line">Giày sneaker & phụ kiện thời trang chính hãng</p>
                 <p class="receipt-sub-line">Đ/C: Trịnh Văn Bô, Nam Từ Liêm, Hà Nội</p>
-                <p class="receipt-sub-line">Hotline: 0987.654.321</p>
+                <p class="receipt-sub-line">Hotline: 0987.654.321 • Website: polyshoes.vn</p>
+              </div>
+
+              <!-- Tiêu đề & Thông tin đơn -->
+              <div class="receipt-bill-heading">
+                <div class="receipt-bill-title">HÓA ĐƠN BÁN LẺ (POS)</div>
+                <div class="receipt-barcode-code">*{{ completedInvoiceData.code }}*</div>
               </div>
 
               <div class="receipt-meta-info">
-                <div>Mã HĐ: <strong>{{ completedInvoiceData.code }}</strong></div>
-                <div>Thời gian: {{ completedInvoiceData.date }}</div>
-                <div>Khách hàng: <strong>{{ completedInvoiceData.customerName }}</strong></div>
-                <div v-if="completedInvoiceData.customerPhone">SĐT: {{ completedInvoiceData.customerPhone }}</div>
+                <div class="meta-row">
+                  <span class="meta-k">Mã hóa đơn:</span>
+                  <span class="meta-v"><strong>{{ completedInvoiceData.code }}</strong></span>
+                </div>
+                <div class="meta-row">
+                  <span class="meta-k">Thời gian:</span>
+                  <span class="meta-v">{{ completedInvoiceData.date }}</span>
+                </div>
+                <div class="meta-row">
+                  <span class="meta-k">Khách hàng:</span>
+                  <span class="meta-v"><strong>{{ completedInvoiceData.customerName }}</strong></span>
+                </div>
+                <div class="meta-row" v-if="completedInvoiceData.customerPhone">
+                  <span class="meta-k">Số điện thoại:</span>
+                  <span class="meta-v">{{ completedInvoiceData.customerPhone }}</span>
+                </div>
+                <div class="meta-row">
+                  <span class="meta-k">Thu ngân:</span>
+                  <span class="meta-v">{{ completedInvoiceData.staffName || 'Nhân viên quầy' }}</span>
+                </div>
               </div>
 
               <table class="receipt-items-table">
                 <thead>
                   <tr>
-                    <th>Tên hàng</th>
-                    <th class="text-center" width="45">SL</th>
-                    <th class="text-end" width="95">T.Tiền</th>
+                    <th>Sản phẩm</th>
+                    <th class="text-center" width="36">SL</th>
+                    <th class="text-end" width="80">Đơn giá</th>
+                    <th class="text-end" width="95">Thành tiền</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="item in completedInvoiceData.cart" :key="item.idCtsp">
-                    <td>{{ item.name }} ({{ item.color }}, {{ item.size }})</td>
-                    <td class="text-center">{{ item.quantity }}</td>
-                    <td class="text-end">{{ formatVnd(item.price * item.quantity) }}</td>
+                    <td>
+                      <div class="rc-item-name">{{ item.name }}</div>
+                      <div class="rc-item-variant">Size {{ item.size }} • {{ item.color }}</div>
+                    </td>
+                    <td class="text-center rc-item-qty">{{ item.quantity }}</td>
+                    <td class="text-end rc-item-price">{{ formatVnd(item.price) }}</td>
+                    <td class="text-end rc-item-total">{{ formatVnd(item.price * item.quantity) }}</td>
                   </tr>
                 </tbody>
               </table>
 
               <div class="receipt-totals-block">
                 <div class="receipt-sum-row">
-                  <span>Tổng tiền hàng:</span>
-                  <strong>{{ formatVnd(completedInvoiceData.subTotal) }}</strong>
+                  <span class="sum-k">Tổng tiền hàng:</span>
+                  <strong class="sum-v">{{ formatVnd(completedInvoiceData.subTotal) }}</strong>
                 </div>
-                <div class="receipt-sum-row" v-if="completedInvoiceData.discount > 0">
-                  <span>Giảm giá:</span>
-                  <strong>- {{ formatVnd(completedInvoiceData.discount) }}</strong>
+                <div class="receipt-sum-row text-discount" v-if="completedInvoiceData.discount > 0">
+                  <span class="sum-k">Giảm giá (Voucher):</span>
+                  <strong class="sum-v discount-val">- {{ formatVnd(completedInvoiceData.discount) }}</strong>
                 </div>
                 <div class="receipt-sum-row" v-if="completedInvoiceData.shippingFee > 0">
-                  <span>Phí vận chuyển:</span>
-                  <strong>+ {{ formatVnd(completedInvoiceData.shippingFee) }}</strong>
+                  <span class="sum-k">Phí vận chuyển:</span>
+                  <strong class="sum-v">+ {{ formatVnd(completedInvoiceData.shippingFee) }}</strong>
                 </div>
                 <div class="receipt-sum-row grand-sum">
-                  <span>THANH TOÁN:</span>
-                  <span>{{ formatVnd(completedInvoiceData.finalTotal) }}</span>
+                  <span class="sum-k">TỔNG THANH TOÁN:</span>
+                  <span class="grand-sum-val">{{ formatVnd(completedInvoiceData.finalTotal) }}</span>
                 </div>
-                <div class="receipt-sum-row" v-if="completedInvoiceData.paymentMethod === 'TIEN_MAT'">
-                  <span>Tiền khách đưa:</span>
-                  <span>{{ formatVnd(completedInvoiceData.cashGiven) }}</span>
+                <div class="receipt-sum-row">
+                  <span class="sum-k">Phương thức:</span>
+                  <span class="sum-v">{{ formatPaymentMethodName(completedInvoiceData.paymentMethod) }}</span>
                 </div>
-                <div class="receipt-sum-row" v-if="completedInvoiceData.paymentMethod === 'TIEN_MAT'">
-                  <span>Tiền thừa trả khách:</span>
-                  <span>{{ formatVnd(completedInvoiceData.changeDue) }}</span>
+                <div class="receipt-sum-row"
+                  v-if="completedInvoiceData.paymentMethod === 'TIEN_MAT' || completedInvoiceData.paymentMethod === 'KET_HOP'">
+                  <span class="sum-k">Tiền khách đưa:</span>
+                  <span class="sum-v">{{ formatVnd(completedInvoiceData.cashGiven) }}</span>
+                </div>
+                <div class="receipt-sum-row"
+                  v-if="completedInvoiceData.paymentMethod === 'TIEN_MAT' || completedInvoiceData.paymentMethod === 'KET_HOP'">
+                  <span class="sum-k">Tiền thừa trả khách:</span>
+                  <span class="sum-v">{{ formatVnd(completedInvoiceData.changeDue) }}</span>
                 </div>
               </div>
 
-              <div class="receipt-thank-msg">
-                Cảm ơn quý khách và hẹn gặp lại!
+              <div class="receipt-footer-notes">
+                <p class="rc-thank-txt">Cảm ơn Quý khách và hẹn gặp lại!</p>
+                <p class="rc-policy-txt">Quý khách vui lòng giữ hóa đơn để được đổi size/mẫu trong vòng 7 ngày.</p>
               </div>
             </div>
           </div>
 
-          <div class="pos-modal-foot">
-            <button class="btn-pos-cancel" style="height: 36px; padding: 0 16px;"
-              @click="isReceiptModalOpen = false">Đóng</button>
-            <button class="btn-pos-checkout ready" style="height: 36px; padding: 0 16px;" @click="printReceipt">
-              In hóa đơn
+          <div class="pos-modal-foot receipt-modal-foot">
+            <button class="btn-receipt-close" @click="isReceiptModalOpen = false">
+              Đóng
+            </button>
+            <button class="btn-receipt-print" @click="printReceipt">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+              </svg>
+              <span>In hóa đơn</span>
             </button>
           </div>
         </div>

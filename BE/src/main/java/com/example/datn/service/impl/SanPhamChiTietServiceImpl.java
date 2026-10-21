@@ -399,4 +399,151 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
                 .ngayTao(spct.getNgayTao())
                 .build();
     }
+
+    @Override
+    public List<SanPhamChiTietResponse> matchVariantsByAI(Map<String, Object> aiResult) {
+        if (aiResult == null) return List.of();
+
+        String tenGoiY = (String) aiResult.getOrDefault("tenGoiY", "");
+        String mauSac = (String) aiResult.getOrDefault("mauSac", "");
+        String kieuDang = (String) aiResult.getOrDefault("kieuDang", "");
+        String loaiGiay = (String) aiResult.getOrDefault("loaiGiay", "");
+
+        String targetColor = mauSac != null ? mauSac.trim().toLowerCase() : "";
+        String targetModel = tenGoiY != null ? tenGoiY.trim().toLowerCase() : "";
+        String targetStyle = kieuDang != null ? kieuDang.trim().toLowerCase() : "";
+        String targetType = loaiGiay != null ? loaiGiay.trim().toLowerCase() : "";
+
+        List<SanPhamChiTiet> allActive = sanPhamChiTietRepository.findAllActiveForDiscount();
+        if (allActive == null || allActive.isEmpty()) return List.of();
+
+        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(allActive);
+
+        record ScoredVariant(SanPhamChiTietResponse response, int score) {}
+        List<ScoredVariant> scoredList = new ArrayList<>();
+
+        for (SanPhamChiTiet spct : allActive) {
+            SanPham sp = spct.getSanPham();
+            MauSac ms = spct.getMauSac();
+            String varColor = (ms != null && ms.getTenMau() != null) ? ms.getTenMau().trim().toLowerCase() : "";
+            String spName = (sp != null && sp.getTenSanPham() != null) ? sp.getTenSanPham().trim().toLowerCase() : "";
+            String kieuDangName = (sp != null && sp.getKieuDang() != null && sp.getKieuDang().getTenKieuDang() != null)
+                    ? sp.getKieuDang().getTenKieuDang().trim().toLowerCase() : "";
+            String loaiGiayName = (sp != null && sp.getLoaiGiay() != null && sp.getLoaiGiay().getTenLoaiGiay() != null)
+                    ? sp.getLoaiGiay().getTenLoaiGiay().trim().toLowerCase() : "";
+
+            int score = 0;
+            List<String> reasons = new ArrayList<>();
+            boolean colorMatched = false;
+
+            // 1. Phân tích và chấm điểm Màu sắc (Tối đa 45 điểm)
+            if (!targetColor.isEmpty()) {
+                if (targetColor.contains("trắng") || targetColor.contains("kem") || targetColor.contains("be")) {
+                    if (varColor.equals("trắng kem") || varColor.equals("kem trắng")) {
+                        score += 45;
+                        colorMatched = true;
+                        reasons.add("Khớp chuẩn tông màu Trắng kem thanh lịch");
+                    } else if (varColor.equals("trắng")) {
+                        score += 44;
+                        colorMatched = true;
+                        reasons.add("Khớp sắc Trắng tinh khôi");
+                    } else if (varColor.equals("kem") || varColor.equals("be")) {
+                        score += 38;
+                        colorMatched = true;
+                        reasons.add("Gam màu Kem/Be tiệm cận");
+                    } else if (varColor.equals("bạc") || varColor.equals("xám")) {
+                        score += 20;
+                        colorMatched = true;
+                    } else if (varColor.contains("đen trắng")) {
+                        score += 10;
+                    } else {
+                        score -= 60;
+                    }
+                } else if (targetColor.contains("đen")) {
+                    if (varColor.equals("đen")) {
+                        score += 45;
+                        colorMatched = true;
+                        reasons.add("Khớp chuẩn màu Đen nguyên bản");
+                    } else if (varColor.contains("đen trắng")) {
+                        score += 35;
+                        colorMatched = true;
+                        reasons.add("Phối màu Đen trắng cá tính");
+                    } else if (varColor.equals("xám") || varColor.contains("than")) {
+                        score += 22;
+                        colorMatched = true;
+                    } else {
+                        score -= 60;
+                    }
+                } else {
+                    if (varColor.equals(targetColor)) {
+                        score += 45;
+                        colorMatched = true;
+                        reasons.add("Khớp chính xác màu " + (ms != null ? ms.getTenMau() : ""));
+                    } else if (varColor.contains(targetColor) || targetColor.contains(varColor)) {
+                        score += 35;
+                        colorMatched = true;
+                        reasons.add("Cùng nhóm gam màu " + (ms != null ? ms.getTenMau() : ""));
+                    } else {
+                        score -= 50;
+                    }
+                }
+            } else {
+                colorMatched = true;
+            }
+
+            // 2. Phân tích và chấm điểm Dòng sản phẩm (Tối đa 35 điểm)
+            if (!targetModel.isEmpty()) {
+                if (targetModel.contains("court vision") && spName.contains("court vision")) {
+                    score += 35;
+                    reasons.add("Khớp dòng Court Vision Low phong cách retro");
+                } else if (spName.contains(targetModel) || targetModel.contains(spName)) {
+                    score += 35;
+                    reasons.add("Khớp chính xác dòng " + (sp != null ? sp.getTenSanPham() : ""));
+                } else if ((targetModel.contains("sneaker") || targetModel.contains("court")) &&
+                           (spName.contains("court") || spName.contains("air max") || spName.contains("carnaby") || spName.contains("classic"))) {
+                    score += 25;
+                    reasons.add("Cùng phân khúc Sneaker Court / Classic");
+                } else if (targetModel.contains("runner") && spName.contains("runner")) {
+                    score += 30;
+                    reasons.add("Khớp dòng giày chạy bộ " + (sp != null ? sp.getTenSanPham() : ""));
+                }
+            }
+
+            // 3. Phân tích Kiểu dáng và Loại giày (Tối đa 15 điểm)
+            if (!targetStyle.isEmpty() && (kieuDangName.contains(targetStyle) || targetStyle.contains(kieuDangName))) {
+                score += 10;
+            }
+            if (!targetType.isEmpty() && (loaiGiayName.contains(targetType) || targetType.contains(loaiGiayName))) {
+                score += 5;
+            }
+
+            // 4. Ưu tiên hàng có sẵn trong kho (Tối đa 5 điểm)
+            int stock = spct.getSoLuong() != null ? spct.getSoLuong() : 0;
+            if (stock > 0) {
+                score += 5;
+            }
+
+            // Chỉ lấy các sản phẩm vượt qua ngưỡng điểm và màu sắc phù hợp
+            if (score >= 45 && colorMatched) {
+                int matchScore = Math.min(99, Math.max(50, score));
+                String reasonStr = reasons.isEmpty() ? "Phù hợp với đặc điểm nhận diện AI" : String.join(" • ", reasons);
+                SanPhamChiTietResponse resp = mapToResponse(spct, giaMap.get(spct.getId()));
+                resp.setMatchScore(matchScore);
+                resp.setMatchReason(reasonStr);
+                scoredList.add(new ScoredVariant(resp, matchScore));
+            }
+        }
+
+        return scoredList.stream()
+                .sorted((a, b) -> {
+                    int cmp = Integer.compare(b.score(), a.score());
+                    if (cmp != 0) return cmp;
+                    int stockA = a.response().getStock() != null ? a.response().getStock() : 0;
+                    int stockB = b.response().getStock() != null ? b.response().getStock() : 0;
+                    return Integer.compare(stockB, stockA);
+                })
+                .limit(8)
+                .map(ScoredVariant::response)
+                .collect(Collectors.toList());
+    }
 }

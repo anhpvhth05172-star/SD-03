@@ -34,4 +34,6 @@ public class SanPhamChiTietResponse {
     private String trangThaiTonKho;
     private String img;
     private LocalDateTime ngayTao;
+    private Integer matchScore;
+    private String matchReason;
 }
