@@ -85,6 +85,11 @@ const menu = [
     path: '/chat',
     iconType: 'chat',
   },
+  {
+    label: 'Giao ca',
+    path: '/ca',
+    iconType: 'cashRegister',
+  },
 ]
 
 const openState = ref({})
@@ -176,10 +181,17 @@ const visibleMenu = computed(() => menu.filter((item) => !item.adminOnly || laAd
                 <circle cx="12" cy="7" r="4" />
               </svg>
 
-              <svg v-else-if="item.iconType === 'chat'" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
+<svg v-else-if="item.iconType === 'chat'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+
+                <svg v-else-if="item.iconType === 'cashRegister'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="9" cy="21" r="1" />
+                  <circle cx="20" cy="21" r="1" />
+                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                </svg>
             </div>
             <span class="nav-text">{{ item.label }}</span>
           </router-link>

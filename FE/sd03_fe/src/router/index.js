@@ -37,6 +37,7 @@ import CustomerAccountPage from '@/pages/Auth/CustomerAccountPage.vue'
 import StatisticsPage from '@/pages/Statistics/StatisticsPage.vue'
 import WorkSchedulePage from '@/pages/Schedule/WorkSchedulePage.vue'
 import ShiftSchedulePage from '@/pages/Schedule/ShiftSchedulePage.vue'
+import GiaoCaListPage from '@/pages/Ca/GiaoCaListPage.vue'
 
 const metaBo = { requiresAuth: true, canBo: true }
 
@@ -138,6 +139,18 @@ const routes = [
         path: '/chat',
         component: StaffChatPage,
         meta: { ...metaBo, title: 'Chat khách hàng' },
+      },
+      {
+        path: '/ca',
+        name: 'GiaoCaList',
+        component: GiaoCaListPage,
+        meta: { ...metaBo, title: 'Lịch sử giao ca', roles: ['NHAN_VIEN', 'ADMIN'] },
+      },
+      {
+        path: '/ca/:id/doi-soat',
+        name: 'GiaoCaDoiSoat',
+        component: () => import('@/pages/Ca/GiaoCaDoiSoatPage.vue'),
+        meta: { ...metaBo, title: 'Đối soát ca', roles: ['NHAN_VIEN', 'ADMIN'] },
       },
     ],
   },
