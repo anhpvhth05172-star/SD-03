@@ -1,4 +1,11 @@
 
+.swal2-container:empty,
+.swal2-container:not(.swal2-shown):not(.swal2-backdrop-show) {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 .custom-swal-container,
 .swal2-container {
   backdrop-filter: blur(2px) !important;

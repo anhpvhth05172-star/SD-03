@@ -12,7 +12,6 @@ const router = useRouter()
 const route = useRoute()
 const API_BASE = 'http://localhost:8080/api/v1'
 
-const showToast = ref(true)
 const isLoading = ref(false)
 
 const variants = ref([])
@@ -242,16 +241,6 @@ const getColorHex = (item) => {
   if (name.includes('vàng')) return '#eab308'
   if (name.includes('bạc') || name.includes('xám')) return '#94a3b8'
   return '#475569'
-}
-
-const getVariantStatusLabel = (item) => {
-  if (item.trangThai === false) return 'Ngưng kinh doanh'
-  return 'Kinh doanh'
-}
-
-const getVariantStatusClass = (item) => {
-  if (item.trangThai === false) return 'is-stopped'
-  return 'is-selling'
 }
 
 const showToastNotice = (title, message, type = 'success') => {
@@ -1005,38 +994,6 @@ const saveAddVariant = async () => {
     }
   }
 
-  const confirmModal = reactive({
-    isOpen: false,
-    title: '',
-    message: '',
-    confirmText: 'Xác nhận xóa',
-    cancelText: 'Hủy bỏ',
-    variant: 'danger',
-    onConfirm: null
-  })
-
-  const openConfirmModal = ({ title, message, confirmText = 'Xác nhận', cancelText = 'Hủy bỏ', variant = 'danger', onConfirm }) => {
-    confirmModal.title = title
-    confirmModal.message = message
-    confirmModal.confirmText = confirmText
-    confirmModal.cancelText = cancelText
-    confirmModal.variant = variant
-    confirmModal.onConfirm = onConfirm
-    confirmModal.isOpen = true
-  }
-
-  const handleConfirmAction = async () => {
-    const callback = confirmModal.onConfirm
-    confirmModal.isOpen = false
-    if (callback) {
-      callback()
-    }
-  }
-
-  const handleCancelConfirm = () => {
-    confirmModal.isOpen = false
-  }
-
   const resetFilters = () => {
     filters.search = ''
     filters.idSanPham = ''
@@ -1648,35 +1605,6 @@ const saveAddVariant = async () => {
             <button class="btn btn-primary" @click="saveAddVariant" :disabled="isSubmittingAdd">
               <span v-if="isSubmittingAdd">Đang lưu...</span>
               <span v-else>+ Thêm biến thể</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- Confirmation Modal Dialog -->
-    <transition name="fade">
-      <div v-if="confirmModal.isOpen" class="modal-backdrop modal-backdrop-blur" @click.self="handleCancelConfirm">
-        <div class="confirm-modal-box">
-          <button class="confirm-close-btn" @click="handleCancelConfirm" title="Đóng">✕</button>
-
-          <div class="confirm-hero-badge badge-danger">
-            <div class="confirm-icon-glow">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-              </svg>
-            </div>
-          </div>
-
-          <h3 class="confirm-title">{{ confirmModal.title }}</h3>
-          <p class="confirm-message">{{ confirmModal.message }}</p>
-
-          <div class="confirm-actions">
-            <button class="btn-cancel" @click="handleCancelConfirm">
-              {{ confirmModal.cancelText }}
-            </button>
-            <button class="btn-submit btn-danger" @click="handleConfirmAction">
-              {{ confirmModal.confirmText }}
             </button>
           </div>
         </div>

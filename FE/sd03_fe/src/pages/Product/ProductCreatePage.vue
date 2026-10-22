@@ -5,7 +5,7 @@ import QuickAddModal from '@/components/QuickAddModal.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import CurrencyInput from '@/components/CurrencyInput.vue'
 import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
-import { formatNumber, formatVnd } from '@/utils/format'
+import { formatNumber } from '@/utils/format'
 
 const router = useRouter()
 const API_BASE = 'http://localhost:8080/api/v1'

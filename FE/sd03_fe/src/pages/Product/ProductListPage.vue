@@ -2,8 +2,8 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import SearchableSelect from '@/components/SearchableSelect.vue'
-import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
-import { formatNumber, formatVnd } from '@/utils/format'
+import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
+import { formatNumber } from '@/utils/format'
 
 const router = useRouter()
 const API_BASE = 'http://localhost:8080/api/v1'
@@ -20,18 +20,7 @@ const currentPage = ref(0)
 const pageSize = ref(10)
 const pageSizeOptions = [5, 10, 20, 50]
 
-const activeTab = ref('ALL')
 const selectedIds = ref([])
-const isAllSelected = computed({
-  get: () => products.value.length > 0 && selectedIds.value.length === products.value.length,
-  set: (val) => {
-    if (val) {
-      selectedIds.value = products.value.map(p => p.id)
-    } else {
-      selectedIds.value = []
-    }
-  }
-})
 
 const filters = reactive({
   keyword: '',
@@ -59,32 +48,6 @@ const origins = ref([])
 
 let debounceTimer = null
 let currentAbortController = null
-
-const isEditModalOpen = ref(false)
-const isUpdating = ref(false)
-const editErrors = reactive({
-  tenSanPham: '',
-  idThuongHieu: '',
-  idLoaiGiay: '',
-  idChatLieu: '',
-  idKieuDang: '',
-  idXuatXu: ''
-})
-
-const editForm = reactive({
-  id: null,
-  maSanPham: '',
-  tenSanPham: '',
-  idThuongHieu: '',
-  idLoaiGiay: '',
-  idChatLieu: '',
-  idKieuDang: '',
-  idXuatXu: '',
-  doiTuong: 'Nam',
-  tinhNang: '',
-  moTa: '',
-  trangThai: true
-})
 
 const isQuickAddModalOpen = ref(false)
 const isSubmittingQuickAdd = ref(false)
@@ -122,14 +85,7 @@ const showToastNotice = (title, message, type = 'success') => {
   }
 }
 
-const activeFilterCount = computed(() => {
-  let count = 0
-  if (filters.keyword && filters.keyword.trim()) count++
-  if (filters.idThuongHieu) count++
-  if (filters.idLoaiGiay) count++
-  if (filters.trangThai !== '' && filters.trangThai !== null && filters.trangThai !== undefined) count++
-  return count
-})
+
 
 const normalizeAttributeList = (data) => {
   if (!data) return []
@@ -254,12 +210,6 @@ const reloadAllData = () => {
   fetchProducts()
 }
 
-const selectTab = (tab) => {
-  activeTab.value = tab
-  currentPage.value = 0
-  fetchProducts()
-}
-
 const onFilterChange = () => {
   currentPage.value = 0
   fetchProducts()
@@ -282,7 +232,6 @@ const resetFilters = () => {
   filters.idXuatXu = ''
   filters.doiTuong = ''
   filters.trangThai = ''
-  activeTab.value = 'ALL'
   currentPage.value = 0
   fetchProducts()
   showToastNotice('Thành công', 'Đã đặt lại bộ lọc về mặc định', 'success')
@@ -345,39 +294,6 @@ const toggleStatus = async (item) => {
   }
 }
 
-const deleteProduct = async (id) => {
-  const target = products.value.find(p => p.id === id)
-  const name = target ? (target.tenSanPham || target.maSanPham) : ''
-  const confirmed = await notifyDeleteConfirm(name)
-  if (!confirmed) return
-  const originalList = [...products.value]
-  products.value = products.value.filter(p => p.id !== id)
-  if (totalElements.value > 0) totalElements.value--
-
-  try {
-    const res = await fetch(`${API_BASE}/san-pham/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}))
-      products.value = originalList
-      if (totalElements.value >= 0) totalElements.value++
-      showToastNotice('Không thể xóa', errData.message || 'Sản phẩm đã có dữ liệu giao dịch liên quan', 'danger')
-    } else {
-      showToastNotice('Thành công', 'Đã xóa sản phẩm thành công', 'success')
-      fetchProducts()
-    }
-  } catch (err) {
-    products.value = originalList
-    if (totalElements.value >= 0) totalElements.value++
-    showToastNotice('Lỗi kết nối', 'Không thể kết nối tới máy chủ', 'danger')
-  }
-}
-
-const copyToClipboard = (text) => {
-  if (!text) return
-  navigator.clipboard.writeText(text)
-  showToastNotice('Đã sao chép', `Đã sao chép mã "${text}" vào clipboard`, 'success')
-}
-
 const viewProductDetails = (item) => {
   router.push({
     path: '/san-pham/bien-the',
@@ -388,7 +304,6 @@ const viewProductDetails = (item) => {
     }
   })
 }
-const viewProductVariants = viewProductDetails
 
 const isExporting = ref(false)
 
@@ -584,95 +499,6 @@ const exportToExcel = async () => {
     showToastNotice('Lỗi', 'Không thể xuất file Excel', 'danger')
   } finally {
     isExporting.value = false
-  }
-}
-
-
-const openQuickEdit = (item) => {
-  editForm.id = item.id
-  editForm.maSanPham = item.maSanPham || `SP0${item.id}`
-  editForm.tenSanPham = item.tenSanPham || ''
-  editForm.idThuongHieu = item.idThuongHieu || (brands.value.find(b => b.ten === item.tenThuongHieu)?.id || '')
-  editForm.idLoaiGiay = item.idLoaiGiay || (categories.value.find(c => c.ten === item.tenLoaiGiay)?.id || '')
-  editForm.idChatLieu = item.idChatLieu || (materials.value.find(m => m.ten === item.tenChatLieu)?.id || '')
-  editForm.idKieuDang = item.idKieuDang || (styles.value.find(s => s.ten === item.tenKieuDang)?.id || '')
-  editForm.idXuatXu = item.idXuatXu || (origins.value.find(o => o.ten === item.tenXuatXu)?.id || '')
-  editForm.doiTuong = item.doiTuong || 'Nam'
-  editForm.tinhNang = item.tinhNang || ''
-  editForm.moTa = item.moTa || ''
-  editForm.trangThai = item.trangThai !== false
-
-  Object.keys(editErrors).forEach(k => editErrors[k] = '')
-  isEditModalOpen.value = true
-}
-
-const validateEditForm = () => {
-  let valid = true
-  Object.keys(editErrors).forEach(k => editErrors[k] = '')
-
-  if (!editForm.tenSanPham || !editForm.tenSanPham.trim()) {
-    editErrors.tenSanPham = 'Tên sản phẩm không được để trống'
-    valid = false
-  }
-  if (!editForm.idThuongHieu) {
-    editErrors.idThuongHieu = 'Vui lòng chọn Thương hiệu'
-    valid = false
-  }
-  if (!editForm.idLoaiGiay) {
-    editErrors.idLoaiGiay = 'Vui lòng chọn Loại giày'
-    valid = false
-  }
-  if (!editForm.idChatLieu) {
-    editErrors.idChatLieu = 'Vui lòng chọn Chất liệu'
-    valid = false
-  }
-  if (!editForm.idKieuDang) {
-    editErrors.idKieuDang = 'Vui lòng chọn Kiểu dáng'
-    valid = false
-  }
-  if (!editForm.idXuatXu) {
-    editErrors.idXuatXu = 'Vui lòng chọn Xuất xứ'
-    valid = false
-  }
-  return valid
-}
-
-const submitQuickEdit = async () => {
-  if (!validateEditForm()) return
-
-  isUpdating.value = true
-  const payload = {
-    tenSanPham: editForm.tenSanPham.trim(),
-    idThuongHieu: Number(editForm.idThuongHieu),
-    idLoaiGiay: Number(editForm.idLoaiGiay),
-    idChatLieu: Number(editForm.idChatLieu),
-    idKieuDang: Number(editForm.idKieuDang),
-    idXuatXu: Number(editForm.idXuatXu),
-    doiTuong: editForm.doiTuong,
-    tinhNang: editForm.tinhNang ? editForm.tinhNang.trim() : '',
-    moTa: editForm.moTa ? editForm.moTa.trim() : '',
-    trangThai: editForm.trangThai
-  }
-
-  try {
-    const res = await fetch(`${API_BASE}/san-pham/${editForm.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-
-    if (res.ok) {
-      showToastNotice('Thành công', `Đã cập nhật sản phẩm "${editForm.tenSanPham}" thành công!`, 'success')
-      isEditModalOpen.value = false
-      fetchProducts()
-    } else {
-      const errData = await res.json().catch(() => ({}))
-      showToastNotice('Lỗi cập nhật', errData.message || 'Không thể lưu thay đổi', 'danger')
-    }
-  } catch (err) {
-    showToastNotice('Lỗi kết nối', 'Không thể kết nối máy chủ', 'danger')
-  } finally {
-    isUpdating.value = false
   }
 }
 
@@ -1058,127 +884,6 @@ onUnmounted(() => {
     </div>
 
     <transition name="modal-fade">
-      <div v-if="isEditModalOpen" class="modal-overlay" @click.self="isEditModalOpen = false">
-        <div class="modal-dialog">
-          <div class="modal-header">
-            <div class="modal-title-group">
-              <h3 class="modal-title">Chỉnh sửa thông tin sản phẩm</h3>
-              <span class="modal-code-tag">{{ editForm.maSanPham }}</span>
-            </div>
-            <button class="modal-close" @click="isEditModalOpen = false">×</button>
-          </div>
-
-          <div class="modal-body">
-            <div class="edit-grid">
-              <div class="form-group span-2">
-                <label class="form-label">Tên sản phẩm <span class="req">*</span></label>
-                <input v-model="editForm.tenSanPham" type="text" class="modal-input"
-                  :class="{ 'has-error': editErrors.tenSanPham }" placeholder="Nhập tên sản phẩm..." />
-                <span v-if="editErrors.tenSanPham" class="err-msg">{{ editErrors.tenSanPham }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Thương hiệu <span class="req">*</span></label>
-                <SearchableSelect v-model="editForm.idThuongHieu" :options="brands" label-key="ten" value-key="id"
-                  placeholder="-- Chọn thương hiệu --" search-placeholder="Tìm thương hiệu..."
-                  :has-error="!!editErrors.idThuongHieu" />
-                <span v-if="editErrors.idThuongHieu" class="err-msg">{{ editErrors.idThuongHieu }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Loại giày <span class="req">*</span></label>
-                <SearchableSelect v-model="editForm.idLoaiGiay" :options="categories" label-key="ten" value-key="id"
-                  placeholder="-- Chọn loại giày --" search-placeholder="Tìm loại giày..."
-                  :has-error="!!editErrors.idLoaiGiay" />
-                <span v-if="editErrors.idLoaiGiay" class="err-msg">{{ editErrors.idLoaiGiay }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Chất liệu <span class="req">*</span></label>
-                <SearchableSelect v-model="editForm.idChatLieu" :options="materials" label-key="ten" value-key="id"
-                  placeholder="-- Chọn chất liệu --" search-placeholder="Tìm chất liệu..."
-                  :has-error="!!editErrors.idChatLieu" />
-                <span v-if="editErrors.idChatLieu" class="err-msg">{{ editErrors.idChatLieu }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Kiểu dáng <span class="req">*</span></label>
-                <SearchableSelect v-model="editForm.idKieuDang" :options="styles" label-key="ten" value-key="id"
-                  placeholder="-- Chọn kiểu dáng --" search-placeholder="Tìm kiểu dáng..."
-                  :has-error="!!editErrors.idKieuDang" />
-                <span v-if="editErrors.idKieuDang" class="err-msg">{{ editErrors.idKieuDang }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Xuất xứ <span class="req">*</span></label>
-                <SearchableSelect v-model="editForm.idXuatXu" :options="origins" label-key="ten" value-key="id"
-                  placeholder="-- Chọn xuất xứ --" search-placeholder="Tìm xuất xứ..."
-                  :has-error="!!editErrors.idXuatXu" />
-                <span v-if="editErrors.idXuatXu" class="err-msg">{{ editErrors.idXuatXu }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Đối tượng sử dụng</label>
-                <SearchableSelect v-model="editForm.doiTuong" :options="[
-                  { value: 'Nam', label: 'Nam' },
-                  { value: 'Nữ', label: 'Nữ' },
-                  { value: 'Unisex', label: 'Tất cả (Unisex)' }
-                ]" label-key="label" value-key="value" placeholder="Chọn đối tượng..." :allow-clear="false" />
-              </div>
-
-              <div class="form-group span-2 ai-magic-card">
-                <div class="ai-magic-content">
-                  <div class="ai-magic-info">
-                    <span class="ai-badge">Gemini AI Copilot</span>
-                    <span class="ai-magic-desc">Tự động sinh tính năng nổi bật và bài viết mô tả sản phẩm chuẩn
-                      SEO</span>
-                  </div>
-                  <button type="button" class="btn-ai-generate" :disabled="isGeneratingAi"
-                    @click="generateAiContent(editForm)">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      stroke-width="2.2">
-                      <path
-                        d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83">
-                      </path>
-                    </svg>
-                    {{ isGeneratingAi ? 'Đang tạo...' : '✨ Sinh mô tả bằng AI' }}
-                  </button>
-                </div>
-              </div>
-
-              <div class="form-group span-2">
-                <label class="form-label">Tính năng nổi bật</label>
-                <input v-model="editForm.tinhNang" type="text" class="modal-input"
-                  placeholder="Ví dụ: Êm ái, Chống trượt, Thoáng khí..." />
-              </div>
-
-              <div class="form-group span-2">
-                <label class="form-label">Mô tả sản phẩm</label>
-                <textarea v-model="editForm.moTa" class="modal-textarea" rows="3"
-                  placeholder="Nhập mô tả chi tiết sản phẩm..."></textarea>
-              </div>
-
-              <div class="form-group span-2 switch-row">
-                <label class="form-label mb-0">Trạng thái (Bật: Kinh doanh / Tắt: Ngưng kinh doanh)</label>
-                <label class="switch-toggle">
-                  <input type="checkbox" v-model="editForm.trangThai" />
-                  <span class="slider round"></span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="isEditModalOpen = false">Hủy bỏ</button>
-            <button class="btn btn-primary" :disabled="isUpdating" @click="submitQuickEdit">
-              {{ isUpdating ? 'Đang lưu...' : 'Lưu thay đổi' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <transition name="modal-fade">
       <div v-if="isQuickAddModalOpen" class="modal-overlay" @click.self="isQuickAddModalOpen = false">
         <div class="modal-dialog">
           <div class="modal-header">
@@ -1254,7 +959,7 @@ onUnmounted(() => {
                       SEO</span>
                   </div>
                   <button type="button" class="btn-ai-generate" :disabled="isGeneratingAi"
-                    @click="generateAiContent(editForm)">
+                    @click="generateAiContent(quickAddForm)">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                       stroke-width="2.2">
                       <path

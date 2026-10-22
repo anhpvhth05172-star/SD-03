@@ -9,25 +9,11 @@ import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/util
 import { formatVnd } from '@/utils/format'
 
 import { getUser } from '@/utils/auth'
-import { tenVaiTro } from '@/utils/session'
 
 const API_BASE = 'http://localhost:8080/api/v1'
 
 const staffUser = computed(() => getUser())
 const staffName = computed(() => staffUser.value?.tenKhachHang || staffUser.value?.tenTaiKhoan || 'Nhân viên')
-const staffRole = computed(() => tenVaiTro())
-
-const clockTimer = ref(null)
-
-const toggleFullscreen = () => {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(() => { })
-  } else {
-    if (document.exitFullscreen) {
-      document.exitFullscreen().catch(() => { })
-    }
-  }
-}
 
 const MAX_ORDERS = 5
 const pendingOrders = ref([])
@@ -585,12 +571,6 @@ const isAllPageSelected = computed(() => {
   return selectable.every(p => modalSelectedIds.value.includes(p.id))
 })
 
-const isIndeterminatePage = computed(() => {
-  const selectable = paginatedModalVariants.value.filter(p => (p.stock ?? p.soLuong ?? 0) > 0)
-  const selected = selectable.filter(p => modalSelectedIds.value.includes(p.id))
-  return selected.length > 0 && selected.length < selectable.length
-})
-
 const toggleModalRow = (product, event) => {
   if (event) event.stopPropagation()
   const stock = product.stock !== undefined ? product.stock : (product.soLuong || 0)
@@ -1059,47 +1039,15 @@ const executeSwap = (newVariant) => {
   selectedNewVariant.value = null
 }
 
-const storeBankAccounts = ref([
-  {
-    id: 'MB',
-    name: 'MB Bank',
-    shortName: 'MB',
-    accountNo: '0987654321',
-    accountName: 'POLYSHOES STORE',
-    color: '#004b8d',
-    tag: 'Khuyên dùng'
-  },
-  {
-    id: 'VCB',
-    name: 'Vietcombank',
-    shortName: 'VCB',
-    accountNo: '1012345678',
-    accountName: 'POLYSHOES STORE',
-    color: '#005f33',
-    tag: 'Ngoại thương'
-  },
-  {
-    id: 'TCB',
-    name: 'Techcombank',
-    shortName: 'TCB',
-    accountNo: '19033445566011',
-    accountName: 'POLYSHOES STORE',
-    color: '#e01a22',
-    tag: 'Kỹ thương'
-  },
-  {
-    id: 'ACB',
-    name: 'ACB',
-    shortName: 'ACB',
-    accountNo: '23456789',
-    accountName: 'POLYSHOES STORE',
-    color: '#0070ba',
-    tag: 'Á Châu'
-  }
-])
+const defaultStoreBank = {
+  id: 'MB',
+  name: 'MB Bank',
+  fullName: 'Ngân hàng TMCP Quân Đội (MB Bank)',
+  accountNo: '0987654321',
+  accountName: 'POLYSHOES STORE',
+  color: '#004b8d'
+}
 
-const selectedBank = ref(storeBankAccounts.value[0])
-const isCustomerDisplayMode = ref(false)
 const isPaymentSuccessAnim = ref(false)
 
 const isBankQrModalOpen = ref(false)
@@ -1126,7 +1074,7 @@ const generateBankTransferQr = async () => {
   isQrImgFailed.value = false
   const amount = Math.round(bankTransferAmount.value)
   const memo = bankTransferMemo.value
-  const bank = selectedBank.value || storeBankAccounts.value[0]
+  const bank = defaultStoreBank
 
   vietQrNetworkUrl.value = `https://img.vietqr.io/image/${bank.id}-${bank.accountNo}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(bank.accountName)}`
 
@@ -1138,11 +1086,6 @@ const generateBankTransferQr = async () => {
   }
 
   isBankQrModalOpen.value = true
-}
-
-const selectBank = (bank) => {
-  selectedBank.value = bank
-  generateBankTransferQr()
 }
 
 const onQrImgError = () => {
@@ -1195,20 +1138,69 @@ const copyToClipboard = async (text, label = 'nội dung') => {
   }
 }
 
-const confirmBankPaymentReceived = () => {
-  if (currentOrder.value) {
-    if (currentOrder.value.paymentMethod === 'KET_HOP') {
-      currentOrder.value.transferGiven = bankTransferAmount.value
-    }
+const isAutoCheckoutEnabled = ref(false)
+const autoCheckoutCountdown = ref(0)
+let autoCheckoutTimer = null
+
+const stopAutoCheckoutCountdown = () => {
+  if (autoCheckoutTimer) {
+    clearInterval(autoCheckoutTimer)
+    autoCheckoutTimer = null
   }
+  autoCheckoutCountdown.value = 0
+}
+
+const startAutoCheckoutCountdown = () => {
+  stopAutoCheckoutCountdown()
+  if (!isAutoCheckoutEnabled.value) return
+  autoCheckoutCountdown.value = 5
+  autoCheckoutTimer = setInterval(() => {
+    if (autoCheckoutCountdown.value > 1) {
+      autoCheckoutCountdown.value--
+    } else {
+      stopAutoCheckoutCountdown()
+      confirmBankPaymentReceived()
+    }
+  }, 1000)
+}
+
+const toggleAutoCheckout = () => {
+  isAutoCheckoutEnabled.value = !isAutoCheckoutEnabled.value
+  if (isAutoCheckoutEnabled.value) {
+    startAutoCheckoutCountdown()
+  } else {
+    stopAutoCheckoutCountdown()
+  }
+}
+
+const confirmBankPaymentReceived = async () => {
+  if (!currentOrder.value || isProcessingCheckout.value) return
+  stopAutoCheckoutCountdown()
+
+  if (currentOrder.value.paymentMethod === 'KET_HOP') {
+    currentOrder.value.transferGiven = bankTransferAmount.value
+  } else {
+    currentOrder.value.paymentMethod = 'CHUYEN_KHOAN'
+  }
+
   playPaymentSuccessSound()
   isPaymentSuccessAnim.value = true
-  setTimeout(() => {
+
+  setTimeout(async () => {
     isPaymentSuccessAnim.value = false
     isBankQrModalOpen.value = false
-    notifySuccess('Xác nhận thành công!', 'Đã ghi nhận thanh toán ' + formatVnd(bankTransferAmount.value) + ' cho hóa đơn ' + (currentOrder.value?.code || ''), 2500)
-  }, 900)
+    // Tự động hoàn tất hóa đơn ngay lập tức vào database, không cần ấn nút thanh toán nữa
+    await handleCheckout({ skipConfirm: true })
+  }, 600)
 }
+
+watch(isBankQrModalOpen, (isOpen) => {
+  if (!isOpen) {
+    stopAutoCheckoutCountdown()
+  } else if (isAutoCheckoutEnabled.value) {
+    startAutoCheckoutCountdown()
+  }
+})
 
 watch(() => currentOrder.value?.paymentMethod, (newMethod) => {
   if (newMethod === 'CHUYEN_KHOAN' && finalTotal.value > 0) {
@@ -1559,11 +1551,6 @@ const openVoucherModal = () => {
   isVoucherModalOpen.value = true
 }
 
-const openQuickCustomerFromVoucher = () => {
-  isVoucherModalOpen.value = false
-  isAddCustomerModalOpen.value = true
-}
-
 const applyVoucher = (voucher) => {
   if (!currentOrder.value) return
   if (!isVoucherEligible(voucher)) {
@@ -1631,14 +1618,13 @@ watch(subTotal, (newSub) => {
   }
 })
 
-const handleCheckout = async () => {
-  if (!currentOrder.value) return
+const handleCheckout = async (options = {}) => {
+  const skipConfirm = options?.skipConfirm === true
+  if (!currentOrder.value || isProcessingCheckout.value) return
   if (currentOrder.value.cart.length === 0) {
     notifyWarning('Giỏ hàng trống', 'Vui lòng chọn ít nhất 1 sản phẩm vào giỏ hàng trước khi thanh toán!')
     return
   }
-
-
 
   if (currentOrder.value.paymentMethod === 'TIEN_MAT') {
     if ((currentOrder.value.cashGiven || 0) < finalTotal.value) {
@@ -1655,13 +1641,15 @@ const handleCheckout = async () => {
     }
   }
 
-  const ok = await notifyConfirm(
-    'Xác nhận thanh toán',
-    `Thanh toán hóa đơn "${currentOrder.value.code}" với tổng số tiền ${formatVnd(finalTotal.value)}?`,
-    'Xác nhận thanh toán',
-    'Kiểm tra lại'
-  )
-  if (!ok) return
+  if (!skipConfirm) {
+    const ok = await notifyConfirm(
+      'Xác nhận thanh toán',
+      `Thanh toán hóa đơn "${currentOrder.value.code}" với tổng số tiền ${formatVnd(finalTotal.value)}?`,
+      'Xác nhận thanh toán',
+      'Kiểm tra lại'
+    )
+    if (!ok) return
+  }
 
   if (currentOrder.value.isDelivery) {
     const d = currentOrder.value.deliveryInfo
@@ -1775,6 +1763,12 @@ const printReceipt = () => {
     return
   }
 
+  // Lấy nội dung hóa đơn
+  const receiptHtml = printEl.outerHTML
+
+  // Tự động đóng modal xem trước hóa đơn ngay khi thực hiện in, thu ngân không cần bấm Đóng thủ công
+  isReceiptModalOpen.value = false
+
   const iframe = document.createElement('iframe')
   iframe.style.position = 'fixed'
   iframe.style.right = '0'
@@ -1783,6 +1777,7 @@ const printReceipt = () => {
   iframe.style.height = '0'
   iframe.style.border = '0'
   iframe.style.opacity = '0'
+  iframe.style.pointerEvents = 'none'
   document.body.appendChild(iframe)
 
   const doc = iframe.contentWindow.document
@@ -1792,37 +1787,54 @@ const printReceipt = () => {
   <head>
     <meta charset="utf-8" />
     <title>Hoa_don_${completedInvoiceData.value?.code || 'POS'}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
       @page {
         size: 80mm auto;
-        margin: 4mm;
+        margin: 0;
       }
       * {
         box-sizing: border-box;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
       }
-      body {
+      html, body {
         margin: 0;
         padding: 0;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        color: #0f172a;
+        width: 100%;
         background: #ffffff;
+        font-family: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color: #0f172a;
         font-size: 12px;
         line-height: 1.35;
       }
-      .thermal-receipt-box {
+      .thermal-print-wrap {
         width: 100%;
-        padding: 4px;
+        display: flex;
+        justify-content: center;
         background: #ffffff;
+      }
+      .thermal-receipt-box {
+        width: 76mm !important;
+        max-width: 76mm !important;
+        min-width: 76mm !important;
+        margin: 0 auto !important;
+        padding: 10px 8px !important;
+        background: #ffffff !important;
+        box-sizing: border-box !important;
       }
       .receipt-header-center {
         text-align: center;
-        padding-bottom: 8px;
-        border-bottom: 1px dashed #64748b;
-        margin-bottom: 8px;
+        padding-bottom: 10px;
+        border-bottom: 1px dashed #cbd5e1 !important;
+        margin-bottom: 10px;
       }
       .receipt-brand-logo {
-        font-size: 17px;
-        font-weight: 900;
+        font-size: 18px;
+        font-weight: 800;
         letter-spacing: 0.5px;
         margin-bottom: 3px;
         color: #0f172a;
@@ -1831,39 +1843,42 @@ const printReceipt = () => {
         font-size: 10.5px;
         color: #475569;
         margin: 2px 0;
+        line-height: 1.35;
       }
       .receipt-bill-heading {
         text-align: center;
         margin-bottom: 10px;
-        padding-bottom: 6px;
-        border-bottom: 1px dashed #64748b;
+        padding-bottom: 8px;
+        border-bottom: 1px dashed #cbd5e1 !important;
       }
       .receipt-bill-title {
-        font-size: 13.5px;
+        font-size: 14px;
         font-weight: 800;
         color: #0f172a;
+        letter-spacing: 0.5px;
       }
       .receipt-barcode-code {
-        font-family: monospace;
-        font-size: 11px;
+        font-family: 'SFMono-Regular', Consolas, monospace;
+        font-size: 11.5px;
+        font-weight: 600;
         letter-spacing: 2px;
-        color: #475569;
+        color: #64748b;
         margin-top: 2px;
       }
       .receipt-meta-info {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        margin-bottom: 10px;
-        padding: 6px 8px;
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 4px;
+        gap: 5px;
+        margin-bottom: 12px;
+        padding: 8px 10px;
+        background-color: #f8fafc !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 8px;
       }
       .meta-row {
         display: flex;
         justify-content: space-between;
-        font-size: 11px;
+        font-size: 11.5px;
       }
       .meta-k {
         color: #475569;
@@ -1871,35 +1886,44 @@ const printReceipt = () => {
       .meta-v {
         font-weight: 600;
         color: #0f172a;
+        text-align: right;
       }
       .receipt-items-table {
         width: 100%;
         border-collapse: collapse;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
       }
       .receipt-items-table thead tr {
-        border-top: 1px dashed #64748b;
-        border-bottom: 1px dashed #64748b;
+        border-top: 1px dashed #cbd5e1 !important;
+        border-bottom: 1px dashed #cbd5e1 !important;
       }
       .receipt-items-table th {
         padding: 6px 0;
-        font-size: 10.5px;
+        font-size: 11px;
         font-weight: 700;
-        text-align: left;
         text-transform: uppercase;
         color: #475569;
+        letter-spacing: 0.3px;
+        text-align: left;
       }
       .receipt-items-table tbody tr {
         border-bottom: 1px solid #f1f5f9;
       }
       .receipt-items-table td {
-        padding: 5px 0;
+        padding: 6px 0;
         font-size: 11.5px;
         vertical-align: top;
+      }
+      .text-center {
+        text-align: center !important;
+      }
+      .text-end {
+        text-align: right !important;
       }
       .rc-item-name {
         font-weight: 600;
         color: #0f172a;
+        line-height: 1.3;
       }
       .rc-item-variant {
         font-size: 10px;
@@ -1907,45 +1931,46 @@ const printReceipt = () => {
         margin-top: 1px;
       }
       .rc-item-qty {
-        text-align: center;
+        text-align: center !important;
         font-weight: 600;
       }
       .rc-item-price {
-        text-align: right;
+        text-align: right !important;
         color: #475569;
       }
       .rc-item-total {
-        text-align: right;
+        text-align: right !important;
         font-weight: 700;
         color: #0f172a;
       }
       .receipt-totals-block {
-        border-top: 1px dashed #64748b;
-        padding-top: 8px;
+        border-top: 1px dashed #cbd5e1 !important;
+        padding-top: 10px;
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 5px;
       }
       .receipt-sum-row {
         display: flex;
         justify-content: space-between;
-        font-size: 11px;
+        align-items: center;
+        font-size: 11.5px;
       }
       .sum-k {
-        color: #475569;
+        color: #64748b;
       }
       .sum-v {
         font-weight: 600;
         color: #0f172a;
       }
       .discount-val {
-        color: #dc2626;
+        color: #dc2626 !important;
         font-weight: 700;
       }
       .grand-sum {
-        border-top: 1.5px solid #0f172a;
+        border-top: 1.5px solid #0f172a !important;
         padding-top: 6px;
-        margin-top: 4px;
+        margin-top: 3px;
       }
       .grand-sum .sum-k {
         font-size: 12.5px;
@@ -1953,18 +1978,18 @@ const printReceipt = () => {
         color: #0f172a;
       }
       .grand-sum-val {
-        font-size: 15px;
+        font-size: 16px;
         font-weight: 900;
-        color: #dc2626;
+        color: #dc2626 !important;
       }
       .receipt-footer-notes {
         text-align: center;
         margin-top: 14px;
-        padding-top: 8px;
-        border-top: 1px dashed #64748b;
+        padding-top: 10px;
+        border-top: 1px dashed #cbd5e1 !important;
       }
       .rc-thank-txt {
-        font-size: 11.5px;
+        font-size: 12px;
         font-weight: 700;
         margin: 0 0 2px;
         color: #0f172a;
@@ -1973,24 +1998,46 @@ const printReceipt = () => {
         font-size: 10px;
         color: #64748b;
         margin: 0;
+        line-height: 1.35;
       }
     </style>
   </head>
   <body>
-    ${printEl.outerHTML}
+    <div class="thermal-print-wrap">
+      ${receiptHtml}
+    </div>
   </body>
 </html>`)
   doc.close()
 
-  iframe.contentWindow.focus()
-  setTimeout(() => {
-    iframe.contentWindow.print()
+  const doPrint = () => {
+    iframe.contentWindow.focus()
+    iframe.contentWindow.onafterprint = () => {
+      isReceiptModalOpen.value = false
+    }
+    try {
+      iframe.contentWindow.print()
+    } catch (e) {
+      console.error('Print trigger error:', e)
+    } finally {
+      isReceiptModalOpen.value = false
+    }
     setTimeout(() => {
       if (document.body.contains(iframe)) {
         document.body.removeChild(iframe)
       }
     }, 2000)
-  }, 250)
+  }
+
+  if (iframe.contentWindow.document.fonts && iframe.contentWindow.document.fonts.ready) {
+    iframe.contentWindow.document.fonts.ready.then(() => {
+      setTimeout(doPrint, 120)
+    }).catch(() => {
+      setTimeout(doPrint, 200)
+    })
+  } else {
+    setTimeout(doPrint, 250)
+  }
 }
 
 const handleKeyDown = (e) => {
@@ -2130,7 +2177,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (clockTimer) clearInterval(clockTimer)
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('click', handleWindowClick)
   stopCameraScanner()
@@ -3290,179 +3336,166 @@ onUnmounted(() => {
 
     <transition name="fade">
       <div v-if="isBankQrModalOpen" class="pos-modal-overlay" @click.self="isBankQrModalOpen = false">
-        <div class="pos-modal-dialog modal-bank-qr" :class="{ 'customer-mode-active': isCustomerDisplayMode }">
+        <div class="pos-modal-dialog modal-bank-qr-clean">
           <div v-if="isPaymentSuccessAnim" class="bank-success-overlay">
             <div class="bso-card">
               <div class="bso-icon-ring">
-                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3">
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               </div>
               <h4 class="bso-title">THANH TOÁN THÀNH CÔNG!</h4>
               <p class="bso-amount">{{ formatVnd(bankTransferAmount) }}</p>
-              <span class="bso-memo">Hóa đơn: {{ currentOrder?.code }}</span>
+              <span class="bso-memo">Mã đơn: {{ currentOrder?.code }}</span>
             </div>
           </div>
 
-          <div class="pos-modal-head">
-            <div class="bank-modal-head-titles">
-              <div class="title-with-badge">
-                <h3 class="pos-modal-title">Thanh toán chuyển khoản VietQR</h3>
-                <span class="napas-badge-head">Napas 24/7</span>
+          <div class="pos-modal-head bank-clean-head">
+            <div class="bank-clean-title-group">
+              <div class="bank-clean-brand">
+                <span class="viet-txt">Viet</span><span class="qr-txt">QR</span>
+                <span class="napas-badge">Napas 24/7</span>
               </div>
-              <span class="pos-modal-subtitle">Quét mã bằng app ngân hàng bất kỳ để tự động điền STK & Số tiền</span>
+              <h3 class="bank-clean-title">Thanh toán chuyển khoản</h3>
             </div>
-            <div class="bank-modal-head-actions">
-              <button type="button" class="btn-toggle-customer-mode" :class="{ active: isCustomerDisplayMode }"
-                @click="isCustomerDisplayMode = !isCustomerDisplayMode"
-                title="Bật/Tắt chế độ màn hình lớn cho khách quét">
-                <span v-if="!isCustomerDisplayMode">🖥️ Chế độ cho khách</span>
-                <span v-else>📋 Chế độ thu ngân</span>
-              </button>
-              <button class="pos-modal-close" @click="isBankQrModalOpen = false">×</button>
-            </div>
+            <button class="pos-modal-close" @click="isBankQrModalOpen = false" title="Đóng">×</button>
           </div>
 
-          <div class="pos-modal-body p-0">
-            <div class="bank-selector-pills-bar" v-if="!isCustomerDisplayMode">
-              <span class="bs-label">Chọn tài khoản nhận:</span>
-              <div class="bs-options">
-                <button v-for="b in storeBankAccounts" :key="b.id" type="button" class="bs-pill-btn"
-                  :class="{ active: selectedBank.id === b.id }" @click="selectBank(b)">
-                  <span class="bs-dot" :style="{ backgroundColor: b.color }"></span>
-                  <span class="bs-name">{{ b.name }}</span>
-                  <span class="bs-tag" v-if="b.tag">{{ b.tag }}</span>
-                </button>
-              </div>
-            </div>
-
-            <div v-if="isCustomerDisplayMode" class="customer-qr-display-container">
-              <div class="cqr-header">
-                <div class="cqr-store-brand">POLYSHOES STORE</div>
-                <div class="cqr-prompt">Quý khách mở ứng dụng ngân hàng bất kỳ để quét mã</div>
-              </div>
-
-              <div class="cqr-card-big">
-                <div class="cqr-img-box">
-                  <img v-if="!isQrImgFailed && vietQrNetworkUrl" :src="vietQrNetworkUrl" @error="onQrImgError"
-                    class="cqr-img" alt="Mã VietQR lớn" />
-                  <img v-else-if="bankQrDataUrl" :src="bankQrDataUrl" class="cqr-img" alt="Mã QR Chuyển khoản" />
+          <div class="pos-modal-body bank-clean-body">
+            <div class="bank-clean-grid">
+              <!-- Cột trái: Mã QR thanh toán -->
+              <div class="bank-clean-qr-col">
+                <div class="bank-clean-qr-box">
+                  <img
+                    v-if="!isQrImgFailed && vietQrNetworkUrl"
+                    :src="vietQrNetworkUrl"
+                    @error="onQrImgError"
+                    class="bank-clean-qr-img"
+                    alt="Mã QR VietQR"
+                  />
+                  <img
+                    v-else-if="bankQrDataUrl"
+                    :src="bankQrDataUrl"
+                    class="bank-clean-qr-img"
+                    alt="Mã QR Chuyển khoản"
+                  />
                 </div>
-                <div class="cqr-amount-box">
-                  <span class="cqr-amount-lbl">SỐ TIỀN THANH TOÁN</span>
-                  <span class="cqr-amount-val">{{ formatVnd(bankTransferAmount) }}</span>
-                </div>
-              </div>
-
-              <div class="cqr-bank-recap">
-                <span class="cqr-recap-item">Ngân hàng: <strong>{{ selectedBank.name }}</strong></span>
-                <span class="cqr-recap-sep">•</span>
-                <span class="cqr-recap-item">Chủ TK: <strong>{{ selectedBank.accountName }}</strong></span>
-                <span class="cqr-recap-sep">•</span>
-                <span class="cqr-recap-item">Nội dung CK: <strong>{{ currentOrder?.code }}</strong></span>
-              </div>
-            </div>
-
-            <div v-else class="bank-qr-layout">
-              <div class="bank-qr-visual-card">
-                <div class="vietqr-badge-header">
-                  <div class="vietqr-brand-logo">
-                    <span class="vietqr-text-viet">Viet</span><span class="vietqr-text-qr">QR</span>
-                  </div>
-                  <span class="bank-napas-tag">{{ selectedBank.shortName }} • Napas 247</span>
-                </div>
-
-                <div class="bank-qr-image-wrapper">
-                  <img v-if="!isQrImgFailed && vietQrNetworkUrl" :src="vietQrNetworkUrl" @error="onQrImgError"
-                    class="vietqr-render-img" alt="Mã VietQR" />
-                  <img v-else-if="bankQrDataUrl" :src="bankQrDataUrl" class="vietqr-render-img"
-                    alt="Mã QR Chuyển khoản" />
-                </div>
-
-                <div class="bank-qr-scan-guide">
+                <div class="bank-clean-qr-sub">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"></circle>
                     <polyline points="12 6 12 12 14 14"></polyline>
                   </svg>
-                  <span>Tự động nhận diện STK & Số tiền</span>
+                  <span>Quét bằng app ngân hàng hoặc ví điện tử</span>
                 </div>
               </div>
 
-              <div class="bank-details-pane">
-                <div class="qr-amount-callout">
-                  <span class="amount-callout-label">Số tiền cần thanh toán</span>
-                  <div class="amount-callout-val">
-                    <span class="amount-number">{{ formatVnd(bankTransferAmount) }}</span>
-                    <button class="btn-copy-chip" @click="copyToClipboard(bankTransferAmount, 'số tiền')"
-                      title="Sao chép số tiền">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2">
+              <!-- Cột phải: Số tiền & Chi tiết tài khoản nhận -->
+              <div class="bank-clean-info-col">
+                <!-- Số tiền thanh toán -->
+                <div class="bank-clean-amount-box">
+                  <span class="bank-clean-amount-label">Số tiền cần thanh toán</span>
+                  <div class="bank-clean-amount-row">
+                    <span class="bank-clean-amount-value">{{ formatVnd(bankTransferAmount) }}</span>
+                    <button
+                      class="btn-clean-copy-amount"
+                      @click="copyToClipboard(bankTransferAmount, 'số tiền')"
+                      title="Sao chép số tiền"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                       </svg>
+                      <span>Sao chép</span>
                     </button>
                   </div>
                 </div>
 
-                <div class="bank-info-table">
-                  <div class="bank-info-row">
-                    <span class="info-k">Hóa đơn:</span>
-                    <span class="info-v highlight-order">{{ currentOrder?.title }} (<strong>{{ currentOrder?.code
-                    }}</strong>)</span>
+                <!-- Bảng chi tiết 1 tài khoản -->
+                <div class="bank-clean-details-card">
+                  <div class="bank-clean-row">
+                    <span class="clean-row-lbl">Hóa đơn:</span>
+                    <span class="clean-row-val">{{ currentOrder?.title }} (<strong>{{ currentOrder?.code }}</strong>)</span>
                   </div>
 
-                  <div class="bank-info-row">
-                    <span class="info-k">Ngân hàng:</span>
-                    <span class="info-v">
-                      <strong :style="{ color: selectedBank.color }">{{ selectedBank.name }}</strong>
+                  <div class="bank-clean-row">
+                    <span class="clean-row-lbl">Ngân hàng:</span>
+                    <span class="clean-row-val">
+                      <span class="mb-brand-pill">MB Bank</span>
+                      <span class="bank-sub-name">Quân Đội</span>
                     </span>
                   </div>
 
-                  <div class="bank-info-row">
-                    <span class="info-k">Chủ tài khoản:</span>
-                    <span class="info-v strong-text">{{ selectedBank.accountName }}</span>
+                  <div class="bank-clean-row">
+                    <span class="clean-row-lbl">Chủ tài khoản:</span>
+                    <span class="clean-row-val strong">{{ defaultStoreBank.accountName }}</span>
                   </div>
 
-                  <div class="bank-info-row">
-                    <span class="info-k">Số tài khoản:</span>
-                    <div class="info-v-copy">
-                      <span class="copy-text-code">{{ selectedBank.accountNo }}</span>
-                      <button class="btn-copy-mini" @click="copyToClipboard(selectedBank.accountNo, 'số tài khoản')"
-                        title="Sao chép số tài khoản">
+                  <div class="bank-clean-row">
+                    <span class="clean-row-lbl">Số tài khoản:</span>
+                    <div class="clean-row-val-copy">
+                      <span class="stk-number">{{ defaultStoreBank.accountNo }}</span>
+                      <button
+                        class="btn-clean-copy-mini"
+                        @click="copyToClipboard(defaultStoreBank.accountNo, 'số tài khoản')"
+                        title="Sao chép số tài khoản"
+                      >
                         Sao chép
                       </button>
                     </div>
                   </div>
 
-                  <div class="bank-info-row">
-                    <span class="info-k">Nội dung CK:</span>
-                    <div class="info-v-copy">
-                      <span class="copy-text-code highlight-memo">{{ currentOrder?.code }}</span>
-                      <button class="btn-copy-mini"
-                        @click="copyToClipboard(currentOrder?.code, 'nội dung chuyển khoản')" title="Sao chép nội dung">
+                  <div class="bank-clean-row">
+                    <span class="clean-row-lbl">Nội dung CK:</span>
+                    <div class="clean-row-val-copy">
+                      <span class="memo-badge">{{ currentOrder?.code }}</span>
+                      <button
+                        class="btn-clean-copy-mini"
+                        @click="copyToClipboard(currentOrder?.code, 'nội dung chuyển khoản')"
+                        title="Sao chép nội dung"
+                      >
                         Sao chép
                       </button>
                     </div>
                   </div>
                 </div>
 
-                <div class="bank-notice-alert">
-                  <span class="notice-icon">ℹ</span>
-                  <span>Nhấn <strong>Đã nhận tiền</strong> khi ứng dụng ngân hàng báo tiền về để hoàn tất.</span>
+                <div class="bank-clean-tip">
+                  <span class="tip-dot" :class="{ pulsing: isAutoCheckoutEnabled }"></span>
+                  <span v-if="isAutoCheckoutEnabled && autoCheckoutCountdown > 0">
+                    Đang tự động xác nhận & thanh toán sau <strong>{{ autoCheckoutCountdown }}s</strong>...
+                  </span>
+                  <span v-else>
+                    Mã QR tự động điền đúng STK, số tiền & nội dung
+                  </span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="pos-modal-foot bank-modal-foot">
-            <button class="btn-cancel-modal" @click="isBankQrModalOpen = false">
+          <div class="pos-modal-foot bank-clean-foot">
+            <button
+              type="button"
+              class="btn-toggle-auto-pay"
+              :class="{ active: isAutoCheckoutEnabled }"
+              @click="toggleAutoCheckout"
+              title="Bật/Tắt tự động thanh toán sau 5 giây"
+            >
+              <span class="auto-dot" :class="{ pulsing: isAutoCheckoutEnabled }"></span>
+              <span>{{ isAutoCheckoutEnabled ? `Tự động (${autoCheckoutCountdown}s)` : 'Tự động thanh toán (5s)' }}</span>
+            </button>
+
+            <button class="btn-clean-cancel" @click="isBankQrModalOpen = false">
               Đóng
             </button>
-            <button class="btn-confirm-received" @click="confirmBankPaymentReceived">
+            <button
+              class="btn-clean-confirm"
+              :disabled="isProcessingCheckout"
+              @click="confirmBankPaymentReceived"
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
-              <span>Đã nhận tiền (Xác nhận) 🔔</span>
+              <span>{{ isProcessingCheckout ? 'Đang thanh toán...' : 'Đã nhận tiền - Hoàn tất hóa đơn' }}</span>
             </button>
           </div>
         </div>
