@@ -1369,8 +1369,9 @@ const loadCaHienTai = async () => {
   try {
     caHienTai.value = await getDangMo()
   } catch (err) {
+    // Giữ state cũ thay vì set null (network blip không được đổi banner sang "Chưa mở ca" oan)
     console.error('Lỗi tải ca làm việc:', err)
-    caHienTai.value = null
+    notifyWarning('Chưa tải được trạng thái ca', 'Giữ nguyên trạng thái hiện tại — vui lòng thử lại sau')
   } finally {
     isLoadingCa.value = false
   }
@@ -1384,6 +1385,7 @@ const openMoCaModal = () => {
 }
 
 const confirmMoCa = async () => {
+  if (isSavingMoCa.value) return
   const raw = moCaForm.tienDauCa
   const tien = Number(raw)
   if (raw === '' || raw === null || raw === undefined || Number.isNaN(tien)) {
@@ -1419,8 +1421,11 @@ const confirmMoCa = async () => {
   }
 }
 
+let tongKetReqId = 0
+
 const openKetCaModal = async () => {
   if (!caHienTai.value) return
+  const reqId = ++tongKetReqId
   ketCaError.value = ''
   ketCaLichError.value = []
   ketCaForm.lyDoLech = ''
@@ -1430,18 +1435,22 @@ const openKetCaModal = async () => {
   isKetCaModalOpen.value = true
   isLoadingTongKet.value = true
   try {
-    ketCaTongKet.value = await getTongKet(caHienTai.value.id)
-    ketCaForm.tienThucTe = Number(ketCaTongKet.value.tienDuKien || 0)
+    const tongKet = await getTongKet(caHienTai.value.id)
+    if (reqId !== tongKetReqId) return
+    ketCaTongKet.value = tongKet
+    ketCaForm.tienThucTe = Number(tongKet.tienDuKien || 0)
   } catch (err) {
+    if (reqId !== tongKetReqId || !isKetCaModalOpen.value) return
     console.error('Lỗi tải đối soát ca:', err)
     notifyError('Không tải được đối soát', err.message || 'Vui lòng thử lại')
     isKetCaModalOpen.value = false
   } finally {
-    isLoadingTongKet.value = false
+    if (reqId === tongKetReqId) isLoadingTongKet.value = false
   }
 }
 
 const confirmKetCa = async () => {
+  if (isSavingKetCa.value) return
   if (!caHienTai.value) return
   const raw = ketCaForm.tienThucTe
   const tien = Number(raw)
@@ -1475,7 +1484,10 @@ const confirmKetCa = async () => {
     if (msg.includes('LY_DO_LECH_THIEU')) {
       ketCaError.value = 'Chênh lệch khác 0, bắt buộc nhập lý do lệch'
     } else if (msg.includes('CON_HD_DANG_XU_LY')) {
-      ketCaLichError.value = [msg.replace(/^CON_HD_DANG_XU_LY:\s*/, '')]
+      const noiDung = msg.replace(/^CON_HD_DANG_XU_LY:\s*/, '')
+      const phanMa = noiDung.includes(':') ? noiDung.slice(noiDung.lastIndexOf(':') + 1) : noiDung
+      const dsMa = phanMa.split(/\s+/).map((s) => s.trim()).filter(Boolean)
+      ketCaLichError.value = dsMa.length > 0 ? dsMa : [noiDung]
     } else if (err.status === 409 || msg.includes('CA_DANG_KET')) {
       isKetCaModalOpen.value = false
       notifyWarning('Ca vừa được kết bởi thao tác khác', 'Trạng thái ca đã được làm mới')
@@ -1495,7 +1507,8 @@ const handleCheckout = async () => {
     return
   }
 
-  if (!caHienTai.value && !currentOrder.value.isDelivery) {
+  // Đang tải trạng thái ca: chưa biết có ca hay không — không chặn oan, để BE quyết định (CA_CHUA_MO nếu thiếu)
+  if (!isLoadingCa.value && !caHienTai.value && !currentOrder.value.isDelivery) {
     notifyWarning('Chưa mở ca', 'Chưa mở ca, vui lòng mở ca để bán tại quầy!')
     openMoCaModal()
     return
