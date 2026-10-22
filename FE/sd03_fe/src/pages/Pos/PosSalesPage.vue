@@ -6,7 +6,8 @@ import http, { API_ORIGIN } from '@/api/http'
 import { getProvinces, getWards, getServices, tinhPhi } from '@/api/shipping'
 import { DS_63_TINH_THANH } from '@/api/diaGioi'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
-import { formatVnd } from '@/utils/format'
+import { formatVnd, formatDateTime } from '@/utils/format'
+import { getDangMo, moCa, getTongKet, ketCa } from '@/api/giaoCa'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 
 import { getUser } from '@/utils/auth'
@@ -1343,10 +1344,160 @@ watch(subTotal, (newSub) => {
   }
 })
 
+// ===== Giao ca (Mo ca / Ket ca / Chan checkout khi chua mo ca - R13) =====
+const caHienTai = ref(null)
+const isLoadingCa = ref(true)
+const isMoCaModalOpen = ref(false)
+const isSavingMoCa = ref(false)
+const moCaForm = reactive({ tienDauCa: 500000, ghiChu: '' })
+const moCaError = ref('')
+
+const isKetCaModalOpen = ref(false)
+const isLoadingTongKet = ref(false)
+const isSavingKetCa = ref(false)
+const ketCaTongKet = ref(null)
+const ketCaForm = reactive({ tienThucTe: null, lyDoLech: '', ghiChu: '' })
+const ketCaError = ref('')
+const ketCaLichError = ref([])
+
+const chenhLechKetCa = computed(() =>
+  Number(ketCaForm.tienThucTe || 0) - Number(ketCaTongKet.value?.tienDuKien || 0)
+)
+
+const loadCaHienTai = async () => {
+  isLoadingCa.value = true
+  try {
+    caHienTai.value = await getDangMo()
+  } catch (err) {
+    console.error('Lỗi tải ca làm việc:', err)
+    caHienTai.value = null
+  } finally {
+    isLoadingCa.value = false
+  }
+}
+
+const openMoCaModal = () => {
+  moCaError.value = ''
+  moCaForm.tienDauCa = 500000
+  moCaForm.ghiChu = ''
+  isMoCaModalOpen.value = true
+}
+
+const confirmMoCa = async () => {
+  const raw = moCaForm.tienDauCa
+  const tien = Number(raw)
+  if (raw === '' || raw === null || raw === undefined || Number.isNaN(tien)) {
+    moCaError.value = 'Vui lòng nhập tiền đầu ca'
+    return
+  }
+  if (tien < 0) {
+    moCaError.value = 'Tiền đầu ca không được âm'
+    return
+  }
+  if (tien % 1000 !== 0) {
+    moCaError.value = 'Tiền đầu ca phải là bội số của 1.000đ'
+    return
+  }
+  moCaError.value = ''
+  isSavingMoCa.value = true
+  try {
+    const ca = await moCa({ tienDauCa: tien, ghiChu: moCaForm.ghiChu || null })
+    caHienTai.value = ca
+    isMoCaModalOpen.value = false
+    notifySuccess('Mở ca thành công', `Ca ${ca.maCa} đã được mở`)
+  } catch (err) {
+    const msg = err.message || ''
+    if (msg.includes('CA_DA_MO')) {
+      moCaError.value = 'Nhân viên đã có ca đang mở'
+      await loadCaHienTai()
+      if (caHienTai.value) isMoCaModalOpen.value = false
+    } else {
+      moCaError.value = msg || 'Không thể mở ca'
+    }
+  } finally {
+    isSavingMoCa.value = false
+  }
+}
+
+const openKetCaModal = async () => {
+  if (!caHienTai.value) return
+  ketCaError.value = ''
+  ketCaLichError.value = []
+  ketCaForm.lyDoLech = ''
+  ketCaForm.ghiChu = ''
+  ketCaForm.tienThucTe = Number(caHienTai.value.tienDuKien || 0)
+  ketCaTongKet.value = null
+  isKetCaModalOpen.value = true
+  isLoadingTongKet.value = true
+  try {
+    ketCaTongKet.value = await getTongKet(caHienTai.value.id)
+    ketCaForm.tienThucTe = Number(ketCaTongKet.value.tienDuKien || 0)
+  } catch (err) {
+    console.error('Lỗi tải đối soát ca:', err)
+    notifyError('Không tải được đối soát', err.message || 'Vui lòng thử lại')
+    isKetCaModalOpen.value = false
+  } finally {
+    isLoadingTongKet.value = false
+  }
+}
+
+const confirmKetCa = async () => {
+  if (!caHienTai.value) return
+  const raw = ketCaForm.tienThucTe
+  const tien = Number(raw)
+  if (raw === '' || raw === null || raw === undefined || Number.isNaN(tien)) {
+    ketCaError.value = 'Vui lòng nhập tiền thực tế'
+    return
+  }
+  if (tien < 0) {
+    ketCaError.value = 'Tiền thực tế không được âm'
+    return
+  }
+  const lech = tien - Number(ketCaTongKet.value?.tienDuKien || 0)
+  if (lech !== 0 && !String(ketCaForm.lyDoLech || '').trim()) {
+    ketCaError.value = 'Chênh lệch khác 0, bắt buộc nhập lý do lệch'
+    return
+  }
+  ketCaError.value = ''
+  ketCaLichError.value = []
+  isSavingKetCa.value = true
+  try {
+    await ketCa(caHienTai.value.id, {
+      tienThucTe: tien,
+      lyDoLech: lech === 0 ? '' : String(ketCaForm.lyDoLech).trim(),
+      ghiChu: ketCaForm.ghiChu || null
+    })
+    caHienTai.value = null
+    isKetCaModalOpen.value = false
+    notifySuccess('Kết ca thành công', 'Ca đã được kết thúc và lưu vào lịch sử')
+  } catch (err) {
+    const msg = err.message || ''
+    if (msg.includes('LY_DO_LECH_THIEU')) {
+      ketCaError.value = 'Chênh lệch khác 0, bắt buộc nhập lý do lệch'
+    } else if (msg.includes('CON_HD_DANG_XU_LY')) {
+      ketCaLichError.value = [msg.replace(/^CON_HD_DANG_XU_LY:\s*/, '')]
+    } else if (err.status === 409 || msg.includes('CA_DANG_KET')) {
+      isKetCaModalOpen.value = false
+      notifyWarning('Ca vừa được kết bởi thao tác khác', 'Trạng thái ca đã được làm mới')
+      await loadCaHienTai()
+    } else {
+      ketCaError.value = msg || 'Không thể kết ca'
+    }
+  } finally {
+    isSavingKetCa.value = false
+  }
+}
+
 const handleCheckout = async () => {
   if (!currentOrder.value) return
   if (currentOrder.value.cart.length === 0) {
     notifyWarning('Giỏ hàng trống', 'Vui lòng chọn ít nhất 1 sản phẩm vào giỏ hàng trước khi thanh toán!')
+    return
+  }
+
+  if (!caHienTai.value && !currentOrder.value.isDelivery) {
+    notifyWarning('Chưa mở ca', 'Chưa mở ca, vui lòng mở ca để bán tại quầy!')
+    openMoCaModal()
     return
   }
 
@@ -1469,7 +1620,13 @@ const handleCheckout = async () => {
 
   } catch (err) {
     console.error('Checkout error:', err)
-    notifyError('Lỗi thanh toán', err.message || 'Không thể lưu hóa đơn vào hệ thống!')
+    if ((err.message || '').includes('CA_CHUA_MO')) {
+      notifyWarning('Chưa mở ca', 'Chưa mở ca, vui lòng mở ca để bán tại quầy!')
+      openMoCaModal()
+      loadCaHienTai()
+    } else {
+      notifyError('Lỗi thanh toán', err.message || 'Không thể lưu hóa đơn vào hệ thống!')
+    }
   } finally {
     isProcessingCheckout.value = false
   }
@@ -1488,6 +1645,7 @@ const handleKeyDown = (e) => {
     isBankQrModalOpen.value = false
     isVoucherModalOpen.value = false
     isReceiptModalOpen.value = false
+    isKetCaModalOpen.value = false
     stopCameraScanner()
   }
 }
@@ -1613,6 +1771,7 @@ const handleWindowClick = (e) => {
 onMounted(() => {
   loadInitialData()
   loadProvinces()
+  loadCaHienTai()
   window.addEventListener('click', handleWindowClick)
 })
 
@@ -1626,6 +1785,27 @@ onUnmounted(() => {
 
 <template>
   <div class="pos-page">
+    <!-- Giao ca banner (Mo ca / Ket ca) -->
+    <div
+      class="pos-ca-banner"
+      :class="isLoadingCa ? 'loading' : (caHienTai ? 'ca-open' : 'ca-closed')"
+    >
+      <div class="ca-banner-info">
+        <span class="ca-banner-dot"></span>
+        <span v-if="isLoadingCa" class="ca-banner-text">Đang tải trạng thái ca...</span>
+        <span v-else-if="caHienTai" class="ca-banner-text">
+          Ca {{ caHienTai.maCa }} · Mở lúc {{ formatDateTime(caHienTai.thoiGianMo) }}<template v-if="caHienTai.tenQuy"> · {{ caHienTai.tenQuy }}</template>
+        </span>
+        <span v-else class="ca-banner-text">Chưa mở ca — Bán tại quầy bị tạm khóa</span>
+      </div>
+      <button v-if="!isLoadingCa && caHienTai" class="btn-ca-action btn-ca-ket" @click="openKetCaModal">
+        Kết ca
+      </button>
+      <button v-else-if="!isLoadingCa" class="btn-ca-action btn-ca-mo" @click="openMoCaModal">
+        Mở ca
+      </button>
+    </div>
+
     <!-- Main Workspace Grid -->
     <div class="pos-main-grid">
       <!-- Left Column: Unified POS Workspace (Tabs + Toolbar + Cart Table + Summary) -->
@@ -2860,7 +3040,459 @@ onUnmounted(() => {
       </div>
     </transition>
 
+    <!-- Modal Mo ca (khong dong duoc khi click overlay - chua mo ca thi khong ban duoc) -->
+    <transition name="fade">
+      <div v-if="isMoCaModalOpen" class="pos-modal-overlay">
+        <div class="pos-modal-dialog modal-sm ca-modal-dialog">
+          <div class="pos-modal-head">
+            <div class="modal-head-title">
+              <div class="modal-title-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+              </div>
+              <div class="modal-title-text-group">
+                <h3>Mở ca làm việc</h3>
+                <span class="modal-badge-count">Bắt buộc trước khi bán</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="pos-modal-body">
+            <div class="cust-form-group ca-form-group">
+              <label class="cust-label">Tiền đầu ca <span class="required-star">*</span></label>
+              <input
+                type="number"
+                class="cust-input ca-input-plain"
+                min="0"
+                step="1000"
+                placeholder="VD: 500000"
+                v-model.number="moCaForm.tienDauCa"
+                @keyup.enter="confirmMoCa"
+              />
+              <span class="ca-input-hint">Bội số của 1.000đ, tối thiểu 0đ</span>
+            </div>
+            <div class="ca-field-error" v-if="moCaError">{{ moCaError }}</div>
+
+            <div class="cust-form-group ca-form-group">
+              <label class="cust-label">Ghi chú</label>
+              <textarea
+                rows="2"
+                class="cust-textarea ca-textarea-plain"
+                placeholder="Ghi chú khi mở ca (tuỳ chọn)"
+                v-model="moCaForm.ghiChu"
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="pos-modal-footer">
+            <span class="ca-modal-hint">Chưa mở ca, giao dịch tại quầy bị tạm khóa.</span>
+            <button class="btn-modal-submit" :disabled="isSavingMoCa" @click="confirmMoCa">
+              {{ isSavingMoCa ? 'Đang mở ca...' : 'Xác nhận mở ca' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Modal Ket ca / Doi soat -->
+    <transition name="fade">
+      <div v-if="isKetCaModalOpen" class="pos-modal-overlay" @click.self="isKetCaModalOpen = false">
+        <div class="pos-modal-dialog modal-md ca-modal-dialog">
+          <div class="pos-modal-head">
+            <div class="modal-head-title">
+              <div class="modal-title-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+              </div>
+              <div class="modal-title-text-group">
+                <h3>Kết ca & Đối soát</h3>
+                <span class="modal-badge-count" v-if="ketCaTongKet">{{ ketCaTongKet.maCa }}</span>
+              </div>
+            </div>
+            <button class="pos-modal-close" @click="isKetCaModalOpen = false" title="Đóng (Esc)">×</button>
+          </div>
+
+          <div class="pos-modal-body">
+            <div v-if="isLoadingTongKet" class="ca-loading-box">Đang tải đối soát ca...</div>
+
+            <template v-else-if="ketCaTongKet">
+              <div class="ca-info-row">
+                <span><strong>Ca:</strong> {{ ketCaTongKet.maCa }}</span>
+                <span><strong>Nhân viên:</strong> {{ ketCaTongKet.tenNhanVien || staffName }}</span>
+                <span><strong>Mở lúc:</strong> {{ formatDateTime(ketCaTongKet.thoiGianMo) }}</span>
+              </div>
+
+              <div class="ca-doi-soat-grid">
+                <div class="ca-ds-item">
+                  <span class="ca-ds-label">Tiền đầu ca</span>
+                  <span class="ca-ds-value">{{ formatVnd(ketCaTongKet.tienDauCa) }}</span>
+                </div>
+                <div class="ca-ds-item">
+                  <span class="ca-ds-label">Tổng hóa đơn</span>
+                  <span class="ca-ds-value">{{ ketCaTongKet.tongHoaDon || 0 }}</span>
+                </div>
+                <div class="ca-ds-item">
+                  <span class="ca-ds-label">Doanh thu</span>
+                  <span class="ca-ds-value">{{ formatVnd(ketCaTongKet.tongDoanhThu) }}</span>
+                </div>
+                <div class="ca-ds-item">
+                  <span class="ca-ds-label">Tiền mặt thu</span>
+                  <span class="ca-ds-value">{{ formatVnd(ketCaTongKet.tienMatThu) }}</span>
+                </div>
+                <div class="ca-ds-item">
+                  <span class="ca-ds-label">Không tiền mặt</span>
+                  <span class="ca-ds-value">{{ formatVnd(ketCaTongKet.tienKhongMat) }}</span>
+                </div>
+                <div class="ca-ds-item">
+                  <span class="ca-ds-label">Tiền hoàn (mặt)</span>
+                  <span class="ca-ds-value">{{ formatVnd(ketCaTongKet.tienHoanMat) }}</span>
+                </div>
+                <div class="ca-ds-item ca-ds-highlight">
+                  <span class="ca-ds-label">Dự kiến</span>
+                  <span class="ca-ds-value">{{ formatVnd(ketCaTongKet.tienDuKien) }}</span>
+                </div>
+              </div>
+
+              <div class="ca-hd-section" v-if="ketCaTongKet.hoaDonGanDay && ketCaTongKet.hoaDonGanDay.length > 0">
+                <div class="ca-hd-title">Hóa đơn gần nhất</div>
+                <table class="ca-hd-table">
+                  <thead>
+                    <tr>
+                      <th>Mã HĐ</th>
+                      <th>Ngày tạo</th>
+                      <th>Phương thức</th>
+                      <th class="text-end">Tiền sau giảm</th>
+                      <th>Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="hd in ketCaTongKet.hoaDonGanDay" :key="hd.maHoaDon">
+                      <td>{{ hd.maHoaDon }}</td>
+                      <td>{{ formatDateTime(hd.ngayTao) }}</td>
+                      <td>{{ hd.tenPhuongThuc || '—' }}</td>
+                      <td class="text-end">{{ formatVnd(hd.tienSauGiamGia) }}</td>
+                      <td>{{ hd.trangThai || '—' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="cust-form-group ca-form-group">
+                <label class="cust-label">Tiền thực tế <span class="required-star">*</span></label>
+                <input
+                  type="number"
+                  class="cust-input ca-input-plain"
+                  min="0"
+                  step="1000"
+                  placeholder="Nhập số tiền thực tế trong két"
+                  v-model.number="ketCaForm.tienThucTe"
+                />
+              </div>
+
+              <div class="ca-chenh-lech-box" :class="chenhLechKetCa === 0 ? 'lech-khong' : 'lech-khac'">
+                <span>Chênh lệch (thực tế − dự kiến):</span>
+                <strong>{{ formatVnd(chenhLechKetCa) }}</strong>
+              </div>
+
+              <div class="cust-form-group ca-form-group" v-if="chenhLechKetCa !== 0">
+                <label class="cust-label">Lý do lệch <span class="required-star">*</span></label>
+                <input
+                  type="text"
+                  class="cust-input ca-input-plain"
+                  placeholder="Nhập lý do chênh lệch (bắt buộc khi lệch khác 0)"
+                  v-model="ketCaForm.lyDoLech"
+                />
+              </div>
+
+              <div class="cust-form-group ca-form-group">
+                <label class="cust-label">Ghi chú kết ca</label>
+                <input
+                  type="text"
+                  class="cust-input ca-input-plain"
+                  placeholder="Tuỳ chọn"
+                  v-model="ketCaForm.ghiChu"
+                />
+              </div>
+
+              <div class="ca-field-error" v-if="ketCaError">{{ ketCaError }}</div>
+              <div class="ca-field-error" v-if="ketCaLichError.length > 0">
+                <div>Còn hóa đơn đang xử lý, vui lòng xử lý trước khi kết ca:</div>
+                <ul class="ca-hd-list">
+                  <li v-for="(m, i) in ketCaLichError" :key="i">{{ m }}</li>
+                </ul>
+              </div>
+            </template>
+          </div>
+
+          <div class="pos-modal-footer">
+            <button class="btn-modal-cancel" @click="isKetCaModalOpen = false" :disabled="isSavingKetCa">
+              Đóng
+            </button>
+            <button
+              class="btn-modal-submit"
+              :disabled="isSavingKetCa || isLoadingTongKet || !ketCaTongKet"
+              @click="confirmKetCa"
+            >
+              {{ isSavingKetCa ? 'Đang kết ca...' : 'Xác nhận kết ca' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
   </div>
 </template>
 
 <style scoped src="@/assets/styles/PosSalesPage.css"></style>
+
+<style scoped>
+/* Giao ca banner */
+.pos-ca-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 18px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.pos-ca-banner.ca-closed {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.pos-ca-banner.ca-open {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.pos-ca-banner.loading {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.ca-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ca-banner-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ca-closed .ca-banner-dot { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15); }
+.ca-open .ca-banner-dot { background: #10b981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); }
+.loading .ca-banner-dot { background: #94a3b8; }
+
+.ca-banner-text {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ca-closed .ca-banner-text { color: #b91c1c; }
+.ca-open .ca-banner-text { color: #047857; }
+
+.btn-ca-action {
+  height: 34px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.btn-ca-mo {
+  background: #dc2626;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.2);
+}
+
+.btn-ca-mo:hover { background: #b91c1c; }
+
+.btn-ca-ket {
+  background: #ffffff;
+  border: 1px solid #fca5a5;
+  color: #b91c1c;
+}
+
+.btn-ca-ket:hover { background: #fef2f2; }
+
+/* Mo/Ket ca modal */
+.ca-modal-dialog .ca-form-group {
+  margin-top: 12px;
+  gap: 6px;
+}
+
+.ca-input-plain {
+  padding-left: 12px;
+}
+
+.ca-textarea-plain {
+  padding-left: 12px;
+}
+
+.ca-input-hint {
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+.ca-field-error {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #b91c1c;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.ca-modal-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.ca-loading-box {
+  padding: 28px 12px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ca-info-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: #475569;
+}
+
+.ca-info-row strong { color: #0f172a; }
+
+.ca-doi-soat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.ca-ds-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.ca-ds-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.ca-ds-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.ca-ds-highlight {
+  background: #fefce8;
+  border-color: #fde047;
+}
+
+.ca-ds-highlight .ca-ds-value { color: #a16207; }
+
+.ca-hd-section { margin-top: 14px; }
+
+.ca-hd-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.ca-hd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ca-hd-table thead th {
+  text-align: left;
+  padding: 7px 10px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  color: #64748b;
+  font-weight: 700;
+  font-size: 11.5px;
+}
+
+.ca-hd-table tbody td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+}
+
+.ca-chenh-lech-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ca-chenh-lech-box.lech-khong {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+}
+
+.ca-chenh-lech-box.lech-khac {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.ca-chenh-lech-box strong { font-size: 14px; font-weight: 800; }
+
+.ca-hd-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.ca-hd-list li { font-weight: 700; }
+</style>
