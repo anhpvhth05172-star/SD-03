@@ -1,14 +1,8 @@
 import http from './http'
+import { getMaAnDanh } from '@/utils/auth'
 
-// header ẩn danh cho khách chưa đăng nhập
-const headersAnDanh = () => {
-  try {
-    const ma = localStorage.getItem('polyshoes_ma_an_danh')
-    return ma ? { 'X-Ma-An-Danh': ma } : {}
-  } catch {
-    return {}
-  }
-}
+// header ẩn danh cho khách chưa đăng nhập — dùng chung getMaAnDanh (sessionStorage)
+const headersAnDanh = () => ({ 'X-Ma-An-Danh': getMaAnDanh() })
 
 // ---- Khách ----
 

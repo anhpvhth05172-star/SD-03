@@ -26,8 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AuthService {
 
-    private static final String EMAIL_REGEX = "^[\\w.%+-]+@[\\w.-]+\\.[A-Za-z]{2,}$";
-    private static final String PHONE_REGEX = "^0\\d{8,9}$";
+    private static final String EMAIL_REGEX = "^[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+$";
+    private static final String PHONE_REGEX = "^0\\d{9}$";
 
     private final KhachHangRepository khachHangRepository;
     private final NhanVienRepository nhanVienRepository;
@@ -87,8 +87,11 @@ public class AuthService {
             throw new IllegalArgumentException("Số điện thoại không được để trống");
         }
         String soDienThoai = req.getSoDienThoai().trim();
+        if (soDienThoai.length() > 10) {
+            throw new IllegalArgumentException("Số điện thoại không được vượt quá 10 ký tự");
+        }
         if (!soDienThoai.matches(PHONE_REGEX)) {
-            throw new IllegalArgumentException("Số điện thoại không hợp lệ (bắt đầu bằng 0, gồm 9-10 chữ số)");
+            throw new IllegalArgumentException("Số điện thoại phải bắt đầu bằng số 0 và gồm đúng 10 chữ số");
         }
         if (isBlank(req.getMatKhau())) {
             throw new IllegalArgumentException("Mật khẩu không được để trống");

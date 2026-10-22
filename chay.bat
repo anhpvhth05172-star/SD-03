@@ -35,19 +35,17 @@ if "%MAIL_PASSWORD%"=="" (
 )
 echo [OK] MAIL_USERNAME=%MAIL_USERNAME%
 
-REM --- 2. Neu chua co JAR thi build ---
-if not exist "BE\target\DATN-0.0.1-SNAPSHOT.jar" (
-    echo [..] Chua co JAR, dang build...
-    pushd BE
-    call mvnw.cmd -q package -DskipTests
-    if errorlevel 1 (
-        echo [LOI] Build that bai - xem lai loi compile o tren.
-        popd
-        pause
-        exit /b 1
-    )
+REM --- 2. Build lai backend de JAR luon chua code moi nhat ---
+echo [..] Dang build backend...
+pushd BE
+call mvnw.cmd -q package -DskipTests
+if errorlevel 1 (
+    echo [LOI] Build that bai - xem lai loi compile o tren.
     popd
+    pause
+    exit /b 1
 )
+popd
 
 REM --- 3. Dung backend cu neu dang giu port 8080 (de khong trung port) ---
 echo [..] Kiem tra port 8080...

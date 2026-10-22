@@ -53,16 +53,18 @@ export const isTokenExpired = (token) => {
   }
 }
 
-/** UUID ẩn danh cho khách chưa đăng nhập (chat). */
+/** UUID ẩn danh cho khách chưa đăng nhập (chat) — chỉ sống trong phiên tab (sessionStorage). */
 export const getMaAnDanh = () => {
-  let ma = localStorage.getItem(MA_AN_DANH_KEY)
+  let ma = sessionStorage.getItem(MA_AN_DANH_KEY)
   if (!ma) {
     ma =
       typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2)}`
-    localStorage.setItem(MA_AN_DANH_KEY, ma)
+    sessionStorage.setItem(MA_AN_DANH_KEY, ma)
   }
+  // Dọn key cũ trên localStorage (phiên bản trước lưu bền vững)
+  localStorage.removeItem(MA_AN_DANH_KEY)
   return ma
 }
 

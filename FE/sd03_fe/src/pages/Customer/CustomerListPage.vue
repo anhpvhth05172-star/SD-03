@@ -5,7 +5,7 @@ import CustomerAddressModal from '@/components/CustomerAddressModal.vue'
 import DoiMatKhauModal from '@/components/DoiMatKhauModal.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
-import { getCustomer, listCustomers, updateCustomerStatus, deleteCustomer } from '@/api/customer'
+import { getCustomer, listCustomers, updateCustomerStatus, deleteCustomer, sendCustomersBulkEmail } from '@/api/customer'
 import { exportExcel, fetchAllPages } from '@/utils/export'
 import { takeFlashWithMeta } from '@/utils/flash'
 import { avatarColor, formatDate, formatDateTime, formatVnd, initialsOf } from '@/utils/format'
@@ -31,6 +31,12 @@ const trangThaiOptions = [
   { value: 'locked', label: 'Đã khóa' },
 ]
 const detailData = ref(null)
+
+const selectedIds = ref([])
+const showEmailModal = ref(false)
+const emailForm = ref({ tieuDe: '', noiDung: '' })
+const emailSending = ref(false)
+const emailResult = ref(null)
 
 let searchTimeout = null
 const onKeywordInput = () => {
@@ -225,6 +231,79 @@ const gioiTinhLabel = (value) => {
   return '—'
 }
 
+// ===== Chọn khách hàng bằng checkbox =====
+const isSelected = (id) => selectedIds.value.includes(id)
+
+const toggleSelect = (id) => {
+  selectedIds.value = isSelected(id)
+    ? selectedIds.value.filter((x) => x !== id)
+    : [...selectedIds.value, id]
+}
+
+const allPageSelected = computed(
+  () => rows.value.length > 0 && rows.value.every((r) => selectedIds.value.includes(r.id)),
+)
+
+const toggleSelectAllPage = () => {
+  const pageIds = rows.value.map((r) => r.id)
+  if (allPageSelected.value) {
+    selectedIds.value = selectedIds.value.filter((id) => !pageIds.includes(id))
+  } else {
+    selectedIds.value = [...new Set([...selectedIds.value, ...pageIds])]
+  }
+}
+
+const selectedRowsKnown = computed(() => rows.value.filter((r) => selectedIds.value.includes(r.id)))
+
+// ===== Gửi email hàng loạt =====
+const openEmailModal = () => {
+  if (selectedIds.value.length === 0) {
+    notifyWarning('Vui lòng chọn ít nhất một khách hàng')
+    return
+  }
+  emailResult.value = null
+  showEmailModal.value = true
+}
+
+const sendBulkEmail = async () => {
+  const tieuDe = emailForm.value.tieuDe.trim()
+  const noiDung = emailForm.value.noiDung.trim()
+  if (!tieuDe) {
+    notifyWarning('Vui lòng nhập tiêu đề email')
+    return
+  }
+  if (!noiDung) {
+    notifyWarning('Vui lòng nhập nội dung email')
+    return
+  }
+  const soLuong = selectedIds.value.length
+  const ok = await notifyConfirm(
+    'Xác nhận gửi email',
+    `Gửi email "${tieuDe}" tới ${soLuong} khách hàng đã chọn?`,
+    'Gửi email',
+    'Hủy bỏ'
+  )
+  if (!ok) return
+
+  emailSending.value = true
+  try {
+    const res = await sendCustomersBulkEmail({
+      ids: [...selectedIds.value],
+      tieuDe,
+      noiDung,
+    })
+    emailResult.value = res
+    if (res.guiThanhCong > 0) {
+      notifySuccess(`Đã gửi thành công ${res.guiThanhCong}/${res.tongYeuCau} email`)
+    } else {
+      notifyWarning('Không có email nào được gửi thành công')
+    }
+  } catch (e) {
+    notifyError('Gửi email thất bại', e.message)
+  } finally {
+    emailSending.value = false
+  }
+}
 
 onMounted(() => {
   const { message, type } = takeFlashWithMeta()
@@ -296,6 +375,19 @@ onMounted(() => {
           </svg>
           {{ exporting ? 'Đang xuất...' : 'Xuất Excel' }}
         </button>
+        <button
+          class="btn-action-outline"
+          type="button"
+          :disabled="selectedIds.length === 0"
+          @click="openEmailModal"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+            <polyline points="22,6 12,13 2,6"></polyline>
+          </svg>
+          Gửi email{{ selectedIds.length ? ` (${selectedIds.length})` : '' }}
+        </button>
         <button class="btn-action-primary" type="button" @click="router.push('/khach-hang/them')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
             stroke-linejoin="round">
@@ -328,7 +420,16 @@ onMounted(() => {
         <table class="customer-table">
           <thead>
             <tr>
-              <th style="width: 50px;">STT</th>
+              <th style="width: 40px; text-align: center;" title="Chọn tất cả khách hàng trong trang">
+                <input
+                  type="checkbox"
+                  class="row-check"
+                  :checked="allPageSelected"
+                  :disabled="loading || rows.length === 0"
+                  @change="toggleSelectAllPage"
+                />
+              </th>
+              <th style="width: 45px;">STT</th>
               <th style="width: 170px;">Họ tên</th>
               <th style="width: 200px;">Email</th>
               <th>Địa chỉ</th>
@@ -339,13 +440,21 @@ onMounted(() => {
           </thead>
           <tbody>
             <tr v-if="loading">
-              <td colspan="7" class="text-center py-5 text-muted">Đang tải dữ liệu...</td>
+              <td colspan="8" class="text-center py-5 text-muted">Đang tải dữ liệu...</td>
             </tr>
             <tr v-else-if="rows.length === 0">
-              <td colspan="7" class="text-center py-5 text-muted">Không tìm thấy khách hàng nào</td>
+              <td colspan="8" class="text-center py-5 text-muted">Không tìm thấy khách hàng nào</td>
             </tr>
             <template v-else>
               <tr v-for="(row, index) in rows" :key="row.id">
+                <td class="text-center">
+                  <input
+                    type="checkbox"
+                    class="row-check"
+                    :checked="isSelected(row.id)"
+                    @change="toggleSelect(row.id)"
+                  />
+                </td>
                 <td class="cell-stt">{{ (page * size) + index + 1 }}</td>
                 <td class="cell-name">{{ row.tenKhachHang }}</td>
                 <td class="cell-email">{{ row.email || '—' }}</td>
@@ -407,116 +516,119 @@ onMounted(() => {
 
     <div v-if="detailData" class="modal-backdrop" @click.self="detailData = null">
       <div class="profile-modal-card">
-        <div class="profile-modal-banner customer-theme">
+        <!-- Banner đầu trang (style giống nhân viên) -->
+        <div class="profile-modal-banner employee-theme">
           <button class="btn-banner-close" type="button" title="Đóng" @click="detailData = null">
             <i class="bi bi-x-lg"></i>
           </button>
 
           <div class="profile-banner-content">
-            <div class="profile-avatar-wrapper customer">
+            <div class="profile-avatar-wrapper">
               <img :src="getAvatarSrc(detailData)" :alt="detailData.tenKhachHang" class="profile-avatar-img"
                 @error="onAvatarError($event, detailData)" />
             </div>
 
             <div class="profile-meta-info">
               <div class="profile-header-badges">
-                <span class="badge-code customer">{{ detailData.maKhachHang }}</span>
-                <span class="badge-role customer">{{ detailData.hangThanhVien || 'Thành viên' }}</span>
+                <span class="badge-code">{{ detailData.maKhachHang }}</span>
+                <span class="badge-role">{{ detailData.hangThanhVien || 'Thành viên' }}</span>
                 <span class="status-pill" :class="detailData.trangThai ? 'is-active' : 'is-locked'">
                   {{ detailData.trangThai ? 'Hoạt động' : 'Đã khóa' }}
                 </span>
               </div>
               <h3 class="profile-name">{{ detailData.tenKhachHang }}</h3>
-              <p class="profile-email-sub"><i class="bi bi-envelope"></i> {{ detailData.email || 'Chưa cập nhật email'
-              }}
-              </p>
+              <p class="profile-email-sub">{{ detailData.email || 'Chưa cập nhật email' }}</p>
             </div>
           </div>
         </div>
 
         <!-- Thân Modal: Các nhóm thông tin -->
         <div class="profile-modal-body">
-          <!-- 2 thẻ thống kê nhanh: Số đơn & Chi tiêu -->
-          <div class="customer-stats-row">
-            <div class="stat-card">
-              <div class="stat-icon-circle blue">
-                <i class="bi bi-bag-check-fill"></i>
-              </div>
-              <div class="stat-info">
-                <span class="stat-label">Tổng đơn mua</span>
-                <h4 class="stat-value">{{ detailData.soDon || 0 }} <span class="stat-unit">đơn</span></h4>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon-circle green">
-                <i class="bi bi-wallet2"></i>
-              </div>
-              <div class="stat-info">
-                <span class="stat-label">Tổng chi tiêu</span>
-                <h4 class="stat-value text-success">{{ formatVnd(detailData.tongChiTieu) }}</h4>
-              </div>
-            </div>
-          </div>
+          <!-- Nhóm 1: Thông tin liên hệ & Cá nhân -->
           <div class="info-section-group">
-            <h4 class="section-group-title">
-              <i class="bi bi-person-lines-fill"></i> Thông tin liên hệ & Tài khoản
-            </h4>
+            <h4 class="section-group-title">Thông tin liên hệ & Tài khoản</h4>
             <div class="info-grid-2">
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-telephone"></i> Số điện thoại</span>
+                <span class="info-cell-label">Số điện thoại</span>
                 <span class="info-cell-value">{{ detailData.soDienThoai || 'Chưa cập nhật' }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-gender-ambiguous"></i> Giới tính</span>
+                <span class="info-cell-label">Giới tính</span>
                 <span class="info-cell-value">{{ gioiTinhLabel(detailData.gioiTinh) }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-cake2"></i> Ngày sinh</span>
+                <span class="info-cell-label">Ngày sinh</span>
                 <span class="info-cell-value">{{ formatDate(detailData.ngaySinh) || '—' }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-person-badge"></i> Tên đăng nhập</span>
+                <span class="info-cell-label">Tên đăng nhập</span>
                 <span class="info-cell-value">{{ detailData.tenTaiKhoan || detailData.email || '—' }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-card-heading"></i> Số CCCD/CMND</span>
+                <span class="info-cell-label">Số CCCD/CMND</span>
                 <span class="info-cell-value">{{ detailData.soCccd || 'Chưa cập nhật' }}</span>
+              </div>
+              <div class="info-cell">
+                <span class="info-cell-label">Ngày đăng ký</span>
+                <span class="info-cell-value">{{ formatDate(detailData.ngayTao) || '—' }}</span>
               </div>
             </div>
           </div>
 
+          <!-- Nhóm 2: Địa chỉ giao hàng -->
           <div class="info-section-group">
-            <h4 class="section-group-title">
-              <i class="bi bi-geo-alt-fill text-danger"></i> Địa chỉ giao hàng
-            </h4>
+            <h4 class="section-group-title">Địa chỉ giao hàng</h4>
             <div class="address-box-card">
               <p class="address-text">{{ diaChiText || 'Chưa cập nhật địa chỉ giao hàng' }}</p>
             </div>
           </div>
 
+          <!-- Nhóm 3: Thống kê mua sắm (giữ riêng cho khách hàng) -->
+          <div class="info-section-group">
+            <h4 class="section-group-title">Thống kê mua sắm</h4>
+            <div class="customer-stats-row">
+              <div class="stat-card">
+                <div class="stat-icon-circle blue">
+                  <i class="bi bi-bag-check-fill"></i>
+                </div>
+                <div class="stat-info">
+                  <span class="stat-label">Tổng đơn mua</span>
+                  <h4 class="stat-value">{{ detailData.soDon || 0 }} <span class="stat-unit">đơn</span></h4>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon-circle green">
+                  <i class="bi bi-wallet2"></i>
+                </div>
+                <div class="stat-info">
+                  <span class="stat-label">Tổng chi tiêu</span>
+                  <h4 class="stat-value text-success">{{ formatVnd(detailData.tongChiTieu) }}</h4>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Metadata thời gian -->
           <div class="modal-time-footer">
-            <span><i class="bi bi-calendar3"></i> Ngày đăng ký: {{ formatDate(detailData.ngayTao) }}</span>
-            <span><i class="bi bi-clock-history"></i> Cập nhật: {{ formatDateTime(detailData.ngayCapNhat) || '—'
-            }}</span>
+            <span>Cập nhật gần nhất: {{ formatDateTime(detailData.ngayCapNhat) || '—' }}</span>
           </div>
         </div>
 
+        <!-- Cụm nút hành động (style giống nhân viên) -->
         <div class="profile-modal-actions">
-          <button class="btn-profile-address" type="button" @click="moSoDiaChi(detailData)">
-            <i class="bi bi-geo-alt"></i>
-            <span>Sổ địa chỉ</span>
-          </button>
-          <button class="btn-profile-edit customer" type="button"
-            @click="router.push(`/khach-hang/${detailData.id}/sua`)"
-            style="background: linear-gradient(135deg, #0284c7, #2563eb); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);">
+          <button class="btn-profile-edit" type="button"
+            @click="router.push(`/khach-hang/${detailData.id}/sua`)">
             <i class="bi bi-pencil-square"></i>
             <span>Chỉnh sửa thông tin</span>
           </button>
-          <button class="btn-profile-edit customer" type="button"
-            @click="doiMkCustomerId = detailData.id"
-            style="background: linear-gradient(135deg, #d97706, #f59e0b); box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);">
+          <button class="btn-profile-secondary" type="button"
+            @click="doiMkCustomerId = detailData.id">
             <i class="bi bi-key"></i>
             <span>Đổi mật khẩu</span>
+          </button>
+          <button class="btn-profile-address" type="button" @click="moSoDiaChi(detailData)">
+            <i class="bi bi-geo-alt"></i>
+            <span>Sổ địa chỉ</span>
           </button>
           <button class="btn-profile-delete" type="button" @click="removeCustomer(detailData); detailData = null">
             <i class="bi bi-trash3"></i>
@@ -533,6 +645,79 @@ onMounted(() => {
     <DoiMatKhauModal v-if="doiMkCustomerId" loai="KH" :id="doiMkCustomerId"
       :ten-tai-khoan="detailData?.tenTaiKhoan || detailData?.email || ''" @close="doiMkCustomerId = null"
       @success="detailData = null" />
+
+    <!-- Modal: GỬI EMAIL HÀNG LOẠT -->
+    <div v-if="showEmailModal" class="action-modal-overlay" @click.self="showEmailModal = false">
+      <div class="action-modal modal-email">
+        <div class="action-modal-head">
+          <h3><i class="bi bi-envelope-paper"></i> Gửi email hàng loạt</h3>
+          <button class="action-modal-x" type="button" @click="showEmailModal = false">×</button>
+        </div>
+
+        <div class="action-modal-body">
+          <p class="action-modal-note">
+            Email sẽ được gửi tới <b>{{ selectedIds.length }}</b> khách hàng đã chọn.
+            Khách hàng không có email hợp lệ sẽ bị bỏ qua và báo cáo chi tiết.
+          </p>
+
+          <div v-if="selectedRowsKnown.length" class="email-chips">
+            <span v-for="r in selectedRowsKnown" :key="r.id" class="email-chip">
+              {{ r.tenKhachHang }} <i>{{ r.email || 'không có email' }}</i>
+            </span>
+            <span v-if="selectedIds.length > selectedRowsKnown.length" class="email-chip is-more">
+              +{{ selectedIds.length - selectedRowsKnown.length }} khách hàng khác
+            </span>
+          </div>
+
+          <div class="action-field">
+            <label>Tiêu đề <b class="req">*</b></label>
+            <input
+              v-model="emailForm.tieuDe"
+              type="text"
+              maxlength="200"
+              placeholder="Thông báo từ PolyShoes"
+            />
+          </div>
+
+          <div class="action-field">
+            <label>Nội dung <b class="req">*</b></label>
+            <textarea
+              v-model="emailForm.noiDung"
+              rows="6"
+              maxlength="5000"
+              placeholder="Nhập nội dung gửi tới khách hàng..."
+            ></textarea>
+          </div>
+
+          <div v-if="emailResult" class="import-result">
+            <p>
+              Đã gửi thành công <b>{{ emailResult.guiThanhCong }}</b>/<b>{{ emailResult.tongYeuCau }}</b>
+              email<template v-if="emailResult.thatBai > 0">, {{ emailResult.thatBai }} bị bỏ qua/thất bại</template>.
+            </p>
+            <ul v-if="emailResult.boQua && emailResult.boQua.length">
+              <li v-for="(b, i) in emailResult.boQua" :key="i">
+                {{ b.tenKhachHang || b.maKhachHang || ('#' + b.id) }}: {{ b.lyDo }}
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="action-modal-foot">
+          <button class="btn-action-outline" type="button" @click="showEmailModal = false">
+            {{ emailResult ? 'Đóng' : 'Hủy' }}
+          </button>
+          <button
+            v-if="!emailResult"
+            class="btn-action-primary"
+            type="button"
+            :disabled="emailSending"
+            @click="sendBulkEmail"
+          >
+            {{ emailSending ? 'Đang gửi...' : `Gửi ${selectedIds.length} email` }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1248,6 +1433,50 @@ onMounted(() => {
   gap: 10px;
 }
 
+.btn-profile-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 9999px;
+  background: #cc0000;
+  color: #ffffff;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(204, 0, 0, 0.25);
+}
+
+.btn-profile-edit:hover {
+  background: #a00;
+  opacity: 0.94;
+  transform: translateY(-1px);
+}
+
+.btn-profile-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 9999px;
+  background: #d97706;
+  color: #ffffff;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.25);
+}
+
+.btn-profile-secondary:hover {
+  background: #b45309;
+  opacity: 0.94;
+  transform: translateY(-1px);
+}
+
 .btn-profile-address {
   display: inline-flex;
   align-items: center;
@@ -1265,25 +1494,6 @@ onMounted(() => {
 
 .btn-profile-address:hover {
   background: #e0f2fe;
-}
-
-.btn-profile-edit {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 18px;
-  border-radius: 9999px;
-  color: #ffffff;
-  border: none;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-profile-edit:hover {
-  opacity: 0.94;
-  transform: translateY(-1px);
 }
 
 .btn-profile-delete {
@@ -1321,6 +1531,73 @@ onMounted(() => {
 .btn-profile-close:hover {
   background: #e2e8f0;
   color: #0f172a;
+}
+
+/* Customer stats row */
+.customer-stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.stat-card {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stat-icon-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.stat-icon-circle.blue {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.stat-icon-circle.green {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-label {
+  font-size: 11.5px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.stat-value {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.stat-unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.text-success {
+  color: #059669;
 }
 
 .switch {
@@ -1376,5 +1653,266 @@ onMounted(() => {
 .switch input:focus-visible + .slider {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
+}
+
+/* Checkbox hàng */
+.row-check {
+  width: 16px;
+  height: 16px;
+  accent-color: #e11d48;
+  cursor: pointer;
+}
+.row-check:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ===== Modal Gửi Email Hàng Loạt ===== */
+.action-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1060;
+  backdrop-filter: blur(4px);
+  padding: 16px;
+}
+
+.action-modal {
+  background: #ffffff;
+  width: 100%;
+  max-width: 560px;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+  overflow: hidden;
+  animation: modalCardIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-email .action-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #f8fafc;
+}
+
+.modal-email .action-modal-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-email .action-modal-x {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modal-email .action-modal-x:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.modal-email .action-modal-body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.action-modal-note {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.action-modal-note b {
+  color: #e11d48;
+}
+
+.email-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 8px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+}
+
+.email-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  font-size: 12px;
+  color: #334155;
+}
+
+.email-chip i {
+  font-style: italic;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.email-chip.is-more {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #ef4444;
+}
+
+.action-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.action-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.action-field .req {
+  color: #ef4444;
+}
+
+.action-field input,
+.action-field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #1e293b;
+  background: #ffffff;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.action-field input:focus,
+.action-field textarea:focus {
+  border-color: #e11d48;
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.1);
+}
+
+.action-field textarea {
+  resize: vertical;
+  min-height: 100px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.import-result {
+  padding: 12px 16px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  color: #065f46;
+}
+
+.import-result p {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+}
+
+.import-result ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12.5px;
+  color: #047857;
+}
+
+.import-result li {
+  margin-bottom: 4px;
+}
+
+.action-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid #f1f5f9;
+  background: #f8fafc;
+}
+
+.btn-action-primary {
+  height: 38px;
+  padding: 0 18px;
+  background: linear-gradient(135deg, #e11d48, #be123c);
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.25);
+  transition: all 0.2s ease;
+}
+
+.btn-action-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-action-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #be123c, #9f1239);
+  box-shadow: 0 6px 16px rgba(225, 29, 72, 0.35);
+}
+
+.btn-action-outline {
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid #ffe4e6;
+  background: #ffffff;
+  color: #e11d48;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-action-outline:hover {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #be123c;
+}
+
+@keyframes modalCardIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 </style>

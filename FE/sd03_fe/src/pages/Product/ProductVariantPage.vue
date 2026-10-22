@@ -873,20 +873,6 @@ const resetFilters = () => {
   fetchVariants(false)
 }
 
-  const resetFilters = () => {
-    filters.search = ''
-    filters.idSanPham = ''
-    filters.idMauSac = ''
-    filters.idKichCo = ''
-    filters.trangThai = ''
-    currentPage.value = 0
-    if (route.query.idSanPham || route.query.tenSanPham || route.query.maSanPham) {
-      router.push({ path: '/san-pham/bien-the' })
-    } else {
-      fetchVariants(false)
-    }
-  }
-
   onMounted(() => {
     fetchFilterOptions()
   })

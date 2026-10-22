@@ -2,7 +2,8 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { dangNhap, dangNhapNhanVien } from '@/api/auth'
-import { luuPhien } from '@/utils/auth'
+import { lienKetSauDangNhap } from '@/api/chat'
+import { luuPhien, getMaAnDanh } from '@/utils/auth'
 import { datVaiTro, datNguoiDung } from '@/utils/session'
 
 const router = useRouter()
@@ -38,6 +39,8 @@ const submit = async () => {
     if (cheDo.value === 'nhan-vien') {
       router.push('/hoa-don')
     } else {
+      // Gắn cuộc trò chuyện ẩn danh (nếu có) vào tài khoản để không mất hội thoại cũ
+      lienKetSauDangNhap(getMaAnDanh()).catch(() => {})
       router.push('/tai-khoan')
     }
   } catch (e) {

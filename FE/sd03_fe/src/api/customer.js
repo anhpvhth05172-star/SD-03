@@ -39,3 +39,6 @@ export const deleteAddress = (idKhachHang, id) =>
 
 export const setDefaultAddress = (idKhachHang, id) =>
   http.put(`/khach-hang/${idKhachHang}/dia-chi/${id}/mac-dinh`).then((r) => r.data)
+
+export const sendCustomersBulkEmail = (data) =>
+  http.post('/khach-hang/gui-email-hang-loat', data).then((r) => r.data)

@@ -63,8 +63,8 @@ public class NhanVienService {
     private static final int SO_LAN_TAO = 5;
     private static final int SO_MA_TOI_DA = 1_000_000;
     private static final int GUI_EMAIL_TOI_DA = 500;
-    /** Số luồng gửi email hàng loạt song song — mỗi email mất ~3-5s nếu gửi tuần tiến. */
-    private static final int GUI_EMAIL_SONG_SONG = 8;
+    /** Giới hạn kết nối SMTP đồng thời để tránh nhà cung cấp từ chối gửi hàng loạt. */
+    private static final int GUI_EMAIL_SONG_SONG = 2;
     private static final String[][] GIOI_TINH_MAP = {
         {"NAM", "Nam"},
         {"NU", "Nữ"},
@@ -269,22 +269,21 @@ public class NhanVienService {
             return response;
         }
 
-        // 2. Gửi song song với pool giới hạn — mỗi email mất ~3-5s (SMTP handshake),
-        //    tuần tiến khiến 50 người gửi mất hơn 3 phút và người dùng tưởng treo.
+        // Giữ pool nhỏ để không mở quá nhiều kết nối SMTP cùng lúc.
         java.util.concurrent.ExecutorService pool =
             java.util.concurrent.Executors.newFixedThreadPool(Math.min(GUI_EMAIL_SONG_SONG, canGui.size()));
         try {
-            java.util.List<java.util.concurrent.Future<boolean[]>> futures = new java.util.ArrayList<>();
+            java.util.List<java.util.concurrent.Future<Boolean>> futures = new java.util.ArrayList<>();
             for (Long id : canGui) {
                 String email = nhanVienMap.get(id).getEmail().trim();
-                futures.add(pool.submit(() -> new boolean[] { emailService.guiMailCustom(email, tieuDe, noiDung) }));
+                futures.add(pool.submit(() -> emailService.guiMailCustom(email, tieuDe, noiDung)));
             }
             for (int i = 0; i < futures.size(); i++) {
                 Long id = canGui.get(i);
                 NhanVien nv = nhanVienMap.get(id);
                 boolean guiOk = false;
                 try {
-                    guiOk = futures.get(i).get()[0];
+                    guiOk = futures.get(i).get();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 } catch (java.util.concurrent.ExecutionException e) {

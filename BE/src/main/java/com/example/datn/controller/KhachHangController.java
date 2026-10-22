@@ -1,6 +1,8 @@
 package com.example.datn.controller;
 
 import com.example.datn.config.QuyenGuard;
+import com.example.datn.dto.KhachHang.GuiEmailHangLoatRequest;
+import com.example.datn.dto.KhachHang.GuiEmailHangLoatResponse;
 import com.example.datn.dto.KhachHang.KhachHangDTO;
 import com.example.datn.dto.KhachHang.KhachHangRequest;
 import com.example.datn.dto.Common.PageResponse;
@@ -121,5 +123,13 @@ public class KhachHangController {
         quyenGuard.canQuanLyKhachHang();
         khachHangService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/gui-email-hang-loat")
+    public GuiEmailHangLoatResponse guiEmailHangLoat(
+        @RequestBody GuiEmailHangLoatRequest request
+    ) {
+        quyenGuard.canQuanLyKhachHang();
+        return khachHangService.guiEmailHangLoat(request);
     }
 }

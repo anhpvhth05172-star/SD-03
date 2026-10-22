@@ -1,5 +1,7 @@
 package com.example.datn.service;
 
+import com.example.datn.dto.KhachHang.GuiEmailHangLoatRequest;
+import com.example.datn.dto.KhachHang.GuiEmailHangLoatResponse;
 import com.example.datn.dto.KhachHang.DiaChiKhachHangDTO;
 import com.example.datn.dto.KhachHang.DiaChiKhachHangRequest;
 import com.example.datn.dto.KhachHang.KhachHangDTO;
@@ -17,6 +19,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -239,6 +242,105 @@ public class KhachHangService {
             phienDangNhapRepository.saveAll(phienDangNhaps);
         }
         return toFullDTO(saved);
+    }
+
+    /**
+     * Gửi cùng một nội dung email (tiêu đề + nội dung) tới nhiều khách hàng.
+     * Khách hàng không có email hợp lệ hoặc gửi lỗi đều được ghi nhận lý do vào danh sách bỏ qua.
+     */
+    @Transactional(readOnly = true)
+    public GuiEmailHangLoatResponse guiEmailHangLoat(GuiEmailHangLoatRequest req) {
+        if (req == null || req.getIds() == null || req.getIds().isEmpty()) {
+            throw new IllegalArgumentException("Danh sách khách hàng nhận email không được để trống");
+        }
+        if (isBlank(req.getTieuDe())) {
+            throw new IllegalArgumentException("Tiêu đề email không được để trống");
+        }
+        checkLength(req.getTieuDe(), 200, "Tiêu đề email");
+        if (isBlank(req.getNoiDung())) {
+            throw new IllegalArgumentException("Nội dung email không được để trống");
+        }
+        checkLength(req.getNoiDung(), 5000, "Nội dung email");
+
+        List<Long> ids = req.getIds().stream()
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .toList();
+        if (ids.isEmpty()) {
+            throw new IllegalArgumentException("Danh sách khách hàng nhận email không hợp lệ");
+        }
+        if (ids.size() > 50) {
+            throw new IllegalArgumentException("Mỗi lần gửi tối đa 50 khách hàng");
+        }
+
+        GuiEmailHangLoatResponse response = GuiEmailHangLoatResponse.builder()
+            .tongYeuCau(ids.size())
+            .build();
+
+        Map<Long, KhachHang> khachHangMap = khachHangRepository.findAllById(ids).stream()
+            .collect(Collectors.toMap(KhachHang::getId, kh -> kh, (a, b) -> a));
+        String tieuDe = req.getTieuDe().trim();
+        String noiDung = req.getNoiDung().trim();
+
+        // 1. Kiểm tra dữ liệu
+        List<Long> canGui = new ArrayList<>();
+        for (Long id : ids) {
+            KhachHang kh = khachHangMap.get(id);
+            if (kh == null) {
+                response.setThatBai(response.getThatBai() + 1);
+                response.getBoQua().add(
+                    new GuiEmailHangLoatResponse.BoQua(id, null, null, null, "Không tìm thấy khách hàng"));
+                continue;
+            }
+            if (isBlank(kh.getEmail()) || !EMAIL_PATTERN.matcher(kh.getEmail().trim()).matches()) {
+                response.setThatBai(response.getThatBai() + 1);
+                response.getBoQua().add(new GuiEmailHangLoatResponse.BoQua(
+                    id, kh.getMaKhachHang(), kh.getTenKhachHang(), kh.getEmail(),
+                    "Khách hàng không có địa chỉ email hợp lệ"));
+                continue;
+            }
+            canGui.add(id);
+        }
+
+        if (canGui.isEmpty()) {
+            return response;
+        }
+
+        // Giới hạn số kết nối SMTP đồng thời để tránh Gmail từ chối các phiên gửi hàng loạt.
+        java.util.concurrent.ExecutorService pool =
+            java.util.concurrent.Executors.newFixedThreadPool(Math.min(2, canGui.size()));
+        try {
+            List<java.util.concurrent.Future<Boolean>> futures = new ArrayList<>();
+            for (Long id : canGui) {
+                String email = khachHangMap.get(id).getEmail().trim();
+                futures.add(pool.submit(() -> emailService != null
+                    ? emailService.guiMailCustom(email, tieuDe, noiDung)
+                    : false));
+            }
+            for (int i = 0; i < futures.size(); i++) {
+                Long id = canGui.get(i);
+                KhachHang kh = khachHangMap.get(id);
+                boolean guiOk = false;
+                try {
+                    guiOk = futures.get(i).get();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (java.util.concurrent.ExecutionException e) {
+                    log.error("Gửi email hàng loạt cho khách hàng {} gặp lỗi", id, e.getCause());
+                }
+                if (guiOk) {
+                    response.setGuiThanhCong(response.getGuiThanhCong() + 1);
+                } else {
+                    response.setThatBai(response.getThatBai() + 1);
+                    response.getBoQua().add(new GuiEmailHangLoatResponse.BoQua(
+                        id, kh.getMaKhachHang(), kh.getTenKhachHang(), kh.getEmail(),
+                        "Nhà cung cấp email từ chối hoặc có lỗi khi gửi"));
+                }
+            }
+        } finally {
+            pool.shutdown();
+        }
+        return response;
     }
 
     /** Mã khách hàng đề xuất theo họ tên (chưa tính các mã đã tồn tại trên FE). */

@@ -52,11 +52,13 @@ const taiHoiThoai = async () => {
   const ma = getMaAnDanh()
   if (cheDo.value === 'ai') {
     hoiThoaiAI.value = await layHoiThoaiAI()
+    tuIdAI = 0
     const ds = await layTinAI(hoiThoaiAI.value.id, tuIdAI)
     tinNhan.value = [...ds]
     if (ds.length) tuIdAI = ds[ds.length - 1].id
   } else {
     hoiThoaiNhanVien.value = await layHoiThoaiKhach()
+    tuId = 0
     const ds = await layTinKhach(hoiThoaiNhanVien.value.id, tuId)
     tinNhan.value = [...ds]
     if (ds.length) tuId = ds[ds.length - 1].id

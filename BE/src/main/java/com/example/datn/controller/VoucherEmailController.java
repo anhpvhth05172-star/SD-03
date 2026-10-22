@@ -107,10 +107,8 @@ public class VoucherEmailController {
         }
     }
 
-    // Helper: chuyển Object sang PhieuGiamGia (nếu bạn dùng DTO thì thay bằng @RequestBody DTO)
+    // Helper: chuyển Object sang PhieuGiamGia
     private PhieuGiamGia convertToPhieuGiamGia(Object obj) {
-        // Cách đơn giản nhất: dùng ObjectMapper hoặc nhận thẳng entity/DTO
-        // Ở đây giả sử bạn truyền đủ field, bạn nên tạo DTO riêng cho sạch
         if (obj instanceof PhieuGiamGia) {
             return (PhieuGiamGia) obj;
         }

@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { dangKy } from '@/api/auth'
+import { batBuoc, toiDa, emailHopLe, soDienThoaiHopLe } from '@/utils/validate'
 
 const router = useRouter()
 
@@ -18,20 +19,23 @@ const loading = ref(false)
 const submit = async () => {
   error.value = ''
   const f = form.value
-  if (!f.tenTaiKhoan.trim()) {
-    error.value = 'Tên tài khoản không được để trống'
-    return
-  }
-  if (!f.email.trim()) {
-    error.value = 'Email không được để trống'
-    return
-  }
-  if (!f.soDienThoai.trim()) {
-    error.value = 'Số điện thoại không được để trống'
-    return
-  }
-  if (!f.matKhau || f.matKhau.length < 6) {
-    error.value = 'Mật khẩu phải có ít nhất 6 ký tự'
+  // Validate như trang thêm khách hàng (utils/validate)
+  const loi = [
+    batBuoc(f.tenTaiKhoan, 'Tên tài khoản'),
+    toiDa(f.tenTaiKhoan, 100, 'Tên tài khoản'),
+    batBuoc(f.email, 'Email'),
+    toiDa(f.email, 150, 'Email'),
+    emailHopLe(f.email),
+    batBuoc(f.soDienThoai, 'Số điện thoại'),
+    soDienThoaiHopLe(f.soDienThoai),
+    batBuoc(f.matKhau, 'Mật khẩu'),
+    f.matKhau && (f.matKhau.length < 6 || f.matKhau.length > 127)
+      ? 'Mật khẩu phải có từ 6 đến 127 ký tự'
+      : '',
+    batBuoc(f.xacNhanMatKhau, 'Vui lòng xác nhận mật khẩu'),
+  ].find((l) => l)
+  if (loi) {
+    error.value = loi
     return
   }
   if (f.matKhau !== f.xacNhanMatKhau) {
@@ -68,15 +72,15 @@ const submit = async () => {
       <form class="auth-form" @submit.prevent="submit">
         <div class="field">
           <label>Tài khoản</label>
-          <input v-model="form.tenTaiKhoan" type="text" placeholder="Tên tài khoản" />
+          <input v-model="form.tenTaiKhoan" type="text" maxlength="100" placeholder="Tên tài khoản" />
         </div>
         <div class="field">
           <label>Email</label>
-          <input v-model="form.email" type="email" placeholder="user@example.com" />
+          <input v-model="form.email" type="email" maxlength="150" placeholder="user@example.com" />
         </div>
         <div class="field">
           <label>Số điện thoại</label>
-          <input v-model="form.soDienThoai" type="tel" placeholder="09xxxxxxxx" />
+          <input v-model="form.soDienThoai" type="tel" maxlength="10" placeholder="09xxxxxxxx" />
         </div>
         <div class="field">
           <label>Mật khẩu</label>
