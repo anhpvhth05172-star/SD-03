@@ -388,78 +388,52 @@ const executeDeleteFast = async (item) => {
 </script>
 
 <template>
-  <div class="attribute-management-page">
-    <div class="page-header-row">
-      <div class="page-title-box">
-        <h1 class="page-title">
+  <div class="attribute-management-page product-style-unified">
+    <div class="page-top-row">
+      <div class="page-intro">
+        <h1 class="page-heading">
           Quản lý {{ activeTabInfo.label }}
+          <span class="count-badge">{{ currentTabItems.length }} {{ activeTabInfo.label.toLowerCase() }}</span>
         </h1>
-        <p class="page-subtitle">
-          Danh sách và thông tin quản lý thuộc tính {{ activeTabInfo.label }} trong hệ thống.
-        </p>
       </div>
 
-      <div class="page-actions-box">
-        <button class="btn btn-add-attr" @click="openAddModal">
-          <span class="plus-icon">+</span>
-          Thêm {{ activeTabInfo.label }} mới
+      <div class="page-actions">
+        <button class="btn btn-add-new" @click="openAddModal">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Thêm {{ activeTabInfo.label.toLowerCase() }} mới
         </button>
       </div>
     </div>
 
-    <!-- Horizontal Tabs Navigation Bar (Đã ẩn theo yêu cầu) -->
-    <!--
-    <div class="tabs-nav-bar">
-      <button
-        v-for="t in tabs"
-        :key="t.id"
-        class="attr-tab-btn"
-        :class="{ active: activeTab === t.id }"
-        @click="switchTab(t.id)"
-      >
-        <span class="tab-label">{{ t.label }}</span>
-        <span class="tab-count-badge">{{ (attributesData[t.id] || []).length }}</span>
-      </button>
-    </div>
-    -->
-
-    <!-- Filter Card -->
-    <div class="filter-card">
+    <div class="filter-box">
       <div class="filter-row">
         <div class="search-box">
-          <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2">
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
-          <input 
-            v-model="searchQuery" 
-            type="text" 
-            class="filter-input"
-            :placeholder="`Tìm kiếm ${activeTabInfo.label.toLowerCase()} theo tên hoặc mã...`" 
-          />
+          <input v-model="searchQuery" type="text" class="filter-input"
+            :placeholder="`Tìm kiếm ${activeTabInfo.label.toLowerCase()} theo tên hoặc mã...`" />
           <button v-if="searchQuery" class="clear-search-btn" @click="searchQuery = ''" title="Xóa tìm kiếm">×</button>
         </div>
 
         <div class="filter-right-actions">
-          <div class="status-filter">
-            <label class="filter-lbl">Trạng thái:</label>
-            <div style="min-width: 175px;">
-              <SearchableSelect
-                v-model="statusFilter"
-                :options="[
-                  { value: 'Tất cả', label: 'Tất cả trạng thái' },
-                  { value: 'Hoạt động', label: 'Hoạt động' },
-                  { value: 'Ngừng hoạt động', label: 'Ngừng hoạt động' }
-                ]"
-                label-key="label"
-                value-key="value"
-                :allow-clear="false"
-              />
+          <div class="status-combobox-wrap">
+            <label class="status-combobox-label">Trạng thái:</label>
+            <div class="status-select-box">
+              <SearchableSelect v-model="statusFilter" :options="[
+                { value: 'Tất cả', label: 'Tất cả trạng thái' },
+                { value: 'Hoạt động', label: 'Hoạt động' },
+                { value: 'Ngừng hoạt động', label: 'Ngừng hoạt động' }
+              ]" label-key="label" value-key="value" :allow-clear="false" />
             </div>
           </div>
 
-          <button class="btn-reset-filter" @click="resetFilters" title="Đặt lại bộ lọc về mặc định">
+          <button class="btn btn-reset-filter" @click="resetFilters" title="Đặt lại bộ lọc về mặc định">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M23 4v6h-6"></path>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
@@ -470,50 +444,54 @@ const executeDeleteFast = async (item) => {
       </div>
     </div>
 
-    <!-- Table Card -->
     <div class="table-card">
-      <div class="table-header">
-        <div class="table-title">
-          <h2>Danh sách {{ activeTabInfo.label }}</h2>
-          <span class="count-pill">{{ currentTabItems.length }} mục</span>
+      <div class="table-card-head">
+        <div class="head-left">
+          <h2 class="card-title">Danh sách {{ activeTabInfo.label.toLowerCase() }}</h2>
+          <span class="items-count-pill">{{ currentTabItems.length }} mục</span>
+        </div>
+
+        <div class="head-right">
+          <label class="page-size-label">Hiển thị:</label>
+          <select v-model="pageSize" class="page-size-select">
+            <option v-for="opt in pageSizeOptions" :key="opt" :value="opt">{{ opt }} mục / trang</option>
+          </select>
         </div>
       </div>
 
       <div class="table-responsive">
-        <table class="attr-table">
+        <table class="data-table">
           <thead>
             <tr>
               <th width="60" class="text-center">STT</th>
-              <th width="140">MÃ THUỘC TÍNH</th>
+              <th width="150" class="text-center">MÃ THUỘC TÍNH</th>
               <th width="240">TÊN {{ activeTabInfo.label.toUpperCase() }}</th>
               <th>MÔ TẢ / GIÁ TRỊ</th>
-              <th width="160">TRẠNG THÁI</th>
-              <th width="140" class="text-center">THAO TÁC</th>
+              <th width="170" class="text-center">TRẠNG THÁI</th>
+              <th width="120" class="text-center">THAO TÁC</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(item, index) in paginatedItems" :key="item.id">
               <td class="text-center text-slate">{{ getIndex(index) }}</td>
-              <td>
-                <span class="code-pill">{{ (item.ma || (activeTabInfo.codePrefix + String(item.id).padStart(3, '0'))).toUpperCase() }}</span>
+              <td class="text-center code-plain-text">
+                {{ (item.ma || (activeTabInfo.codePrefix + String(item.id).padStart(3, '0'))).toUpperCase() }}
               </td>
               <td>
                 <div class="name-col">
-                  <span v-if="activeTab === 'kich_co'" class="size-pill-tag">
-                    Size {{ item.ten }}
-                  </span>
-                  <span v-else class="name-main">{{ item.ten }}</span>
+                  <span class="name-main">{{ activeTab === 'kich_co' ? `Size ${item.ten}` : item.ten }}</span>
                 </div>
               </td>
               <td>
-                <div v-if="activeTab === 'mau_sac'" class="color-preview-cell" @click="copyHex(item.mo_ta)" title="Click để sao chép mã màu">
+                <div v-if="activeTab === 'mau_sac'" class="color-preview-cell" @click="copyHex(item.mo_ta)"
+                  title="Click để sao chép mã màu">
                   <span class="color-circle"
                     :style="{ backgroundColor: (item.mo_ta && item.mo_ta.startsWith('#')) ? item.mo_ta : '#64748b', border: item.mo_ta === '#ffffff' ? '1px solid #cbd5e1' : 'none' }"></span>
                   <span class="color-hex">{{ (item.mo_ta || '#64748B').toUpperCase() }}</span>
                 </div>
                 <span v-else class="text-slate-desc">{{ item.mo_ta || '—' }}</span>
               </td>
-              <td>
+              <td class="text-center">
                 <span class="badge-pill"
                   :class="{ 'badge-active': item.trang_thai === 'Hoạt động', 'badge-inactive': item.trang_thai === 'Ngừng hoạt động' }"
                   @click="toggleStatusFast(item)" title="Click để đổi trạng thái tức thì">
@@ -524,13 +502,15 @@ const executeDeleteFast = async (item) => {
               <td class="text-center">
                 <div class="action-btns">
                   <button class="btn-action edit" title="Chỉnh sửa" @click="openEditModal(item)">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M12 20h9"></path>
-                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2.2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
                   </button>
                   <button class="btn-action del" title="Xóa thuộc tính" @click="confirmDeleteItem(item)">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2.2">
                       <polyline points="3 6 5 6 21 6"></polyline>
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                     </svg>
@@ -584,14 +564,16 @@ const executeDeleteFast = async (item) => {
             <div class="form-group margin-bottom">
               <label class="form-lbl">Tên {{ activeTabInfo.label }} <span class="required">*</span></label>
               <input v-model="modalForm.ten" type="text" class="form-inp"
-                :placeholder="activeTabInfo.placeholder || `Nhập tên ${activeTabInfo.label.toLowerCase()}...`" autofocus />
+                :placeholder="activeTabInfo.placeholder || `Nhập tên ${activeTabInfo.label.toLowerCase()}...`"
+                autofocus />
             </div>
 
             <div v-if="activeTab === 'mau_sac'" class="form-group margin-bottom">
               <label class="form-lbl">Mã màu HEX đại diện</label>
               <div class="color-input-row">
                 <input v-model="modalForm.mo_ta" type="color" class="color-picker-box" />
-                <input v-model="modalForm.mo_ta" type="text" class="form-inp" placeholder="#HEX (vd: #D92D20)" @input="modalForm.mo_ta = modalForm.mo_ta ? modalForm.mo_ta.toUpperCase() : ''" />
+                <input v-model="modalForm.mo_ta" type="text" class="form-inp" placeholder="#HEX (vd: #D92D20)"
+                  @input="modalForm.mo_ta = modalForm.mo_ta ? modalForm.mo_ta.toUpperCase() : ''" />
               </div>
             </div>
 
@@ -603,16 +585,10 @@ const executeDeleteFast = async (item) => {
 
             <div class="form-group">
               <label class="form-lbl">Trạng thái</label>
-              <SearchableSelect
-                v-model="modalForm.trang_thai"
-                :options="[
-                  { value: 'Hoạt động', label: 'Hoạt động' },
-                  { value: 'Ngừng hoạt động', label: 'Ngừng hoạt động' }
-                ]"
-                label-key="label"
-                value-key="value"
-                :allow-clear="false"
-              />
+              <SearchableSelect v-model="modalForm.trang_thai" :options="[
+                { value: 'Hoạt động', label: 'Hoạt động' },
+                { value: 'Ngừng hoạt động', label: 'Ngừng hoạt động' }
+              ]" label-key="label" value-key="value" :allow-clear="false" />
             </div>
           </div>
 
@@ -633,16 +609,19 @@ const executeDeleteFast = async (item) => {
 
           <div class="confirm-hero-badge" :class="`badge-${confirmModal.variant}`">
             <div class="confirm-icon-glow">
-              <svg v-if="confirmModal.variant === 'danger'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-if="confirmModal.variant === 'danger'" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 <line x1="10" y1="11" x2="10" y2="17"></line>
                 <line x1="14" y1="11" x2="14" y2="17"></line>
               </svg>
-              <svg v-else-if="confirmModal.variant === 'warning'" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-else-if="confirmModal.variant === 'warning'" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
               </svg>
-              <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                 <polyline points="17 21 17 13 7 13 7 21"></polyline>
                 <polyline points="7 3 7 8 15 8"></polyline>

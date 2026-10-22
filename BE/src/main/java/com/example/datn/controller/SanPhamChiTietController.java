@@ -19,6 +19,23 @@ import java.util.List;
 public class SanPhamChiTietController {
 
     private final SanPhamChiTietService sanPhamChiTietService;
+    private final com.example.datn.service.GeminiService geminiService;
+
+    @PostMapping("/ai-visual-search")
+    public ResponseEntity<java.util.Map<String, Object>> aiVisualSearch(
+            @RequestBody java.util.Map<String, String> request
+    ) {
+        String imageBase64 = request.get("imageBase64");
+        String mimeType = request.get("mimeType");
+        java.util.Map<String, Object> aiResult = geminiService.nhanDienGiayQuaHinhAnh(imageBase64, mimeType);
+
+        // Khớp biến thể qua thuật toán xếp hạng đa tầng của AI
+        List<SanPhamChiTietResponse> matchingVariants = sanPhamChiTietService.matchVariantsByAI(aiResult);
+
+        java.util.Map<String, Object> response = new java.util.HashMap<>(aiResult);
+        response.put("matchingVariants", matchingVariants);
+        return ResponseEntity.ok(response);
+    }
 
     @GetMapping
     public ResponseEntity<com.example.datn.dto.Common.PageResponse<SanPhamChiTietResponse>> getAll(
@@ -45,14 +62,17 @@ public class SanPhamChiTietController {
     }
 
     @PostMapping("/batch")
-    public ResponseEntity<List<SanPhamChiTietResponse>> createBatch(@RequestBody List<@Valid SanPhamChiTietRequest> requests) {
-        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(sanPhamChiTietService.createBatch(requests));
+    public ResponseEntity<List<SanPhamChiTietResponse>> createBatch(
+            @Valid @RequestBody List<SanPhamChiTietRequest> requests
+    ) {
+        return ResponseEntity.ok(sanPhamChiTietService.createBatch(requests));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<SanPhamChiTietResponse> update(
             @PathVariable Long id,
-            @RequestBody @Valid SanPhamChiTietRequest request) {
+            @Valid @RequestBody SanPhamChiTietRequest request
+    ) {
         return ResponseEntity.ok(sanPhamChiTietService.update(id, request));
     }
 
@@ -67,4 +87,3 @@ public class SanPhamChiTietController {
         return ResponseEntity.noContent().build();
     }
 }
-

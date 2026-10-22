@@ -19,6 +19,21 @@ import org.springframework.web.bind.annotation.*;
 public class SanPhamController {
 
     private final SanPhamService sanPhamService;
+    private final com.example.datn.service.GeminiService geminiService;
+
+    @PostMapping("/ai-generate-content")
+    public ResponseEntity<java.util.Map<String, String>> aiGenerateContent(
+            @RequestBody java.util.Map<String, String> request
+    ) {
+        String ten = request.get("tenSanPham");
+        String thuongHieu = request.get("thuongHieu");
+        String loaiGiay = request.get("loaiGiay");
+        String chatLieu = request.get("chatLieu");
+        String kieuDang = request.get("kieuDang");
+        String doiTuong = request.get("doiTuong");
+        java.util.Map<String, String> result = geminiService.sinhNoiDungSanPham(ten, thuongHieu, loaiGiay, chatLieu, kieuDang, doiTuong);
+        return ResponseEntity.ok(result);
+    }
 
     @GetMapping
     public ResponseEntity<PageResponse<SanPhamResponse>> getAll(
