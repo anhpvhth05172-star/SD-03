@@ -71,7 +71,7 @@ public class GiaoCaController {
         @RequestParam(required = false) Long idNhanVien,
         Authentication auth
     ) {
-        Long callerId = idNhanVien(auth);
+        Long callerId = idUser(auth);
         boolean callerAdmin = auth.getAuthorities().stream()
             .anyMatch(a -> new SimpleGrantedAuthority("ROLE_ADMIN").equals(a));
         return giaoCaService.lichSu(page, size, tuNgay, denNgay, trangThai, idNhanVien, callerId, callerAdmin);
@@ -81,10 +81,22 @@ public class GiaoCaController {
         if (auth == null || !(auth.getPrincipal() instanceof Long id)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Chưa đăng nhập");
         }
-        boolean laNhanVien = auth.getAuthorities().stream()
+        boolean laNV = auth.getAuthorities().stream()
             .anyMatch(a -> "ROLE_NHAN_VIEN".equals(a.getAuthority()));
-        if (!laNhanVien) {
+        if (!laNV) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cần đăng nhập nhân viên");
+        }
+        return id;
+    }
+
+    private static Long idUser(Authentication auth) {
+        if (auth == null || !(auth.getPrincipal() instanceof Long id)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Chưa đăng nhập");
+        }
+        boolean laNVHoacAdmin = auth.getAuthorities().stream()
+            .anyMatch(a -> "ROLE_NHAN_VIEN".equals(a.getAuthority()) || "ROLE_ADMIN".equals(a.getAuthority()));
+        if (!laNVHoacAdmin) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cần đăng nhập nhân viên hoặc admin");
         }
         return id;
     }
