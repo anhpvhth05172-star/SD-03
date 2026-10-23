@@ -20,15 +20,6 @@ public interface CaLamRepository extends JpaRepository<CaLam, Long> {
     @Query("SELECT COUNT(l) FROM LichLamViec l WHERE l.caLam.id = :idCa")
     long demLichTheoCa(@Param("idCa") Long idCa);
 
-    @Query("""
-        SELECT c FROM CaLam c
-        WHERE c.id != :id
-          AND c.batDau < :ketThuc
-          AND c.ketThuc > :batDau
-        """)
-    List<CaLam> timCaTrungKhungGio(
-        @Param("id") Long id,
-        @Param("batDau") LocalTime batDau,
-        @Param("ketThuc") LocalTime ketThuc
-    );
+    @Query("SELECT c FROM CaLam c WHERE c.dangBat = true")
+    List<CaLam> findAllDangBat();
 }
