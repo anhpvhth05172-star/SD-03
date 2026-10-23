@@ -11,6 +11,8 @@ public interface CaLamRepository extends JpaRepository<CaLam, Long> {
 
     boolean existsByMaCa(String maCa);
 
+    java.util.Optional<CaLam> findByMaCa(String maCa);
+
     boolean existsByTenCaIgnoreCase(String tenCa);
 
     boolean existsByTenCaIgnoreCaseAndIdNot(String tenCa, Long id);

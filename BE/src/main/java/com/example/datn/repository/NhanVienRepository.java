@@ -14,6 +14,8 @@ public interface NhanVienRepository extends JpaRepository<NhanVien, Long> {
 
     java.util.Optional<NhanVien> findByMaNhanVien(String maNhanVien);
 
+    java.util.List<NhanVien> findByTrangThaiTrue();
+
     boolean existsByMaNhanVienAndIdNot(String maNhanVien, Long id);
 
     boolean existsByTenTaiKhoan(String tenTaiKhoan);
