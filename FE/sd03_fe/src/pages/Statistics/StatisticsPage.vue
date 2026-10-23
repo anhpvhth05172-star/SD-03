@@ -4,8 +4,9 @@ import { listEmployees } from '@/api/employee'
 import { API_BASE } from '@/api/http'
 import { formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
-import { notifySuccess } from '@/utils/notify'
+import { notifySuccess, notifyError } from '@/utils/notify'
 import { nhanVienMau } from '@/pages/Schedule/scheduleData'
+import { fetchTongQuan, fetchTrangThaiDon } from '@/api/statistics'
 import BarLineChart from '@/components/charts/BarLineChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
 import {
@@ -58,6 +59,10 @@ const nhanViens = ref([])
 const sanPhams = ref([])
 const bang = ref(new Map())
 const capNhatLuc = ref(gioHienTai())
+
+const tongQuanData = ref(null)
+const trangThaiData = ref([])
+const dangTai = ref(false)
 
 const chartMode = ref('cot')
 const thMode = ref('tron')
@@ -144,9 +149,23 @@ const tyLeChon = computed(() => {
   return tl === undefined ? 0 : tl
 })
 
-const khoang = computed(() =>
-  tinhKhoang(bang.value, tuDate.value, denDate.value, tyLeChon.value)
-)
+const khoang = computed(() => {
+  if (tongQuanData.value) {
+    const t = tongQuanData.value
+    return {
+      doanhThu: t.doanhThu || 0,
+      tienMat: t.tienMat || 0,
+      tienChuyenKhoan: t.tienChuyenKhoan || 0,
+      soDon: t.soDon || 0,
+      aov: t.aov || 0,
+      sanPhamBan: t.sanPhamBan || 0,
+      khachMoi: t.khachMoi || 0,
+      soTra: 0,
+      soNgay: 0,
+    }
+  }
+  return tinhKhoang(bang.value, tuDate.value, denDate.value, tyLeChon.value)
+})
 
 const chuoiBanHang = computed(() =>
   tinhChuoiBanHang(bang.value, tuDate.value, denDate.value, kieuTongQuan.value, tyLeChon.value)
@@ -195,7 +214,12 @@ const seriesTH = computed(() =>
 )
 
 const chuKy = computed(() => tinhChuKy(bang.value))
-const trangThai = computed(() => tinhTrangThaiDon(bang.value, tuDate.value, denDate.value, tyLeChon.value))
+const trangThai = computed(() => {
+  if (trangThaiData.value.length) {
+    return trangThaiData.value.map((x) => ({ ...x, mau: mauTrangThai(x.ten) }))
+  }
+  return tinhTrangThaiDon(bang.value, tuDate.value, denDate.value, tyLeChon.value)
+})
 const slicesTrangThai = computed(() =>
   trangThai.value.map((x) => ({ label: x.ten, value: x.soLuong, color: x.mau }))
 )
@@ -370,12 +394,35 @@ const xuatSanPham = async () => {
   notifySuccess('Đã xuất Excel', 'Tệp Excel (.xlsx) đã được tải xuống')
 }
 
-const capNhatDoanhThu = () => {
+const capNhatDoanhThu = async () => {
+  await napThongKe()
   capNhatLuc.value = gioHienTai()
-  notifySuccess('Đã cập nhật doanh thu', 'Dữ liệu minh họa đã được tính lại')
+  notifySuccess('Đã cập nhật doanh thu', 'Dữ liệu thống kê đã được tải lại')
 }
 
 /* ---------------------------------- Nạp dữ liệu ---------------------------------- */
+const napThongKe = async () => {
+  if (!tuNgay.value || !denNgay.value) return
+  dangTai.value = true
+  try {
+    const thuongHieu = thuongHieuChon.value || null
+    const [tong, trangThai] = await Promise.all([
+      fetchTongQuan(tuNgay.value, denNgay.value, thuongHieu),
+      fetchTrangThaiDon(tuNgay.value, denNgay.value, thuongHieu),
+    ])
+    tongQuanData.value = tong
+    trangThaiData.value = trangThai
+    capNhatLuc.value = gioHienTai()
+  } catch (e) {
+    console.error('Lỗi tải thống kê:', e)
+    tongQuanData.value = null
+    trangThaiData.value = []
+    notifyError('Không tải được dữ liệu thống kê')
+  } finally {
+    dangTai.value = false
+  }
+}
+
 const locThuongHieu = computed(() => {
   const kw = timThuongHieu.value.trim().toLowerCase()
   if (!kw) return thuongHieus.value
@@ -388,9 +435,15 @@ watch(locThuongHieu, (list) => {
   }
 })
 
+watch([tuNgay, denNgay, thuongHieuChon], () => {
+  if (!docInputDate(tuNgay.value) || !docInputDate(denNgay.value)) return
+  napThongKe()
+})
+
 onMounted(async () => {
   bang.value = taoBangNgay()
   capNhatLuc.value = gioHienTai()
+  napThongKe()
 
   try {
     const d = await listEmployees({ page: 0, size: 500 })
@@ -505,9 +558,6 @@ onMounted(async () => {
         <span class="info-text">
           Đang hiển thị dữ liệu tổng quan từ ngày <strong>{{ hienThiNgay(tuNgay) }}</strong> đến ngày
           <strong>{{ hienThiNgay(denNgay) }}</strong>
-        </span>
-        <span class="mock-badge" title="API thống kê chưa được kết nối — số liệu được sinh minh họa phía frontend">
-          Dữ liệu minh họa · chưa kết nối API
         </span>
       </div>
       <div class="info-right">
@@ -1326,18 +1376,6 @@ onMounted(async () => {
 
 .info-text strong {
   color: #0f172a;
-}
-
-.mock-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  border-radius: 20px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  color: #b45309;
-  font-size: 11.5px;
-  font-weight: 700;
 }
 
 .info-right {
