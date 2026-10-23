@@ -24,8 +24,6 @@ let timer = null
 let tuId = 0
 let tuIdAI = 0
 
-const lopChat = () => (cheDo.value === 'ai' ? tinNhan : tinNhan)
-
 const moChat = async () => {
   mo.value = true
   await nextTick()
@@ -71,7 +69,17 @@ const taiHoiThoai = async () => {
 const poll = async () => {
   if (!mo.value || dangGui.value) return
   try {
-    if (cheDo.value === 'ai') return
+    if (cheDo.value === 'ai') {
+      if (!hoiThoaiAI.value) return
+      const ds = await layTinAI(hoiThoaiAI.value.id, tuIdAI)
+      if (ds.length) {
+        tinNhan.value = [...tinNhan.value, ...ds]
+        tuIdAI = ds[ds.length - 1].id
+        await nextTick()
+        cuonDuoi()
+      }
+      return
+    }
     if (!hoiThoaiNhanVien.value) return
     const ds = await layTinKhach(hoiThoaiNhanVien.value.id, tuId)
     if (ds.length) {

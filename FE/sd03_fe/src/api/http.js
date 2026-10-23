@@ -52,10 +52,17 @@ const ganToken = async (config) => {
   }
   if (getRefreshToken()) {
     try {
-      await refreshSession()
+      const refreshed = await refreshSession()
+      if (!refreshed?.token) {
+        dangXuat()
+        chuyenVeDangNhap()
+        return config
+      }
       token = getToken()
     } catch {
-      // Phien co the da het han: van gui request.
+      dangXuat()
+      chuyenVeDangNhap()
+      return config
     }
   }
   if (token) {
@@ -108,7 +115,8 @@ http.interceptors.response.use(
 
       if (getRefreshToken()) {
         try {
-          await refreshSession()
+          const refreshed = await refreshSession()
+          if (!refreshed?.token) throw new Error('Refresh thất bại')
           config.headers = { ...config.headers, Authorization: `Bearer ${getToken()}` }
           return http.request(config)
         } catch {

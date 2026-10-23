@@ -48,7 +48,7 @@ const routes = [
   {
     path: '/tai-khoan',
     component: CustomerAccountPage,
-    meta: { title: 'Tài khoản của tôi', requiresAuth: true, canKhach: true },
+    meta: { title: 'Tài khoản của tôi', canKhach: true },
   },
   {
     path: '/',
@@ -56,11 +56,8 @@ const routes = [
     children: [
       {
         path: '',
-        redirect: () => {
-          if (isKhachHangDangNhap()) return '/tai-khoan'
-          // Mặc định: màn hình mua hàng (POS) — khách ẩn danh và nhân viên đều vào đây
-          return '/ban-hang'
-        },
+        // Mở khu vực khách hàng trước; khách có thể đăng nhập sau từ giao diện.
+        redirect: '/tai-khoan',
       },
       { path: '/san-pham', name: 'ProductList', component: ProductListPage, meta: { ...metaBo, title: 'Quản lý sản phẩm' } },
       { path: '/san-pham/them', name: 'ProductCreate', component: ProductCreatePage, meta: { ...metaBo, title: 'Thêm mới sản phẩm' } },

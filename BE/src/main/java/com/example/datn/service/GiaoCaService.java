@@ -294,6 +294,11 @@ public class GiaoCaService {
         if (auth == null || !(auth.getPrincipal() instanceof Long id)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Chưa đăng nhập");
         }
+        boolean laNhanVien = auth.getAuthorities().stream()
+            .anyMatch(a -> "ROLE_NHAN_VIEN".equals(a.getAuthority()));
+        if (!laNhanVien) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cần đăng nhập nhân viên");
+        }
         return id;
     }
 

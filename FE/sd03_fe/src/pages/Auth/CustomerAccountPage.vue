@@ -2,16 +2,18 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import http from '@/api/http'
-import { getUser, dangXuat, getRefreshToken } from '@/utils/auth'
+import { getUser, dangXuat, getRefreshToken, isKhachHangDangNhap } from '@/utils/auth'
 import { huyPhien } from '@/api/auth'
 
 const router = useRouter()
 const nguoiDung = ref(getUser())
+const daDangNhap = isKhachHangDangNhap()
 const vouchers = ref([])
-const loading = ref(true)
+const loading = ref(daDangNhap)
 const loi = ref('')
 
 onMounted(async () => {
+  if (!daDangNhap) return
   try {
     const data = await http.get('/phieu-giam-gia/cua-toi').then((r) => r.data)
     vouchers.value = Array.isArray(data) ? data : []
@@ -39,12 +41,25 @@ const xulyDangXuat = async () => {
     <header class="tk-header">
       <img src="/images/logo_polyshoes_final.png" alt="PolyShoes" class="tk-logo" />
       <div class="tk-header-right">
-        <span class="tk-user">{{ nguoiDung?.tenKhachHang || nguoiDung?.tenTaiKhoan }}</span>
-        <button type="button" class="btn-logout" @click="xulyDangXuat">Đăng xuất</button>
+        <template v-if="daDangNhap">
+          <span class="tk-user">{{ nguoiDung?.tenKhachHang || nguoiDung?.tenTaiKhoan }}</span>
+          <button type="button" class="btn-logout" @click="xulyDangXuat">Đăng xuất</button>
+        </template>
+        <template v-else>
+          <router-link to="/dang-nhap?cheDo=khach" class="btn-login">Đăng nhập</router-link>
+          <router-link to="/dang-ky" class="btn-register">Đăng ký</router-link>
+        </template>
       </div>
     </header>
 
     <main class="tk-body">
+      <section v-if="!daDangNhap" class="tk-card tk-welcome">
+        <h1>Chào mừng đến với PolyShoes</h1>
+        <p>Đăng nhập để xem thông tin tài khoản và phiếu giảm giá dành cho bạn.</p>
+        <router-link to="/dang-nhap?cheDo=khach" class="btn-login">Đăng nhập tài khoản khách hàng</router-link>
+      </section>
+
+      <template v-else>
       <section class="tk-card">
         <h2>Thông tin tài khoản</h2>
         <dl class="tk-info">
@@ -58,6 +73,7 @@ const xulyDangXuat = async () => {
           </div>
         </dl>
       </section>
+      </template>
 
       <section class="tk-card">
         <h2>Phiếu giảm giá của tôi</h2>
@@ -129,6 +145,19 @@ const xulyDangXuat = async () => {
   background: #fef2f2;
   border-color: #fecaca;
 }
+.btn-login,
+.btn-register {
+  border-radius: 16px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.btn-login { background: #2563eb; color: #fff; }
+.btn-register { border: 1px solid #cbd5e1; color: #334155; }
+.tk-welcome { text-align: center; padding: 36px 22px; }
+.tk-welcome h1 { margin: 0 0 10px; font-size: 23px; color: #1e293b; }
+.tk-welcome p { margin: 0 0 20px; color: #64748b; }
 
 .tk-body {
   flex: 1;

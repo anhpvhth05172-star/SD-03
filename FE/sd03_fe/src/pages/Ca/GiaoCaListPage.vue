@@ -3,8 +3,8 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getUser } from '@/utils/auth'
 import { laAdmin } from '@/utils/session'
-import { formatVnd, formatDateTime, formatDate } from '@/utils/format'
-import { getLichSu } from '@/api/giaoCa'
+import { formatVnd, formatDateTime } from '@/utils/format'
+import { getDangMo, getLichSu, moCa } from '@/api/giaoCa'
 import PaginationBar from '@/components/PaginationBar.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { notifyError, notifySuccess } from '@/utils/notify'
@@ -16,7 +16,7 @@ const router = useRouter()
 const list = ref([])
 const loading = ref(false)
 const page = ref(0)
-const pageSize = ref(10)
+const pageSize = ref(5)
 const totalPages = ref(0)
 const totalElements = ref(0)
 
@@ -26,6 +26,11 @@ const isLoadingEmployees = ref(false)
 const isAdmin = computed(() => laAdmin())
 const currentUser = computed(() => getUser())
 const currentStaffId = computed(() => currentUser.value?.idNhanVien)
+const caTruoc = computed(() => list.value.find((row) => row.trangThai === 'DA_KET_CA'))
+const caHienTai = ref(null)
+const moCaForm = reactive({ tienDauCa: 300000, ghiChu: '' })
+const moCaLoading = ref(false)
+const moCaError = ref('')
 
 const emptyFilter = () => ({
   tuNgay: '',
@@ -36,8 +41,6 @@ const emptyFilter = () => ({
 
 const filter = reactive(emptyFilter())
 const applied = reactive(emptyFilter())
-
-const hasFilter = computed(() => Object.values(applied).some(v => v))
 
 const trangThaiOptions = [
   { value: '', label: 'Tất cả' },
@@ -92,6 +95,33 @@ const loadData = async (p = 0) => {
   }
 }
 
+const loadCaHienTai = async () => {
+  try {
+    caHienTai.value = await getDangMo()
+  } catch (err) {
+    notifyError('Lỗi tải ca làm việc', err.message)
+  }
+}
+
+const batDauCa = async () => {
+  moCaError.value = ''
+  const tienDauCa = Number(moCaForm.tienDauCa)
+  if (!Number.isFinite(tienDauCa) || tienDauCa < 0) {
+    moCaError.value = 'Tiền đầu ca phải là số không âm'
+    return
+  }
+  moCaLoading.value = true
+  try {
+    caHienTai.value = await moCa({ tienDauCa, ghiChu: moCaForm.ghiChu.trim() || null })
+    notifySuccess('Mở ca thành công', `Ca ${caHienTai.value.maCa} đã được mở`)
+    await loadData(0)
+  } catch (err) {
+    moCaError.value = err.message || 'Không thể mở ca làm việc'
+  } finally {
+    moCaLoading.value = false
+  }
+}
+
 const applyFilter = () => {
   Object.assign(applied, filter)
   page.value = 0
@@ -117,11 +147,6 @@ const goPage = (p) => {
   loadData(p)
 }
 
-const exportExcel = () => {
-  console.log('Xuất Excel với params:', buildParams())
-  notifySuccess('Placeholder', 'Chức năng xuất Excel đang phát triển')
-}
-
 const navigateToDoiSoat = (id) => {
   router.push(`/ca/${id}/doi-soat`)
 }
@@ -138,26 +163,6 @@ const trangThaiClass = (trangThai) => {
   return 'status-gray'
 }
 
-const formatDateOnly = (iso) => {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  const p = (x) => String(x).padStart(2, '0')
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`
-}
-
-const summary = computed(() => {
-  return list.value.reduce((acc, row) => {
-    acc.doanhThu += Number(row.tongDoanhThu || 0)
-    acc.tienMat += Number(row.tienMatThu || 0)
-    acc.tienHoan += Number(row.tienHoanMat || 0)
-    acc.duKien += Number(row.tienDuKien || 0)
-    acc.thucTe += Number(row.tienThucTe || 0)
-    acc.chenhLech += Number(row.chenhLech || 0)
-    return acc
-  }, { doanhThu: 0, tienMat: 0, tienHoan: 0, duKien: 0, thucTe: 0, chenhLech: 0 })
-})
-
 onMounted(async () => {
   if (isAdmin.value) {
     await loadEmployees()
@@ -165,7 +170,7 @@ onMounted(async () => {
     filter.idNhanVien = currentStaffId.value
     applied.idNhanVien = currentStaffId.value
   }
-  await loadData(0)
+  await Promise.all([loadData(0), loadCaHienTai()])
 })
 
 watch(() => route.fullPath, () => {
@@ -175,30 +180,53 @@ watch(() => route.fullPath, () => {
 
 <template>
 <div class="giao-ca-page">
-  <div class="screen-head">
-    <div>
-      <h1 class="screen-title">Lịch sử giao ca</h1>
+  <section class="panel shift-panel">
+    <div class="shift-heading">
+      <span class="status-badge" :class="caHienTai ? 'status-yellow' : 'status-gray'">
+        {{ caHienTai ? 'ĐANG TRONG CA' : 'CHƯA VÀO CA LÀM VIỆC' }}
+      </span>
+      <h1 class="screen-title">Mở ca làm việc & Kiểm đếm tiền ban đầu</h1>
     </div>
-    <button class="btn-export" type="button" @click="exportExcel" disabled title="Chưa hỗ trợ">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-        <polyline points="17 8 12 3 7 8" />
-        <line x1="12" y1="3" x2="12" y2="15" />
-      </svg>
-      Xuất Excel
-    </button>
-  </div>
 
-  <section class="panel filter-panel">
-    <div class="filter-head">
-      <div class="filter-title">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M3 4.6h18l-7.1 8.5v5.9l-3.8 2v-7.9L3 4.6z" />
-        </svg>
-        <h3>Tìm kiếm & bộ lọc</h3>
+    <div v-if="caTruoc" class="previous-shift">
+      <i class="bi bi-info-circle" aria-hidden="true"></i>
+      <div>
+        <strong>Ca trước: {{ caTruoc.maCa }}</strong>
+        <span>{{ caTruoc.tenNhanVien || caTruoc.maNhanVien }} · {{ formatDateTime(caTruoc.thoiGianKet || caTruoc.thoiGianMo) }}</span>
+        <span>Tiền cuối ca: {{ formatVnd(caTruoc.tienThucTe ?? caTruoc.tienDauCa) }} · Chênh lệch: {{ formatVnd(caTruoc.chenhLech) }}</span>
       </div>
     </div>
 
+    <div v-if="caHienTai" class="open-shift-info">
+      <span>Ca {{ caHienTai.maCa }} đang mở từ {{ formatDateTime(caHienTai.thoiGianMo) }}.</span>
+      <button type="button" class="btn-shift-action" @click="router.push('/ban-hang')">Đi tới bán hàng</button>
+    </div>
+    <form v-else class="open-shift-form" @submit.prevent="batDauCa">
+      <div class="open-shift-fields">
+        <div class="f-item">
+          <label for="open-cash">Tiền đầu ca <b>*</b></label>
+          <input id="open-cash" v-model.number="moCaForm.tienDauCa" class="f-control" type="number" min="0" step="1000" required placeholder="Nhập tiền đầu ca" />
+        </div>
+        <div class="f-item">
+          <label for="open-note">Ghi chú khi mở ca</label>
+          <input id="open-note" v-model="moCaForm.ghiChu" class="f-control" type="text" maxlength="500" placeholder="Ghi chú mở ca (nếu có)..." />
+        </div>
+        <div class="f-item staff-field">
+          <label>Nhân viên trực quầy <b>*</b></label>
+          <div class="staff-value"><i class="bi bi-person-circle" aria-hidden="true"></i>{{ currentUser?.tenKhachHang || currentUser?.tenTaiKhoan || 'Tài khoản đang đăng nhập' }}</div>
+        </div>
+      </div>
+      <p v-if="moCaError" class="shift-error">{{ moCaError }}</p>
+      <div class="shift-form-actions">
+        <button type="submit" class="btn-shift-action" :disabled="moCaLoading">
+          {{ moCaLoading ? 'Đang mở ca...' : 'Bắt đầu ca làm việc ngay' }}
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <details class="panel filter-details">
+    <summary class="filter-summary">Tìm kiếm & bộ lọc</summary>
     <form class="filter-row" @submit.prevent="applyFilter">
       <div class="f-item">
         <label for="f-from">Từ ngày</label>
@@ -270,7 +298,7 @@ watch(() => route.fullPath, () => {
         </button>
       </div>
     </form>
-  </section>
+  </details>
 
   <section class="panel">
     <div class="panel-head">
@@ -280,92 +308,26 @@ watch(() => route.fullPath, () => {
           <polyline points="12 6 12 12 16 14" />
         </svg>
       </span>
-      <h3 class="panel-title">Danh sách ca làm việc</h3>
+      <h3 class="panel-title">Các lượt giao ca gần nhất</h3>
       <span class="count-pill">{{ totalElements }} ca</span>
     </div>
 
     <div class="table-wrap">
       <table class="data-table">
-        <thead>
-          <tr>
-            <th>Mã ca</th>
-            <th>Nhân viên</th>
-            <th>Quầy</th>
-            <th>Mở lúc</th>
-            <th>Kết lúc</th>
-            <th>Trạng thái</th>
-            <th style="text-align: right">Tiền đầu ca</th>
-            <th style="text-align: right">Doanh thu</th>
-            <th style="text-align: right">Tiền mặt</th>
-            <th style="text-align: right">Tiền K-M</th>
-            <th style="text-align: right">Tiền hoàn</th>
-            <th style="text-align: right">Dự kiến</th>
-            <th style="text-align: right">Thực tế</th>
-            <th style="text-align: right">Chênh lệch</th>
-            <th>Lý do lệch</th>
-            <th>Ghi chú mở</th>
-            <th style="width: 120px; text-align: center;">Hành động</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Mã ca</th><th>Người giao</th><th>Quầy</th><th>Thời gian mở</th><th>Thời gian đóng</th><th style="text-align:right">Tiền cuối ca</th><th style="text-align:right">Chênh lệch</th><th>Trạng thái</th><th style="text-align:center">Biên bản</th></tr></thead>
         <tbody>
-          <tr v-if="loading">
-            <td colspan="17" class="text-center py-4">Đang tải dữ liệu...</td>
-          </tr>
-          <tr v-else-if="list.length === 0">
-            <td colspan="17" class="text-center py-4">Chưa có ca làm việc nào</td>
-          </tr>
-          <template v-else>
-            <tr v-for="(row, idx) in list" :key="row.id || idx">
-              <td class="cell-code">{{ row.maCa }}</td>
-              <td>{{ row.tenNhanVien || row.maNhanVien }}</td>
-              <td>{{ row.tenQuay || row.maQuay || '—' }}</td>
-              <td>{{ formatDateTime(row.ngayMo) }}</td>
-              <td>{{ row.ngayKet ? formatDateTime(row.ngayKet) : '—' }}</td>
-              <td>
-                <span class="status-badge" :class="trangThaiClass(row.trangThai)">
-                  {{ getTrangThaiLabel(row.trangThai) }}
-                </span>
-              </td>
-              <td style="text-align: right">{{ formatVnd(row.tienDauCa) }}</td>
-              <td style="text-align: right">{{ formatVnd(row.tongDoanhThu) }}</td>
-              <td style="text-align: right">{{ formatVnd(row.tienMatThu) }}</td>
-              <td style="text-align: right">{{ formatVnd(row.tienKhongMat) }}</td>
-              <td style="text-align: right">{{ formatVnd(row.tienHoanMat) }}</td>
-              <td style="text-align: right">{{ formatVnd(row.tienDuKien) }}</td>
-              <td style="text-align: right">{{ formatVnd(row.tienThucTe) }}</td>
-              <td style="text-align: right" :class="{ 'text-red': Number(row.chenhLech || 0) !== 0 }">
-                {{ formatVnd(row.chenhLech) }}
-              </td>
-              <td>{{ row.lyDoLech || '—' }}</td>
-              <td>{{ row.ghiChuMo || '—' }}</td>
-              <td style="text-align: center;">
-                <button
-                  class="btn-action-circle is-view"
-                  type="button"
-                  title="Xem đối soát"
-                  @click="navigateToDoiSoat(row.id)"
-                  :disabled="!row.id"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                </button>
-              </td>
-            </tr>
-          </template>
-          <tr v-if="list.length > 0" class="summary-row">
-            <td colspan="7" style="text-align: right; font-weight: 600;">Tổng cộng (trang):</td>
-            <td style="text-align: right">{{ formatVnd(summary.doanhThu) }}</td>
-            <td style="text-align: right">{{ formatVnd(summary.tienMat) }}</td>
-            <td style="text-align: right">{{ formatVnd(summary.tienHoan) }}</td>
-            <td></td>
-            <td style="text-align: right">{{ formatVnd(summary.duKien) }}</td>
-            <td style="text-align: right">{{ formatVnd(summary.thucTe) }}</td>
-            <td style="text-align: right" :class="{ 'text-red': summary.chenhLech !== 0 }">
-              {{ formatVnd(summary.chenhLech) }}
-            </td>
-            <td colspan="3"></td>
+          <tr v-if="loading"><td colspan="9" class="text-center py-4">Đang tải dữ liệu...</td></tr>
+          <tr v-else-if="list.length === 0"><td colspan="9" class="text-center py-4">Chưa có ca làm việc nào</td></tr>
+          <tr v-for="(row, idx) in list" v-else :key="row.id || idx">
+            <td class="cell-code">{{ row.maCa }}</td>
+            <td>{{ row.tenNhanVien || row.maNhanVien || '—' }}</td>
+            <td>{{ row.tenQuay || row.maQuay || row.tenQuy || '—' }}</td>
+            <td>{{ formatDateTime(row.thoiGianMo) }}</td>
+            <td>{{ row.thoiGianKet ? formatDateTime(row.thoiGianKet) : '—' }}</td>
+            <td style="text-align:right">{{ formatVnd(row.tienThucTe ?? row.tienDauCa) }}</td>
+            <td style="text-align:right" :class="{ 'text-red': Number(row.chenhLech || 0) !== 0 }">{{ formatVnd(row.chenhLech) }}</td>
+            <td><span class="status-badge" :class="trangThaiClass(row.trangThai)">{{ getTrangThaiLabel(row.trangThai) }}</span></td>
+            <td style="text-align:center"><button class="btn-action-circle is-view" type="button" title="Xem biên bản giao ca" @click="navigateToDoiSoat(row.id)" :disabled="!row.id"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg></button></td>
           </tr>
         </tbody>
       </table>
@@ -397,40 +359,98 @@ watch(() => route.fullPath, () => {
   gap: 20px;
 }
 
-.screen-head {
+.shift-panel {
+  padding: 18px 20px;
+}
+
+.shift-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.shift-heading .screen-title {
+  font-size: 18px;
+}
+
+.previous-shift,
+.open-shift-info {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
 }
+
+.previous-shift > i { color: #475569; font-size: 16px; }
+.previous-shift div { display: flex; flex-direction: column; gap: 3px; }
+.previous-shift strong { color: #1e293b; }
+.previous-shift span { line-height: 1.4; }
+.open-shift-info { justify-content: space-between; margin: 0; }
+
+.open-shift-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  align-items: end;
+}
+
+.open-shift-fields .f-item label { text-transform: none; }
+.open-shift-fields .f-item label b { color: #dc2626; }
+.staff-field { grid-column: 1 / -1; }
+
+.staff-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+}
+
+.shift-error { margin: 10px 0 0; color: #dc2626; font-size: 12px; }
+.shift-form-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+
+.btn-shift-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-shift-action:hover:not(:disabled) { background: #b91c1c; }
+.btn-shift-action:disabled { opacity: .6; cursor: not-allowed; }
+.filter-details { padding: 0 18px 14px; }
+.filter-summary { padding: 13px 0 0; color: #475569; font-size: 13px; font-weight: 600; cursor: pointer; }
+.filter-details .filter-row { margin-top: 14px; }
+.filter-row > .f-actions { grid-column: 1 / -1; }
 
 .screen-title {
   font-size: 22px;
   font-weight: 700;
   color: #1e293b;
   margin: 0;
-}
-
-.btn-export {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #fff;
-  color: #64748b;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.btn-export svg {
-  width: 16px;
-  height: 16px;
 }
 
 /* Panel */
@@ -744,12 +764,12 @@ watch(() => route.fullPath, () => {
 }
 
 @media (max-width: 640px) {
+  .open-shift-fields { grid-template-columns: 1fr; }
+  .staff-field { grid-column: auto; }
+  .shift-panel { padding: 16px; }
+  .open-shift-info { align-items: flex-start; flex-direction: column; }
   .filter-row > .f-item {
     grid-column: 1 / -1;
-  }
-  .screen-head {
-    flex-direction: column;
-    align-items: flex-start;
   }
 }
 </style>
