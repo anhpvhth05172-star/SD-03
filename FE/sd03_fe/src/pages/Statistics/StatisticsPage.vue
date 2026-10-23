@@ -1085,13 +1085,13 @@ onMounted(async () => {
 .icon-chart,
 .icon-cycle {
   background: #ffe4e6;
-  color: #f43f5e;
+  color: var(--primary);
 }
 
 .icon-brand,
 .icon-status {
   background: #fff1f2;
-  color: #e11d48;
+  color: var(--primary-hover);
 }
 
 .icon-users {
@@ -1144,13 +1144,13 @@ onMounted(async () => {
 
 .quick-range-btn:hover {
   border-color: #fecdd3;
-  color: #e11d48;
+  color: var(--primary-hover);
 }
 
 .quick-range-btn.is-active {
   background: #fff1f2;
-  border-color: #f43f5e;
-  color: #e11d48;
+  border-color: var(--primary);
+  color: var(--primary-hover);
 }
 
 /* Ô lọc */
@@ -1194,7 +1194,7 @@ onMounted(async () => {
 }
 
 .input-date:focus {
-  border-color: #f43f5e;
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
 }
 
@@ -1228,7 +1228,7 @@ onMounted(async () => {
 }
 
 .input-search:focus {
-  border-color: #f43f5e;
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
 }
 
@@ -1246,7 +1246,7 @@ onMounted(async () => {
   border: 1px solid #ffe4e6;
   border-radius: 8px;
   background: #ffffff;
-  color: #f43f5e;
+  color: var(--primary);
   font-size: 13px;
   font-weight: 600;
   display: inline-flex;
@@ -1265,7 +1265,7 @@ onMounted(async () => {
 .btn-action-outline:hover {
   background: #fff1f2;
   border-color: #fecdd3;
-  color: #e11d48;
+  color: var(--primary-hover);
 }
 
 /* Thanh thông tin */
@@ -1407,7 +1407,7 @@ onMounted(async () => {
 
 .stat-icon.is-rose {
   background: #fff1f2;
-  color: #f43f5e;
+  color: var(--primary);
 }
 
 .stat-value {

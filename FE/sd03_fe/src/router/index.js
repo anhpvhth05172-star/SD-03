@@ -8,7 +8,6 @@ import {
   isKhachHangDangNhap,
 } from '../utils/auth'
 import { refreshSession } from '../api/http'
-import { laAdmin } from '../utils/session'
 import AdminLayout from '../layouts/AdminLayout.vue'
 import ProductListPage from '@/pages/Product/ProductListPage.vue'
 import ProductCreatePage from '@/pages/Product/ProductCreatePage.vue'
@@ -88,12 +87,12 @@ const routes = [
       {
         path: '/lich-lam-viec',
         component: WorkSchedulePage,
-        meta: { ...metaBo, title: 'Quản lý lịch làm việc', adminOnly: true },
+        meta: { ...metaBo, title: 'Quản lý lịch làm việc' },
       },
       {
         path: '/lich-ca-lam',
         component: ShiftSchedulePage,
-        meta: { ...metaBo, title: 'Lịch ca làm', adminOnly: true },
+        meta: { ...metaBo, title: 'Lịch ca làm' },
       },
       {
         path: '/ban-hang',
@@ -120,17 +119,17 @@ const routes = [
       {
         path: '/nhan-vien',
         component: EmployeeListPage,
-        meta: { ...metaBo, title: 'Quản lý nhân viên', adminOnly: true },
+        meta: { ...metaBo, title: 'Quản lý nhân viên' },
       },
       {
         path: '/nhan-vien/them',
         component: EmployeeCreatePage,
-        meta: { ...metaBo, title: 'Quản lý nhân viên', adminOnly: true },
+        meta: { ...metaBo, title: 'Quản lý nhân viên' },
       },
       {
         path: '/nhan-vien/:id/sua',
         component: EmployeeCreatePage,
-        meta: { ...metaBo, title: 'Quản lý nhân viên', adminOnly: true },
+        meta: { ...metaBo, title: 'Quản lý nhân viên' },
       },
       {
         path: '/chat',
@@ -205,10 +204,6 @@ router.beforeEach(async (to) => {
 
   // Trang khách hàng: nhân viên về trang quản trị.
   if (to.meta.canKhach && isNhanVienDangNhap()) {
-    return '/hoa-don'
-  }
-
-  if (to.meta.adminOnly && !laAdmin()) {
     return '/hoa-don'
   }
 

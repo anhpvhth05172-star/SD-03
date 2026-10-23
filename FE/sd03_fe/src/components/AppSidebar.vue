@@ -1,7 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { laAdmin } from '../utils/session'
 
 defineProps({
   collapsed: { type: Boolean, default: false },
@@ -59,13 +58,11 @@ const menu = [
     label: 'Quản lý nhân viên',
     path: '/nhan-vien',
     iconType: 'employees',
-    adminOnly: true,
   },
   {
     label: 'Quản lý lịch làm việc',
     path: '/lich-lam-viec',
     iconType: 'schedule',
-    adminOnly: true,
     children: [
       { label: 'Lịch làm việc', path: '/lich-lam-viec' },
       { label: 'Lịch ca làm', path: '/lich-ca-lam' },
@@ -125,7 +122,7 @@ const toggle = (item) => {
   openState.value = { ...openState.value, [item.path]: !(openState.value[item.path] ?? auto) }
 }
 
-const visibleMenu = computed(() => menu.filter((item) => !item.adminOnly || laAdmin()))
+const visibleMenu = computed(() => menu)
 </script>
 
 <template>
