@@ -16,8 +16,13 @@ const staffUser = computed(() => getUser())
 const staffName = computed(() => staffUser.value?.tenKhachHang || staffUser.value?.tenTaiKhoan || 'Nhân viên')
 
 const MAX_ORDERS = 5
+const POS_PENDING_STORAGE_KEY = 'polyshoes_pos_pending_orders_v1'
+const POS_ACTIVE_IDX_STORAGE_KEY = 'polyshoes_pos_active_idx_v1'
+const POS_RECENT_INVOICES_KEY = 'polyshoes_pos_recent_invoices_v1'
+
 const pendingOrders = ref([])
 const activeOrderIndex = ref(0)
+let isRestoringOrders = false
 
 const allProducts = ref([])
 const allCustomers = ref([])
@@ -36,6 +41,207 @@ const currentOrder = computed(() => {
   return pendingOrders.value[activeOrderIndex.value] || null
 })
 
+// --- MỤC 6: ĐỒNG BỘ & CHẶN VƯỢT TỒN KHO CHÉO GIỮA CÁC HÓA ĐƠN CHỜ ---
+const getReservedQtyAcrossOrders = (idCtsp, excludeOrderId = null) => {
+  if (!idCtsp) return 0
+  let total = 0
+  for (const order of pendingOrders.value) {
+    if (excludeOrderId !== null && order.id === excludeOrderId) continue
+    if (!Array.isArray(order.cart)) continue
+    for (const item of order.cart) {
+      if (Number(item.idCtsp) === Number(idCtsp)) {
+        total += Number(item.quantity || 0)
+      }
+    }
+  }
+  return total
+}
+
+const getReservedInOtherOrders = (idCtsp) => {
+  return getReservedQtyAcrossOrders(idCtsp, currentOrder.value?.id ?? null)
+}
+
+const getServerBaseStock = (prod) => {
+  if (!prod) return 0
+  if (prod._serverStock !== undefined && prod._serverStock !== null) {
+    return Number(prod._serverStock)
+  }
+  const raw = Number(prod.stock !== undefined ? prod.stock : (prod.soLuong || 0))
+  prod._serverStock = raw
+  return raw
+}
+
+const recalculateAvailableStocks = () => {
+  if (!Array.isArray(allProducts.value)) return
+  allProducts.value.forEach(p => {
+    const baseStock = getServerBaseStock(p)
+    const reserved = getReservedQtyAcrossOrders(p.id)
+    const available = Math.max(0, baseStock - reserved)
+    p.stock = available
+    p.soLuong = available
+  })
+}
+
+const setServerProductsList = (rawList) => {
+  if (!Array.isArray(rawList)) return
+  rawList.forEach(p => {
+    p._serverStock = Number(p.stock !== undefined ? p.stock : (p.soLuong || 0))
+  })
+  allProducts.value = rawList
+  reconcilePendingOrdersWithServerStock()
+  recalculateAvailableStocks()
+}
+
+const ensureProductInCatalog = (variant) => {
+  if (!variant || !variant.id) return null
+  let existing = allProducts.value.find(p => Number(p.id) === Number(variant.id))
+  if (!existing) {
+    const rawStock = Number(variant.stock !== undefined ? variant.stock : (variant.soLuong || 0))
+    const cloned = {
+      ...variant,
+      _serverStock: rawStock + getReservedQtyAcrossOrders(variant.id)
+    }
+    allProducts.value.push(cloned)
+    recalculateAvailableStocks()
+    existing = allProducts.value.find(p => Number(p.id) === Number(variant.id))
+  }
+  return existing
+}
+
+const reconcilePendingOrdersWithServerStock = () => {
+  if (!Array.isArray(pendingOrders.value) || pendingOrders.value.length === 0) return
+  if (!Array.isArray(allProducts.value) || allProducts.value.length === 0) return
+
+  const usedMap = new Map()
+  const adjustedMessages = []
+
+  for (const order of pendingOrders.value) {
+    if (!Array.isArray(order.cart)) {
+      order.cart = []
+      continue
+    }
+    for (let i = order.cart.length - 1; i >= 0; i--) {
+      const item = order.cart[i]
+      const prod = allProducts.value.find(p => Number(p.id) === Number(item.idCtsp))
+      if (!prod) continue
+
+      const serverStock = getServerBaseStock(prod)
+      const alreadyUsed = usedMap.get(Number(item.idCtsp)) || 0
+      const maxRemaining = Math.max(0, serverStock - alreadyUsed)
+
+      if (maxRemaining <= 0) {
+        adjustedMessages.push(`"${item.name}" (${order.title}) đã hết hàng thực tế và được gỡ khỏi giỏ`)
+        order.cart.splice(i, 1)
+      } else if (item.quantity > maxRemaining) {
+        adjustedMessages.push(`"${item.name}" (${order.title}) giảm từ ${item.quantity} xuống ${maxRemaining} theo tồn kho thực tế`)
+        item.quantity = maxRemaining
+        usedMap.set(Number(item.idCtsp), alreadyUsed + maxRemaining)
+      } else {
+        usedMap.set(Number(item.idCtsp), alreadyUsed + Number(item.quantity || 0))
+      }
+    }
+  }
+
+  if (adjustedMessages.length > 0) {
+    notifyWarning('Cập nhật tồn kho thực tế', adjustedMessages.join('; '))
+  }
+}
+
+// --- MỤC 1: LƯU GIỮ HÓA ĐƠN CHỜ VÀO LOCALSTORAGE KHI F5 HOẶC CHUYỂN TRANG ---
+const savePendingOrdersToStorage = () => {
+  if (isRestoringOrders) return
+  try {
+    const serialized = pendingOrders.value.map(o => ({
+      id: o.id,
+      code: o.code,
+      title: o.title,
+      cart: Array.isArray(o.cart) ? o.cart : [],
+      customer: o.customer || null,
+      isDelivery: Boolean(o.isDelivery),
+      deliveryInfo: {
+        recipientName: o.deliveryInfo?.recipientName || '',
+        recipientPhone: o.deliveryInfo?.recipientPhone || '',
+        recipientAddress: o.deliveryInfo?.recipientAddress || '',
+        province: o.deliveryInfo?.province || null,
+        ward: o.deliveryInfo?.ward || null,
+        wardsLoading: false,
+        services: Array.isArray(o.deliveryInfo?.services) ? o.deliveryInfo.services : [],
+        servicesDistrictId: o.deliveryInfo?.servicesDistrictId || null,
+        serviceTypeId: o.deliveryInfo?.serviceTypeId || null,
+        shippingFee: Number(o.deliveryInfo?.shippingFee || 0),
+        feeLoading: false,
+        feeError: '',
+        legacy: o.deliveryInfo?.legacy || null
+      },
+      paymentMethod: o.paymentMethod || 'TIEN_MAT',
+      selectedVoucher: o.selectedVoucher || null,
+      cashGiven: Number(o.cashGiven || 0),
+      transferGiven: Number(o.transferGiven || 0),
+      note: o.note || ''
+    }))
+    localStorage.setItem(POS_PENDING_STORAGE_KEY, JSON.stringify(serialized))
+    localStorage.setItem(POS_ACTIVE_IDX_STORAGE_KEY, String(activeOrderIndex.value))
+  } catch (e) {
+    console.warn('Không thể lưu hóa đơn chờ vào localStorage:', e)
+  }
+}
+
+const restorePendingOrdersFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(POS_PENDING_STORAGE_KEY)
+    if (!raw) return false
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed) || parsed.length === 0) return false
+
+    isRestoringOrders = true
+    pendingOrders.value = parsed.slice(0, MAX_ORDERS).map((o, idx) => ({
+      id: o.id || (Date.now() + idx),
+      code: o.code || generateOrderCode(),
+      title: o.title || `Hóa đơn ${idx + 1}`,
+      cart: Array.isArray(o.cart) ? o.cart : [],
+      customer: o.customer || null,
+      isDelivery: Boolean(o.isDelivery),
+      deliveryInfo: {
+        recipientName: o.deliveryInfo?.recipientName || '',
+        recipientPhone: o.deliveryInfo?.recipientPhone || '',
+        recipientAddress: o.deliveryInfo?.recipientAddress || '',
+        province: o.deliveryInfo?.province || null,
+        ward: o.deliveryInfo?.ward || null,
+        wardsLoading: false,
+        services: Array.isArray(o.deliveryInfo?.services) ? o.deliveryInfo.services : [],
+        servicesDistrictId: o.deliveryInfo?.servicesDistrictId || null,
+        serviceTypeId: o.deliveryInfo?.serviceTypeId || null,
+        shippingFee: Number(o.deliveryInfo?.shippingFee || 0),
+        feeLoading: false,
+        feeError: '',
+        legacy: o.deliveryInfo?.legacy || null
+      },
+      paymentMethod: o.paymentMethod || 'TIEN_MAT',
+      selectedVoucher: o.selectedVoucher || null,
+      cashGiven: Number(o.cashGiven || 0),
+      transferGiven: Number(o.transferGiven || 0),
+      note: o.note || ''
+    }))
+
+    const savedIdx = Number(localStorage.getItem(POS_ACTIVE_IDX_STORAGE_KEY) || 0)
+    activeOrderIndex.value = (savedIdx >= 0 && savedIdx < pendingOrders.value.length) ? savedIdx : 0
+
+    reconcilePendingOrdersWithServerStock()
+    recalculateAvailableStocks()
+    isRestoringOrders = false
+    savePendingOrdersToStorage()
+    return true
+  } catch (e) {
+    isRestoringOrders = false
+    console.warn('Không thể khôi phục hóa đơn chờ từ localStorage:', e)
+    return false
+  }
+}
+
+watch([pendingOrders, activeOrderIndex], () => {
+  savePendingOrdersToStorage()
+}, { deep: true })
+
 const generateOrderCode = () => {
   const d = new Date()
   const timeCode = String(d.getHours()).padStart(2, '0') +
@@ -44,7 +250,7 @@ const generateOrderCode = () => {
   return `HD${timeCode}`
 }
 
-const createNewOrder = () => {
+const createNewOrder = (silent = false) => {
   if (pendingOrders.value.length >= MAX_ORDERS) {
     notifyWarning('Đã đạt giới hạn!', `Chỉ được tạo tối đa ${MAX_ORDERS} hóa đơn chờ cùng lúc.`)
     return
@@ -52,7 +258,7 @@ const createNewOrder = () => {
 
   const newIdx = pendingOrders.value.length + 1
   const newOrder = {
-    id: Date.now(),
+    id: Date.now() + Math.floor(Math.random() * 1000),
     code: generateOrderCode(),
     title: `Hóa đơn ${newIdx}`,
     cart: [],
@@ -82,7 +288,9 @@ const createNewOrder = () => {
 
   pendingOrders.value.push(newOrder)
   activeOrderIndex.value = pendingOrders.value.length - 1
-  notifySuccess('Đã thêm hóa đơn chờ mới', newOrder.title, 1200)
+  if (!silent) {
+    notifySuccess('Đã thêm hóa đơn chờ mới', newOrder.title, 1200)
+  }
 }
 
 const selectOrderTab = (index) => {
@@ -104,18 +312,14 @@ const closeOrderTab = async (index, event) => {
     if (!ok) return
   }
 
-  target.cart.forEach(item => {
-    const targetProd = allProducts.value.find(p => p.id === item.idCtsp)
-    if (targetProd) {
-      if (targetProd.stock !== undefined) targetProd.stock += item.quantity
-      if (targetProd.soLuong !== undefined) targetProd.soLuong += item.quantity
-    }
-  })
-
   pendingOrders.value.splice(index, 1)
-  if (activeOrderIndex.value >= pendingOrders.value.length) {
+  if (pendingOrders.value.length === 0) {
+    createNewOrder(true)
+  } else if (activeOrderIndex.value >= pendingOrders.value.length) {
     activeOrderIndex.value = Math.max(0, pendingOrders.value.length - 1)
   }
+  recalculateAvailableStocks()
+  savePendingOrdersToStorage()
 }
 
 const subTotal = computed(() => {
@@ -184,26 +388,26 @@ const getEffectivePrice = (item) => {
 
 const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
   if (!currentOrder.value) {
-    createNewOrder()
+    createNewOrder(true)
   }
 
-  const targetProd = allProducts.value.find(p => p.id === productVariant.id)
+  const targetProd = ensureProductInCatalog(productVariant)
   const currentAvailableStock = targetProd
-    ? (targetProd.stock !== undefined ? targetProd.stock : (targetProd.soLuong || 0))
-    : (productVariant.stock !== undefined ? productVariant.stock : (productVariant.soLuong || 0))
+    ? Number(targetProd.stock !== undefined ? targetProd.stock : (targetProd.soLuong || 0))
+    : Number(productVariant.stock !== undefined ? productVariant.stock : (productVariant.soLuong || 0))
+
+  const reservedOther = getReservedInOtherOrders(productVariant.id)
 
   if (currentAvailableStock < qtyToAdd) {
-    notifyWarning('Tồn kho không đủ!', `Sản phẩm này chỉ còn ${currentAvailableStock} sản phẩm trong kho.`)
+    const extraMsg = reservedOther > 0
+      ? ` (Đang giữ ${reservedOther} sản phẩm ở hóa đơn chờ khác)`
+      : ''
+    notifyWarning('Tồn kho không đủ!', `Sản phẩm này chỉ còn ${currentAvailableStock} sản phẩm khả dụng${extraMsg}.`)
     return
   }
 
-  if (targetProd) {
-    if (targetProd.stock !== undefined) targetProd.stock -= qtyToAdd
-    if (targetProd.soLuong !== undefined) targetProd.soLuong -= qtyToAdd
-  }
-
   const cart = currentOrder.value.cart
-  const existingItem = cart.find(i => i.idCtsp === productVariant.id)
+  const existingItem = cart.find(i => Number(i.idCtsp) === Number(productVariant.id))
   const effectivePrice = getEffectivePrice(productVariant)
   const prodName = productVariant.tenSp || productVariant.tenSanPham || 'Sản phẩm'
 
@@ -227,50 +431,46 @@ const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
     })
   }
 
+  recalculateAvailableStocks()
+  savePendingOrdersToStorage()
+
   if (!silent) {
     notifySuccess('Thêm thành công', `Đã thêm "${prodName}" (+${qtyToAdd}) vào giỏ hàng`, 1500)
   }
 }
 
-const updateCartItemQty = async (item, newQty) => {
-  if (newQty <= 0) {
+const updateCartItemQty = async (item, rawNewQty, event = null) => {
+  const newQty = Math.floor(Number(rawNewQty))
+  if (isNaN(newQty) || newQty <= 0) {
+    if (event?.target) event.target.value = item.quantity
     await removeCartItem(item)
     return
   }
 
-  const delta = newQty - item.quantity
-  const targetProd = allProducts.value.find(p => p.id === item.idCtsp)
-  const currentAvailable = targetProd
-    ? (targetProd.stock !== undefined ? targetProd.stock : (targetProd.soLuong || 0))
-    : 0
+  const targetProd = allProducts.value.find(p => Number(p.id) === Number(item.idCtsp))
+  const serverStock = targetProd ? getServerBaseStock(targetProd) : (item.quantity + getRemainingStock(item.idCtsp))
+  const reservedOther = getReservedInOtherOrders(item.idCtsp)
+  const maxAllowedForThisOrder = Math.max(0, serverStock - reservedOther)
 
-  if (delta > 0) {
-    if (delta > currentAvailable) {
-      notifyWarning('Vượt quá tồn kho!', `Chỉ còn thêm ${currentAvailable} sản phẩm trong kho.`)
-      const actualAdd = currentAvailable
-      if (actualAdd > 0) {
-        if (targetProd) {
-          if (targetProd.stock !== undefined) targetProd.stock -= actualAdd
-          if (targetProd.soLuong !== undefined) targetProd.soLuong -= actualAdd
-        }
-        item.quantity += actualAdd
-      }
-      return
-    }
-
-    if (targetProd) {
-      if (targetProd.stock !== undefined) targetProd.stock -= delta
-      if (targetProd.soLuong !== undefined) targetProd.soLuong -= delta
-    }
-    item.quantity = newQty
-  } else if (delta < 0) {
-    const returnQty = Math.abs(delta)
-    if (targetProd) {
-      if (targetProd.stock !== undefined) targetProd.stock += returnQty
-      if (targetProd.soLuong !== undefined) targetProd.soLuong += returnQty
-    }
-    item.quantity = newQty
+  if (newQty > maxAllowedForThisOrder) {
+    const extraMsg = reservedOther > 0
+      ? ` (đang giữ ${reservedOther} sản phẩm ở hóa đơn chờ khác)`
+      : ''
+    notifyWarning(
+      'Vượt quá tồn kho khả dụng!',
+      `Tối đa có thể đặt cho đơn này là ${maxAllowedForThisOrder} sản phẩm${extraMsg}.`
+    )
+    item.quantity = Math.max(1, maxAllowedForThisOrder)
+    if (event?.target) event.target.value = item.quantity
+    recalculateAvailableStocks()
+    savePendingOrdersToStorage()
+    return
   }
+
+  item.quantity = newQty
+  if (event?.target) event.target.value = item.quantity
+  recalculateAvailableStocks()
+  savePendingOrdersToStorage()
 }
 
 const removeCartItem = async (item) => {
@@ -284,14 +484,11 @@ const removeCartItem = async (item) => {
   )
   if (!ok) return
 
-  const idx = currentOrder.value.cart.findIndex(i => i.idCtsp === item.idCtsp)
+  const idx = currentOrder.value.cart.findIndex(i => Number(i.idCtsp) === Number(item.idCtsp))
   if (idx !== -1) {
-    const targetProd = allProducts.value.find(p => p.id === item.idCtsp)
-    if (targetProd) {
-      if (targetProd.stock !== undefined) targetProd.stock += item.quantity
-      if (targetProd.soLuong !== undefined) targetProd.soLuong += item.quantity
-    }
     currentOrder.value.cart.splice(idx, 1)
+    recalculateAvailableStocks()
+    savePendingOrdersToStorage()
     notifySuccess('Xóa thành công', `Đã xóa "${prodName}" khỏi giỏ hàng`, 1500)
   }
 }
@@ -305,14 +502,9 @@ const clearCurrentCart = async () => {
     'Giữ lại'
   )
   if (ok) {
-    currentOrder.value.cart.forEach(item => {
-      const targetProd = allProducts.value.find(p => p.id === item.idCtsp)
-      if (targetProd) {
-        if (targetProd.stock !== undefined) targetProd.stock += item.quantity
-        if (targetProd.soLuong !== undefined) targetProd.soLuong += item.quantity
-      }
-    })
     currentOrder.value.cart = []
+    recalculateAvailableStocks()
+    savePendingOrdersToStorage()
     notifySuccess('Đã làm trống giỏ hàng')
   }
 }
@@ -984,32 +1176,24 @@ const executeSwap = (newVariant) => {
     return
   }
 
-  const targetNew = allProducts.value.find(p => p.id === newVariant.id)
+  const targetNew = ensureProductInCatalog(newVariant)
   const availableStock = targetNew
-    ? (targetNew.stock !== undefined ? targetNew.stock : (targetNew.soLuong || 0))
-    : (newVariant.stock !== undefined ? newVariant.stock : (newVariant.soLuong || 0))
+    ? Number(targetNew.stock !== undefined ? targetNew.stock : (targetNew.soLuong || 0))
+    : Number(newVariant.stock !== undefined ? newVariant.stock : (newVariant.soLuong || 0))
+
+  const reservedOther = getReservedInOtherOrders(newVariant.id)
 
   if (availableStock < currentItem.quantity) {
-    notifyWarning('Tồn kho không đủ!', `Biến thể này chỉ còn ${availableStock} sản phẩm, không đủ số lượng ${currentItem.quantity} trong giỏ.`)
+    const extraMsg = reservedOther > 0 ? ` (đang giữ ${reservedOther} sản phẩm ở hóa đơn chờ khác)` : ''
+    notifyWarning('Tồn kho không đủ!', `Biến thể này chỉ còn ${availableStock} sản phẩm khả dụng${extraMsg}, không đủ số lượng ${currentItem.quantity} trong giỏ.`)
     return
-  }
-
-  const targetOld = allProducts.value.find(p => p.id === currentItem.idCtsp)
-  if (targetOld) {
-    if (targetOld.stock !== undefined) targetOld.stock += currentItem.quantity
-    if (targetOld.soLuong !== undefined) targetOld.soLuong += currentItem.quantity
-  }
-
-  if (targetNew) {
-    if (targetNew.stock !== undefined) targetNew.stock -= currentItem.quantity
-    if (targetNew.soLuong !== undefined) targetNew.soLuong -= currentItem.quantity
   }
 
   const newEffectivePrice = getEffectivePrice(newVariant)
   const newSize = newVariant.size || newVariant.tenKichCo || '---'
   const newColor = newVariant.color || newVariant.tenMau || '---'
 
-  const existingInCart = currentOrder.value.cart.find(i => i.idCtsp === newVariant.id && i !== currentItem)
+  const existingInCart = currentOrder.value.cart.find(i => Number(i.idCtsp) === Number(newVariant.id) && i !== currentItem)
   if (existingInCart) {
     existingInCart.quantity += currentItem.quantity
     const oldIdx = currentOrder.value.cart.findIndex(i => i === currentItem)
@@ -1033,6 +1217,9 @@ const executeSwap = (newVariant) => {
     }
     notifySuccess('Đổi biến thể thành công!', `Đã đổi sang Size ${newSize} - Màu ${newColor}`, 2000)
   }
+
+  recalculateAvailableStocks()
+  savePendingOrdersToStorage()
 
   isSwapModalOpen.value = false
   swapCartItem.value = null
@@ -1356,6 +1543,85 @@ const isReceiptModalOpen = ref(false)
 const completedInvoiceData = ref(null)
 const isProcessingCheckout = ref(false)
 
+// --- MỤC 5: LỊCH SỬ ĐƠN VỪA BÁN TRONG CA & IN LẠI HÓA ĐƠN NHANH ---
+const recentPosInvoices = ref([])
+const isRecentInvoicesModalOpen = ref(false)
+const recentInvoiceSearch = ref('')
+
+const loadRecentInvoicesFromStorage = () => {
+  try {
+    const raw = localStorage.getItem(POS_RECENT_INVOICES_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      recentPosInvoices.value = parsed
+    }
+  } catch (e) {
+    console.warn('Không thể đọc lịch sử đơn vừa bán:', e)
+  }
+}
+
+const saveRecentInvoiceToStorage = (invoiceRecord) => {
+  if (!invoiceRecord) return
+  try {
+    const list = [
+      invoiceRecord,
+      ...recentPosInvoices.value.filter(i => i.code !== invoiceRecord.code)
+    ].slice(0, 30)
+    recentPosInvoices.value = list
+    localStorage.setItem(POS_RECENT_INVOICES_KEY, JSON.stringify(list))
+  } catch (e) {
+    console.warn('Không thể lưu lịch sử đơn vừa bán:', e)
+  }
+}
+
+const filteredRecentInvoices = computed(() => {
+  const q = recentInvoiceSearch.value.trim().toLowerCase()
+  if (!q) return recentPosInvoices.value
+  return recentPosInvoices.value.filter(inv =>
+    (inv.code && inv.code.toLowerCase().includes(q)) ||
+    (inv.customerName && inv.customerName.toLowerCase().includes(q)) ||
+    (inv.customerPhone && inv.customerPhone.toLowerCase().includes(q))
+  )
+})
+
+const openRecentInvoicesModal = () => {
+  recentInvoiceSearch.value = ''
+  isRecentInvoicesModalOpen.value = true
+}
+
+const viewRecentInvoiceReceipt = (inv) => {
+  if (!inv) return
+  completedInvoiceData.value = inv
+  isRecentInvoicesModalOpen.value = false
+  isReceiptModalOpen.value = true
+}
+
+const reprintRecentInvoice = async (inv) => {
+  if (!inv) return
+  completedInvoiceData.value = inv
+  isRecentInvoicesModalOpen.value = false
+  isReceiptModalOpen.value = true
+  await nextTick()
+  setTimeout(() => {
+    printReceipt()
+  }, 80)
+}
+
+const clearRecentInvoicesHistory = async () => {
+  if (recentPosInvoices.value.length === 0) return
+  const ok = await notifyConfirm(
+    'Xóa lịch sử đơn vừa bán?',
+    'Xóa danh sách lưu tạm các đơn vừa bán trong ca trên máy này (dữ liệu hóa đơn trên hệ thống vẫn được giữ nguyên)?',
+    'Xóa danh sách',
+    'Hủy'
+  )
+  if (!ok) return
+  recentPosInvoices.value = []
+  localStorage.removeItem(POS_RECENT_INVOICES_KEY)
+  notifySuccess('Đã xóa danh sách đơn vừa bán trong ca')
+}
+
 const handleCancelOrder = async () => {
   if (!currentOrder.value) return
   const ok = await notifyConfirm(
@@ -1365,18 +1631,13 @@ const handleCancelOrder = async () => {
     'Không'
   )
   if (ok) {
-    currentOrder.value.cart.forEach(item => {
-      const targetProd = allProducts.value.find(p => p.id === item.idCtsp)
-      if (targetProd) {
-        if (targetProd.stock !== undefined) targetProd.stock += item.quantity
-        if (targetProd.soLuong !== undefined) targetProd.soLuong += item.quantity
-      }
-    })
     currentOrder.value.cart = []
     currentOrder.value.customer = null
     currentOrder.value.cashGiven = 0
     currentOrder.value.transferGiven = 0
     currentOrder.value.note = ''
+    recalculateAvailableStocks()
+    savePendingOrdersToStorage()
     notifySuccess('Đã làm mới giỏ hàng và hoàn trả tồn kho')
   }
 }
@@ -1666,6 +1927,22 @@ const handleCheckout = async (options = {}) => {
   isProcessingCheckout.value = true
 
   try {
+    // Kiểm tra tồn kho thực tế trước khi gửi thanh toán
+    for (const item of currentOrder.value.cart) {
+      const prod = allProducts.value.find(p => Number(p.id) === Number(item.idCtsp))
+      if (prod) {
+        const realServerStock = getServerBaseStock(prod)
+        if (item.quantity > realServerStock) {
+          notifyError(
+            'Không đủ tồn kho!',
+            `Sản phẩm "${item.name}" (Size ${item.size} - ${item.color}) chỉ còn ${realServerStock} sản phẩm thực tế trong kho.`
+          )
+          isProcessingCheckout.value = false
+          return
+        }
+      }
+    }
+
     const paymentMethodId = getPaymentMethodId(currentOrder.value.paymentMethod)
     const employeeId = allEmployees.value.length > 0 ? allEmployees.value[0].id : 2
 
@@ -1705,14 +1982,15 @@ const handleCheckout = async (options = {}) => {
       }))
     }
 
+    const soldCartSnapshot = currentOrder.value.cart.map(item => ({ ...item }))
     await http.post('/hoa-don', payload)
 
-    completedInvoiceData.value = {
+    const completedRecord = {
       code: currentOrder.value.code,
       title: currentOrder.value.title,
       customerName: payload.tenKhachHang,
       customerPhone: payload.soDienThoaiKhachHang,
-      cart: [...currentOrder.value.cart],
+      cart: soldCartSnapshot,
       subTotal: subTotal.value,
       discount: discountAmount.value,
       shippingFee: payload.phiVanChuyen,
@@ -1724,20 +2002,40 @@ const handleCheckout = async (options = {}) => {
       staffName: staffName.value || 'Nhân viên quầy'
     }
 
+    completedInvoiceData.value = completedRecord
+    saveRecentInvoiceToStorage(completedRecord)
+
+    // Trừ ngay tồn kho gốc (_serverStock) cho các sản phẩm vừa bán
+    soldCartSnapshot.forEach(soldItem => {
+      const prod = allProducts.value.find(p => Number(p.id) === Number(soldItem.idCtsp))
+      if (prod) {
+        prod._serverStock = Math.max(0, getServerBaseStock(prod) - Number(soldItem.quantity || 0))
+      }
+    })
+
     notifySuccess('Thanh toán thành công!', `Đã hoàn tất hóa đơn ${currentOrder.value.code}`)
-    fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&trangThai=true`)
-      .then(r => r.json())
-      .then(data => {
-        if (data && data.content) allProducts.value = data.content
-      })
-      .catch(() => { })
 
     pendingOrders.value.splice(activeOrderIndex.value, 1)
     if (pendingOrders.value.length === 0) {
-      createNewOrder()
+      createNewOrder(true)
     } else if (activeOrderIndex.value >= pendingOrders.value.length) {
       activeOrderIndex.value = Math.max(0, pendingOrders.value.length - 1)
     }
+
+    // Đồng bộ lại tồn kho khả dụng cho các hóa đơn chờ còn lại
+    reconcilePendingOrdersWithServerStock()
+    recalculateAvailableStocks()
+    savePendingOrdersToStorage()
+
+    fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&trangThai=true`)
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.content) {
+          setServerProductsList(data.content)
+          savePendingOrdersToStorage()
+        }
+      })
+      .catch(() => { })
 
     isReceiptModalOpen.value = true
 
@@ -2049,6 +2347,7 @@ const handleKeyDown = (e) => {
     isBankQrModalOpen.value = false
     isVoucherModalOpen.value = false
     isReceiptModalOpen.value = false
+    isRecentInvoicesModalOpen.value = false
     stopCameraScanner()
   }
 }
@@ -2085,12 +2384,13 @@ const loadInitialData = async () => {
     if (colorRes.status === 'fulfilled' && Array.isArray(colorRes.value)) colorsList.value = colorRes.value
     if (sizeRes.status === 'fulfilled' && Array.isArray(sizeRes.value)) sizesList.value = sizeRes.value
 
+    let loadedProducts = []
     if (prodRes.status === 'fulfilled' && prodRes.value && prodRes.value.content) {
-      allProducts.value = prodRes.value.content
+      loadedProducts = prodRes.value.content
     }
 
-    if (allProducts.value.length === 0) {
-      allProducts.value = [
+    if (loadedProducts.length === 0) {
+      loadedProducts = [
         {
           id: 101,
           maSp: 'G66748',
@@ -2154,11 +2454,17 @@ const loadInitialData = async () => {
       ]
     }
 
-    if (pendingOrders.value.length === 0) {
-      createNewOrder()
+    setServerProductsList(loadedProducts)
+
+    const restored = restorePendingOrdersFromStorage()
+    if (!restored || pendingOrders.value.length === 0) {
+      createNewOrder(true)
     }
   } catch (error) {
     console.error('Error loading POS data:', error)
+    if (pendingOrders.value.length === 0) {
+      createNewOrder(true)
+    }
   } finally {
     isLoadingData.value = false
   }
@@ -2171,8 +2477,10 @@ const handleWindowClick = (e) => {
 }
 
 onMounted(() => {
+  loadRecentInvoicesFromStorage()
   loadInitialData()
   loadProvinces()
+  window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('click', handleWindowClick)
 })
 
@@ -2207,9 +2515,17 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div class="pos-orders-counter-pill">
-              <span class="counter-num">{{ pendingOrders.length }}/{{ MAX_ORDERS }}</span>
-              <span class="counter-lbl">hóa đơn</span>
+            <div class="pos-tabs-right-group">
+              <button type="button" class="btn-recent-pos-invoices" @click="openRecentInvoicesModal"
+                title="Xem lịch sử đơn vừa bán trong ca và in lại hóa đơn">
+                <span>Đơn vừa bán</span>
+                <span class="recent-count-badge" v-if="recentPosInvoices.length > 0">{{ recentPosInvoices.length }}</span>
+              </button>
+
+              <div class="pos-orders-counter-pill">
+                <span class="counter-num">{{ pendingOrders.length }}/{{ MAX_ORDERS }}</span>
+                <span class="counter-lbl">hóa đơn</span>
+              </div>
             </div>
           </div>
 
@@ -2291,13 +2607,16 @@ onUnmounted(() => {
                         <div class="qty-stepper-modern">
                           <button class="step-btn" @click="updateCartItemQty(item, item.quantity - 1)"
                             :disabled="item.quantity <= 1">−</button>
-                          <input type="number" class="step-input" v-model.number="item.quantity"
-                            @change="updateCartItemQty(item, item.quantity)" min="1" />
+                          <input type="number" class="step-input" :value="item.quantity"
+                            @change="updateCartItemQty(item, $event.target.value, $event)" min="1" />
                           <button class="step-btn" @click="updateCartItemQty(item, item.quantity + 1)"
                             :disabled="getRemainingStock(item.idCtsp) <= 0">+</button>
                         </div>
                         <div class="stock-hint-txt" v-if="getRemainingStock(item.idCtsp) < 10">
                           Còn lại: {{ getRemainingStock(item.idCtsp) }}
+                        </div>
+                        <div class="cross-order-stock-hint" v-if="getReservedInOtherOrders(item.idCtsp) > 0">
+                          Đơn chờ khác giữ: {{ getReservedInOtherOrders(item.idCtsp) }}
                         </div>
                       </td>
                       <td class="text-end">
@@ -2769,6 +3088,9 @@ onUnmounted(() => {
                       }">
                         {{ item.stock !== undefined ? item.stock : (item.soLuong || 0) }}
                       </span>
+                      <div class="modal-reserved-hint" v-if="getReservedQtyAcrossOrders(item.id) > 0">
+                        Đang giữ: {{ getReservedQtyAcrossOrders(item.id) }}
+                      </div>
                     </td>
                     <td class="text-end">
                       <div class="prod-modal-price-box">
@@ -3626,6 +3948,117 @@ onUnmounted(() => {
                 <rect x="6" y="14" width="12" height="8"></rect>
               </svg>
               <span>In hóa đơn</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- MODAL LỊCH SỬ ĐƠN VỪA BÁN TRONG CA & IN LẠI HÓA ĐƠN -->
+    <transition name="modal-fade">
+      <div v-if="isRecentInvoicesModalOpen" class="pos-modal-backdrop" @click.self="isRecentInvoicesModalOpen = false">
+        <div class="pos-modal-box recent-invoices-modal-box">
+          <div class="pos-modal-head">
+            <div class="modal-head-left">
+              <div>
+                <h4 class="modal-title-text">Lịch sử đơn vừa bán trong ca</h4>
+                <p class="modal-sub-text">Xem lại hóa đơn vừa thanh toán tại quầy và in lại hóa đơn nhiệt 80mm</p>
+              </div>
+            </div>
+            <button class="btn-modal-close" @click="isRecentInvoicesModalOpen = false">×</button>
+          </div>
+
+          <div class="pos-modal-body recent-invoices-modal-body">
+            <div class="recent-invoices-toolbar">
+              <div class="recent-search-wrap">
+                <input
+                  type="text"
+                  class="recent-search-input"
+                  v-model="recentInvoiceSearch"
+                  placeholder="Tìm theo mã hóa đơn, tên khách hàng hoặc số điện thoại..."
+                />
+                <button v-if="recentInvoiceSearch" class="btn-clear-recent-search" @click="recentInvoiceSearch = ''">×</button>
+              </div>
+              <button
+                v-if="recentPosInvoices.length > 0"
+                type="button"
+                class="btn-clear-recent-history"
+                @click="clearRecentInvoicesHistory"
+              >
+                Xóa lịch sử ca
+              </button>
+            </div>
+
+            <div v-if="filteredRecentInvoices.length > 0" class="recent-invoices-table-wrap">
+              <table class="recent-invoices-table">
+                <thead>
+                  <tr>
+                    <th width="120">MÃ HÓA ĐƠN</th>
+                    <th width="150">THỜI GIAN</th>
+                    <th>KHÁCH HÀNG</th>
+                    <th width="90" class="text-center">SỐ SP</th>
+                    <th width="145">THANH TOÁN</th>
+                    <th width="135" class="text-end">TỔNG TIỀN</th>
+                    <th width="195" class="text-center">THAO TÁC</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="inv in filteredRecentInvoices" :key="inv.code">
+                    <td>
+                      <span class="recent-inv-code">{{ inv.code }}</span>
+                    </td>
+                    <td class="recent-inv-date">{{ inv.date }}</td>
+                    <td>
+                      <div class="recent-cust-info">
+                        <span class="recent-cust-name">{{ inv.customerName || 'Khách lẻ' }}</span>
+                        <span class="recent-cust-phone" v-if="inv.customerPhone">{{ inv.customerPhone }}</span>
+                      </div>
+                    </td>
+                    <td class="text-center">
+                      <span class="recent-qty-pill">
+                        {{ Array.isArray(inv.cart) ? inv.cart.reduce((s, i) => s + Number(i.quantity || 0), 0) : 0 }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="recent-method-badge">{{ formatPaymentMethodName(inv.paymentMethod) }}</span>
+                    </td>
+                    <td class="text-end">
+                      <strong class="recent-total-val">{{ formatVnd(inv.finalTotal) }}</strong>
+                    </td>
+                    <td class="text-center">
+                      <div class="recent-actions-group">
+                        <button
+                          type="button"
+                          class="btn-recent-view"
+                          @click="viewRecentInvoiceReceipt(inv)"
+                          title="Xem chi tiết hóa đơn"
+                        >
+                          Xem bill
+                        </button>
+                        <button
+                          type="button"
+                          class="btn-recent-reprint"
+                          @click="reprintRecentInvoice(inv)"
+                          title="In lại hóa đơn nhiệt 80mm ngay"
+                        >
+                          In lại
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-else class="recent-empty-state">
+              <p class="recent-empty-title">Chưa có hóa đơn nào vừa thanh toán trong ca</p>
+              <p class="recent-empty-sub">Các hóa đơn sau khi hoàn tất thanh toán tại quầy sẽ tự động lưu tại đây để bạn tra cứu hoặc in lại nhanh.</p>
+            </div>
+          </div>
+
+          <div class="pos-modal-foot">
+            <button class="btn-receipt-close" @click="isRecentInvoicesModalOpen = false">
+              Đóng
             </button>
           </div>
         </div>
