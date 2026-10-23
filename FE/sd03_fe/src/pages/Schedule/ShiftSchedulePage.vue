@@ -1,25 +1,15 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { notifySuccess, notifyWarning, notifyDeleteConfirm } from '@/utils/notify'
 import SearchableSelect from '@/components/SearchableSelect.vue'
-import {
-  danhSachCa,
-  themCa,
-  capNhatCa,
-  doiTrangThaiCa,
-  caTrungTen,
-  xoaCa,
-  soLichCuaCa,
-  slugMaCa,
-} from './scheduleData'
+import { listCaLam, createCaLam, updateCaLam, toggleCaLam, deleteCaLam } from '@/api/schedule'
+import { slugMaCa } from './scheduleData'
 
-/* ---------------------------------- Bộ lọc + bảng ---------------------------------- */
-const fKeyword = ref('')
-const fTrangThai = ref('')
-
+/* ---------------------------------- Dữ liệu ca làm ---------------------------------- */
+const cas = ref([])
 const caLoc = computed(() => {
   const kw = fKeyword.value.trim().toLowerCase()
-  let rows = [...danhSachCa]
+  let rows = [...cas.value]
   if (kw) {
     rows = rows.filter(
       (c) =>
@@ -30,9 +20,22 @@ const caLoc = computed(() => {
   if (fTrangThai.value === 'tat') rows = rows.filter((c) => !c.dangBat)
   return rows
 })
+const tongCa = computed(() => cas.value.length)
+const soDangBat = computed(() => cas.value.filter((c) => c.dangBat).length)
+const soLichCuaCa = () => 0
 
-const tongCa = computed(() => danhSachCa.length)
-const soDangBat = computed(() => danhSachCa.filter((c) => c.dangBat).length)
+const taiCa = async () => {
+  try {
+    cas.value = await listCaLam()
+  } catch {
+    cas.value = []
+  }
+}
+onMounted(taiCa)
+
+/* ---------------------------------- Bộ lọc + bảng ---------------------------------- */
+const fKeyword = ref('')
+const fTrangThai = ref('')
 
 const datLaiBoLoc = () => {
   fKeyword.value = ''
@@ -40,27 +43,29 @@ const datLaiBoLoc = () => {
 }
 
 /* ---------------------------------- Thao tác ---------------------------------- */
-const doiTrangThaiBtn = (ca) => {
-  doiTrangThaiCa(ca.id)
-  notifySuccess(
-    ca.dangBat ? 'Đã bật ca làm' : 'Đã tắt ca làm',
-    `${ca.ten} (${ca.batDau} - ${ca.ketThuc})`
-  )
+const doiTrangThaiBtn = async (ca) => {
+  try {
+    await toggleCaLam(ca.id)
+    await taiCa()
+    notifySuccess(
+      ca.dangBat ? 'Đã tắt ca làm' : 'Đã bật ca làm',
+      `${ca.ten} (${ca.batDau} - ${ca.ketThuc})`
+    )
+  } catch (e) {
+    notifyWarning('Không đổi được trạng thái', e.response?.data?.message || e.message || '')
+  }
 }
 
 const xoaCaBtn = async (ca) => {
-  const n = soLichCuaCa(ca.id)
-  if (n > 0) {
-    notifyWarning(
-      'Không thể xóa ca làm',
-      `Còn ${n} lịch làm việc đang gắn với ca "${ca.ten}" — hãy xóa hoặc đổi các lịch đó trước`
-    )
-    return
-  }
   const ok = await notifyDeleteConfirm(`ca làm "${ca.ten}"`)
   if (!ok) return
-  xoaCa(ca.id)
-  notifySuccess('Đã xóa ca làm', ca.ten)
+  try {
+    await deleteCaLam(ca.id)
+    await taiCa()
+    notifySuccess('Đã xóa ca làm', ca.ten)
+  } catch (e) {
+    notifyWarning('Không thể xóa ca làm', e.response?.data?.message || e.message || '')
+  }
 }
 
 /* ---------------------------------- Form thêm / sửa ---------------------------------- */
@@ -83,16 +88,12 @@ const moFormSua = (ca) => {
   showForm.value = true
 }
 
-const luuForm = () => {
+const luuForm = async () => {
   formError.value = ''
   const f = form.value
   const ten = f.ten.trim()
   if (!ten) {
     formError.value = 'Vui lòng nhập tên ca làm'
-    return
-  }
-  if (caTrungTen(ten, formMode.value === 'sua' ? f.id : null)) {
-    formError.value = 'Tên ca làm đã tồn tại — vui lòng chọn tên khác'
     return
   }
   if (!f.batDau || !f.ketThuc) {
@@ -103,15 +104,20 @@ const luuForm = () => {
     formError.value = 'Giờ kết thúc phải sau giờ bắt đầu'
     return
   }
-  const payload = { ten, batDau: f.batDau, ketThuc: f.ketThuc, ma: slugMaCa(ten) }
-  if (formMode.value === 'sua') {
-    capNhatCa(f.id, payload)
-    notifySuccess('Đã cập nhật ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
-  } else {
-    themCa(payload)
-    notifySuccess('Đã thêm ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
+  const payload = { ten, batDau: f.batDau, ketThuc: f.ketThuc }
+  try {
+    if (formMode.value === 'sua') {
+      await updateCaLam(f.id, payload)
+      notifySuccess('Đã cập nhật ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
+    } else {
+      await createCaLam(payload)
+      notifySuccess('Đã thêm ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
+    }
+    await taiCa()
+    showForm.value = false
+  } catch (e) {
+    formError.value = e.response?.data?.message || e.message || 'Lỗi khi lưu ca làm'
   }
-  showForm.value = false
 }
 </script>
 

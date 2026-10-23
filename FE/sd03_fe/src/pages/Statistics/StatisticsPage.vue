@@ -7,7 +7,6 @@ import { API_BASE } from '@/api/http'
 import { formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
 import { notifySuccess, notifyError } from '@/utils/notify'
-import { nhanVienMau } from '@/pages/Schedule/scheduleData'
 import { fetchTongQuan, fetchTrangThaiDon } from '@/api/statistics'
 import BarLineChart from '@/components/charts/BarLineChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
@@ -136,9 +135,7 @@ const denDate = computed(() => docInputDate(denNgay.value) || new Date())
 const sanPhamHienTai = computed(() =>
   sanPhams.value.length ? sanPhams.value : SAN_PHAM_MAU
 )
-const nhanVienHienTai = computed(() =>
-  nhanViens.value.length ? nhanViens.value : nhanVienMau
-)
+const nhanVienHienTai = computed(() => nhanViens.value)
 
 const dongSanPhamAll = computed(() =>
   tinhSanPham(sanPhamHienTai.value, tuDate.value, denDate.value)

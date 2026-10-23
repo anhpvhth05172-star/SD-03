@@ -5,38 +5,55 @@ import SearchableSelect from '@/components/SearchableSelect.vue'
 import { listEmployees } from '@/api/employee'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import {
-  caDangBat,
-  danhSachLich,
+  listLich,
+  createLich,
+  updateLich,
+  deleteLich,
+  deleteLichTheoNgay,
+  xepTuDong,
+  importLich,
+  listCaLam,
+} from '@/api/schedule'
+import {
   hienThiNgay,
-  kiemTraTrung,
   khoaNgay,
-  lichCuaCaNgay,
-  lichCuaNgay,
-  nhanVienMau,
-  nhapRowsVaoStore,
   docNgay,
-  capNhatLich,
-  themLich,
-  xoaLich,
-  xoaLichTheoNgay,
-  xepCaTuDong,
   xuatMauLichLamViec,
   phanTichCsvLich,
   phanTichDongLich,
-  timCa,
 } from './scheduleData'
 
 const pad2 = (x) => String(x).padStart(2, '0')
 
-/* ---------------------------------- Dữ liệu nhân viên ---------------------------------- */
+/* ---------------------------------- Dữ liệu nhân viên + ca + lịch ---------------------------------- */
 const nhanViens = ref([])
-const dsNhanVien = computed(() => (nhanViens.value.length ? nhanViens.value : nhanVienMau))
+const cas = ref([])
+const lichs = ref([])
+const dsNhanVien = computed(() => nhanViens.value)
+const caDangBat = computed(() => cas.value.filter((c) => c.dangBat))
 
 const tenCua = (ma) => {
   const nv = dsNhanVien.value.find((x) => String(x.maNhanVien) === String(ma))
-  if (nv) return nv.tenTaiKhoan || nv.ten || ma
-  const mau = nhanVienMau.find((x) => x.maNhanVien === ma)
-  return mau ? mau.tenTaiKhoan : ma
+  return nv ? nv.tenTaiKhoan || nv.ten || ma : ma
+}
+
+const timCa = (id) => cas.value.find((c) => c.id === Number(id))
+
+const taiDuLieu = async () => {
+  try {
+    const [nvRes, caRes, lichRes] = await Promise.all([
+      listEmployees({ page: 0, size: 1000 }),
+      listCaLam(),
+      listLich({}),
+    ])
+    nhanViens.value = nvRes.content || []
+    cas.value = caRes || []
+    lichs.value = lichRes || []
+  } catch {
+    nhanViens.value = []
+    cas.value = []
+    lichs.value = []
+  }
 }
 
 /* ---------------------------------- Bộ lọc + bảng ---------------------------------- */
@@ -63,7 +80,7 @@ const size = ref(10)
 
 const lichLoc = computed(() => {
   const kw = fKeyword.value.trim().toLowerCase()
-  let rows = [...danhSachLich]
+  let rows = [...lichs.value]
   if (kw) {
     rows = rows.filter(
       (l) =>
@@ -122,19 +139,24 @@ watch(fNgay, (v) => {
 })
 
 /* ---------------------------------- Thao tác hàng loạt ---------------------------------- */
-const xepCaTuDongBtn = () => {
+const xepCaTuDongBtn = async () => {
   const khoa = fNgay.value ? khoaNgay(docNgay(fNgay.value)) : ''
   if (!khoa) return
-  const kq = xepCaTuDong(khoa, dsNhanVien.value)
-  if (kq.lyDo === 'khongCa') {
-    notifyWarning('Chưa có ca đang bật', 'Hãy bật ca làm ở trang Lịch ca làm trước')
-    return
+  try {
+    const kq = await xepTuDong(khoa)
+    if (kq.lyDo === 'khongCa') {
+      notifyWarning('Chưa có ca đang bật', 'Hãy bật ca làm ở trang Lịch ca làm trước')
+      return
+    }
+    if (kq.lyDo === 'khongUngVien') {
+      notifyWarning('Không còn nhân viên trống', 'Mọi nhân viên đã có lịch trong ngày này')
+      return
+    }
+    await taiDuLieu()
+    notifySuccess('Đã xếp ca tự động', `Thêm ${kq.themMoi} lịch làm việc ngày ${hienThiNgay(khoa)}`)
+  } catch (e) {
+    notifyWarning('Lỗi xếp ca tự động', e.response?.data?.message || e.message || '')
   }
-  if (kq.lyDo === 'khongUngVien') {
-    notifyWarning('Không còn nhân viên trống', 'Mọi nhân viên đã có lịch trong ngày này')
-    return
-  }
-  notifySuccess('Đã xếp ca tự động', `Thêm ${kq.themMoi} lịch làm việc ngày ${hienThiNgay(khoa)}`)
 }
 
 const datLaiLich = async () => {
@@ -145,8 +167,13 @@ const datLaiLich = async () => {
   }
   const ok = await notifyDeleteConfirm(`tất cả lịch làm việc ngày ${hienThiNgay(khoa)}`)
   if (!ok) return
-  xoaLichTheoNgay(khoa)
-  notifySuccess('Đã đặt lại lịch', `Đã xóa lịch ngày ${hienThiNgay(khoa)}`)
+  try {
+    await deleteLichTheoNgay(khoa)
+    await taiDuLieu()
+    notifySuccess('Đã đặt lại lịch', `Đã xóa lịch ngày ${hienThiNgay(khoa)}`)
+  } catch (e) {
+    notifyWarning('Lỗi xóa lịch', e.response?.data?.message || e.message || '')
+  }
 }
 
 const taiTemplate = async () => {
@@ -210,9 +237,9 @@ const docTrenFile = async (e) => {
   importLoading.value = true
   try {
     if (/\.csv$/i.test(file.name)) {
-      importPreview.value = phanTichCsvLich(await file.text(), dsNhanVien.value)
+      importPreview.value = phanTichCsvLich(await file.text(), dsNhanVien.value, cas.value)
     } else if (/\.xlsx?$/i.test(file.name)) {
-      importPreview.value = phanTichDongLich(await docExcelTrenFile(file), dsNhanVien.value)
+      importPreview.value = phanTichDongLich(await docExcelTrenFile(file), dsNhanVien.value, cas.value)
     } else {
       notifyWarning('Sai định dạng tệp', 'Chỉ hỗ trợ tệp Excel (.xlsx, .xls) hoặc CSV (.csv)')
       importFileName.value = ''
@@ -230,16 +257,26 @@ const docTrenFile = async (e) => {
   }
 }
 
-const xacNhanNhap = () => {
+const xacNhanNhap = async () => {
   const p = importPreview.value
   if (!p || !p.rows.length) return
-  const n = nhapRowsVaoStore(p.rows)
-  showImport.value = false
-  view.value = 'bang'
-  notifySuccess(
-    'Hoàn tất nhập lịch làm việc',
-    `Đã thêm ${n} lịch; bỏ qua ${p.loi.length} dòng lỗi`
-  )
+  try {
+    const rows = p.rows.map((r) => ({
+      maNhanVien: r.maNhanVien,
+      maCa: cas.value.find((c) => c.id === r.idCa)?.ma || String(r.idCa),
+      ngay: r.ngay,
+    }))
+    const kq = await importLich(rows)
+    await taiDuLieu()
+    showImport.value = false
+    view.value = 'bang'
+    notifySuccess(
+      'Hoàn tất nhập lịch làm việc',
+      `Đã thêm ${kq.themMoi} lịch; bỏ qua ${kq.loi?.length || 0} dòng lỗi`
+    )
+  } catch (e) {
+    notifyWarning('Lỗi nhập lịch', e.response?.data?.message || e.message || '')
+  }
 }
 
 /* ---------------------------------- Form thêm / sửa ---------------------------------- */
@@ -297,7 +334,7 @@ const moFormSua = (row) => {
   showDetail.value = false
 }
 
-const luuForm = () => {
+const luuForm = async () => {
   formError.value = ''
   const f = form.value
   if (!f.maNhanVien) {
@@ -314,23 +351,23 @@ const luuForm = () => {
     return
   }
   const khoa = khoaNgay(d)
-  if (kiemTraTrung(f.maNhanVien, khoa, f.idCa, formMode.value === 'sua' ? f.id : null)) {
-    formError.value = 'Nhân viên đã có lịch ca này trong ngày — vui lòng chọn ca hoặc ngày khác'
-    return
-  }
   const payload = {
     maNhanVien: f.maNhanVien,
-    tenNhanVien: tenCua(f.maNhanVien),
     idCa: Number(f.idCa),
     ngay: khoa,
   }
-  if (formMode.value === 'sua') capNhatLich(f.id, payload)
-  else themLich(payload)
-  showForm.value = false
-  notifySuccess(
-    formMode.value === 'sua' ? 'Đã cập nhật lịch làm việc' : 'Đã thêm lịch làm việc',
-    `${payload.maNhanVien} · ${tenCaCua(payload.idCa)} · ${hienThiNgay(khoa)}`
-  )
+  try {
+    if (formMode.value === 'sua') await updateLich(f.id, payload)
+    else await createLich(payload)
+    await taiDuLieu()
+    showForm.value = false
+    notifySuccess(
+      formMode.value === 'sua' ? 'Đã cập nhật lịch làm việc' : 'Đã thêm lịch làm việc',
+      `${payload.maNhanVien} · ${tenCaCua(payload.idCa)} · ${hienThiNgay(khoa)}`
+    )
+  } catch (e) {
+    formError.value = e.response?.data?.message || e.message || 'Lỗi khi lưu lịch'
+  }
 }
 
 /* ---------------------------------- Chi tiết / xem thêm ---------------------------------- */
@@ -349,13 +386,22 @@ const xoaChiTiet = async () => {
     `lịch làm việc của ${tenCua(row.maNhanVien)} ngày ${hienThiNgay(row.ngay)}`
   )
   if (!ok) return
-  xoaLich(row.id)
-  showDetail.value = false
-  notifySuccess('Đã xóa lịch làm việc')
+  try {
+    await deleteLich(row.id)
+    await taiDuLieu()
+    showDetail.value = false
+    notifySuccess('Đã xóa lịch làm việc')
+  } catch (e) {
+    notifyWarning('Lỗi xóa lịch', e.response?.data?.message || e.message || '')
+  }
 }
 
 const showXemThem = ref(false)
 const xemThemData = ref({ ca: null, ngay: '', list: [] })
+
+const lichCuaNgay = (ngay) => lichs.value.filter((l) => l.ngay === ngay)
+const lichCuaCaNgay = (idCa, ngay) =>
+  lichs.value.filter((l) => l.idCa === Number(idCa) && l.ngay === ngay)
 
 const moXemThem = (ca, khoa) => {
   const list = lichCuaCaNgay(ca.id, khoa)
@@ -447,13 +493,8 @@ const datKieuXem = (kieu) => {
   calMode.value = kieu
 }
 
-onMounted(async () => {
-  try {
-    const d = await listEmployees({ page: 0, size: 300 })
-    nhanViens.value = d.content || []
-  } catch {
-    nhanViens.value = []
-  }
+onMounted(() => {
+  taiDuLieu()
 })
 </script>
 
@@ -1176,10 +1217,10 @@ onMounted(async () => {
 .btn-action-dark {
   height: 38px;
   padding: 0 18px;
-  background: #0f172a;
-  border: none;
+  background: #ffffff;
+  border: 1px solid #e11d48;
   border-radius: 8px;
-  color: #ffffff;
+  color: #e11d48;
   font-size: 13px;
   font-weight: 600;
   display: inline-flex;
@@ -1196,7 +1237,7 @@ onMounted(async () => {
 }
 
 .btn-action-dark:hover {
-  background: #1e293b;
+  background: #fff1f2;
 }
 
 /* Toggle */
