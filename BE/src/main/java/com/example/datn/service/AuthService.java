@@ -41,6 +41,7 @@ public class AuthService {
     private final long thoiGianPhienGhiNhoMs;
 
     private static final String PREFIX_REFRESH_GHI_NHO = "r_";
+    private static final String KHOA_OTP_KHACH = "KH:";
 
     public AuthService(
         KhachHangRepository khachHangRepository,
@@ -336,6 +337,53 @@ public class AuthService {
         NhanVien nhanVien = timNhanVienTheoEmail(email);
         nhanVien.setMatKhau(passwordEncoder.encode(matKhauMoi));
         nhanVienRepository.save(nhanVien);
+    }
+
+    /**
+     * Quên mật khẩu chung (nhân viên hoặc khách hàng): tự nhận diện email
+     * thuộc tài khoản nào rồi gửi OTP 6 số qua email.
+     */
+    @Transactional
+    public void guiMaQuenMatKhauChung(String email) {
+        if (isBlank(email)) {
+            throw new IllegalArgumentException("Email không được để trống");
+        }
+        String diaChi = email.trim();
+        if (nhanVienRepository.findByEmail(diaChi).isPresent()) {
+            guiMaQuenMatKhau(diaChi);
+            return;
+        }
+        KhachHang khachHang = timKhachHangTheoEmail(diaChi);
+        String maOtp = quenMatKhauOtpService.sinhMa(KHOA_OTP_KHACH + khachHang.getEmail());
+        if (!emailService.guiMaQuenMatKhau(khachHang.getEmail(), maOtp)) {
+            throw new IllegalStateException("Không gửi được mã xác nhận, vui lòng thử lại sau");
+        }
+    }
+
+    /**
+     * Đặt lại mật khẩu chung: kiểm tra OTP rồi cập nhật mật khẩu của đúng tài khoản.
+     */
+    @Transactional
+    public void datLaiMatKhauChung(String email, String maOtp, String matKhauMoi, String xacNhan) {
+        hopLeMatKhauMoi(matKhauMoi, xacNhan);
+        if (isBlank(email)) {
+            throw new IllegalArgumentException("Email không được để trống");
+        }
+        String diaChi = email.trim();
+        if (nhanVienRepository.findByEmail(diaChi).isPresent()) {
+            datLaiMatKhau(diaChi, maOtp, matKhauMoi, xacNhan);
+            return;
+        }
+        KhachHang khachHang = timKhachHangTheoEmail(diaChi);
+        quenMatKhauOtpService.xacNhan(KHOA_OTP_KHACH + diaChi, maOtp);
+        khachHang.setMatKhau(passwordEncoder.encode(matKhauMoi));
+        khachHangRepository.save(khachHang);
+    }
+
+    private KhachHang timKhachHangTheoEmail(String email) {
+        return khachHangRepository
+            .findByEmail(email)
+            .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy tài khoản với email này"));
     }
 
     private NhanVien timNhanVienTheoEmail(String email) {
