@@ -33,8 +33,9 @@ class GHNServiceTest {
     private final GHNApiClient ghnApiClient = mock(GHNApiClient.class);
     private final SanPhamChiTietRepository sanPhamChiTietRepository =
         mock(SanPhamChiTietRepository.class);
+    private final OpenApiClient openApiClient = mock(OpenApiClient.class);
     private final GHNService service = new GHNService(
-        cauHinh, ghnApiClient, sanPhamChiTietRepository
+        cauHinh, ghnApiClient, sanPhamChiTietRepository, openApiClient
     );
 
     @BeforeEach
@@ -78,23 +79,21 @@ class GHNServiceTest {
     }
 
     @Test
-    void thieuToken_BaoLoiCauHinh() {
+    void thieuToken_KhongCauHinh_TraPhiMacDinh() {
         cauHinh.setToken("");
 
-        assertThatThrownBy(() -> service.tinhPhi(yeuCau(1)))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("GHN_TOKEN");
+        assertThat(service.tinhPhi(yeuCau(1))).isEqualTo(30000);
 
         verifyNoInteractions(ghnApiClient);
     }
 
     @Test
-    void thieuShopId_BaoLoiCauHinh() {
+    void thieuShopId_KhongCauHinh_TraPhiMacDinh() {
         cauHinh.setShopId("  ");
 
-        assertThatThrownBy(() -> service.tinhPhi(yeuCau(1)))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("GHN_SHOP_ID");
+        assertThat(service.tinhPhi(yeuCau(1))).isEqualTo(30000);
+
+        verifyNoInteractions(ghnApiClient);
     }
 
     @Test
@@ -385,13 +384,14 @@ class GHNServiceTest {
     }
 
     @Test
-    void dichVu_ThieuToken_BaoLoiCauHinh() {
+    void dichVu_ThieuToken_KhongCauHinh_TraDichVuMacDinh() {
         cauHinh.setToken("");
 
-        assertThatThrownBy(() -> service.getDichVu(1442))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("GHN_TOKEN");
+        List<ShippingServiceDTO> ds = service.getDichVu(1442);
 
+        assertThat(ds).hasSize(1);
+        assertThat(ds.get(0).getServiceTypeId()).isEqualTo(2);
+        assertThat(ds.get(0).getShortName()).isEqualTo("Giao hàng tiêu chuẩn");
         verifyNoInteractions(ghnApiClient);
     }
 

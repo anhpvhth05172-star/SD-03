@@ -1,5 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import PaginationBar from '@/components/PaginationBar.vue'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import { listEmployees } from '@/api/employee'
 import { API_BASE } from '@/api/http'
 import { formatVnd } from '@/utils/format'
@@ -315,18 +317,6 @@ const mauAvarta = (id) => {
 }
 
 /* ---------------------------------- Phân trang ---------------------------------- */
-const danhSachTrang = (tong, hienTai) => {
-  const cur = hienTai + 1
-  let start = Math.max(1, Math.min(cur - 2, Math.max(1, tong - 4)))
-  const end = Math.min(tong, start + 4)
-  start = Math.max(1, end - 4)
-  const out = []
-  for (let p = start; p <= end; p++) out.push(p)
-  return out
-}
-const trangNv = computed(() => danhSachTrang(tongTrangNv.value, pageNv.value))
-const trangSp = computed(() => danhSachTrang(tongTrangSp.value, pageSp.value))
-
 const datTrangNv = (p) => {
   if (p < 0 || p >= tongTrangNv.value || p === pageNv.value) return
   pageNv.value = p
@@ -435,6 +425,20 @@ watch(locThuongHieu, (list) => {
   }
 })
 
+const thuongHieuOptions = computed(() => [
+  { value: '', label: 'Tất cả thương hiệu' },
+  ...locThuongHieu.value.map((t) => ({ value: t, label: t }))
+])
+
+const onThuongHieuChange = (val) => {
+  thuongHieuChon.value = val ?? ''
+}
+
+const onTonKhoSpChange = (val) => {
+  tonKhoSp.value = val ?? ''
+  pageSp.value = 0
+}
+
 watch([tuNgay, denNgay, thuongHieuChon], () => {
   if (!docInputDate(tuNgay.value) || !docInputDate(denNgay.value)) return
   napThongKe()
@@ -516,18 +520,30 @@ onMounted(async () => {
         </div>
         <div class="field-block">
           <label class="field-label">Tổng quan</label>
-          <select v-model="kieuTongQuan" class="filter-select">
-            <option value="ngay">Theo ngày</option>
-            <option value="tuan">Theo tuần</option>
-            <option value="thang">Theo tháng</option>
-          </select>
+          <SearchableSelect
+            v-model="kieuTongQuan"
+            :options="[
+              { value: 'ngay', label: 'Theo ngày' },
+              { value: 'tuan', label: 'Theo tuần' },
+              { value: 'thang', label: 'Theo tháng' }
+            ]"
+            label-key="label"
+            value-key="value"
+            :allow-clear="false"
+            placeholder="Theo ngày"
+          />
         </div>
         <div class="field-block">
           <label class="field-label">Thương hiệu</label>
-          <select v-model="thuongHieuChon" class="filter-select">
-            <option value="">Tất cả thương hiệu</option>
-            <option v-for="t in locThuongHieu" :key="t" :value="t">{{ t }}</option>
-          </select>
+          <SearchableSelect
+            v-model="thuongHieuChon"
+            :options="thuongHieuOptions"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả thương hiệu"
+            search-placeholder="Tìm thương hiệu..."
+            @change="onThuongHieuChange"
+          />
         </div>
         <div class="field-block">
           <label class="field-label">Tìm theo thương hiệu</label>
@@ -694,10 +710,17 @@ onMounted(async () => {
               <button type="button" class="seg-btn" :class="{ 'is-active': thMode === 'tron' }" @click="thMode = 'tron'">Tròn</button>
               <button type="button" class="seg-btn" :class="{ 'is-active': thMode === 'duong' }" @click="thMode = 'duong'">Đường</button>
             </div>
-            <select v-model="thTheo" class="filter-select filter-select-sm">
-              <option value="doanhThu">Theo doanh thu</option>
-              <option value="soDon">Theo số đơn</option>
-            </select>
+            <SearchableSelect
+              v-model="thTheo"
+              :options="[
+                { value: 'doanhThu', label: 'Theo doanh thu' },
+                { value: 'soDon', label: 'Theo số đơn' }
+              ]"
+              label-key="label"
+              value-key="value"
+              :allow-clear="false"
+              placeholder="Theo doanh thu"
+            />
           </div>
         </div>
 
@@ -837,11 +860,18 @@ onMounted(async () => {
         </div>
         <div class="field-block">
           <label class="field-label">Sắp xếp</label>
-          <select v-model="sortNv" class="filter-select wide">
-            <option value="doanhThuCao">Doanh thu cao nhất</option>
-            <option value="doanhThuThap">Doanh thu thấp nhất</option>
-            <option value="donNhieu">Đơn hàng nhiều nhất</option>
-          </select>
+          <SearchableSelect
+            v-model="sortNv"
+            :options="[
+              { value: 'doanhThuCao', label: 'Doanh thu cao nhất' },
+              { value: 'doanhThuThap', label: 'Doanh thu thấp nhất' },
+              { value: 'donNhieu', label: 'Đơn hàng nhiều nhất' }
+            ]"
+            label-key="label"
+            value-key="value"
+            :allow-clear="false"
+            placeholder="Doanh thu cao nhất"
+          />
         </div>
         <div class="field-block field-reset">
           <label class="field-label">&nbsp;</label>
@@ -890,35 +920,18 @@ onMounted(async () => {
         </table>
       </div>
 
-      <div class="table-pagination-row">
-        <div class="pagination-summary">
-          Hiển thị <strong>{{ dongNv.length }}</strong> trong tổng số
-          <strong>{{ nhanVienLoc.length }}</strong> nhân viên
-        </div>
-        <div class="pagination-size-wrap">
-          <select v-model="sizeNv" class="pagination-select" @change="pageNv = 0">
-            <option :value="5">5</option>
-            <option :value="10">10</option>
-            <option :value="20">20</option>
-          </select>
-        </div>
-        <div class="pagination-nav-wrap">
-          <button class="pagination-nav-btn" type="button" :disabled="pageNv === 0" @click="datTrangNv(0)">K</button>
-          <button class="pagination-nav-btn" type="button" :disabled="pageNv === 0" @click="datTrangNv(pageNv - 1)">&lt;</button>
-          <button
-            v-for="p in trangNv"
-            :key="'nv' + p"
-            class="pagination-num-btn"
-            :class="{ 'is-active': p === pageNv + 1 }"
-            type="button"
-            @click="datTrangNv(p - 1)"
-          >
-            {{ p }}
-          </button>
-          <button class="pagination-nav-btn" type="button" :disabled="pageNv + 1 >= tongTrangNv" @click="datTrangNv(pageNv + 1)">&gt;</button>
-          <button class="pagination-nav-btn" type="button" :disabled="pageNv + 1 >= tongTrangNv" @click="datTrangNv(tongTrangNv - 1)">L</button>
-        </div>
-      </div>
+      <PaginationBar
+        :page="pageNv"
+        :total-pages="tongTrangNv"
+        :total-elements="nhanVienLoc.length"
+        :page-size="sizeNv"
+        :from="dongNv.length ? pageNv * sizeNv + 1 : 0"
+        :to="pageNv * sizeNv + dongNv.length"
+        :sizes="[5, 10, 20]"
+        label="nhân viên"
+        @change="datTrangNv"
+        @size-change="(s) => { sizeNv = s; pageNv = 0 }"
+      />
     </div>
 
     <!-- TỔNG QUAN SẢN PHẨM -->
@@ -957,20 +970,36 @@ onMounted(async () => {
         </div>
         <div class="field-block">
           <label class="field-label">Tồn kho</label>
-          <select v-model="tonKhoSp" class="filter-select wide" @change="pageSp = 0">
-            <option value="">Tất cả tồn kho</option>
-            <option value="con">Còn hàng</option>
-            <option value="sapHet">Sắp hết hàng</option>
-            <option value="het">Hết hàng</option>
-          </select>
+          <SearchableSelect
+            v-model="tonKhoSp"
+            :options="[
+              { value: '', label: 'Tất cả tồn kho' },
+              { value: 'con', label: 'Còn hàng' },
+              { value: 'sapHet', label: 'Sắp hết hàng' },
+              { value: 'het', label: 'Hết hàng' }
+            ]"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả tồn kho"
+            search-placeholder="Tìm trạng thái tồn..."
+            @change="onTonKhoSpChange"
+          />
         </div>
         <div class="field-block">
           <label class="field-label">Sắp xếp</label>
-          <select v-model="sortSp" class="filter-select wide" @change="pageSp = 0">
-            <option value="banChay">Bán chạy nhất</option>
-            <option value="doanhThu">Doanh thu cao nhất</option>
-            <option value="tonKho">Tồn kho cao nhất</option>
-          </select>
+          <SearchableSelect
+            v-model="sortSp"
+            :options="[
+              { value: 'banChay', label: 'Bán chạy nhất' },
+              { value: 'doanhThu', label: 'Doanh thu cao nhất' },
+              { value: 'tonKho', label: 'Tồn kho cao nhất' }
+            ]"
+            label-key="label"
+            value-key="value"
+            :allow-clear="false"
+            placeholder="Bán chạy nhất"
+            @change="pageSp = 0"
+          />
         </div>
         <div class="field-block field-reset">
           <label class="field-label">&nbsp;</label>
@@ -1029,35 +1058,18 @@ onMounted(async () => {
         </table>
       </div>
 
-      <div class="table-pagination-row">
-        <div class="pagination-summary">
-          Hiển thị <strong>{{ dongSp.length }}</strong> trong tổng số
-          <strong>{{ sanPhamLoc.length }}</strong> sản phẩm
-        </div>
-        <div class="pagination-size-wrap">
-          <select v-model="sizeSp" class="pagination-select" @change="pageSp = 0">
-            <option :value="5">5</option>
-            <option :value="10">10</option>
-            <option :value="20">20</option>
-          </select>
-        </div>
-        <div class="pagination-nav-wrap">
-          <button class="pagination-nav-btn" type="button" :disabled="pageSp === 0" @click="datTrangSp(0)">K</button>
-          <button class="pagination-nav-btn" type="button" :disabled="pageSp === 0" @click="datTrangSp(pageSp - 1)">&lt;</button>
-          <button
-            v-for="p in trangSp"
-            :key="'sp' + p"
-            class="pagination-num-btn"
-            :class="{ 'is-active': p === pageSp + 1 }"
-            type="button"
-            @click="datTrangSp(p - 1)"
-          >
-            {{ p }}
-          </button>
-          <button class="pagination-nav-btn" type="button" :disabled="pageSp + 1 >= tongTrangSp" @click="datTrangSp(pageSp + 1)">&gt;</button>
-          <button class="pagination-nav-btn" type="button" :disabled="pageSp + 1 >= tongTrangSp" @click="datTrangSp(tongTrangSp - 1)">L</button>
-        </div>
-      </div>
+      <PaginationBar
+        :page="pageSp"
+        :total-pages="tongTrangSp"
+        :total-elements="sanPhamLoc.length"
+        :page-size="sizeSp"
+        :from="dongSp.length ? pageSp * sizeSp + 1 : 0"
+        :to="pageSp * sizeSp + dongSp.length"
+        :sizes="[5, 10, 20]"
+        label="sản phẩm"
+        @change="datTrangSp"
+        @size-change="(s) => { sizeSp = s; pageSp = 0 }"
+      />
     </div>
   </div>
 </template>
@@ -1123,13 +1135,13 @@ onMounted(async () => {
 .icon-chart,
 .icon-cycle {
   background: #ffe4e6;
-  color: #f43f5e;
+  color: var(--primary);
 }
 
 .icon-brand,
 .icon-status {
   background: #fff1f2;
-  color: #e11d48;
+  color: var(--primary-hover);
 }
 
 .icon-users {
@@ -1182,13 +1194,13 @@ onMounted(async () => {
 
 .quick-range-btn:hover {
   border-color: #fecdd3;
-  color: #e11d48;
+  color: var(--primary-hover);
 }
 
 .quick-range-btn.is-active {
   background: #fff1f2;
-  border-color: #f43f5e;
-  color: #e11d48;
+  border-color: var(--primary);
+  color: var(--primary-hover);
 }
 
 /* Ô lọc */
@@ -1232,7 +1244,7 @@ onMounted(async () => {
 }
 
 .input-date:focus {
-  border-color: #f43f5e;
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
 }
 
@@ -1266,45 +1278,12 @@ onMounted(async () => {
 }
 
 .input-search:focus {
-  border-color: #f43f5e;
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
 }
 
 .input-search::placeholder {
   color: #94a3b8;
-}
-
-.filter-select {
-  height: 42px;
-  min-width: 150px;
-  padding: 0 32px 0 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 9px;
-  font-size: 13.5px;
-  color: #334155;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 10px center;
-  background-size: 14px;
-  appearance: none;
-  outline: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: inherit;
-}
-
-.filter-select:focus {
-  border-color: #f43f5e;
-  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
-}
-
-.filter-select.wide {
-  min-width: 190px;
-}
-
-.filter-select-sm {
-  height: 34px;
-  min-width: 150px;
-  font-size: 12.5px;
-  border-radius: 8px;
 }
 
 .field-reset {
@@ -1317,7 +1296,7 @@ onMounted(async () => {
   border: 1px solid #ffe4e6;
   border-radius: 8px;
   background: #ffffff;
-  color: #f43f5e;
+  color: var(--primary);
   font-size: 13px;
   font-weight: 600;
   display: inline-flex;
@@ -1336,7 +1315,7 @@ onMounted(async () => {
 .btn-action-outline:hover {
   background: #fff1f2;
   border-color: #fecdd3;
-  color: #e11d48;
+  color: var(--primary-hover);
 }
 
 /* Thanh thông tin */
@@ -1466,7 +1445,7 @@ onMounted(async () => {
 
 .stat-icon.is-rose {
   background: #fff1f2;
-  color: #f43f5e;
+  color: var(--primary);
 }
 
 .stat-value {
@@ -1817,94 +1796,6 @@ onMounted(async () => {
   color: #ef4444;
 }
 
-/* Phân trang */
-.table-pagination-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid #f8fafc;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.pagination-summary {
-  flex: 1;
-  text-align: center;
-  font-size: 13px;
-  color: #64748b;
-  min-width: 200px;
-}
-
-.pagination-summary strong {
-  color: #1f2937;
-  font-weight: 700;
-}
-
-.pagination-size-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.pagination-select {
-  height: 32px;
-  padding: 0 24px 0 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 6px center;
-  background-size: 12px;
-  appearance: none;
-  font-size: 13px;
-  color: #334155;
-  cursor: pointer;
-  outline: none;
-  font-family: inherit;
-}
-
-.pagination-nav-wrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.pagination-nav-btn,
-.pagination-num-btn {
-  height: 30px;
-  min-width: 30px;
-  padding: 0 6px;
-  border-radius: 6px;
-  border: 1px solid #f1f5f9;
-  background: #ffffff;
-  color: #475569;
-  font-size: 13px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-family: inherit;
-}
-
-.pagination-nav-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.pagination-num-btn.is-active {
-  background: #e11d48;
-  color: #ffffff;
-  border-color: #e11d48;
-  font-weight: 600;
-}
-
-.pagination-num-btn:hover:not(.is-active),
-.pagination-nav-btn:hover:not(:disabled) {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-}
-
 @media (max-width: 1199px) {
   .charts-grid {
     grid-template-columns: 1fr;
@@ -1940,15 +1831,6 @@ onMounted(async () => {
 
   .field-block.grow {
     min-width: 0;
-  }
-
-  .table-pagination-row {
-    justify-content: center;
-  }
-
-  .pagination-summary {
-    order: -1;
-    width: 100%;
   }
 }
 </style>

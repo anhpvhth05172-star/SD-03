@@ -95,6 +95,14 @@ public class NhanVienController {
         return Map.of("exists", nhanVienService.checkTrungEmail(email, excludeId));
     }
 
+    @GetMapping("/check-sdt")
+    public Map<String, Boolean> checkSdt(
+        @RequestParam String soDienThoai,
+        @RequestParam(required = false) Long excludeId
+    ) {
+        return Map.of("exists", nhanVienService.checkTrungSdt(soDienThoai, excludeId));
+    }
+
     @GetMapping("/{id}")
     public NhanVienDTO get(@PathVariable Long id) {
         quyenGuard.canQuanLyNhanVien();

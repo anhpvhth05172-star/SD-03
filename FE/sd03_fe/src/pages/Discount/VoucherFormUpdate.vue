@@ -13,6 +13,8 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import { useRouter, useRoute } from "vue-router";
 import logo from "@/assets/logo.png";
+import SearchableSelect from "@/components/SearchableSelect.vue";
+import { API_BASE } from "@/api/http";
 
 const router = useRouter();
 const route = useRoute();
@@ -164,14 +166,35 @@ const err = (key) => (submitted.value || touched[key]) && errors.value[key];
 /* ---------------- Dữ liệu sản phẩm ---------------- */
 const products = ref([]);
 const loadingProducts = ref(true);
+const thuongHieuOptions = ref([]);
+const chatLieuOptions = ref([]);
+const filterThuongHieu = ref("");
+const filterChatLieu = ref("");
+
+const loadFilterOptions = async () => {
+  try {
+    const r = await fetch(`${API_BASE}/v1/attributes/all-filter-options`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const norm = (x) => (Array.isArray(x) ? x : Array.isArray(x?.content) ? x.content : Array.isArray(x?.data) ? x.data : []);
+    thuongHieuOptions.value = norm(d?.thuongHieu);
+    chatLieuOptions.value = norm(d?.chatLieu);
+  } catch {
+    /* bỏ qua, không lọc được vẫn chọn bộ lọc khác */
+  }
+};
 
 const loadProducts = async () => {
   try {
+    loadingProducts.value = true;
     // excludeId: bỏ qua chính đợt đang sửa khi tính "đã thuộc đợt khác"
     // Backend trả phanTramGiamKhac = mức CAO NHẤT trong các đợt khác đang hiệu lực
+    const params = { excludeId: route.params.id };
+    if (filterThuongHieu.value) params.idThuongHieu = filterThuongHieu.value;
+    if (filterChatLieu.value) params.idChatLieu = filterChatLieu.value;
     const res = await axios.get(
       baseAPI + "admin/dot-giam-gia/san-pham-chi-tiet/for-discount",
-      { params: { excludeId: route.params.id } },
+      { params },
     );
     const raw = res.data?.data ?? res.data ?? [];
 
@@ -256,6 +279,7 @@ const loadDetail = async () => {
 };
 
 onMounted(async () => {
+  loadFilterOptions();
   await loadProducts();
   await loadDetail();
 });
@@ -368,6 +392,10 @@ const resetVariantFilters = () => {
   variantKeyword.value = "";
   sizeFilter.value = "";
   colorFilter.value = "";
+  const hadServerFilter = !!(filterThuongHieu.value || filterChatLieu.value);
+  filterThuongHieu.value = "";
+  filterChatLieu.value = "";
+  if (hadServerFilter) loadProducts();
 };
 
 /* ---------------- Submit ---------------- */
@@ -664,21 +692,65 @@ const submit = async () => {
             </div>
             <div class="dg-field">
               <label>Kích cỡ</label>
-              <select v-model="sizeFilter" class="dg-round">
-                <option value="">Tất cả</option>
-                <option v-for="s in sizeOptions" :key="s" :value="s">
-                  {{ s }}
-                </option>
-              </select>
+              <SearchableSelect
+                v-model="sizeFilter"
+                :options="[
+                  { value: '', label: 'Tất cả' },
+                  ...sizeOptions.map((s) => ({ value: s, label: s })),
+                ]"
+                label-key="label"
+                value-key="value"
+                placeholder="Tất cả"
+                search-placeholder="Tìm kích cỡ..."
+                @change="
+                  (v) => {
+                    sizeFilter = v === null || v === undefined ? '' : v;
+                  }
+                "
+              />
             </div>
             <div class="dg-field">
               <label>Màu sắc</label>
-              <select v-model="colorFilter" class="dg-round">
-                <option value="">Tất cả</option>
-                <option v-for="c in colorOptions" :key="c" :value="c">
-                  {{ c }}
-                </option>
-              </select>
+              <SearchableSelect
+                v-model="colorFilter"
+                :options="[
+                  { value: '', label: 'Tất cả' },
+                  ...colorOptions.map((c) => ({ value: c, label: c })),
+                ]"
+                label-key="label"
+                value-key="value"
+                placeholder="Tất cả"
+                search-placeholder="Tìm màu sắc..."
+                @change="
+                  (v) => {
+                    colorFilter = v === null || v === undefined ? '' : v;
+                  }
+                "
+              />
+            </div>
+            <div class="dg-field">
+              <label>Thương hiệu</label>
+              <SearchableSelect
+                v-model="filterThuongHieu"
+                :options="thuongHieuOptions"
+                label-key="ten"
+                value-key="id"
+                placeholder="Tất cả thương hiệu"
+                search-placeholder="Tìm thương hiệu..."
+                @change="loadProducts"
+              />
+            </div>
+            <div class="dg-field">
+              <label>Chất liệu</label>
+              <SearchableSelect
+                v-model="filterChatLieu"
+                :options="chatLieuOptions"
+                label-key="ten"
+                value-key="id"
+                placeholder="Tất cả chất liệu"
+                search-placeholder="Tìm chất liệu..."
+                @change="loadProducts"
+              />
             </div>
             <button type="button" class="dg-reset" @click="resetVariantFilters">
               <svg
@@ -710,15 +782,15 @@ const submit = async () => {
                     />
                   </th>
                   <th class="dg-center dg-w-stt">STT</th>
-                  <th class="dg-center">Sản phẩm</th>
                   <th class="dg-center dg-w-img">Ảnh</th>
+                  <th class="dg-center">Sản phẩm</th>
                   <th class="dg-center">Mã chi tiết</th>
                   <th class="dg-center">Kích cỡ</th>
                   <th class="dg-center">Màu sắc</th>
+                  <th class="dg-center">Thương hiệu</th>
+                  <th class="dg-center">Chất liệu</th>
                   <th class="dg-center">Giá bán</th>
-                  <th class="dg-center">Giá hiện tại</th>
                   <th class="dg-center">Giá sau giảm</th>
-                  <th class="dg-center">Tồn</th>
                 </tr>
               </thead>
               <tbody>
@@ -747,9 +819,6 @@ const submit = async () => {
                   </td>
                   <td class="dg-center">{{ i + 1 }}</td>
 
-                  <td class="dg-center dg-strong" :title="v.tenSanPham">
-                    {{ v.tenSanPham }}
-                  </td>
                   <td class="dg-center dg-cell-img">
                     <div class="dg-img-wrap">
                       <img
@@ -769,16 +838,15 @@ const submit = async () => {
                       </span>
                     </div>
                   </td>
+                  <td class="dg-center dg-strong" :title="v.tenSanPham">
+                    {{ v.tenSanPham }}
+                  </td>
                   <td class="dg-center dg-muted">{{ v.maChiTiet }}</td>
                   <td class="dg-center">{{ v.kichCo }}</td>
                   <td class="dg-center">{{ v.mauSac }}</td>
+                  <td class="dg-center">{{ v.tenThuongHieu }}</td>
+                  <td class="dg-center">{{ v.chatLieu }}</td>
                   <td class="dg-center">{{ money(v.giaBan) }}</td>
-                  <td class="dg-center">
-                    <span v-if="v.phanTramGiamKhac">
-                      {{ money(currentPrice(v)) }}
-                    </span>
-                    <span v-else class="dg-muted">—</span>
-                  </td>
                   <td class="dg-center">
                     <template v-if="validPercent">
                       <span class="dg-sale">{{ money(afterDiscount(v)) }}</span>
@@ -793,7 +861,6 @@ const submit = async () => {
                     </template>
                     <span v-else class="dg-muted">—</span>
                   </td>
-                  <td class="dg-center">{{ v.soLuong }}</td>
                 </tr>
               </tbody>
             </table>
@@ -929,8 +996,7 @@ const submit = async () => {
 .dg-req {
   color: var(--red);
 }
-.dg-field input,
-.dg-field select {
+.dg-field input {
   width: 100%;
   padding: 0.7rem 0.9rem;
   border: 1px solid var(--line);
@@ -943,8 +1009,7 @@ const submit = async () => {
     border-color 0.15s,
     box-shadow 0.15s;
 }
-.dg-field input:focus,
-.dg-field select:focus {
+.dg-field input:focus {
   border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
 }
@@ -954,9 +1019,6 @@ const submit = async () => {
 .dg-field input.dg-pill {
   border-radius: 999px;
   padding-left: 1.1rem;
-}
-.dg-field select.dg-round {
-  border-radius: 12px;
 }
 
 .dg-affix {

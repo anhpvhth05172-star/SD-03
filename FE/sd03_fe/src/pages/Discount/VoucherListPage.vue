@@ -2,12 +2,14 @@
 import axios from "axios";
 import Swal from "sweetalert2";
 import { computed, inject, onMounted, reactive, ref } from "vue";
+import PaginationBar from "@/components/PaginationBar.vue";
+import SearchableSelect from "@/components/SearchableSelect.vue";
 
 const apiDiscount = inject("baseAPI");
 
 const listDiscount = ref([]);
 const page = ref(0);
-const pageSize = 8;
+const pageSize = ref(10);
 const totalPages = ref(0);
 const totalElements = ref(0);
 
@@ -27,7 +29,6 @@ const filter = reactive(emptyFilter());
 const applied = reactive(emptyFilter());
 
 const hasFilter = computed(() => Object.values(applied).some((v) => v));
-const showFilter = ref(true);
 
 /* ---------------- Cache danh sách ban đầu ---------------- */
 try {
@@ -49,7 +50,7 @@ const getData = async (p = 0) => {
     const res = await axios.get(apiDiscount + "admin/phieu-giam-gia", {
       params: {
         page: p,
-        size: pageSize,
+        size: pageSize.value,
         // ⚠️ đổi tên param cho khớp backend
         keyword: applied.keyword || undefined,
         loaiGiamGia: applied.discountType || undefined,
@@ -152,11 +153,22 @@ const goToPage = (p) => {
   getData(p);
 };
 
+const onSizeChange = (s) => {
+  pageSize.value = s;
+  getData(0);
+};
+
 /* ---------------- Định dạng ---------------- */
 const formatDiscount = (v) =>
   v <= 100 ? v + "%" : v.toLocaleString("vi-VN") + "đ";
 
-const formatDate = (s) => (s ? new Date(s).toLocaleDateString("vi-VN") : "");
+const formatDate = (s) => {
+  if (!s) return "";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return String(s);
+  const p = (x) => String(x).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 
 const getStatus = (d) => {
   const now = new Date();
@@ -184,9 +196,6 @@ onMounted(() => getData(0));
     <div class="screen-head">
       <div>
         <h1 class="screen-title">Quản lý phiếu giảm giá</h1>
-        <p class="screen-sub">
-          Tạo, theo dõi và phân phối các mã giảm giá đến khách hàng
-        </p>
       </div>
       <RouterLink
         :to="`/admin/phieu-giam-gia/add`"
@@ -215,37 +224,9 @@ onMounted(() => getData(0));
           </svg>
           <h3>Tìm kiếm &amp; bộ lọc</h3>
         </div>
-
-        <div class="filter-head-right">
-          <span class="filter-count">{{ totalElements }} kết quả</span>
-          <button
-            type="button"
-            class="filter-toggle"
-            :aria-expanded="showFilter"
-            @click="showFilter = !showFilter"
-          >
-            {{ showFilter ? "Ẩn bớt" : "Mở rộng" }}
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              :class="{ 'is-flipped': !showFilter }"
-              aria-hidden="true"
-            >
-              <path d="M6 15l6-6 6 6" />
-            </svg>
-          </button>
-        </div>
       </div>
 
-      <form
-        v-show="showFilter"
-        class="filter-row"
-        @submit.prevent="applyFilter"
-      >
+      <form class="filter-row" @submit.prevent="applyFilter">
         <div class="f-item f-keyword">
           <label for="f-keyword">Mã / tên phiếu giảm giá</label>
           <input
@@ -258,44 +239,68 @@ onMounted(() => getData(0));
         </div>
 
         <div class="f-item">
-          <label for="f-type">Loại giảm</label>
-          <select
-            id="f-type"
+          <label>Loại giảm</label>
+          <SearchableSelect
             v-model="filter.discountType"
-            class="f-control f-select"
-          >
-            <option value="">Tất cả</option>
-            <option value="PERCENT">Giảm theo %</option>
-            <option value="AMOUNT">Giảm tiền (VNĐ)</option>
-          </select>
+            :options="[
+              { value: '', label: 'Tất cả' },
+              { value: 'PERCENT', label: 'Giảm theo %' },
+              { value: 'AMOUNT', label: 'Giảm tiền (VNĐ)' },
+            ]"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả"
+            search-placeholder="Tìm loại giảm..."
+            @change="
+              (v) => {
+                filter.discountType = v === null || v === undefined ? '' : v;
+              }
+            "
+          />
         </div>
 
         <div class="f-item">
-          <label for="f-status">Trạng thái</label>
-          <select
-            id="f-status"
+          <label>Trạng thái</label>
+          <SearchableSelect
             v-model="filter.status"
-            class="f-control f-select"
-          >
-            <option value="">Tất cả</option>
-            <option value="active">Đang hoạt động</option>
-            <option value="upcoming">Sắp diễn ra</option>
-            <option value="expired">Hết hạn</option>
-            <option value="inactive">Ngừng hoạt động</option>
-          </select>
+            :options="[
+              { value: '', label: 'Tất cả' },
+              { value: 'active', label: 'Đang hoạt động' },
+              { value: 'upcoming', label: 'Sắp diễn ra' },
+              { value: 'expired', label: 'Hết hạn' },
+              { value: 'inactive', label: 'Ngừng hoạt động' },
+            ]"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả"
+            search-placeholder="Tìm trạng thái..."
+            @change="
+              (v) => {
+                filter.status = v === null || v === undefined ? '' : v;
+              }
+            "
+          />
         </div>
 
         <div class="f-item">
-          <label for="f-scope">Loại phiếu</label>
-          <select
-            id="f-scope"
+          <label>Loại phiếu</label>
+          <SearchableSelect
             v-model="filter.scope"
-            class="f-control f-select"
-          >
-            <option value="">Tất cả</option>
-            <option value="CONG_KHAI">Công khai</option>
-            <option value="CA_NHAN">Cá nhân</option>
-          </select>
+            :options="[
+              { value: '', label: 'Tất cả' },
+              { value: 'CONG_KHAI', label: 'Công khai' },
+              { value: 'CA_NHAN', label: 'Cá nhân' },
+            ]"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả"
+            search-placeholder="Tìm loại phiếu..."
+            @change="
+              (v) => {
+                filter.scope = v === null || v === undefined ? '' : v;
+              }
+            "
+          />
         </div>
 
         <div class="f-item">
@@ -368,9 +373,6 @@ onMounted(() => getData(0));
         </span>
         <h3 class="panel-title">Danh sách phiếu giảm giá</h3>
         <span class="count-pill">{{ totalElements }} phiếu</span>
-        <div class="panel-right">
-          <span class="panel-meta">Cập nhật lúc 08:32 25/05/2026</span>
-        </div>
       </div>
 
       <div class="table-wrap">
@@ -460,62 +462,17 @@ onMounted(() => getData(0));
         </table>
       </div>
 
-      <div class="panel-foot">
-        <span class="foot-text">
-          Hiển thị {{ listDiscount.length ? page * pageSize + 1 : 0 }}-{{
-            page * pageSize + listDiscount.length
-          }}
-          trong {{ totalElements }} phiếu giảm giá
-        </span>
-        <div class="pager">
-          <button
-            class="page-btn"
-            type="button"
-            aria-label="Trang trước"
-            :disabled="page === 0"
-            @click="goToPage(page - 1)"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M14.5 6l-6 6 6 6" />
-            </svg>
-          </button>
-          <button
-            v-for="p in totalPages"
-            :key="p"
-            class="page-btn"
-            :class="{ 'is-active': p - 1 === page }"
-            type="button"
-            @click="goToPage(p - 1)"
-          >
-            {{ p }}
-          </button>
-          <button
-            class="page-btn"
-            type="button"
-            aria-label="Trang sau"
-            :disabled="page >= totalPages - 1"
-            @click="goToPage(page + 1)"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M9.5 6l6 6-6 6" />
-            </svg>
-          </button>
-        </div>
-      </div>
+      <PaginationBar
+        :page="page"
+        :total-pages="totalPages"
+        :total-elements="totalElements"
+        :page-size="pageSize"
+        :from="listDiscount.length ? page * pageSize + 1 : 0"
+        :to="page * pageSize + listDiscount.length"
+        label="phiếu giảm giá"
+        @change="goToPage"
+        @size-change="onSizeChange"
+      />
     </section>
   </div>
 </template>
@@ -613,7 +570,7 @@ onMounted(() => getData(0));
 }
 .filter-title h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
@@ -623,7 +580,7 @@ onMounted(() => getData(0));
   gap: 1rem;
 }
 .filter-count {
-  font-size: 0.9rem;
+  font-size: 11.5px;
   color: var(--muted);
 }
 .filter-toggle {
@@ -669,7 +626,7 @@ onMounted(() => getData(0));
 .f-item label {
   display: block;
   margin-bottom: 0.4rem;
-  font-size: 0.85rem;
+  font-size: 11.5px;
   color: var(--muted);
 }
 
@@ -682,6 +639,7 @@ onMounted(() => getData(0));
   border-radius: 8px;
   background: #fff;
   font: inherit;
+  font-size: 13px;
   color: var(--ink);
   outline: none;
   transition:
@@ -694,17 +652,6 @@ onMounted(() => getData(0));
 .f-control:focus {
   border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
-}
-
-/* Select có mũi tên riêng */
-.f-select {
-  appearance: none;
-  padding-right: 2.3rem;
-  cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23374151' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.8rem center;
-  background-size: 16px;
 }
 
 /* Cụm nút: reset (chỉ icon) + Áp dụng */
@@ -761,6 +708,7 @@ onMounted(() => getData(0));
   background: var(--red);
   color: #fff;
   font: inherit;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;

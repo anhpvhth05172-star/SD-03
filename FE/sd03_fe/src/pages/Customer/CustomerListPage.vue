@@ -3,12 +3,14 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import CustomerAddressModal from '@/components/CustomerAddressModal.vue'
 import DoiMatKhauModal from '@/components/DoiMatKhauModal.vue'
-import { getCustomer, listCustomers, updateCustomerStatus, deleteCustomer } from '@/api/customer'
+import PaginationBar from '@/components/PaginationBar.vue'
+import SearchableSelect from '@/components/SearchableSelect.vue'
+import { getCustomer, listCustomers, updateCustomerStatus } from '@/api/customer'
 import { exportExcel, fetchAllPages } from '@/utils/export'
 import { takeFlashWithMeta } from '@/utils/flash'
 import { avatarColor, formatDate, formatDateTime, formatVnd, initialsOf } from '@/utils/format'
 import { getAvatarSrc, onAvatarError } from '@/utils/avatar'
-import { notifySuccess, notifyWarning, notifyError, notifyConfirm, notifyDeleteConfirm } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 
 const router = useRouter()
 const flashMsg = ref('')
@@ -23,6 +25,11 @@ const size = ref(5) // Khớp 5 dòng như trong ảnh mẫu
 
 const fKeyword = ref('')
 const fTrangThai = ref('')
+const trangThaiOptions = [
+  { value: '', label: 'Tất cả' },
+  { value: 'active', label: 'Hoạt động' },
+  { value: 'locked', label: 'Đã khóa' },
+]
 const detailData = ref(null)
 
 let searchTimeout = null
@@ -73,7 +80,8 @@ const resetFilter = () => {
   load()
 }
 
-const onSizeChange = () => {
+const onSizeChange = (s) => {
+  size.value = s
   page.value = 0
   load()
 }
@@ -99,29 +107,6 @@ const formatCustomerAddress = (row) => {
   if (!d) return '—'
   const parts = [d.diaChiCuThe, d.phuong, d.thanhPho].filter(Boolean)
   return parts.length ? parts.join(', ') : '—'
-}
-
-const formatCustomerAddressTooltip = (row) => {
-  const ds =
-    row.danhSachDiaChi && row.danhSachDiaChi.length
-      ? row.danhSachDiaChi
-      : row.diaChiMacDinh
-        ? [row.diaChiMacDinh]
-        : []
-  if (!ds.length) return 'Chưa cập nhật địa chỉ'
-  if (ds.length === 1) {
-    const parts = [ds[0].diaChiCuThe, ds[0].phuong, ds[0].thanhPho].filter(Boolean)
-    return parts.length ? parts.join(', ') : '—'
-  }
-  return ds
-    .map((d, i) => {
-      const parts = [d.diaChiCuThe, d.phuong, d.thanhPho].filter(Boolean)
-      const addr = parts.length ? parts.join(', ') : '—'
-      const ten = d.tenChiChi && d.tenChiChi !== row.tenKhachHang ? ` (${d.tenChiChi})` : ''
-      const def = d.macDinh ? ' [Mặc định]' : ''
-      return `${i + 1}. ${addr}${ten}${def}`
-    })
-    .join('\n')
 }
 
 const diaChiText = computed(() => {
@@ -197,18 +182,6 @@ const toggleStatus = async (row) => {
   }
 }
 
-const removeCustomer = async (row) => {
-  const ok = await notifyDeleteConfirm(row.tenKhachHang || row.maKhachHang)
-  if (!ok) return
-  try {
-    await deleteCustomer(row.id)
-    notifySuccess(`Đã xóa khách hàng "${row.tenKhachHang}" thành công!`)
-    await load()
-  } catch (e) {
-    notifyError('Không thể xóa khách hàng', e.message)
-  }
-}
-
 const diaChiCustomerId = ref(null)
 const doiMkCustomerId = ref(null)
 const openAddress = (row) => {
@@ -239,7 +212,6 @@ const gioiTinhLabel = (value) => {
   if (value === 'KHAC') return 'Khác'
   return '—'
 }
-
 
 onMounted(() => {
   const { message, type } = takeFlashWithMeta()
@@ -283,11 +255,15 @@ onMounted(() => {
         </div>
 
         <div class="select-status-wrap">
-          <select v-model="fTrangThai" class="select-status" @change="applyFilter">
-            <option value="">Tất cả</option>
-            <option value="active">Hoạt động</option>
-            <option value="locked">Đã khóa</option>
-          </select>
+          <SearchableSelect
+            v-model="fTrangThai"
+            :options="trangThaiOptions"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả"
+            search-placeholder="Tìm..."
+            @change="(v) => { fTrangThai = (v === null || v === undefined) ? '' : v; applyFilter() }"
+          />
         </div>
         <button class="btn-action-outline" type="button" @click="resetFilter">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -307,6 +283,7 @@ onMounted(() => {
           </svg>
           {{ exporting ? 'Đang xuất...' : 'Xuất Excel' }}
         </button>
+
         <button class="btn-action-primary" type="button" @click="router.push('/khach-hang/them')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
             stroke-linejoin="round">
@@ -333,23 +310,13 @@ onMounted(() => {
           <span class="card-title-text">Danh sách khách hàng</span>
           <span class="items-count-pill">{{ rows.length }}/{{ totalElements }} khách hàng</span>
         </div>
-        <div class="card-title-right">
-          <span class="page-size-label">Hiển thị:</span>
-          <select v-model="size" class="page-size-select" @change="onSizeChange">
-            <option :value="5">5 bản ghi/trang</option>
-            <option :value="10">10 bản ghi/trang</option>
-            <option :value="20">20 bản ghi/trang</option>
-            <option :value="50">50 bản ghi/trang</option>
-          </select>
-        </div>
       </div>
 
       <div class="table-container">
         <table class="customer-table">
           <thead>
             <tr>
-              <th style="width: 50px;">STT</th>
-              <th style="width: 65px; text-align: center;">Ảnh</th>
+              <th style="width: 45px;">STT</th>
               <th style="width: 170px;">Họ tên</th>
               <th style="width: 200px;">Email</th>
               <th>Địa chỉ</th>
@@ -360,31 +327,20 @@ onMounted(() => {
           </thead>
           <tbody>
             <tr v-if="loading">
-              <td colspan="8" class="text-center py-5 text-muted">Đang tải dữ liệu...</td>
+              <td colspan="7" class="text-center py-5 text-muted">Đang tải dữ liệu...</td>
             </tr>
             <tr v-else-if="rows.length === 0">
               <td colspan="8" class="text-center py-5 text-muted">Không tìm thấy khách hàng nào</td>
             </tr>
             <template v-else>
               <tr v-for="(row, index) in rows" :key="row.id">
+
                 <td class="cell-stt">{{ (page * size) + index + 1 }}</td>
-                <td class="text-center">
-                  <div class="customer-avatar has-img">
-                    <img :src="getAvatarSrc(row)" :alt="row.tenKhachHang" @error="onAvatarError($event, row)" />
-                  </div>
-                </td>
                 <td class="cell-name">{{ row.tenKhachHang }}</td>
                 <td class="cell-email">{{ row.email || '—' }}</td>
                 <td class="cell-address">
-                  <span class="address-clamp" :title="formatCustomerAddressTooltip(row)">
+                  <span class="address-clamp">
                     {{ formatCustomerAddress(row) }}
-                  </span>
-                  <span
-                    v-if="row.danhSachDiaChi && row.danhSachDiaChi.length > 1"
-                    class="extra-addr-tag"
-                    :title="formatCustomerAddressTooltip(row)"
-                  >
-                    +{{ row.danhSachDiaChi.length - 1 }} địa chỉ
                   </span>
                 </td>
                 <td class="cell-phone">{{ row.soDienThoai || '—' }}</td>
@@ -395,14 +351,10 @@ onMounted(() => {
                 </td>
                 <td class="text-center">
                   <div class="action-buttons-group">
-                    <button class="btn-icon is-power" type="button"
-                      :title="row.trangThai ? 'Khóa tài khoản' : 'Kích hoạt tài khoản'" @click="toggleStatus(row)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-                        <line x1="12" y1="2" x2="12" y2="12"></line>
-                      </svg>
-                    </button>
+                    <label class="switch" :title="row.trangThai ? 'Khóa tài khoản' : 'Kích hoạt tài khoản'">
+                      <input type="checkbox" :checked="row.trangThai" @click.prevent="toggleStatus(row)" />
+                      <span class="slider"></span>
+                    </label>
                     <button class="btn-icon is-location" type="button" title="Quản lý địa chỉ"
                       @click="openAddress(row)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
@@ -411,15 +363,10 @@ onMounted(() => {
                         <circle cx="12" cy="10" r="3"></circle>
                       </svg>
                     </button>
-                    <button class="btn-icon is-view" type="button" title="Xem chi tiết" aria-label="Xem chi tiết"
-                      @click="openDetail(row)">
+                    <button class="btn-icon is-edit" type="button" title="Sửa" @click="openDetail(row)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                         stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                        <circle cx="9" cy="10" r="2"></circle>
-                        <path d="M6 16c0-1.7 1.3-3 3-3s3 1.3 3 3"></path>
-                        <line x1="15" y1="9" x2="18" y2="9"></line>
-                        <line x1="15" y1="13" x2="18" y2="13"></line>
+                        <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3"></path>
                       </svg>
                     </button>
                   </div>
@@ -432,153 +379,138 @@ onMounted(() => {
 
       <!-- Phân trang Footer -->
       <div v-if="totalElements > 0" class="table-card-foot">
-        <span class="foot-info">
-          Hiển thị <strong>{{ rows.length ? page * size + 1 : 0 }} - {{ page * size + rows.length }}</strong> trong tổng số
-          <strong>{{ totalElements }}</strong> khách hàng
-        </span>
-        <div v-if="totalPages > 1" class="foot-pager">
-          <button class="pager-btn" type="button" :disabled="page === 0" @click="goPage(page - 1)">
-            ‹ Trước
-          </button>
-          <button
-            v-for="p in pageList"
-            :key="p"
-            type="button"
-            class="pager-btn num-btn"
-            :class="{ active: p === page + 1 }"
-            @click="goPage(p - 1)"
-          >
-            {{ p }}
-          </button>
-          <button
-            class="pager-btn"
-            type="button"
-            :disabled="page + 1 >= totalPages"
-            @click="goPage(page + 1)"
-          >
-            Sau ›
-          </button>
-        </div>
+        <PaginationBar
+          :page="page"
+          :total-pages="totalPages"
+          :total-elements="totalElements"
+          :page-size="size"
+          :from="rows.length ? page * size + 1 : 0"
+          :to="page * size + rows.length"
+          :sizes="[5, 10, 20, 50]"
+          label="khách hàng"
+          @change="goPage"
+          @size-change="onSizeChange"
+        />
       </div>
     </div>
 
     <div v-if="detailData" class="modal-backdrop" @click.self="detailData = null">
       <div class="profile-modal-card">
-        <div class="profile-modal-banner customer-theme">
+        <!-- Banner đầu trang (style giống nhân viên) -->
+        <div class="profile-modal-banner employee-theme">
           <button class="btn-banner-close" type="button" title="Đóng" @click="detailData = null">
             <i class="bi bi-x-lg"></i>
           </button>
 
           <div class="profile-banner-content">
-            <div class="profile-avatar-wrapper customer">
+            <div class="profile-avatar-wrapper">
               <img :src="getAvatarSrc(detailData)" :alt="detailData.tenKhachHang" class="profile-avatar-img"
                 @error="onAvatarError($event, detailData)" />
             </div>
 
             <div class="profile-meta-info">
               <div class="profile-header-badges">
-                <span class="badge-code customer">{{ detailData.maKhachHang }}</span>
-                <span class="badge-role customer">{{ detailData.hangThanhVien || 'Thành viên' }}</span>
+                <span class="badge-code">{{ detailData.maKhachHang }}</span>
+                <span class="badge-role">{{ detailData.hangThanhVien || 'Thành viên' }}</span>
                 <span class="status-pill" :class="detailData.trangThai ? 'is-active' : 'is-locked'">
                   {{ detailData.trangThai ? 'Hoạt động' : 'Đã khóa' }}
                 </span>
               </div>
               <h3 class="profile-name">{{ detailData.tenKhachHang }}</h3>
-              <p class="profile-email-sub"><i class="bi bi-envelope"></i> {{ detailData.email || 'Chưa cập nhật email'
-              }}
-              </p>
+              <p class="profile-email-sub">{{ detailData.email || 'Chưa cập nhật email' }}</p>
             </div>
           </div>
         </div>
 
         <!-- Thân Modal: Các nhóm thông tin -->
         <div class="profile-modal-body">
-          <!-- 2 thẻ thống kê nhanh: Số đơn & Chi tiêu -->
-          <div class="customer-stats-row">
-            <div class="stat-card">
-              <div class="stat-icon-circle blue">
-                <i class="bi bi-bag-check-fill"></i>
-              </div>
-              <div class="stat-info">
-                <span class="stat-label">Tổng đơn mua</span>
-                <h4 class="stat-value">{{ detailData.soDon || 0 }} <span class="stat-unit">đơn</span></h4>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon-circle green">
-                <i class="bi bi-wallet2"></i>
-              </div>
-              <div class="stat-info">
-                <span class="stat-label">Tổng chi tiêu</span>
-                <h4 class="stat-value text-success">{{ formatVnd(detailData.tongChiTieu) }}</h4>
-              </div>
-            </div>
-          </div>
+          <!-- Nhóm 1: Thông tin liên hệ & Cá nhân -->
           <div class="info-section-group">
-            <h4 class="section-group-title">
-              <i class="bi bi-person-lines-fill"></i> Thông tin liên hệ & Tài khoản
-            </h4>
+            <h4 class="section-group-title">Thông tin liên hệ & Tài khoản</h4>
             <div class="info-grid-2">
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-telephone"></i> Số điện thoại</span>
+                <span class="info-cell-label">Số điện thoại</span>
                 <span class="info-cell-value">{{ detailData.soDienThoai || 'Chưa cập nhật' }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-gender-ambiguous"></i> Giới tính</span>
+                <span class="info-cell-label">Giới tính</span>
                 <span class="info-cell-value">{{ gioiTinhLabel(detailData.gioiTinh) }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-cake2"></i> Ngày sinh</span>
+                <span class="info-cell-label">Ngày sinh</span>
                 <span class="info-cell-value">{{ formatDate(detailData.ngaySinh) || '—' }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-person-badge"></i> Tên đăng nhập</span>
+                <span class="info-cell-label">Tên đăng nhập</span>
                 <span class="info-cell-value">{{ detailData.tenTaiKhoan || detailData.email || '—' }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-card-heading"></i> Số CCCD/CMND</span>
+                <span class="info-cell-label">Số CCCD/CMND</span>
                 <span class="info-cell-value">{{ detailData.soCccd || 'Chưa cập nhật' }}</span>
+              </div>
+              <div class="info-cell">
+                <span class="info-cell-label">Ngày đăng ký</span>
+                <span class="info-cell-value">{{ formatDate(detailData.ngayTao) || '—' }}</span>
               </div>
             </div>
           </div>
 
+          <!-- Nhóm 2: Địa chỉ giao hàng -->
           <div class="info-section-group">
-            <h4 class="section-group-title">
-              <i class="bi bi-geo-alt-fill text-danger"></i> Địa chỉ giao hàng
-            </h4>
+            <h4 class="section-group-title">Địa chỉ giao hàng</h4>
             <div class="address-box-card">
               <p class="address-text">{{ diaChiText || 'Chưa cập nhật địa chỉ giao hàng' }}</p>
             </div>
           </div>
 
+          <!-- Nhóm 3: Thống kê mua sắm (giữ riêng cho khách hàng) -->
+          <div class="info-section-group">
+            <h4 class="section-group-title">Thống kê mua sắm</h4>
+            <div class="customer-stats-row">
+              <div class="stat-card">
+                <div class="stat-icon-circle blue">
+                  <i class="bi bi-bag-check-fill"></i>
+                </div>
+                <div class="stat-info">
+                  <span class="stat-label">Tổng đơn mua</span>
+                  <h4 class="stat-value">{{ detailData.soDon || 0 }} <span class="stat-unit">đơn</span></h4>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon-circle green">
+                  <i class="bi bi-wallet2"></i>
+                </div>
+                <div class="stat-info">
+                  <span class="stat-label">Tổng chi tiêu</span>
+                  <h4 class="stat-value text-success">{{ formatVnd(detailData.tongChiTieu) }}</h4>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Metadata thời gian -->
           <div class="modal-time-footer">
-            <span><i class="bi bi-calendar3"></i> Ngày đăng ký: {{ formatDate(detailData.ngayTao) }}</span>
-            <span><i class="bi bi-clock-history"></i> Cập nhật: {{ formatDateTime(detailData.ngayCapNhat) || '—'
-            }}</span>
+            <span>Cập nhật gần nhất: {{ formatDateTime(detailData.ngayCapNhat) || '—' }}</span>
           </div>
         </div>
 
+        <!-- Cụm nút hành động (style giống nhân viên) -->
         <div class="profile-modal-actions">
+          <button class="btn-profile-edit" type="button"
+            @click="router.push(`/khach-hang/${detailData.id}/sua`)">
+            <i class="bi bi-pencil-square"></i>
+            <span>Chỉnh sửa thông tin</span>
+          </button>
+          <button class="btn-profile-secondary" type="button"
+            @click="doiMkCustomerId = detailData.id">
+            <i class="bi bi-key"></i>
+            <span>Đổi mật khẩu</span>
+          </button>
           <button class="btn-profile-address" type="button" @click="moSoDiaChi(detailData)">
             <i class="bi bi-geo-alt"></i>
             <span>Sổ địa chỉ</span>
           </button>
-          <button class="btn-profile-edit customer" type="button"
-            @click="router.push(`/khach-hang/${detailData.id}/sua`)"
-            style="background: linear-gradient(135deg, #0284c7, #2563eb); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);">
-            <i class="bi bi-pencil-square"></i>
-            <span>Chỉnh sửa thông tin</span>
-          </button>
-          <button class="btn-profile-edit customer" type="button"
-            @click="doiMkCustomerId = detailData.id"
-            style="background: linear-gradient(135deg, #d97706, #f59e0b); box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);">
-            <i class="bi bi-key"></i>
-            <span>Đổi mật khẩu</span>
-          </button>
-          <button class="btn-profile-delete" type="button" @click="removeCustomer(detailData); detailData = null">
-            <i class="bi bi-trash3"></i>
-            <span>Xóa tài khoản</span>
-          </button>
+
           <button class="btn-profile-close" type="button" @click="detailData = null">
             Đóng
           </button>
@@ -590,6 +522,8 @@ onMounted(() => {
     <DoiMatKhauModal v-if="doiMkCustomerId" loai="KH" :id="doiMkCustomerId"
       :ten-tai-khoan="detailData?.tenTaiKhoan || detailData?.email || ''" @close="doiMkCustomerId = null"
       @success="detailData = null" />
+
+
   </div>
 </template>
 
@@ -638,32 +572,6 @@ onMounted(() => {
   padding: 3px 10px;
   border-radius: 20px;
   font-weight: 600;
-}
-
-.page-size-label {
-  font-size: 13px;
-  color: #64748b;
-  font-weight: 500;
-}
-
-.page-size-select {
-  padding: 6px 30px 6px 12px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 8px center;
-  background-size: 14px;
-  font-size: 13px;
-  color: #1e293b;
-  font-weight: 600;
-  cursor: pointer;
-  outline: none;
-  appearance: none;
-  transition: all 0.2s ease;
-}
-
-.page-size-select:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .icon-circle {
@@ -747,26 +655,6 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.select-status {
-  height: 40px;
-  min-width: 110px;
-  padding: 0 28px 0 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 13.5px;
-  color: #334155;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 10px center;
-  background-size: 14px;
-  appearance: none;
-  cursor: pointer;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.select-status:focus {
-  border-color: #f43f5e;
-}
-
 .btn-action-outline {
   height: 40px;
   padding: 0 16px;
@@ -839,8 +727,9 @@ onMounted(() => {
 
 .customer-table th {
   padding: 13px 14px;
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
   color: #334155;
   border-bottom: 1px solid #f1f5f9;
   background: #ffffff;
@@ -849,7 +738,7 @@ onMounted(() => {
 
 .customer-table td {
   padding: 14px 14px;
-  font-size: 13.5px;
+  font-size: 13px;
   color: #334155;
   border-bottom: 1px solid #f8fafc;
   vertical-align: middle;
@@ -894,18 +783,6 @@ onMounted(() => {
   line-height: 1.45;
 }
 
-.extra-addr-tag {
-  display: inline-block;
-  margin-top: 4px;
-  padding: 1px 7px;
-  background: #eff6ff;
-  color: #2563eb;
-  border: 1px solid #bfdbfe;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: default;
-}
 
 /* Avatar tròn */
 .customer-avatar {
@@ -982,18 +859,6 @@ onMounted(() => {
   height: 14px;
 }
 
-/* Nút Power (đỏ/hồng) */
-.btn-icon.is-power {
-  background: #fff1f2;
-  color: #f43f5e;
-  border: 1px solid #ffe4e6;
-}
-
-.btn-icon.is-power:hover {
-  background: #f43f5e;
-  color: #ffffff;
-}
-
 /* Nút Location Pin (xanh dương) */
 .btn-icon.is-location {
   background: #f0f9ff;
@@ -1006,27 +871,15 @@ onMounted(() => {
   color: #ffffff;
 }
 
-/* Nút Edit (tím) */
+/* Nút Edit (đỏ) */
 .btn-icon.is-edit {
-  background: #f5f3ff;
-  color: #8b5cf6;
-  border: 1px solid #ede9fe;
+  background: #fef2f2;
+  color: #cc0000;
+  border: 1px solid #fecaca;
 }
 
 .btn-icon.is-edit:hover {
-  background: #8b5cf6;
-  color: #ffffff;
-}
-
-/* Nút View (xám xanh) */
-.btn-icon.is-view {
-  background: #f8fafc;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
-}
-
-.btn-icon.is-view:hover {
-  background: #64748b;
+  background: #cc0000;
   color: #ffffff;
 }
 
@@ -1051,61 +904,6 @@ onMounted(() => {
   border-top: 1px solid #f1f5f9;
   background: #ffffff;
   margin-top: 16px;
-}
-
-.foot-info {
-  font-size: 12.5px;
-  color: #64748b;
-}
-
-.foot-info strong {
-  color: #1e293b;
-  font-weight: 700;
-}
-
-.foot-pager {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.pager-btn {
-  padding: 5px 12px;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  color: #475569;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1.4;
-}
-
-.pager-btn:hover:not(:disabled) {
-  background: #f8fafc;
-  color: #0f172a;
-  border-color: #cbd5e1;
-}
-
-.pager-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.pager-btn.num-btn {
-  min-width: 32px;
-  text-align: center;
-  padding: 5px 0;
-}
-
-.pager-btn.active {
-  background: #dc2626;
-  color: #ffffff;
-  border-color: #dc2626;
 }
 
 /* Modal Xem Chi Tiết */
@@ -1441,6 +1239,50 @@ onMounted(() => {
   gap: 10px;
 }
 
+.btn-profile-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 9999px;
+  background: #cc0000;
+  color: #ffffff;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(204, 0, 0, 0.25);
+}
+
+.btn-profile-edit:hover {
+  background: #a00;
+  opacity: 0.94;
+  transform: translateY(-1px);
+}
+
+.btn-profile-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 9999px;
+  background: #d97706;
+  color: #ffffff;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.25);
+}
+
+.btn-profile-secondary:hover {
+  background: #b45309;
+  opacity: 0.94;
+  transform: translateY(-1px);
+}
+
 .btn-profile-address {
   display: inline-flex;
   align-items: center;
@@ -1460,45 +1302,6 @@ onMounted(() => {
   background: #e0f2fe;
 }
 
-.btn-profile-edit {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 18px;
-  border-radius: 9999px;
-  color: #ffffff;
-  border: none;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-profile-edit:hover {
-  opacity: 0.94;
-  transform: translateY(-1px);
-}
-
-.btn-profile-delete {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 18px;
-  border-radius: 9999px;
-  background: #ffffff;
-  color: #ef4444;
-  border: 1px solid #fecaca;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-profile-delete:hover {
-  background: #fef2f2;
-  border-color: #f87171;
-}
-
 .btn-profile-close {
   padding: 9px 20px;
   border-radius: 9999px;
@@ -1514,5 +1317,187 @@ onMounted(() => {
 .btn-profile-close:hover {
   background: #e2e8f0;
   color: #0f172a;
+}
+
+/* Customer stats row */
+.customer-stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.stat-card {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stat-icon-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.stat-icon-circle.blue {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.stat-icon-circle.green {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-label {
+  font-size: 11.5px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.stat-value {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.stat-unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.text-success {
+  color: #059669;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 21px;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #cbd5e1;
+  border-radius: 999px;
+  transition: 0.25s;
+}
+
+.slider::before {
+  position: absolute;
+  content: "";
+  width: 15px;
+  height: 15px;
+  left: 3px;
+  top: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.25s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.switch input:checked + .slider {
+  background-color: #16a34a;
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(17px);
+}
+
+.switch input:disabled + .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch input:focus-visible + .slider {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.btn-action-primary {
+  height: 38px;
+  padding: 0 18px;
+  background: linear-gradient(135deg, #e11d48, #be123c);
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.25);
+  transition: all 0.2s ease;
+}
+
+.btn-action-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-action-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #be123c, #9f1239);
+  box-shadow: 0 6px 16px rgba(225, 29, 72, 0.35);
+}
+
+.btn-action-outline {
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid #ffe4e6;
+  background: #ffffff;
+  color: #e11d48;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-action-outline:hover {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #be123c;
+}
+
+@keyframes modalCardIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 </style>

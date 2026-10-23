@@ -1,5 +1,6 @@
 package com.example.datn.service;
 
+import com.example.datn.dto.CaLamViecDto;
 import com.example.datn.dto.HoaDon.ChiTietHoaDonDTO;
 import com.example.datn.dto.HoaDon.ChiTietHoaDonRequest;
 import com.example.datn.dto.SanPham.FormDataResponse;
@@ -9,6 +10,7 @@ import com.example.datn.dto.HoaDon.LichSuHoaDonDTO;
 import com.example.datn.dto.Common.PageResponse;
 import com.example.datn.dto.ShippingFeeRequest;
 import com.example.datn.entity.ChiTietHoaDon;
+import com.example.datn.entity.DiaChiKhachHang;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.entity.LichSuHoaDon;
@@ -19,6 +21,7 @@ import com.example.datn.entity.PhuongThucThanhToan;
 import com.example.datn.entity.SanPhamChiTiet;
 import com.example.datn.repository.ChiTietHoaDonRepository;
 import com.example.datn.repository.HoaDonRepository;
+import com.example.datn.repository.DiaChiKhachHangRepository;
 import com.example.datn.repository.KhachHangRepository;
 import com.example.datn.repository.LichSuHoaDonRepository;
 import com.example.datn.repository.LichSuSuDungPhieuGiamGiaRepository;
@@ -40,12 +43,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
-@RequiredArgsConstructor
 public class HoaDonService {
     private static final Pattern TEN_KHACH_HANG_HOP_LE =
         Pattern.compile("^[\\p{L}\\s.'-]+$");
@@ -92,7 +99,7 @@ public class HoaDonService {
     private static final Map<String, List<String>> TRANSITION_MAP_POS = new HashMap<>();
     static {
         TRANSITION_MAP_POS.put("CHO_XAC_NHAN", List.of("DA_HOAN_THANH"));
-        TRANSITION_MAP_POS.put("DA_HOAN_THANH", List.of());
+        TRANSITION_MAP_POS.put("DA_HOAN_THANH", List.of("DA_HOAN_TIEN"));
         TRANSITION_MAP_POS.put("DA_HUY", List.of());
         TRANSITION_MAP_POS.put("DA_HOAN_TIEN", List.of());
     }
@@ -108,7 +115,37 @@ public class HoaDonService {
     private final SanPhamChiTietRepository sanPhamChiTietRepository;
     private final LichSuHoaDonRepository lichSuHoaDonRepository;
     private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository;
+    private final DiaChiKhachHangRepository diaChiKhachHangRepository;
     private final GHNService ghnService;
+
+    @Autowired
+    private GiaoCaService giaoCaService;
+
+    public HoaDonService(
+        HoaDonRepository hoaDonRepository,
+        ChiTietHoaDonRepository chiTietHoaDonRepository,
+        KhachHangRepository khachHangRepository,
+        NhanVienRepository nhanVienRepository,
+        PhuongThucThanhToanRepository phuongThucThanhToanRepository,
+        PhieuGiamGiaRepository phieuGiamGiaRepository,
+        SanPhamChiTietRepository sanPhamChiTietRepository,
+        LichSuHoaDonRepository lichSuHoaDonRepository,
+        LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository,
+        DiaChiKhachHangRepository diaChiKhachHangRepository,
+        GHNService ghnService
+    ) {
+        this.hoaDonRepository = hoaDonRepository;
+        this.chiTietHoaDonRepository = chiTietHoaDonRepository;
+        this.khachHangRepository = khachHangRepository;
+        this.nhanVienRepository = nhanVienRepository;
+        this.phuongThucThanhToanRepository = phuongThucThanhToanRepository;
+        this.phieuGiamGiaRepository = phieuGiamGiaRepository;
+        this.sanPhamChiTietRepository = sanPhamChiTietRepository;
+        this.lichSuHoaDonRepository = lichSuHoaDonRepository;
+        this.lichSuSuDungRepository = lichSuSuDungRepository;
+        this.diaChiKhachHangRepository = diaChiKhachHangRepository;
+        this.ghnService = ghnService;
+    }
 
     @Transactional(readOnly = true)
     public PageResponse<HoaDonDTO> list(
@@ -283,20 +320,49 @@ public class HoaDonService {
     @Transactional
     public HoaDonDTO create(HoaDonRequest req) {
         validateHeader(req, null);
+        CaLamViecDto caDangMo = chuanBiTaoHdTaiQuay(req);
         xacDinhPhiVanChuyenOnline(req);
         PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
-        if (phieu != null) {
+        if (phieu != null && req.getIdKhachHang() != null) {
             kiemTraGioiHanSuDung(phieu, req.getIdKhachHang(), null);
         }
         HoaDon hoaDon = new HoaDon();
         fillHeader(hoaDon, req);
+        if (caDangMo != null) {
+            hoaDon.setIdCaLamViec(caDangMo.getId());
+        }
         List<DongTinh> lines = tinhToanVaLuu(hoaDon, req);
         hoaDon = hoaDonRepository.save(hoaDon);
+        luuDiaChiKhachHangVaoSo(hoaDon);
         luuCacDong(hoaDon, lines, req);
         if (phieu != null) {
             ghiLichSuSuDung(hoaDon, phieu);
         }
         return toFullDTO(hoaDon);
+    }
+
+    /**
+     * Mua hàng có địa chỉ nhận mà khách chưa có sổ địa chỉ -> lưu làm địa chỉ mặc định.
+     * Khách đã có địa chỉ thì không đụng vào.
+     */
+    private void luuDiaChiKhachHangVaoSo(HoaDon hoaDon) {
+        KhachHang khachHang = hoaDon.getKhachHang();
+        String diaChi = hoaDon.getDiaChiNhanHang();
+        if (khachHang == null || khachHang.getId() == null || isBlank(diaChi)) {
+            return;
+        }
+        if (diaChiKhachHangRepository.findFirstByKhachHangIdAndMacDinhTrue(khachHang.getId()).isPresent()) {
+            return;
+        }
+        DiaChiKhachHang diaChiMoi = new DiaChiKhachHang();
+        diaChiMoi.setKhachHang(khachHang);
+        diaChiMoi.setMaDiaChi(String.format("DC%03d-%02d", khachHang.getId(),
+            diaChiKhachHangRepository.countByKhachHangId(khachHang.getId()) + 1));
+        diaChiMoi.setTenChiChi(khachHang.getTenKhachHang());
+        diaChiMoi.setDiaChiCuThe(diaChi.trim());
+        diaChiMoi.setMacDinh(true);
+        diaChiMoi.setTrangThai(true);
+        diaChiKhachHangRepository.save(diaChiMoi);
     }
 
     @Transactional
@@ -320,7 +386,7 @@ public class HoaDonService {
         fillHeader(hoaDon, req);
         PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
         lichSuSuDungRepository.deleteByHoaDonId(hoaDon.getId());
-        if (phieu != null) {
+        if (phieu != null && req.getIdKhachHang() != null) {
             kiemTraGioiHanSuDung(phieu, req.getIdKhachHang(), hoaDon.getId());
         }
         List<DongTinh> lines = tinhToanVaLuu(hoaDon, req);
@@ -725,6 +791,35 @@ public class HoaDonService {
         }
     }
 
+    private CaLamViecDto chuanBiTaoHdTaiQuay(HoaDonRequest req) {
+        if (!"TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon()))) {
+            return null;
+        }
+        Long idNhanVienSession = idNhanVienSession();
+        if (idNhanVienSession == null) {
+            return null;
+        }
+        req.setIdNhanVien(idNhanVienSession);
+        CaLamViecDto ca = giaoCaService.getDangMoOf(idNhanVienSession);
+        if (ca == null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "CA_CHUA_MO: Chưa mở ca — vui lòng mở ca để bán tại quầy");
+        }
+        return ca;
+    }
+
+    private static Long idNhanVienSession() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof Long id)) {
+            return null;
+        }
+        boolean laNhanVienOrAdmin = auth.getAuthorities().stream().anyMatch(a ->
+            "ROLE_NHAN_VIEN".equals(a.getAuthority())
+                || "ROLE_ADMIN".equals(a.getAuthority()));
+        return laNhanVienOrAdmin ? id : null;
+    }
+
     private KhachHang timKhachHang(Long id) {
         KhachHang kh = khachHangRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Khách hàng không tồn tại"));
@@ -843,7 +938,8 @@ public class HoaDonService {
         if (!Boolean.TRUE.equals(phieu.getTrangThai())) {
             throw new IllegalArgumentException("Phiếu giảm giá không hoạt động");
         }
-        if (req.getIdKhachHang() == null) {
+        boolean laPos = "TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon()));
+        if (!laPos && req.getIdKhachHang() == null) {
             throw new IllegalArgumentException("Vui lòng chọn khách hàng để sử dụng phiếu giảm giá");
         }
         return phieu;

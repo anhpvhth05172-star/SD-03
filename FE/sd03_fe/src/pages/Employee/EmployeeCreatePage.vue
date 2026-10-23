@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { DS_34_TINH_THANH, layDiaGioi, layPhuongXa, phanTichChuoiCccd, phanTichDiaChiCccd, timTinh } from '@/api/diaGioi'
 import {
   checkEmployeeEmail,
+  checkEmployeeSdt,
   createEmployee,
   getEmployee,
   getEmployeeFormData,
@@ -48,6 +49,7 @@ const vaiTros = ref([])
 const daNopForm = ref(false)
 const ngaySinhDaCham = ref(false)
 const emailTrungLoi = ref('')
+const sdtTrungLoi = ref('')
 let yeuCauHienTai = 0
 
 const tinhThanhs = ref([])
@@ -166,7 +168,25 @@ const kiemTraEmailTrung = async () => {
       emailTrungLoi.value = ''
     }
   } catch {
-    emailTrungLoi.value = ''
+    emailTrungLoi.value = 'Không thể kiểm tra email trùng, vui lòng thử lại'
+  }
+}
+
+const kiemTraSdtTrung = async () => {
+  const sdt = (form.value.soDienThoai || '').trim()
+  if (!/^0\d{9}$/.test(sdt)) {
+    sdtTrungLoi.value = ''
+    return
+  }
+  try {
+    const res = await checkEmployeeSdt(sdt, isEdit ? route.params.id : null)
+    if (res && res.exists) {
+      sdtTrungLoi.value = 'Số điện thoại đã được sử dụng'
+    } else {
+      sdtTrungLoi.value = ''
+    }
+  } catch {
+    sdtTrungLoi.value = 'Không thể kiểm tra số điện thoại trùng, vui lòng thử lại'
   }
 }
 
@@ -494,6 +514,7 @@ const validate = () =>
     loiEmail.value,
     emailTrungLoi.value,
     loiSdt.value,
+    sdtTrungLoi.value,
     loiVaiTro.value,
     loiGioiTinh.value,
     loiNgaySinh.value,
@@ -523,6 +544,9 @@ const submit = async () => {
   daNopForm.value = true
   if (form.value.email.trim()) {
     await kiemTraEmailTrung()
+  }
+  if (form.value.soDienThoai.trim()) {
+    await kiemTraSdtTrung()
   }
   const error = validate()
   if (error) {
@@ -728,19 +752,22 @@ onMounted(async () => {
             <div class="form-group">
               <label class="form-label">Số điện thoại <span class="req">*</span></label>
               <input v-model="form.soDienThoai" type="tel" class="form-input" placeholder="Nhập số điện thoại"
-                maxlength="10" @blur="cham('soDienThoai')" />
+                :class="{ 'has-error': sdtTrungLoi || hienLoi('soDienThoai', loiSdt) }"
+                maxlength="10" @blur="cham('soDienThoai'); kiemTraSdtTrung()" />
               <p v-if="hienLoi('soDienThoai', loiSdt)" class="input-error">{{ loiSdt }}</p>
+              <p v-else-if="sdtTrungLoi" class="input-error">{{ sdtTrungLoi }}</p>
             </div>
 
             <div class="form-group">
               <label class="form-label">Vai trò <span class="req">*</span></label>
-              <div class="select-wrapper">
-                <select v-model="form.idVaiTro" class="form-select" @change="cham('idVaiTro')">
-                  <option value="" disabled>Chọn vai trò</option>
-                  <option v-for="v in vaiTros" :key="v.id" :value="v.id">{{ v.ten }}</option>
-                </select>
-                <i class="bi bi-chevron-down select-arrow"></i>
-              </div>
+              <SearchableSelect
+                v-model="form.idVaiTro"
+                :options="vaiTros.map((v) => ({ value: v.id, label: v.ten }))"
+                value-key="value"
+                label-key="label"
+                placeholder="Chọn vai trò"
+                search-placeholder="Tìm vai trò..."
+                @change="(v) => { form.idVaiTro = v === null ? '' : v; cham('idVaiTro') }" />
               <p v-if="hienLoi('idVaiTro', loiVaiTro)" class="input-error">{{ loiVaiTro }}</p>
             </div>
 
@@ -1126,9 +1153,8 @@ onMounted(async () => {
   margin-left: 2px;
 }
 
-/* Inputs & Selects */
-.form-input,
-.form-select {
+/* Inputs */
+.form-input {
   height: 42px;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -1146,8 +1172,7 @@ onMounted(async () => {
   color: #94a3b8;
 }
 
-.form-input:focus,
-.form-select:focus {
+.form-input:focus {
   border-color: #f43f5e;
   box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
 }
@@ -1161,28 +1186,6 @@ onMounted(async () => {
   font-size: 11.5px;
   color: #ef4444;
   font-weight: 500;
-}
-
-/* Custom Select Dropdown wrapper */
-.select-wrapper {
-  position: relative;
-  width: 100%;
-}
-
-.form-select {
-  appearance: none;
-  cursor: pointer;
-  padding-right: 36px;
-}
-
-.select-arrow {
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  font-size: 11px;
-  color: #64748b;
 }
 
 /* Cụm nút hành động */

@@ -11,7 +11,6 @@ export const createCustomer = (data) =>
 export const updateCustomer = (id, data) =>
   http.put(`/khach-hang/${id}`, data).then((r) => r.data)
 
-export const deleteCustomer = (id) => http.delete(`/khach-hang/${id}`).then((r) => r.data)
 
 export const suggestCustomerCode = (ten) =>
   http.get('/khach-hang/ma-tu-dong', { params: { ten } }).then((r) => r.data)

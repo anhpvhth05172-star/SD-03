@@ -2,13 +2,14 @@
 import axios from "axios";
 import { inject, onMounted, ref } from "vue";
 import Swal from "sweetalert2";
+import PaginationBar from "@/components/PaginationBar.vue";
+import SearchableSelect from "@/components/SearchableSelect.vue";
 
-const showFilter = ref(true);
 const apiDiscountEvent = inject("baseAPI");
 
 const listEvent = ref([]);
 const page = ref(0);
-const pageSize = 8;
+const pageSize = ref(10);
 const totalPages = ref(0);
 const totalElements = ref(0);
 const togglingId = ref(null); // id đợt đang đổi trạng thái (khóa switch)
@@ -26,9 +27,15 @@ const filter = ref(emptyFilter());
 // Giá trị đã bấm "Áp dụng" (dùng cho phân trang, đổi trạng thái, v.v.)
 const applied = ref(emptyFilter());
 
+const trangThaiFilterOptions = [
+  { value: null, label: "Tất cả" },
+  { value: 1, label: "Đang hoạt động" },
+  { value: 0, label: "Ngừng hoạt động" },
+];
+
 const getData = async (p = 0) => {
   try {
-    const params = { page: p, size: pageSize };
+    const params = { page: p, size: pageSize.value };
     const f = applied.value;
     if (f.ten.trim()) params.ten = f.ten.trim();
     if (f.trangThai !== null) params.trangThai = f.trangThai;
@@ -76,8 +83,19 @@ const goToPage = (p) => {
   getData(p);
 };
 
+const onSizeChange = (s) => {
+  pageSize.value = s;
+  getData(0);
+};
+
 // ========== Hiển thị ==========
-const formatDate = (s) => (s ? new Date(s).toLocaleDateString("vi-VN") : "");
+const formatDate = (s) => {
+  if (!s) return "";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return String(s);
+  const p = (x) => String(x).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 
 const formatUpdated = (d) =>
   d
@@ -163,14 +181,10 @@ onMounted(() => getData(0));
 
 <template>
   <div class="screen">
-    <div class="screen-head">
-      <div>
-        <h1 class="screen-title">Quản lý đợt giảm giá</h1>
-        <p class="screen-sub">
-          Quản lý các sự kiện giảm giá áp dụng cho tất cả khách hàng trên toàn
-          hệ thống
-        </p>
-      </div>
+      <div class="screen-head">
+        <div>
+          <h1 class="screen-title">Quản lý đợt giảm giá</h1>
+        </div>
       <RouterLink to="/admin/dot-giam-gia/add" class="btn-add" type="button">
         <svg
           viewBox="0 0 24 24"
@@ -194,29 +208,9 @@ onMounted(() => getData(0));
           </svg>
         </span>
         <h3 class="panel-title">Tìm kiếm &amp; bộ lọc</h3>
-        <div class="panel-right">
-          <span class="result-count">{{ totalElements }} kết quả</span>
-          <button
-            class="link-red"
-            type="button"
-            @click="showFilter = !showFilter"
-          >
-            {{ showFilter ? "Ẩn bớt" : "Hiện thêm" }}
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path :d="showFilter ? 'M6 14.5l6-6 6 6' : 'M6 9.5l6 6 6-6'" />
-            </svg>
-          </button>
-        </div>
       </div>
 
-      <div v-show="showFilter" class="filter-row">
+      <div class="filter-row">
         <div class="f-item">
           <label>Tên đợt giảm giá</label>
           <input
@@ -229,11 +223,14 @@ onMounted(() => getData(0));
 
         <div class="f-item">
           <label>Trạng thái</label>
-          <select v-model="filter.trangThai">
-            <option :value="null">Tất cả</option>
-            <option :value="1">Đang hoạt động</option>
-            <option :value="0">Ngừng hoạt động</option>
-          </select>
+          <SearchableSelect
+            v-model="filter.trangThai"
+            :options="trangThaiFilterOptions"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả"
+            search-placeholder="Tìm..."
+          />
         </div>
 
         <div class="f-item">
@@ -394,62 +391,17 @@ onMounted(() => getData(0));
         </table>
       </div>
 
-      <div class="panel-foot">
-        <span class="foot-text">
-          Hiển thị {{ listEvent.length ? page * pageSize + 1 : 0 }}-{{
-            page * pageSize + listEvent.length
-          }}
-          trong {{ totalElements }} đợt giảm giá
-        </span>
-        <div class="pager">
-          <button
-            class="page-btn"
-            type="button"
-            aria-label="Trang trước"
-            :disabled="page === 0"
-            @click="goToPage(page - 1)"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M14.5 6l-6 6 6 6" />
-            </svg>
-          </button>
-          <button
-            v-for="p in totalPages"
-            :key="p"
-            class="page-btn"
-            :class="{ 'is-active': p - 1 === page }"
-            type="button"
-            @click="goToPage(p - 1)"
-          >
-            {{ p }}
-          </button>
-          <button
-            class="page-btn"
-            type="button"
-            aria-label="Trang sau"
-            :disabled="page >= totalPages - 1"
-            @click="goToPage(page + 1)"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M9.5 6l6 6-6 6" />
-            </svg>
-          </button>
-        </div>
-      </div>
+      <PaginationBar
+        :page="page"
+        :total-pages="totalPages"
+        :total-elements="totalElements"
+        :page-size="pageSize"
+        :from="listEvent.length ? page * pageSize + 1 : 0"
+        :to="page * pageSize + listEvent.length"
+        label="đợt giảm giá"
+        @change="goToPage"
+        @size-change="onSizeChange"
+      />
     </section>
   </div>
 </template>

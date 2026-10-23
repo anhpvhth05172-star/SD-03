@@ -122,4 +122,5 @@ public class KhachHangController {
         khachHangService.delete(id);
         return ResponseEntity.noContent().build();
     }
+
 }

@@ -89,15 +89,15 @@ const datLai = async () => {
       <p class="auth-sub">
         {{
           buoc === 1
-            ? 'Nhập email đã đăng ký của nhân viên để nhận mã xác nhận'
+            ? 'Nhập email đã đăng ký của bạn (nhân viên hoặc khách hàng) để nhận mã xác nhận'
             : 'Nhập mã xác nhận từ email và mật khẩu mới'
         }}
       </p>
 
       <form v-if="buoc === 1" class="auth-form" @submit.prevent="guiMa">
         <div class="field">
-          <label>Email nhân viên</label>
-          <input v-model="email" type="email" placeholder="ten@polyshoes.vn" autocomplete="email" />
+          <label>Email đã đăng ký</label>
+          <input v-model="email" type="email" placeholder="ban@email.com" autocomplete="email" />
         </div>
         <p v-if="error" class="auth-error">{{ error }}</p>
         <button class="auth-btn" type="submit" :disabled="loading">

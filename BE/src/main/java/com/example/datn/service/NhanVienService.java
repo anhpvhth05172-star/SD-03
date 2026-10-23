@@ -63,6 +63,8 @@ public class NhanVienService {
     private static final int SO_LAN_TAO = 5;
     private static final int SO_MA_TOI_DA = 1_000_000;
     private static final int GUI_EMAIL_TOI_DA = 500;
+    /** Giới hạn kết nối SMTP đồng thời để tránh nhà cung cấp từ chối gửi hàng loạt. */
+    private static final int GUI_EMAIL_SONG_SONG = 2;
     private static final String[][] GIOI_TINH_MAP = {
         {"NAM", "Nam"},
         {"NU", "Nữ"},
@@ -188,6 +190,17 @@ public class NhanVienService {
             : nhanVienRepository.existsByEmailAndIdNot(cleanEmail, excludeId);
     }
 
+    @Transactional(readOnly = true)
+    public boolean checkTrungSdt(String soDienThoai, Long excludeId) {
+        if (soDienThoai == null || soDienThoai.trim().isEmpty()) {
+            return false;
+        }
+        String cleanSdt = soDienThoai.trim();
+        return excludeId == null
+            ? nhanVienRepository.existsBySoDienThoai(cleanSdt)
+            : nhanVienRepository.existsBySoDienThoaiAndIdNot(cleanSdt, excludeId);
+    }
+
     /** Kiểm tra dữ liệu nhân viên không thay đổi dữ liệu (dùng cho xem trước import Excel). */
     @Transactional(readOnly = true)
     public void kiemTraHopLe(NhanVienRequest req, Long excludeId) {
@@ -232,6 +245,8 @@ public class NhanVienService {
         String tieuDe = req.getTieuDe().trim();
         String noiDung = req.getNoiDung().trim();
 
+        // 1. Kiểm tra dữ liệu trên thread chính (email hợp lệ, nhân viên tồn tại)
+        java.util.List<Long> canGui = new java.util.ArrayList<>();
         for (Long id : ids) {
             NhanVien nv = nhanVienMap.get(id);
             if (nv == null) {
@@ -247,15 +262,44 @@ public class NhanVienService {
                     "Nhân viên không có địa chỉ email hợp lệ"));
                 continue;
             }
-            boolean guiOk = emailService.guiMailCustom(nv.getEmail().trim(), tieuDe, noiDung);
-            if (guiOk) {
-                response.setGuiThanhCong(response.getGuiThanhCong() + 1);
-            } else {
-                response.setThatBai(response.getThatBai() + 1);
-                response.getBoQua().add(new GuiEmailHangLoatResponse.BoQua(
-                    id, nv.getMaNhanVien(), nv.getTenTaiKhoan(), nv.getEmail(),
-                    "Nhà cung cấp email từ chối hoặc có lỗi khi gửi"));
+            canGui.add(id);
+        }
+
+        if (canGui.isEmpty()) {
+            return response;
+        }
+
+        // Giữ pool nhỏ để không mở quá nhiều kết nối SMTP cùng lúc.
+        java.util.concurrent.ExecutorService pool =
+            java.util.concurrent.Executors.newFixedThreadPool(Math.min(GUI_EMAIL_SONG_SONG, canGui.size()));
+        try {
+            java.util.List<java.util.concurrent.Future<Boolean>> futures = new java.util.ArrayList<>();
+            for (Long id : canGui) {
+                String email = nhanVienMap.get(id).getEmail().trim();
+                futures.add(pool.submit(() -> emailService.guiMailCustom(email, tieuDe, noiDung)));
             }
+            for (int i = 0; i < futures.size(); i++) {
+                Long id = canGui.get(i);
+                NhanVien nv = nhanVienMap.get(id);
+                boolean guiOk = false;
+                try {
+                    guiOk = futures.get(i).get();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (java.util.concurrent.ExecutionException e) {
+                    log.error("Gửi email hàng loạt cho nhân viên {} gặp lỗi", id, e.getCause());
+                }
+                if (guiOk) {
+                    response.setGuiThanhCong(response.getGuiThanhCong() + 1);
+                } else {
+                    response.setThatBai(response.getThatBai() + 1);
+                    response.getBoQua().add(new GuiEmailHangLoatResponse.BoQua(
+                        id, nv.getMaNhanVien(), nv.getTenTaiKhoan(), nv.getEmail(),
+                        "Nhà cung cấp email từ chối hoặc có lỗi khi gửi"));
+                }
+            }
+        } finally {
+            pool.shutdown();
         }
         return response;
     }
@@ -566,6 +610,12 @@ public class NhanVienService {
             String sdt = req.getSoDienThoai().trim();
             if (!SO_DIEN_THAI_PATTERN.matcher(sdt).matches()) {
                 throw new IllegalArgumentException("Số điện thoại phải bắt đầu bằng số 0 và gồm đúng 10 chữ số");
+            }
+            boolean trungSdt = taoMoi
+                ? nhanVienRepository.existsBySoDienThoai(sdt)
+                : nhanVienRepository.existsBySoDienThoaiAndIdNot(sdt, excludeId);
+            if (trungSdt) {
+                throw new IllegalArgumentException("Số điện thoại đã được sử dụng");
             }
         }
         if (taoMoi && req.getNgaySinh() == null) {

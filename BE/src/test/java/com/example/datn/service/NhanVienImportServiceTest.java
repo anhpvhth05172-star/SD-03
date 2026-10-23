@@ -212,6 +212,7 @@ class NhanVienImportServiceTest {
         String[] dongCapNhat = DONG_HOP_LE.clone();
         dongCapNhat[0] = "NV01";
         dongCapNhat[2] = "aicapnhat@example.com";
+        dongCapNhat[3] = "0901234568";
 
         NhanVienImportKetQuaResponse result =
             service.xacNhan(fileExcel(dongMoi, dongCapNhat));
@@ -393,6 +394,7 @@ class NhanVienImportServiceTest {
         dongThem[2] = "them-moi@example.com";
         String[] dongCapNhat = dongCu.clone();
         dongCapNhat[2] = "email-moi@example.com";
+        dongCapNhat[3] = "0901234568";
 
         NhanVienImportKetQuaResponse result = service.xacNhan(fileExcel(dongThem, dongCapNhat));
 

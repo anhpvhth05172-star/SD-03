@@ -1,12 +1,21 @@
 import axios from 'axios'
 import { getToken, getRefreshToken, isTokenExpired, luuPhien, dangXuat } from '../utils/auth'
 
-export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api'
+export const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
 // Không set Content-Type mặc định ở đây: axios tự gắn application/json cho body object,
 // còn FormData (upload Excel) phải để nguyên cho browser gắn multipart/form-data + boundary.
 // Set cứng 'application/json' sẽ làm axios serialize FormData thành JSON -> backend không nhận được file.
-const API_ORIGIN = new URL(API_BASE).origin
+// API_BASE có thể là đường dẫn tương đối (/api) — khi đó origin = origin của trang hiện tại,
+// nên FE chạy qua localhost hay IP LAN đều call BE được (qua Vite proxy).
+export const API_ORIGIN = new URL(
+  API_BASE,
+  typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost'
+).origin
+
+/** URL có trỏ tới API không (tương đối /api/... hoặc tuyệt đối cùng origin). */
+export const laUrlAPI = (url) => url.startsWith(API_BASE) || url.startsWith(API_ORIGIN)
+
 const http = axios.create({
   baseURL: API_BASE,
 })
@@ -43,10 +52,17 @@ const ganToken = async (config) => {
   }
   if (getRefreshToken()) {
     try {
-      await refreshSession()
+      const refreshed = await refreshSession()
+      if (!refreshed?.token) {
+        dangXuat()
+        chuyenVeDangNhap()
+        return config
+      }
       token = getToken()
     } catch {
-      // Phien co the da het han: van gui request.
+      dangXuat()
+      chuyenVeDangNhap()
+      return config
     }
   }
   if (token) {
@@ -66,7 +82,7 @@ http.interceptors.request.use(async (config) => {
 // Gắn token cho mọi request cùng origin API để không bị 401 sau khi siết bảo mật.
 axios.interceptors.request.use(async (config) => {
   const url = String(config.url || '')
-  if (!url.startsWith(API_ORIGIN)) return config
+  if (!laUrlAPI(url)) return config
   if (url.includes('/auth/refresh')) return config
   return ganToken(config)
 })
@@ -99,7 +115,8 @@ http.interceptors.response.use(
 
       if (getRefreshToken()) {
         try {
-          await refreshSession()
+          const refreshed = await refreshSession()
+          if (!refreshed?.token) throw new Error('Refresh thất bại')
           config.headers = { ...config.headers, Authorization: `Bearer ${getToken()}` }
           return http.request(config)
         } catch {

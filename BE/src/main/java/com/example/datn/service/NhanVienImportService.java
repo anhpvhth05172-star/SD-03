@@ -165,11 +165,15 @@ public class NhanVienImportService {
         List<VaiTro> danhSachVaiTro = vaiTroRepository.findAll();
         NhanVienImportKetQuaResponse result = NhanVienImportKetQuaResponse.builder().build();
         Set<String> maDaXuatHien = new HashSet<>();
+        Set<String> sdtDaXuatHien = new HashSet<>();
 
         for (DongPhanTich r : rows) {
             try {
                 Long idHienTai = timIdTheoMa(r, maDaXuatHien);
                 NhanVienRequest req = taoRequest(r, idHienTai, danhSachVaiTro);
+                if (!isBlank(req.getSoDienThoai()) && !sdtDaXuatHien.add(req.getSoDienThoai().trim())) {
+                    throw new IllegalArgumentException("Số điện thoại đã được sử dụng");
+                }
                 if (idHienTai != null) {
                     nhanVienService.update(idHienTai, req);
                     result.setCapNhatThanhCong(result.getCapNhatThanhCong() + 1);

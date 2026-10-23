@@ -2,7 +2,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  deleteEmployee,
   getEmployee,
   getEmployeeFormData,
   importEmployeesConfirm,
@@ -11,11 +10,13 @@ import {
   updateEmployeeStatus,
 } from '@/api/employee'
 import DoiMatKhauModal from '@/components/DoiMatKhauModal.vue'
+import PaginationBar from '@/components/PaginationBar.vue'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import { exportExcel, fetchAllPages } from '@/utils/export'
 import { takeFlashWithMeta } from '@/utils/flash'
 import { avatarColor, formatDate, formatDateTime, initialsOf } from '@/utils/format'
 import { getAvatarSrc, onAvatarError } from '@/utils/avatar'
-import { notifySuccess, notifyWarning, notifyError, notifyConfirm, notifyDeleteConfirm } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import { API_BASE } from '@/api/http'
 
 const router = useRouter()
@@ -40,6 +41,17 @@ const size = ref(5) // Khớp 5 dòng như trong ảnh mẫu
 const fKeyword = ref('')
 const fVaiTro = ref('')
 const fTrangThai = ref('')
+
+const vaiTroFilterOptions = computed(() => [
+  { value: '', label: 'Tất cả vai trò' },
+  ...vaiTros.value.map((v) => ({ value: v.id, label: v.ten })),
+])
+
+const trangThaiFilterOptions = [
+  { value: '', label: 'Tất cả' },
+  { value: 'active', label: 'Hoạt động' },
+  { value: 'locked', label: 'Đã khóa' },
+]
 
 const detailData = ref(null)
 const doiMkNhanVienId = ref(null)
@@ -118,7 +130,7 @@ const onDropExcelFile = (e) => {
 const downloadTemplate = async () => {
   isDownloadingTemplate.value = true
   try {
-    const res = await fetch(`${API_BASE}/nhan-vien/excel/template`)
+    const res = await fetch(`${API_BASE}/nhan-vien/import/mau`)
     if (!res.ok) throw new Error('Không thể tải file mẫu')
     const blob = await res.blob()
     const url = window.URL.createObjectURL(blob)
@@ -144,20 +156,18 @@ const submitImportExcel = async () => {
   }
   isImporting.value = true
   importResult.value = null
-  const formData = new FormData()
-  formData.append('file', selectedImportFile.value)
   try {
-    const res = await fetch(`${API_BASE}/nhan-vien/excel/import`, {
-      method: 'POST',
-      body: formData,
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      throw new Error(data.message || 'Lỗi xử lý file Excel')
+    const ketQua = await importEmployeesConfirm(selectedImportFile.value)
+    const thanhCong = (ketQua.themThanhCong || 0) + (ketQua.capNhatThanhCong || 0)
+    const thatBai = ketQua.thatBai || 0
+    importResult.value = {
+      soDongThanhCong: thanhCong,
+      soDongThatBai: thatBai,
+      tongSoDong: thanhCong + thatBai,
+      danhSachLoi: ketQua.chiTietLoi || [],
     }
-    importResult.value = data
-    if (data.soDongThanhCong > 0) {
-      notifySuccess(`Import thành công ${data.soDongThanhCong}/${data.tongSoDong} dòng dữ liệu!`)
+    if (thanhCong > 0) {
+      notifySuccess(`Import thành công ${thanhCong}/${thanhCong + thatBai} dòng dữ liệu!`)
       load()
     } else {
       notifyWarning('Không có dòng dữ liệu nào được import thành công')
@@ -177,7 +187,8 @@ const resetFilter = () => {
   load()
 }
 
-const onSizeChange = () => {
+const onSizeChange = (s) => {
+  size.value = s
   page.value = 0
   load()
 }
@@ -519,18 +530,6 @@ const toggleStatus = async (row) => {
   }
 }
 
-const removeEmployee = async (row) => {
-  const ok = await notifyDeleteConfirm(row.tenTaiKhoan || row.maNhanVien)
-  if (!ok) return
-  try {
-    await deleteEmployee(row.id)
-    notifySuccess(`Đã xóa nhân viên "${row.tenTaiKhoan}" thành công!`)
-    await load()
-  } catch (e) {
-    notifyError('Không thể xóa nhân viên', e.message)
-  }
-}
-
 onMounted(async () => {
   const { message, type } = takeFlashWithMeta()
   flashMsg.value = message
@@ -586,19 +585,26 @@ onMounted(async () => {
 
         <!-- Dropdown Vai trò -->
         <div class="select-wrap">
-          <select v-model="fVaiTro" class="filter-select" @change="applyFilter">
-            <option value="">Tất cả vai trò</option>
-            <option v-for="vt in vaiTros" :key="vt.id" :value="vt.id">{{ vt.ten }}</option>
-          </select>
+          <SearchableSelect
+            v-model="fVaiTro"
+            :options="vaiTroFilterOptions"
+            value-key="value"
+            label-key="label"
+            placeholder="Tất cả vai trò"
+            search-placeholder="Tìm vai trò..."
+            @change="(v) => { fVaiTro = v ?? ''; applyFilter() }" />
         </div>
 
         <!-- Dropdown Trạng thái -->
         <div class="select-wrap">
-          <select v-model="fTrangThai" class="filter-select" @change="applyFilter">
-            <option value="">Tất cả</option>
-            <option value="active">Hoạt động</option>
-            <option value="locked">Đã khóa</option>
-          </select>
+          <SearchableSelect
+            v-model="fTrangThai"
+            :options="trangThaiFilterOptions"
+            value-key="value"
+            label-key="label"
+            placeholder="Tất cả"
+            search-placeholder="Tìm trạng thái..."
+            @change="(v) => { fTrangThai = v ?? ''; applyFilter() }" />
         </div>
       </div>
 
@@ -674,15 +680,6 @@ onMounted(async () => {
           <span class="card-title-text">Danh sách nhân viên</span>
           <span class="items-count-pill">{{ rows.length }}/{{ totalElements }} nhân viên</span>
         </div>
-        <div class="card-title-right">
-          <span class="page-size-label">Hiển thị:</span>
-          <select v-model="size" class="page-size-select" @change="onSizeChange">
-            <option :value="5">5 bản ghi/trang</option>
-            <option :value="10">10 bản ghi/trang</option>
-            <option :value="20">20 bản ghi/trang</option>
-            <option :value="50">50 bản ghi/trang</option>
-          </select>
-        </div>
       </div>
 
       <div class="table-container">
@@ -756,17 +753,19 @@ onMounted(async () => {
                 </td>
                 <td class="text-center">
                   <div class="action-buttons-group">
-                    <!-- Nút 1: On/Off (Power) -->
-                    <button
-                      class="btn-action-circle"
-                      :class="isAccountProtected(row) ? 'is-disabled' : 'is-power-active'"
-                      type="button"
-                      :disabled="isAccountProtected(row)"
+                    <!-- Nút 1: On/Off (Switch) -->
+                    <label
+                      class="switch"
                       :title="isAccountProtected(row) ? 'Tài khoản Quản trị viên (không thể đổi trạng thái)' : (row.trangThai ? 'Khóa tài khoản' : 'Kích hoạt tài khoản')"
-                      @click="!isAccountProtected(row) ? toggleStatus(row) : null"
                     >
-                      <i class="bi bi-power"></i>
-                    </button>
+                      <input
+                        type="checkbox"
+                        :checked="row.trangThai"
+                        :disabled="isAccountProtected(row)"
+                        @click.prevent="isAccountProtected(row) ? null : toggleStatus(row)"
+                      />
+                      <span class="slider"></span>
+                    </label>
 
                     <!-- Nút 2: Mắt (Xem chi tiết) -->
                     <button
@@ -787,33 +786,18 @@ onMounted(async () => {
 
       <!-- Phân trang Footer -->
       <div v-if="totalElements > 0" class="table-card-foot">
-        <span class="foot-info">
-          Hiển thị <strong>{{ rows.length ? page * size + 1 : 0 }} - {{ page * size + rows.length }}</strong> trong tổng số
-          <strong>{{ totalElements }}</strong> nhân viên
-        </span>
-        <div v-if="totalPages > 1" class="foot-pager">
-          <button class="pager-btn" type="button" :disabled="page === 0" @click="goPage(page - 1)">
-            ‹ Trước
-          </button>
-          <button
-            v-for="p in pageList"
-            :key="p"
-            type="button"
-            class="pager-btn num-btn"
-            :class="{ active: p === page + 1 }"
-            @click="goPage(p - 1)"
-          >
-            {{ p }}
-          </button>
-          <button
-            class="pager-btn"
-            type="button"
-            :disabled="page + 1 >= totalPages"
-            @click="goPage(page + 1)"
-          >
-            Sau ›
-          </button>
-        </div>
+        <PaginationBar
+          :page="page"
+          :total-pages="totalPages"
+          :total-elements="totalElements"
+          :page-size="size"
+          :from="rows.length ? page * size + 1 : 0"
+          :to="page * size + rows.length"
+          :sizes="[5, 10, 20, 50]"
+          label="nhân viên"
+          @change="goPage"
+          @size-change="onSizeChange"
+        />
       </div>
     </div>
 
@@ -845,7 +829,7 @@ onMounted(async () => {
                 </span>
               </div>
               <h3 class="profile-name">{{ detailData.tenTaiKhoan }}</h3>
-              <p class="profile-email-sub"><i class="bi bi-envelope"></i> {{ detailData.email || 'Chưa cập nhật email' }}</p>
+              <p class="profile-email-sub">{{ detailData.email || 'Chưa cập nhật email' }}</p>
             </div>
           </div>
         </div>
@@ -854,24 +838,22 @@ onMounted(async () => {
         <div class="profile-modal-body">
           <!-- Nhóm 1: Thông tin cá nhân & liên hệ -->
           <div class="info-section-group">
-            <h4 class="section-group-title">
-              <i class="bi bi-person-lines-fill"></i> Thông tin liên hệ & Cá nhân
-            </h4>
+            <h4 class="section-group-title">Thông tin liên hệ & Cá nhân</h4>
             <div class="info-grid-2">
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-telephone"></i> Số điện thoại</span>
+                <span class="info-cell-label">Số điện thoại</span>
                 <span class="info-cell-value">{{ detailData.soDienThoai || 'Chưa cập nhật' }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-gender-ambiguous"></i> Giới tính</span>
+                <span class="info-cell-label">Giới tính</span>
                 <span class="info-cell-value">{{ gioiTinhLabel(detailData.gioiTinh) }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-calendar3"></i> Ngày sinh</span>
+                <span class="info-cell-label">Ngày sinh</span>
                 <span class="info-cell-value">{{ formatDate(detailData.ngaySinh) || '—' }}</span>
               </div>
               <div class="info-cell">
-                <span class="info-cell-label"><i class="bi bi-calendar-check"></i> Ngày vào làm</span>
+                <span class="info-cell-label">Ngày vào làm</span>
                 <span class="info-cell-value">{{ formatDate(detailData.ngayTao) || '—' }}</span>
               </div>
             </div>
@@ -879,9 +861,7 @@ onMounted(async () => {
 
           <!-- Nhóm 2: Địa chỉ nơi ở -->
           <div class="info-section-group">
-            <h4 class="section-group-title">
-              <i class="bi bi-geo-alt-fill text-danger"></i> Địa chỉ nơi ở
-            </h4>
+            <h4 class="section-group-title">Địa chỉ nơi ở</h4>
             <div class="address-box-card">
               <p class="address-text">{{ formatEmployeeAddress(detailData) || 'Chưa cập nhật địa chỉ' }}</p>
             </div>
@@ -889,7 +869,7 @@ onMounted(async () => {
 
           <!-- Metadata thời gian -->
           <div class="modal-time-footer">
-            <span><i class="bi bi-clock-history"></i> Cập nhật gần nhất: {{ formatDateTime(detailData.ngayCapNhat) || '—' }}</span>
+            <span>Cập nhật gần nhất: {{ formatDateTime(detailData.ngayCapNhat) || '—' }}</span>
             <span v-if="detailData.nguoiCapNhat">Bởi: <b>{{ detailData.nguoiCapNhat }}</b></span>
           </div>
         </div>
@@ -902,21 +882,12 @@ onMounted(async () => {
           </button>
           <button
             v-if="!isAccountProtected(detailData)"
-            class="btn-profile-edit"
+            class="btn-profile-secondary"
             type="button"
             @click="doiMkNhanVienId = detailData.id"
           >
             <i class="bi bi-key"></i>
             <span>Đổi mật khẩu</span>
-          </button>
-          <button
-            v-if="!isAccountProtected(detailData)"
-            class="btn-profile-delete"
-            type="button"
-            @click="removeEmployee(detailData); detailData = null"
-          >
-            <i class="bi bi-trash3"></i>
-            <span>Xóa tài khoản</span>
           </button>
           <button class="btn-profile-close" type="button" @click="detailData = null">
             Đóng
@@ -1176,32 +1147,6 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-.page-size-label {
-  font-size: 13px;
-  color: #64748b;
-  font-weight: 500;
-}
-
-.page-size-select {
-  padding: 6px 30px 6px 12px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 8px center;
-  background-size: 14px;
-  font-size: 13px;
-  color: #1e293b;
-  font-weight: 600;
-  cursor: pointer;
-  outline: none;
-  appearance: none;
-  transition: all 0.2s ease;
-}
-
-.page-size-select:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-
 .icon-circle {
   width: 30px;
   height: 30px;
@@ -1283,27 +1228,7 @@ onMounted(async () => {
 /* Dropdown bộ lọc */
 .select-wrap {
   flex-shrink: 0;
-}
-
-.filter-select {
-  height: 42px;
   min-width: 140px;
-  padding: 0 32px 0 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 9px;
-  font-size: 13.5px;
-  color: #334155;
-  background: #ffffff url("data:image/svg2+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 10px center;
-  background-size: 14px;
-  appearance: none;
-  outline: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.filter-select:focus {
-  border-color: #f43f5e;
-  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
 }
 
 /* Hàng nút hành động bộ lọc bên phải */
@@ -1386,8 +1311,9 @@ onMounted(async () => {
 
 .employee-table th {
   padding: 13px 12px;
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
   color: #334155;
   border-bottom: 1px solid #f1f5f9;
   background: #ffffff;
@@ -1396,7 +1322,7 @@ onMounted(async () => {
 
 .employee-table td {
   padding: 13px 12px;
-  font-size: 13.5px;
+  font-size: 13px;
   color: #334155;
   border-bottom: 1px solid #f8fafc;
   vertical-align: middle;
@@ -1449,12 +1375,11 @@ onMounted(async () => {
 }
 
 .address-clamp {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: block;
   max-width: 280px;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 /* Avatar tròn */
@@ -1555,19 +1480,6 @@ onMounted(async () => {
   box-shadow: none !important;
 }
 
-/* Nút On/Off khi là Nhân viên: MÀU ĐỎ */
-.btn-action-circle.is-power-active {
-  background: #f8fafc;
-  color: #dc2626;
-  border-color: #fee2e2;
-}
-
-.btn-action-circle.is-power-active:hover {
-  background: #fee2e2;
-  color: #b91c1c;
-  transform: scale(1.08);
-}
-
 /* Nút Mắt (Xem chi tiết): Xám đậm */
 .btn-action-circle.is-view {
   background: #f8fafc;
@@ -1592,61 +1504,6 @@ onMounted(async () => {
   margin-top: 16px;
 }
 
-.foot-info {
-  font-size: 12.5px;
-  color: #64748b;
-}
-
-.foot-info strong {
-  color: #1e293b;
-  font-weight: 700;
-}
-
-.foot-pager {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.pager-btn {
-  padding: 5px 12px;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  color: #475569;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1.4;
-}
-
-.pager-btn:hover:not(:disabled) {
-  background: #f8fafc;
-  color: #0f172a;
-  border-color: #cbd5e1;
-}
-
-.pager-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.pager-btn.num-btn {
-  min-width: 32px;
-  text-align: center;
-  padding: 5px 0;
-}
-
-.pager-btn.active {
-  background: #dc2626;
-  color: #ffffff;
-  border-color: #dc2626;
-}
-
 /* ==========================================================================
    PROFILE MODAL THIẾT KẾ HIỆN ĐẠI & SANG TRỌNG
    ========================================================================== */
@@ -1666,8 +1523,8 @@ onMounted(async () => {
   background: #ffffff;
   width: 100%;
   max-width: 560px;
-  border-radius: 20px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
   overflow: hidden;
   animation: modalCardIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1691,7 +1548,7 @@ onMounted(async () => {
 }
 
 .profile-modal-banner.employee-theme {
-  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 50%, #fecdd3 100%);
+  background: #ffffff;
 }
 
 .btn-banner-close {
@@ -1748,7 +1605,7 @@ onMounted(async () => {
 .profile-avatar-initials {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #f43f5e, #e11d48);
+  background: #cc0000;
   color: #ffffff;
   font-size: 26px;
   font-weight: 700;
@@ -1775,18 +1632,17 @@ onMounted(async () => {
 .badge-code {
   font-size: 11.5px;
   font-weight: 700;
-  color: #e11d48;
-  background: #ffffff;
+  color: #cc0000;
+  background: #fef2f2;
   padding: 2px 8px;
   border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .badge-role {
   font-size: 11.5px;
   font-weight: 600;
   color: #475569;
-  background: rgba(255, 255, 255, 0.7);
+  background: #f1f5f9;
   padding: 2px 8px;
   border-radius: 6px;
 }
@@ -1824,19 +1680,13 @@ onMounted(async () => {
 
 .section-group-title {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #475569;
+  letter-spacing: 0;
+  color: #0f172a;
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.section-group-title i {
-  font-size: 14px;
-  color: #e11d48;
 }
 
 .info-grid-2 {
@@ -1846,9 +1696,9 @@ onMounted(async () => {
 }
 
 .info-cell {
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   padding: 10px 14px;
   display: flex;
   flex-direction: column;
@@ -1856,34 +1706,30 @@ onMounted(async () => {
 }
 
 .info-cell-label {
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 500;
-  color: #64748b;
+  color: #94a3b8;
   display: flex;
   align-items: center;
   gap: 5px;
 }
 
-.info-cell-label i {
-  font-size: 12px;
-}
-
 .info-cell-value {
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   color: #1e293b;
 }
 
 .address-box-card {
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   padding: 12px 14px;
 }
 
 .address-text {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   color: #1e293b;
   line-height: 1.5;
@@ -1919,45 +1765,42 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   padding: 9px 18px;
-  border-radius: 9999px;
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  border-radius: 8px;
+  background: var(--red);
   color: #ffffff;
   border: none;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.2);
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
 }
 
 .btn-profile-edit:hover {
-  opacity: 0.94;
-  transform: translateY(-1px);
+  background: #a30000;
 }
 
-.btn-profile-delete {
+.btn-profile-secondary {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 9px 18px;
-  border-radius: 9999px;
+  border-radius: 8px;
   background: #ffffff;
-  color: #ef4444;
-  border: 1px solid #fecaca;
+  color: #334155;
+  border: 1px solid #e2e8f0;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
 }
 
-.btn-profile-delete:hover {
-  background: #fef2f2;
-  border-color: #f87171;
+.btn-profile-secondary:hover {
+  background: #f8fafc;
 }
 
 .btn-profile-close {
   padding: 9px 20px;
-  border-radius: 9999px;
+  border-radius: 8px;
   background: #f1f5f9;
   color: #475569;
   border: 1px solid #e2e8f0;
@@ -2654,5 +2497,60 @@ onMounted(async () => {
 
 .action-field textarea {
   resize: vertical;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 21px;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #cbd5e1;
+  border-radius: 999px;
+  transition: 0.25s;
+}
+
+.slider::before {
+  position: absolute;
+  content: "";
+  width: 15px;
+  height: 15px;
+  left: 3px;
+  top: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.25s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.switch input:checked + .slider {
+  background-color: #16a34a;
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(17px);
+}
+
+.switch input:disabled + .slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch input:focus-visible + .slider {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 </style>

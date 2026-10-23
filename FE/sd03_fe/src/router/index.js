@@ -8,7 +8,6 @@ import {
   isKhachHangDangNhap,
 } from '../utils/auth'
 import { refreshSession } from '../api/http'
-import { laAdmin } from '../utils/session'
 import AdminLayout from '../layouts/AdminLayout.vue'
 import ProductListPage from '@/pages/Product/ProductListPage.vue'
 import ProductCreatePage from '@/pages/Product/ProductCreatePage.vue'
@@ -37,6 +36,7 @@ import CustomerAccountPage from '@/pages/Auth/CustomerAccountPage.vue'
 import StatisticsPage from '@/pages/Statistics/StatisticsPage.vue'
 import WorkSchedulePage from '@/pages/Schedule/WorkSchedulePage.vue'
 import ShiftSchedulePage from '@/pages/Schedule/ShiftSchedulePage.vue'
+import GiaoCaListPage from '@/pages/Ca/GiaoCaListPage.vue'
 
 const metaBo = { requiresAuth: true, canBo: true }
 
@@ -47,7 +47,7 @@ const routes = [
   {
     path: '/tai-khoan',
     component: CustomerAccountPage,
-    meta: { title: 'Tài khoản của tôi', requiresAuth: true, canKhach: true },
+    meta: { title: 'Tài khoản của tôi', canKhach: true },
   },
   {
     path: '/',
@@ -55,11 +55,8 @@ const routes = [
     children: [
       {
         path: '',
-        redirect: () => {
-          if (isNhanVienDangNhap()) return '/hoa-don'
-          if (isKhachHangDangNhap()) return '/tai-khoan'
-          return '/dang-nhap'
-        },
+        // Mở khu vực khách hàng trước; khách có thể đăng nhập sau từ giao diện.
+        redirect: '/tai-khoan',
       },
       { path: '/san-pham', name: 'ProductList', component: ProductListPage, meta: { ...metaBo, title: 'Quản lý sản phẩm' } },
       { path: '/san-pham/them', name: 'ProductCreate', component: ProductCreatePage, meta: { ...metaBo, title: 'Thêm mới sản phẩm' } },
@@ -74,12 +71,12 @@ const routes = [
       { path: '/phieu-giam-gia', component: VoucherListPage, meta: { ...metaBo, title: 'Quản lý phiếu giảm giá' } },
       { path: '/phieu-giam-gia/add', component: DiscountForm, meta: { ...metaBo, title: 'Thêm phiếu giảm giá' } },
       { path: '/phieu-giam-gia/detail/:id', component: DiscountFormDetail, meta: { ...metaBo, title: 'Chi tiết phiếu giảm giá' } },
-      { path: '/phieu-giam-gia/update/:id', component: VoucherFormUpdate, meta: { ...metaBo, title: 'Cập nhật phiếu giảm giá' } },
+      { path: '/phieu-giam-gia/update/:id', component: DiscountFormUpdate, meta: { ...metaBo, title: 'Cập nhật phiếu giảm giá' } },
       { path: '/phieu-giam-gia/:id/edit', redirect: to => `/phieu-giam-gia/update/${to.params.id}` },
       { path: '/dot-giam-gia', component: DiscountEventPage, meta: { ...metaBo, title: 'Quản lý đợt giảm giá' } },
       { path: '/dot-giam-gia/add', component: VoucherForm, meta: { ...metaBo, title: 'Thêm đợt giảm giá' } },
       { path: '/dot-giam-gia/detail/:id', component: VoucherFormDetail, meta: { ...metaBo, title: 'Chi tiết đợt giảm giá' } },
-      { path: '/dot-giam-gia/update/:id', component: DiscountFormUpdate, meta: { ...metaBo, title: 'Cập nhật đợt giảm giá' } },
+      { path: '/dot-giam-gia/update/:id', component: VoucherFormUpdate, meta: { ...metaBo, title: 'Cập nhật đợt giảm giá' } },
       { path: '/dot-giam-gia/edit/:id', redirect: to => `/dot-giam-gia/update/${to.params.id}` },
       { path: '/giam-gia', redirect: '/phieu-giam-gia' },
       {
@@ -90,18 +87,19 @@ const routes = [
       {
         path: '/lich-lam-viec',
         component: WorkSchedulePage,
-        meta: { ...metaBo, title: 'Quản lý lịch làm việc', adminOnly: true },
+        meta: { ...metaBo, title: 'Quản lý lịch làm việc' },
       },
       {
         path: '/lich-ca-lam',
         component: ShiftSchedulePage,
-        meta: { ...metaBo, title: 'Lịch ca làm', adminOnly: true },
+        meta: { ...metaBo, title: 'Lịch ca làm' },
       },
       {
         path: '/ban-hang',
         name: 'PosSales',
         component: PosSalesPage,
-        meta: { ...metaBo, title: 'Bán hàng tại quầy' },
+        // Màn hình mua hàng mặc định — công khai (khách ẩn danh cũng thấy)
+        meta: { title: 'Bán hàng tại quầy' },
       },
       {
         path: '/khach-hang',
@@ -121,22 +119,34 @@ const routes = [
       {
         path: '/nhan-vien',
         component: EmployeeListPage,
-        meta: { ...metaBo, title: 'Quản lý nhân viên', adminOnly: true },
+        meta: { ...metaBo, title: 'Quản lý nhân viên' },
       },
       {
         path: '/nhan-vien/them',
         component: EmployeeCreatePage,
-        meta: { ...metaBo, title: 'Quản lý nhân viên', adminOnly: true },
+        meta: { ...metaBo, title: 'Quản lý nhân viên' },
       },
       {
         path: '/nhan-vien/:id/sua',
         component: EmployeeCreatePage,
-        meta: { ...metaBo, title: 'Quản lý nhân viên', adminOnly: true },
+        meta: { ...metaBo, title: 'Quản lý nhân viên' },
       },
       {
         path: '/chat',
         component: StaffChatPage,
         meta: { ...metaBo, title: 'Chat khách hàng' },
+      },
+      {
+        path: '/ca',
+        name: 'GiaoCaList',
+        component: GiaoCaListPage,
+        meta: { ...metaBo, title: 'Lịch sử giao ca', roles: ['NHAN_VIEN', 'ADMIN'] },
+      },
+      {
+        path: '/ca/:id/doi-soat',
+        name: 'GiaoCaDoiSoat',
+        component: () => import('@/pages/Ca/GiaoCaDoiSoatPage.vue'),
+        meta: { ...metaBo, title: 'Đối soát ca', roles: ['NHAN_VIEN', 'ADMIN'] },
       },
     ],
   },
@@ -194,10 +204,6 @@ router.beforeEach(async (to) => {
 
   // Trang khách hàng: nhân viên về trang quản trị.
   if (to.meta.canKhach && isNhanVienDangNhap()) {
-    return '/hoa-don'
-  }
-
-  if (to.meta.adminOnly && !laAdmin()) {
     return '/hoa-don'
   }
 

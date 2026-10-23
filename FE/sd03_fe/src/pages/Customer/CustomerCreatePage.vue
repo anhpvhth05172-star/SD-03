@@ -4,7 +4,6 @@ import { Html5Qrcode } from 'html5-qrcode'
 import { useRoute, useRouter } from 'vue-router'
 import { checkCustomerEmail, createCustomer, getCustomer, suggestCustomerCode, updateCustomer } from '@/api/customer'
 import { layDiaGioi, layPhuongXa, phanTichDiaChiCccd, timTinh } from '@/api/diaGioi'
-import AvatarCard from '@/components/AvatarCard.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { setFlash } from '@/utils/flash'
 import { hopLeMa, maDeXuat } from '@/utils/maNhanVien'
@@ -40,6 +39,11 @@ const trangThais = [
   { value: 'false', label: 'Đã khóa' },
 ]
 
+const vaiTroOptions = [
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'STAFF', label: 'Nhân viên' },
+]
+
 const tinhThanhs = ref([])
 const phuongXas = ref([])
 const diaGioiLoading = ref(false)
@@ -68,10 +72,6 @@ const form = ref({
   diaChiCuThe: '',
   anhDaiDien: '',
 })
-
-const onAvatarChange = (val) => {
-  form.value.anhDaiDien = val?.dataUrl || ''
-}
 
 const kiemTraEmailTrung = async () => {
   const em = (form.value.email || '').trim()
@@ -152,9 +152,7 @@ const loiTinhThanhPho = computed(() => toiDa(form.value.tinhThanhPho, 100, 'Tỉ
 const loiPhuong = computed(() => toiDa(form.value.phuong, 100, 'Phường/Xã'))
 const loiDiaChiCuThe = computed(() => toiDa(form.value.diaChiCuThe, 255, 'Địa chỉ cụ thể'))
 
-const chonVaiTro = (e) => {
-  const id = e.target.value
-  const v = id
+const chonVaiTro = (v) => {
   if (v) datVaiTro(v)
 }
 
@@ -520,23 +518,22 @@ onMounted(async () => {
 
     <div class="role-bar">
       <span>Đang thao tác với vai trò: <b>{{ vaiTroHienTai === 'ADMIN' ? 'Admin' : 'Nhân viên' }}</b></span>
-      <select :value="vaiTroHienTai" @change="chonVaiTro($event)">
-        <option value="ADMIN">Admin</option>
-        <option value="STAFF">Nhân viên</option>
-      </select>
+      <SearchableSelect
+        :model-value="vaiTroHienTai"
+        :options="vaiTroOptions"
+        label-key="label"
+        value-key="value"
+        placeholder="Chọn vai trò"
+        search-placeholder="Tìm..."
+        :allow-clear="false"
+        @change="chonVaiTro"
+      />
     </div>
 
     <p v-if="errorMsg" class="form-error">{{ errorMsg }}</p>
     <p v-if="loading" class="form-error">Đang tải dữ liệu...</p>
 
     <div class="create-grid">
-      <AvatarCard
-        :ten="form.tenKhachHang"
-        :phu="form.email || form.maKhachHang"
-        :anh="form.anhDaiDien"
-        @change="onAvatarChange"
-      />
-
       <div class="form-col">
         <section class="panel">
           <div class="panel-head">
@@ -614,9 +611,15 @@ onMounted(async () => {
 
             <div v-if="isEdit" class="field">
               <label class="field-label">Trạng thái</label>
-              <select v-model="form.trangThai">
-                <option v-for="item in trangThais" :key="item.value" :value="item.value">{{ item.label }}</option>
-              </select>
+              <SearchableSelect
+                v-model="form.trangThai"
+                :options="trangThais"
+                label-key="label"
+                value-key="value"
+                placeholder="Chọn trạng thái"
+                search-placeholder="Tìm..."
+                :allow-clear="false"
+              />
             </div>
           </div>
         </section>
@@ -708,7 +711,7 @@ onMounted(async () => {
 
 .create-grid {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -741,17 +744,6 @@ onMounted(async () => {
   padding: 9px 12px;
   font-size: 12.5px;
   color: #4a4a52;
-}
-
-.role-bar select {
-  height: 30px;
-  border: 1px solid #e3e3e8;
-  border-radius: 6px;
-  background: #fff;
-  font-size: 12.5px;
-  padding: 0 8px;
-  color: #4a4a52;
-  outline: none;
 }
 
 .form-error {
@@ -812,7 +804,6 @@ onMounted(async () => {
 }
 
 .form-fields input:not([type='radio']),
-.form-fields select,
 .form-fields textarea {
   width: 100%;
   height: 38px;
@@ -840,7 +831,6 @@ onMounted(async () => {
 }
 
 .form-fields input:not([type='radio']):focus,
-.form-fields select:focus,
 .form-fields textarea:focus {
   border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
@@ -895,7 +885,7 @@ onMounted(async () => {
 
 @media (max-width: 1024px) {
   .create-grid {
-    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
 

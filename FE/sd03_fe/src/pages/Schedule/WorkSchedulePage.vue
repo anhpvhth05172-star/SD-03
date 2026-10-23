@@ -1,5 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import PaginationBar from '@/components/PaginationBar.vue'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import { listEmployees } from '@/api/employee'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import {
@@ -41,6 +43,16 @@ const tenCua = (ma) => {
 const fKeyword = ref('')
 const fCa = ref('')
 const fNgay = ref('')
+
+const caFilterOptions = computed(() => [
+  { value: '', label: 'Tất cả ca' },
+  ...caDangBat.value.map((ca) => ({ value: ca.id, label: ca.ten }))
+])
+
+const onCaFilterChange = (val) => {
+  fCa.value = val ?? ''
+  page.value = 0
+}
 const view = ref('bang')
 const calMode = ref('thang')
 const anchor = ref(new Date())
@@ -78,22 +90,13 @@ watch(lichLoc, () => {
   if (page.value >= tongTrang.value) page.value = 0
 })
 
-const danhSachTrang = computed(() => {
-  const cur = page.value + 1
-  let start = Math.max(1, Math.min(cur - 2, Math.max(1, tongTrang.value - 4)))
-  const end = Math.min(tongTrang.value, start + 4)
-  start = Math.max(1, end - 4)
-  const out = []
-  for (let p = start; p <= end; p++) out.push(p)
-  return out
-})
-
 const datTrang = (p) => {
   if (p < 0 || p >= tongTrang.value || p === page.value) return
   page.value = p
 }
 
-const doiSize = () => {
+const doiSize = (s) => {
+  size.value = s
   page.value = 0
 }
 
@@ -244,6 +247,30 @@ const showForm = ref(false)
 const formMode = ref('them')
 const form = ref({ id: null, maNhanVien: '', idCa: '', ngay: '' })
 const formError = ref('')
+
+const nvFormOptions = computed(() => [
+  { value: '', label: '-- Chọn nhân viên --' },
+  ...dsNhanVien.value.map((nv) => ({
+    value: nv.maNhanVien,
+    label: `${nv.maNhanVien} — ${nv.tenTaiKhoan || nv.ten}`
+  }))
+])
+
+const caFormOptions = computed(() => [
+  { value: '', label: '-- Chọn ca làm --' },
+  ...caDangBat.value.map((ca) => ({
+    value: ca.id,
+    label: `${ca.ten} (${ca.batDau} - ${ca.ketThuc})`
+  }))
+])
+
+const onFormNvChange = (val) => {
+  form.value.maNhanVien = val ?? ''
+}
+
+const onFormCaChange = (val) => {
+  form.value.idCa = val ?? ''
+}
 
 const moFormThem = () => {
   formMode.value = 'them'
@@ -456,10 +483,15 @@ onMounted(async () => {
 
         <div class="inline-field">
           <label class="inline-label">Ca làm:</label>
-          <select v-model="fCa" class="filter-select" @change="page = 0">
-            <option value="">Tất cả ca</option>
-            <option v-for="ca in caDangBat" :key="ca.id" :value="ca.id">{{ ca.ten }}</option>
-          </select>
+          <SearchableSelect
+            v-model="fCa"
+            :options="caFilterOptions"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả ca"
+            search-placeholder="Tìm ca làm..."
+            @change="onCaFilterChange"
+          />
         </div>
 
         <div class="inline-field">
@@ -602,35 +634,18 @@ onMounted(async () => {
           </table>
         </div>
 
-        <div class="table-pagination-row">
-          <div class="pagination-summary">
-            Hiển thị <strong>{{ dongHienTai.length }}</strong> trong tổng số
-            <strong>{{ lichLoc.length }}</strong> lịch làm việc
-          </div>
-          <div class="pagination-size-wrap">
-            <select v-model="size" class="pagination-select" @change="doiSize">
-              <option :value="5">5</option>
-              <option :value="10">10</option>
-              <option :value="20">20</option>
-            </select>
-          </div>
-          <div class="pagination-nav-wrap">
-            <button class="pagination-nav-btn" type="button" :disabled="page === 0" @click="datTrang(0)">K</button>
-            <button class="pagination-nav-btn" type="button" :disabled="page === 0" @click="datTrang(page - 1)">&lt;</button>
-            <button
-              v-for="p in danhSachTrang"
-              :key="p"
-              class="pagination-num-btn"
-              :class="{ 'is-active': p === page + 1 }"
-              type="button"
-              @click="datTrang(p - 1)"
-            >
-              {{ p }}
-            </button>
-            <button class="pagination-nav-btn" type="button" :disabled="page + 1 >= tongTrang" @click="datTrang(page + 1)">&gt;</button>
-            <button class="pagination-nav-btn" type="button" :disabled="page + 1 >= tongTrang" @click="datTrang(tongTrang - 1)">L</button>
-          </div>
-        </div>
+        <PaginationBar
+          :page="page"
+          :total-pages="tongTrang"
+          :total-elements="lichLoc.length"
+          :page-size="size"
+          :from="dongHienTai.length ? page * size + 1 : 0"
+          :to="page * size + dongHienTai.length"
+          :sizes="[5, 10, 20]"
+          label="ca làm việc"
+          @change="datTrang"
+          @size-change="doiSize"
+        />
       </template>
 
       <!-- XEM LỊCH -->
@@ -758,22 +773,28 @@ onMounted(async () => {
         <div class="modal-body">
           <div class="form-field">
             <label class="form-label">Nhân viên <span class="req">*</span></label>
-            <select v-model="form.maNhanVien" class="form-control">
-              <option value="">-- Chọn nhân viên --</option>
-              <option v-for="nv in dsNhanVien" :key="nv.id ?? nv.maNhanVien" :value="nv.maNhanVien">
-                {{ nv.maNhanVien }} — {{ nv.tenTaiKhoan || nv.ten }}
-              </option>
-            </select>
+            <SearchableSelect
+              v-model="form.maNhanVien"
+              :options="nvFormOptions"
+              label-key="label"
+              value-key="value"
+              placeholder="-- Chọn nhân viên --"
+              search-placeholder="Tìm nhân viên..."
+              @change="onFormNvChange"
+            />
           </div>
 
           <div class="form-field">
             <label class="form-label">Ca làm <span class="req">*</span></label>
-            <select v-model="form.idCa" class="form-control">
-              <option value="">-- Chọn ca làm --</option>
-              <option v-for="ca in caDangBat" :key="ca.id" :value="ca.id">
-                {{ ca.ten }} ({{ ca.batDau }} - {{ ca.ketThuc }})
-              </option>
-            </select>
+            <SearchableSelect
+              v-model="form.idCa"
+              :options="caFormOptions"
+              label-key="label"
+              value-key="value"
+              placeholder="-- Chọn ca làm --"
+              search-placeholder="Tìm ca làm..."
+              @change="onFormCaChange"
+            />
           </div>
 
           <div class="form-field">
@@ -1048,28 +1069,6 @@ onMounted(async () => {
 
 .input-search::placeholder {
   color: #94a3b8;
-}
-
-.filter-select {
-  height: 42px;
-  min-width: 150px;
-  padding: 0 32px 0 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 9px;
-  font-size: 13.5px;
-  color: #334155;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 10px center;
-  background-size: 14px;
-  appearance: none;
-  outline: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: inherit;
-}
-
-.filter-select:focus {
-  border-color: #f43f5e;
-  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
 }
 
 .input-date {
@@ -1365,88 +1364,6 @@ onMounted(async () => {
   background: #fee2e2;
   color: #b91c1c;
   transform: scale(1.08);
-}
-
-/* Phân trang */
-.table-pagination-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid #f8fafc;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.pagination-summary {
-  flex: 1;
-  text-align: center;
-  font-size: 13px;
-  color: #64748b;
-  min-width: 200px;
-}
-
-.pagination-summary strong {
-  color: #1f2937;
-  font-weight: 700;
-}
-
-.pagination-select {
-  height: 32px;
-  padding: 0 24px 0 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 6px center;
-  background-size: 12px;
-  appearance: none;
-  font-size: 13px;
-  color: #334155;
-  cursor: pointer;
-  outline: none;
-  font-family: inherit;
-}
-
-.pagination-nav-wrap {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.pagination-nav-btn,
-.pagination-num-btn {
-  height: 30px;
-  min-width: 30px;
-  padding: 0 6px;
-  border-radius: 6px;
-  border: 1px solid #f1f5f9;
-  background: #ffffff;
-  color: #475569;
-  font-size: 13px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-family: inherit;
-}
-
-.pagination-nav-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.pagination-num-btn.is-active {
-  background: #e11d48;
-  color: #ffffff;
-  border-color: #e11d48;
-  font-weight: 600;
-}
-
-.pagination-num-btn:hover:not(.is-active),
-.pagination-nav-btn:hover:not(:disabled) {
-  background: #f8fafc;
-  border-color: #cbd5e1;
 }
 
 /* Lịch */
@@ -1904,13 +1821,6 @@ onMounted(async () => {
   font-family: inherit;
   transition: all 0.15s ease;
   width: 100%;
-}
-
-select.form-control {
-  appearance: none;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 12px center;
-  background-size: 14px;
-  padding-right: 34px;
 }
 
 .form-control:focus {

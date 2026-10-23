@@ -1,8 +1,9 @@
 <script setup>
 import { provide } from 'vue'
 import ChatWidget from './components/ChatWidget.vue'
+import { API_ORIGIN } from './api/http'
 
-const baseAPI = 'http://localhost:8080/'
+const baseAPI = `${API_ORIGIN}/`
 provide('baseAPI', baseAPI)
 </script>
 

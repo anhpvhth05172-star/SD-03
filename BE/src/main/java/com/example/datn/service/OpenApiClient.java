@@ -22,7 +22,8 @@ public class OpenApiClient {
             ? baseUrl.substring(0, baseUrl.length() - 1)
             : baseUrl;
         this.httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .connectTimeout(Duration.ofSeconds(10))
             .build();
     }
 

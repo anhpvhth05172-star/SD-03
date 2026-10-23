@@ -61,7 +61,7 @@ public class ChatService {
                 HoiThoai.TRANG_THAI_DANG_MO
             )
             .map(this::toKhachDTO)
-            .orElseGet(() -> toKhachDTO(taoHoiThoaiNhanVien(null, hash, null)));
+            .orElseGet(() -> toKhachDTO(taoHoiThoaiNhanVien(null, hash, "Khách ẩn danh")));
     }
 
     /**
@@ -298,6 +298,7 @@ public class ChatService {
             h.setTenKhach(tenKhach);
         } else {
             h.setMaAnDanh(maAnDanhHash);
+            h.setTenKhach(tenKhach);
         }
         h.setNgayCapNhat(LocalDateTime.now());
         return hoiThoaiRepository.save(h);

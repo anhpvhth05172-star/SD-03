@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { notifySuccess, notifyWarning, notifyDeleteConfirm } from '@/utils/notify'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import {
   danhSachCa,
   themCa,
@@ -140,11 +141,19 @@ const luuForm = () => {
 
         <div class="inline-field">
           <label class="inline-label">Trạng thái:</label>
-          <select v-model="fTrangThai" class="filter-select">
-            <option value="">Tất cả</option>
-            <option value="bat">Đang bật</option>
-            <option value="tat">Đang tắt</option>
-          </select>
+          <SearchableSelect
+            v-model="fTrangThai"
+            :options="[
+              { value: '', label: 'Tất cả' },
+              { value: 'bat', label: 'Đang bật' },
+              { value: 'tat', label: 'Đang tắt' }
+            ]"
+            value-key="value"
+            label-key="label"
+            placeholder="Tất cả"
+            search-placeholder="Tìm trạng thái..."
+            style="width: auto; min-width: 150px"
+            @change="(v) => { fTrangThai = v ?? '' }" />
         </div>
       </div>
 
@@ -426,28 +435,6 @@ const luuForm = () => {
 
 .input-search::placeholder {
   color: #94a3b8;
-}
-
-.filter-select {
-  height: 42px;
-  min-width: 150px;
-  padding: 0 32px 0 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 9px;
-  font-size: 13.5px;
-  color: #334155;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") no-repeat right 10px center;
-  background-size: 14px;
-  appearance: none;
-  outline: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: inherit;
-}
-
-.filter-select:focus {
-  border-color: #f43f5e;
-  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
 }
 
 .filter-actions-row {
