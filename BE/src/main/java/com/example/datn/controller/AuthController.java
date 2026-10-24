@@ -106,6 +106,9 @@ public class AuthController {
         if (laNhanVien) {
             var nhanVien = nhanVienRepository.findById(idNguoiDung)
                 .orElseThrow(() -> new DangNhapThatBaiException("Không tìm thấy tài khoản"));
+            if (Boolean.FALSE.equals(nhanVien.getTrangThai())) {
+                throw new DangNhapThatBaiException("Tài khoản đã bị khóa");
+            }
             String vaiTro = nhanVien.getVaiTro() != null ? nhanVien.getVaiTro().getMaVaiTro() : "STAFF";
             return new ThongTinResponse(
                 nhanVien.getId(),

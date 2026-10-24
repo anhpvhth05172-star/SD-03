@@ -1,10 +1,10 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 
 const props = defineProps({
   modelValue: {
     type: [Number, String],
-    default: 0
+    default: ''
   },
   placeholder: {
     type: String,
@@ -32,7 +32,10 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'change', 'blur'])
+const emit = defineEmits(['update:modelValue', 'change', 'blur', 'focus'])
+
+const inputRef = ref(null)
+const isFocused = ref(false)
 
 const formatNumberString = (val) => {
   if (val === null || val === undefined || val === '') return ''
@@ -46,41 +49,118 @@ const displayValue = ref(formatNumberString(props.modelValue))
 watch(
   () => props.modelValue,
   (newVal) => {
+    // Nếu đang focus thì chỉ cập nhật khi giá trị số từ ngoài khác hẳn giá trị người dùng đang gõ
+    if (isFocused.value) {
+      const currentDigits = String(displayValue.value).replace(/[^\d]/g, '')
+      const newDigits = newVal !== null && newVal !== undefined && newVal !== '' ? String(newVal).replace(/[^\d]/g, '') : ''
+      const currentNum = currentDigits ? parseInt(currentDigits, 10) : NaN
+      const newNum = newDigits ? parseInt(newDigits, 10) : NaN
+      if (isNaN(currentNum) && isNaN(newNum)) return
+      if (currentNum === newNum) return
+    }
     const formatted = formatNumberString(newVal)
-    if (displayValue.value !== formatted) {
-      displayValue.value = formatted
+    displayValue.value = formatted
+    if (inputRef.value) {
+      inputRef.value.value = formatted
     }
   }
 )
 
+const handleFocus = (e) => {
+  isFocused.value = true
+  emit('focus', e)
+  // Tự động bôi đen toàn bộ số để người dùng gõ số mới sẽ ghi đè ngay, không bị dính số cũ
+  nextTick(() => {
+    if (inputRef.value) {
+      inputRef.value.select()
+    }
+  })
+}
+
 const handleInput = (e) => {
-  const rawInput = e.target.value
-  const digits = rawInput.replace(/[^\d]/g, '')
-  
+  const inputEl = e.target
+  const rawInput = inputEl.value
+  const oldCursorPos = inputEl.selectionStart || 0
+
+  // Đếm số lượng chữ số nằm TRƯỚC con trỏ trước khi format lại
+  const digitsBeforeCursor = rawInput.slice(0, oldCursorPos).replace(/[^\d]/g, '').length
+
+  // Lọc chỉ lấy các chữ số
+  let digits = rawInput.replace(/[^\d]/g, '')
+
   if (!digits) {
     displayValue.value = ''
-    emit('update:modelValue', 0)
-    emit('change', 0)
+    inputEl.value = ''
+    emit('update:modelValue', '')
+    emit('change', '')
     return
   }
 
-  let num = parseInt(digits, 10)
-  if (props.max && num > props.max) {
-    num = props.max
+  // Giới hạn tối đa 12 chữ số để tránh overflow
+  if (digits.length > 12) {
+    digits = digits.slice(0, 12)
   }
 
-  displayValue.value = new Intl.NumberFormat('vi-VN').format(num)
+  let num = parseInt(digits, 10)
+  if (isNaN(num)) num = 0
+
+  const formatted = new Intl.NumberFormat('vi-VN').format(num)
+  displayValue.value = formatted
+  // Luôn đồng bộ DOM trực tiếp để không bao giờ bị lệch ký tự
+  inputEl.value = formatted
+
   emit('update:modelValue', num)
   emit('change', num)
+
+  // Khôi phục con trỏ chuột chính xác sau khi cập nhật
+  nextTick(() => {
+    if (!inputEl || !isFocused.value) return
+    let newCursorPos = 0
+    let count = 0
+    for (let i = 0; i < formatted.length; i++) {
+      if (/\d/.test(formatted[i])) {
+        count++
+      }
+      if (count === digitsBeforeCursor) {
+        newCursorPos = i + 1
+        break
+      }
+    }
+    if (digitsBeforeCursor === 0) newCursorPos = 0
+    if (count < digitsBeforeCursor) newCursorPos = formatted.length
+
+    inputEl.setSelectionRange(newCursorPos, newCursorPos)
+  })
 }
 
 const handleBlur = (e) => {
-  let num = typeof props.modelValue === 'number' ? props.modelValue : parseInt(String(displayValue.value).replace(/[^\d]/g, ''), 10)
-  if (isNaN(num) || num < props.min) {
-    num = props.min
+  isFocused.value = false
+  const raw = String(displayValue.value).replace(/[^\d]/g, '')
+  if (!raw) {
+    if (props.min > 0) {
+      displayValue.value = formatNumberString(props.min)
+      if (inputRef.value) inputRef.value.value = displayValue.value
+      emit('update:modelValue', props.min)
+    } else {
+      displayValue.value = ''
+      if (inputRef.value) inputRef.value.value = ''
+      emit('update:modelValue', '')
+    }
+  } else {
+    let num = parseInt(raw, 10)
+    if (isNaN(num)) num = props.min || 0
+    if (props.min !== undefined && props.min !== null && num < props.min) {
+      num = props.min
+    }
+    if (props.max !== undefined && props.max !== null && num > props.max) {
+      num = props.max
+    }
+
+    const formatted = formatNumberString(num)
+    displayValue.value = formatted
+    if (inputRef.value) inputRef.value.value = formatted
+    emit('update:modelValue', num)
   }
-  displayValue.value = formatNumberString(num)
-  emit('update:modelValue', num)
   emit('blur', e)
 }
 </script>
@@ -94,11 +174,13 @@ const handleBlur = (e) => {
     ]"
   >
     <input 
+      ref="inputRef"
       type="text" 
       class="currency-input"
       :value="displayValue"
       :placeholder="placeholder"
       :disabled="disabled"
+      @focus="handleFocus"
       @input="handleInput"
       @blur="handleBlur"
     />

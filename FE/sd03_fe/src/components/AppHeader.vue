@@ -12,6 +12,14 @@ defineProps({
 const route = useRoute()
 const router = useRouter()
 const nguoiDung = ref(getUser())
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', () => {
+    nguoiDung.value = getUser()
+  })
+  window.addEventListener('polyshoes-user-updated', () => {
+    nguoiDung.value = getUser()
+  })
+}
 
 watch(route, () => {
   nguoiDung.value = getUser()

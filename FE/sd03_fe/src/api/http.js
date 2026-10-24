@@ -93,7 +93,15 @@ axios.interceptors.request.use(async (config) => {
 })
 
 http.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    const method = String(res?.config?.method || '').toLowerCase()
+    if (['post', 'put', 'patch', 'delete'].includes(method)) {
+      try {
+        localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()))
+      } catch {}
+    }
+    return res
+  },
   async (err) => {
     const config = err.config
     const status = err.response?.status
@@ -150,5 +158,15 @@ http.interceptors.response.use(
     return Promise.reject(e)
   },
 )
+
+axios.interceptors.response.use((res) => {
+  const method = String(res?.config?.method || '').toLowerCase()
+  if (['post', 'put', 'patch', 'delete'].includes(method)) {
+    try {
+      localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()))
+    } catch {}
+  }
+  return res
+})
 
 export default http

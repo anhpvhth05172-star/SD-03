@@ -318,6 +318,13 @@
   text-align: center !important;
 }
 
+.name-col,
+.color-preview-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .text-slate {
   color: #64748b;
   font-weight: 500;
