@@ -279,7 +279,7 @@ const submit = async () => {
     }
     const payload = buildPayload()
     await createInvoice(payload)
-    router.push('/hoa-don')
+    router.push('/admin/hoa-don')
   } catch (e) {
     alert(e.message)
   } finally {
@@ -463,7 +463,7 @@ onMounted(async () => {
         <button class="btn-primary" type="button" :disabled="saving" @click="submit">
           {{ saving ? 'Đang lưu...' : 'Thêm' }}
         </button>
-        <button class="btn-cancel" type="button" @click="router.push('/hoa-don')">Hủy</button>
+        <button class="btn-cancel" type="button" @click="router.push('/admin/hoa-don')">Hủy</button>
       </div>
     </section>
     <section class="create-card" v-else>

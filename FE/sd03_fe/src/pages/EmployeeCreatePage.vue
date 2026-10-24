@@ -160,7 +160,7 @@ const submit = async () => {
       const taoMoi = await createEmployee(payload)
       setFlash(`Đã thêm nhân viên ${taoMoi.maNhanVien} — ${taoMoi.tenTaiKhoan}`)
     }
-    router.push('/nhan-vien')
+    router.push('/admin/nhan-vien')
   } catch (e) {
     errorMsg.value = e.message
   } finally {
@@ -405,7 +405,7 @@ onMounted(async () => {
           <button class="btn-primary" type="button" :disabled="saving" @click="submit">
             {{ saving ? 'Đang lưu...' : isEdit ? 'Cập nhật' : 'Thêm' }}
           </button>
-          <button class="btn-cancel" type="button" @click="router.push('/nhan-vien')">Hủy</button>
+          <button class="btn-cancel" type="button" @click="router.push('/admin/nhan-vien')">Hủy</button>
         </div>
       </div>
     </div>

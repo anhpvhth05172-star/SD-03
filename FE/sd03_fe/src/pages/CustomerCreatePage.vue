@@ -173,7 +173,7 @@ const submit = async () => {
       const taoMoi = await createCustomer(payload)
       setFlash(`Đã thêm khách hàng ${taoMoi.maKhachHang} — ${taoMoi.tenKhachHang}`)
     }
-    router.push('/khach-hang')
+    router.push('/admin/khach-hang')
   } catch (e) {
     errorMsg.value = e.message
   } finally {
@@ -388,7 +388,7 @@ onMounted(async () => {
           <button class="btn-primary" type="button" :disabled="saving" @click="submit">
             {{ saving ? 'Đang lưu...' : isEdit ? 'Cập nhật' : 'Thêm' }}
           </button>
-          <button class="btn-cancel" type="button" @click="router.push('/khach-hang')">Hủy</button>
+          <button class="btn-cancel" type="button" @click="router.push('/admin/khach-hang')">Hủy</button>
         </div>
       </div>
     </div>

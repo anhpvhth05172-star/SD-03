@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
-import { cartCount } from "@/pages/clients/store";
+import { cartCount, fetchCart } from "@/pages/clients/store";
 import { getUser, dangXuat } from "@/utils/auth";
 import "@/pages/clients/css/style.css";
 
@@ -9,10 +9,11 @@ const route = useRoute();
 
 const user = ref(getUser());
 const userName = computed(() => {
+  if (!user.value) return "TÀI KHOẢN";
   return (
     user.value?.tenKhachHang ||
     user.value?.tenTaiKhoan ||
-    "TRAN VAN THAI"
+    "KHÁCH HÀNG"
   ).toUpperCase();
 });
 
@@ -39,6 +40,7 @@ const closeDropdowns = () => {
 
 onMounted(() => {
   window.addEventListener("click", closeDropdowns);
+  fetchCart();
 });
 
 onUnmounted(() => {
@@ -48,6 +50,7 @@ onUnmounted(() => {
 const handleLogout = () => {
   dangXuat();
   user.value = null;
+  fetchCart();
   closeDropdowns();
 };
 
@@ -104,15 +107,6 @@ const handleSubscribe = () => {
             </li>
             <li class="nav-item">
               <RouterLink
-                to="/gioi-thieu"
-                class="client-nav-link"
-                :class="{ active: route.path === '/gioi-thieu' }"
-              >
-                GIỚI THIỆU
-              </RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink
                 to="/cua-hang"
                 class="client-nav-link"
                 :class="{ active: route.path.startsWith('/cua-hang') }"
@@ -122,33 +116,24 @@ const handleSubscribe = () => {
             </li>
             <li class="nav-item">
               <RouterLink
-                to="/don-hang"
+                to="/tra-cuu"
                 class="client-nav-link"
                 :class="{
                   active:
-                    route.path === '/don-hang' ||
-                    route.path.startsWith('/don-hang/'),
+                    route.path === '/tra-cuu' ||
+                    route.path.startsWith('/don-hang'),
                 }"
               >
-                ĐƠN HÀNG
+                TRA CỨU ĐƠN HÀNG
               </RouterLink>
             </li>
             <li class="nav-item">
               <RouterLink
-                to="/tra-cuu"
+                to="/gioi-thieu"
                 class="client-nav-link"
-                :class="{ active: route.path === '/tra-cuu' }"
+                :class="{ active: route.path === '/gioi-thieu' }"
               >
-                TRA CỨU
-              </RouterLink>
-            </li>
-            <li class="nav-item">
-              <RouterLink
-                to="/goi-y"
-                class="client-nav-link"
-                :class="{ active: route.path === '/goi-y' }"
-              >
-                GỢI Ý
+                GIỚI THIỆU
               </RouterLink>
             </li>
             <li class="nav-item">
@@ -260,24 +245,16 @@ const handleSubscribe = () => {
                   <span>Giỏ hàng của tôi</span>
                 </RouterLink>
                 <RouterLink
-                  to="/don-hang"
-                  class="client-dropdown-item"
-                  @click="closeDropdowns"
-                >
-                  <i class="bi bi-receipt text-muted"></i>
-                  <span>Đơn hàng của tôi</span>
-                </RouterLink>
-                <RouterLink
                   to="/tra-cuu"
                   class="client-dropdown-item"
                   @click="closeDropdowns"
                 >
                   <i class="bi bi-search text-muted"></i>
-                  <span>Tra cứu đơn hàng</span>
+                  <span>Tra cứu & đơn hàng của tôi</span>
                 </RouterLink>
                 <div class="client-dropdown-divider"></div>
                 <RouterLink
-                  to="/san-pham"
+                  to="/admin/san-pham"
                   class="client-dropdown-item text-muted"
                   @click="closeDropdowns"
                 >
@@ -632,7 +609,7 @@ const handleSubscribe = () => {
             >
             <span>·</span>
             <RouterLink
-              to="/san-pham"
+              to="/admin/san-pham"
               class="text-decoration-none text-danger fw-semibold"
             >
               <i class="bi bi-shield-lock me-1"></i>Trang quản trị (Admin)

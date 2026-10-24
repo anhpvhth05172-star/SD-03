@@ -384,7 +384,7 @@ onMounted(() => {
           </svg>
           {{ exporting ? 'Đang xuất...' : 'Xuất File' }}
         </button>
-        <button class="btn-add" type="button" @click="router.push('/khach-hang/them')">
+        <button class="btn-add" type="button" @click="router.push('/admin/khach-hang/them')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
             <path d="M12 6v12M6 12h12" />
           </svg>

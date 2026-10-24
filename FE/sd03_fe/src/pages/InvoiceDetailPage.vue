@@ -50,7 +50,7 @@ onMounted(load)
 <template>
   <div class="screen">
     <div class="detail-top">
-      <button class="btn-back" type="button" @click="router.push('/hoa-don')">← Quay lại danh sách</button>
+      <button class="btn-back" type="button" @click="router.push('/admin/hoa-don')">← Quay lại danh sách</button>
     </div>
 
     <section v-if="loading" class="panel">
@@ -60,7 +60,7 @@ onMounted(load)
     <section v-else-if="error" class="panel">
       <div class="state-box is-error">
         <p class="state-msg">{{ error }}</p>
-        <button class="btn-back" type="button" @click="router.push('/hoa-don')">← Quay lại danh sách</button>
+        <button class="btn-back" type="button" @click="router.push('/admin/hoa-don')">← Quay lại danh sách</button>
       </div>
     </section>
 

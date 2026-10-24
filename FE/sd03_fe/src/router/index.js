@@ -49,150 +49,151 @@ const routes = [
   { path: "/dang-nhap", component: LoginPage, meta: { title: "Đăng nhập" } },
   { path: "/dang-ky", component: RegisterPage, meta: { title: "Đăng ký" } },
   {
-    path: "/",
+    path: "/admin",
     component: AdminLayout,
     children: [
-      { path: "", redirect: "/san-pham" },
+      { path: "", redirect: "/admin/san-pham" },
+      { path: "/admin", redirect: "/admin/san-pham" },
       {
-        path: "/san-pham",
+        path: "san-pham",
         name: "ProductList",
         component: ProductListPage,
         meta: { title: "Quản lý sản phẩm" },
       },
       {
-        path: "/san-pham/them",
+        path: "san-pham/them",
         name: "ProductCreate",
         component: ProductCreatePage,
         meta: { title: "Thêm mới sản phẩm" },
       },
       {
-        path: "/san-pham/bien-the",
+        path: "san-pham/bien-the",
         name: "ProductVariant",
         component: ProductVariantPage,
         meta: { title: "Biến thể sản phẩm" },
       },
       {
-        path: "/bien-the-san-pham",
+        path: "bien-the-san-pham",
         component: ProductVariantPage,
         meta: { title: "Biến thể sản phẩm" },
       },
       {
-        path: "/thuoc-tinh",
+        path: "thuoc-tinh",
         component: AttributeCategoryPage,
         meta: { title: "Danh mục thuộc tính" },
       },
       {
-        path: "/thuoc-tinh/:category",
+        path: "thuoc-tinh/:category",
         component: AttributeCategoryPage,
         meta: { title: "Danh mục thuộc tính" },
       },
       {
-        path: "/hoa-don",
+        path: "hoa-don",
         component: InvoiceListPage,
         meta: { title: "Quản lý hóa đơn", requiresAuth: true },
       },
       {
-        path: "/hoa-don/them",
+        path: "hoa-don/them",
         component: InvoiceFormPage,
         meta: { title: "Tạo hóa đơn", requiresAuth: true },
       },
       {
-        path: "/hoa-don/:id",
+        path: "hoa-don/:id",
         component: InvoiceDetailPage,
         meta: { title: "Chi tiết hóa đơn", requiresAuth: true },
       },
       {
-        path: "/hoa-don/:id/sua",
+        path: "hoa-don/:id/sua",
         component: InvoiceFormPage,
         meta: { title: "Sửa hóa đơn", requiresAuth: true },
       },
       {
-        path: "/phieu-giam-gia",
+        path: "phieu-giam-gia",
         component: VoucherListPage,
         meta: { title: "Quản lý phiếu giảm giá" },
       },
       {
-        path: "/phieu-giam-gia/add",
+        path: "phieu-giam-gia/add",
         component: DiscountForm,
         meta: { title: "Thêm phiếu giảm giá" },
       },
       {
-        path: "/phieu-giam-gia/detail/:id",
+        path: "phieu-giam-gia/detail/:id",
         component: DiscountFormDetail,
         meta: { title: "Chi tiết phiếu giảm giá" },
       },
       {
-        path: "/phieu-giam-gia/update/:id",
+        path: "phieu-giam-gia/update/:id",
         component: DiscountFormUpdate,
         meta: { title: "Cập nhật phiếu giảm giá" },
       },
       {
-        path: "/phieu-giam-gia/:id/edit",
-        redirect: (to) => `/phieu-giam-gia/update/${to.params.id}`,
+        path: "phieu-giam-gia/:id/edit",
+        redirect: (to) => `/admin/phieu-giam-gia/update/${to.params.id}`,
       },
       {
-        path: "/dot-giam-gia",
+        path: "dot-giam-gia",
         component: DiscountEventPage,
         meta: { title: "Quản lý đợt giảm giá", requiresAuth: true },
       },
       {
-        path: "/dot-giam-gia/add",
+        path: "dot-giam-gia/add",
         component: VoucherForm,
         meta: { title: "Thêm đợt giảm giá" },
       },
       {
-        path: "/dot-giam-gia/detail/:id",
+        path: "dot-giam-gia/detail/:id",
         component: VoucherFormDetail,
         meta: { title: "Chi tiết đợt giảm giá" },
       },
       {
-        path: "/dot-giam-gia/update/:id",
+        path: "dot-giam-gia/update/:id",
         component: VoucherFormUpdate,
         meta: { title: "Cập nhật đợt giảm giá" },
       },
       {
-        path: "/dot-giam-gia/edit/:id",
-        redirect: (to) => `/dot-giam-gia/update/${to.params.id}`,
+        path: "dot-giam-gia/edit/:id",
+        redirect: (to) => `/admin/dot-giam-gia/update/${to.params.id}`,
       },
-      { path: "/giam-gia", redirect: "/phieu-giam-gia" },
+      { path: "giam-gia", redirect: "/admin/phieu-giam-gia" },
       {
-        path: "/thong-ke",
+        path: "thong-ke",
         component: PlaceholderPage,
         meta: { title: "Thống kê", requiresAuth: true },
       },
       {
-        path: "/ban-hang",
+        path: "ban-hang",
         name: "PosSales",
         component: PosSalesPage,
         meta: { title: "Bán hàng tại quầy", requiresAuth: true },
       },
       {
-        path: "/khach-hang",
+        path: "khach-hang",
         component: CustomerListPage,
         meta: { title: "Quản lý khách hàng", requiresAuth: true },
       },
       {
-        path: "/khach-hang/them",
+        path: "khach-hang/them",
         component: CustomerCreatePage,
         meta: { title: "Quản lý khách hàng", requiresAuth: true },
       },
       {
-        path: "/khach-hang/:id/sua",
+        path: "khach-hang/:id/sua",
         component: CustomerCreatePage,
         meta: { title: "Quản lý khách hàng", requiresAuth: true },
       },
       {
-        path: "/nhan-vien",
+        path: "nhan-vien",
         component: EmployeeListPage,
         meta: { title: "Quản lý nhân viên", requiresAuth: true },
       },
       {
-        path: "/nhan-vien/them",
+        path: "nhan-vien/them",
         component: EmployeeCreatePage,
         meta: { title: "Quản lý nhân viên", requiresAuth: true },
       },
       {
-        path: "/nhan-vien/:id/sua",
+        path: "nhan-vien/:id/sua",
         component: EmployeeCreatePage,
         meta: { title: "Quản lý nhân viên", requiresAuth: true },
       },
@@ -227,9 +228,7 @@ const routes = [
       },
       {
         path: "/goi-y",
-        name: "ClientSuggestions",
-        component: ProductShop,
-        meta: { title: "Gợi ý sản phẩm" },
+        redirect: "/cua-hang",
       },
       {
         path: "/cua-hang/:id",
@@ -239,9 +238,7 @@ const routes = [
       },
       {
         path: "/don-hang",
-        name: "ClientOrders",
-        component: OrderList,
-        meta: { title: "Đơn hàng của bạn" },
+        redirect: "/tra-cuu",
       },
       {
         path: "/don-hang/:id",
@@ -275,17 +272,38 @@ const routes = [
       },
     ],
   },
-  {
-    path: "/admin/:pathMatch(.*)*",
-    redirect: (to) => {
-      const sub = to.params.pathMatch;
-      const path = Array.isArray(sub) ? sub.join("/") : sub;
-      return path ? `/${path}` : "/san-pham";
-    },
-  },
+  // ===== Backward Compatibility Redirects (URL cũ không có tiền tố /admin) =====
+  { path: "/san-pham", redirect: "/admin/san-pham" },
+  { path: "/san-pham/them", redirect: "/admin/san-pham/them" },
+  { path: "/san-pham/bien-the", redirect: "/admin/san-pham/bien-the" },
+  { path: "/bien-the-san-pham", redirect: "/admin/bien-the-san-pham" },
+  { path: "/thuoc-tinh", redirect: "/admin/thuoc-tinh" },
+  { path: "/thuoc-tinh/:category", redirect: (to) => `/admin/thuoc-tinh/${to.params.category}` },
+  { path: "/hoa-don", redirect: "/admin/hoa-don" },
+  { path: "/hoa-don/them", redirect: "/admin/hoa-don/them" },
+  { path: "/hoa-don/:id", redirect: (to) => `/admin/hoa-don/${to.params.id}` },
+  { path: "/hoa-don/:id/sua", redirect: (to) => `/admin/hoa-don/${to.params.id}/sua` },
+  { path: "/phieu-giam-gia", redirect: "/admin/phieu-giam-gia" },
+  { path: "/phieu-giam-gia/add", redirect: "/admin/phieu-giam-gia/add" },
+  { path: "/phieu-giam-gia/detail/:id", redirect: (to) => `/admin/phieu-giam-gia/detail/${to.params.id}` },
+  { path: "/phieu-giam-gia/update/:id", redirect: (to) => `/admin/phieu-giam-gia/update/${to.params.id}` },
+  { path: "/dot-giam-gia", redirect: "/admin/dot-giam-gia" },
+  { path: "/dot-giam-gia/add", redirect: "/admin/dot-giam-gia/add" },
+  { path: "/dot-giam-gia/detail/:id", redirect: (to) => `/admin/dot-giam-gia/detail/${to.params.id}` },
+  { path: "/dot-giam-gia/update/:id", redirect: (to) => `/admin/dot-giam-gia/update/${to.params.id}` },
+  { path: "/thong-ke", redirect: "/admin/thong-ke" },
+  { path: "/ban-hang", redirect: "/admin/ban-hang" },
+  { path: "/khach-hang", redirect: "/admin/khach-hang" },
+  { path: "/khach-hang/them", redirect: "/admin/khach-hang/them" },
+  { path: "/khach-hang/:id/sua", redirect: (to) => `/admin/khach-hang/${to.params.id}/sua` },
+  { path: "/nhan-vien", redirect: "/admin/nhan-vien" },
+  { path: "/nhan-vien/them", redirect: "/admin/nhan-vien/them" },
+  { path: "/nhan-vien/:id/sua", redirect: (to) => `/admin/nhan-vien/${to.params.id}/sua` },
+
+  { path: "/", redirect: "/trang-chu" },
   {
     path: "/:pathMatch(.*)*",
-    redirect: "/san-pham",
+    redirect: "/trang-chu",
   },
 ];
 
@@ -320,8 +338,8 @@ const router = createRouter({
 // })
 
 // router.beforeEach((to) => {
-//   if (to.path.startsWith('/nhan-vien') && !laAdmin()) {
-//     return '/khach-hang'
+//   if (to.path.startsWith('/admin/nhan-vien') && !laAdmin()) {
+//     return '/admin/khach-hang'
 //   }
 //   return true
 // })

@@ -1,15 +1,56 @@
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { products, brands, types } from "../store";
+import { getSanPhamClient } from "@/api/product";
+import { money } from "../store";
 import ProductCard from "./ProductCard.vue";
 
 const route = useRoute();
+
+// ===== Bộ lọc =====
 const q = ref("");
 const brand = ref(route.query.brand || "");
 const type = ref("");
 const sort = ref("");
 
+// ===== Dữ liệu từ API =====
+const allProducts = ref([]);
+const loading = ref(false);
+const error = ref("");
+
+// Danh sách thương hiệu / loại giày từ dữ liệu thực
+const brands = computed(() => [
+  ...new Set(allProducts.value.map((p) => p.tenThuongHieu).filter(Boolean)),
+]);
+const types = computed(() => [
+  ...new Set(allProducts.value.map((p) => p.tenLoaiGiay).filter(Boolean)),
+]);
+
+// ===== Fetch sản phẩm =====
+async function fetchProducts() {
+  loading.value = true;
+  error.value = "";
+  try {
+    const res = await getSanPhamClient({ keyword: q.value || undefined });
+    // res có thể là PageResponse { content: [...], totalElements, ... }
+    allProducts.value = res?.content ?? res ?? [];
+  } catch (e) {
+    error.value = e.message || "Không thể tải danh sách sản phẩm.";
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(fetchProducts);
+
+// Debounce khi gõ tìm kiếm
+let searchTimer = null;
+watch(q, () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(fetchProducts, 400);
+});
+
+// Đồng bộ brand từ query string
 watch(
   () => route.query.brand,
   (val) => {
@@ -17,16 +58,21 @@ watch(
   }
 );
 
+// ===== Lọc/sắp xếp phía FE =====
 const list = computed(() => {
-  let r = products.filter(
+  let r = allProducts.value.filter(
     (p) =>
-      (!q.value ||
-        (p.name + p.code).toLowerCase().includes(q.value.toLowerCase())) &&
-      (!brand.value || p.brand === brand.value) &&
-      (!type.value || p.type === type.value),
+      (!brand.value || p.tenThuongHieu === brand.value) &&
+      (!type.value || p.tenLoaiGiay === type.value)
   );
-  if (sort.value === "asc") r = [...r].sort((a, b) => a.price - b.price);
-  if (sort.value === "desc") r = [...r].sort((a, b) => b.price - a.price);
+  if (sort.value === "asc")
+    r = [...r].sort(
+      (a, b) => Number(a.giaBanMin || a.giaBan || 0) - Number(b.giaBanMin || b.giaBan || 0)
+    );
+  if (sort.value === "desc")
+    r = [...r].sort(
+      (a, b) => Number(b.giaBanMin || b.giaBan || 0) - Number(a.giaBanMin || a.giaBan || 0)
+    );
   return r;
 });
 
@@ -35,6 +81,7 @@ const reset = () => {
   brand.value = "";
   type.value = "";
   sort.value = "";
+  fetchProducts();
 };
 </script>
 
@@ -76,21 +123,40 @@ const reset = () => {
     </div>
   </div>
 
-  <p class="text-muted-ps">
-    {{ list.length }} / {{ products.length }} sản phẩm
-  </p>
-
-  <div v-if="list.length" class="row g-3">
-    <div v-for="p in list" :key="p.id" class="col-6 col-md-4 col-lg-3">
-      <ProductCard :product="p" />
+  <!-- Loading -->
+  <div v-if="loading" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Đang tải...</span>
     </div>
+    <p class="mt-2 text-muted-ps">Đang tải sản phẩm...</p>
   </div>
-  <div v-else class="ps-card text-center p-5">
-    <div class="fs-1">👟</div>
-    <h5 class="mt-2">Không tìm thấy sản phẩm nào</h5>
+
+  <!-- Error -->
+  <div v-else-if="error" class="ps-card text-center p-5">
+    <div class="fs-1">⚠️</div>
+    <h5 class="mt-2">Lỗi tải dữ liệu</h5>
+    <p class="text-muted-ps">{{ error }}</p>
+    <button class="btn btn-primary px-4" @click="fetchProducts">Thử lại</button>
+  </div>
+
+  <!-- Danh sách sản phẩm -->
+  <template v-else>
     <p class="text-muted-ps">
-      Thử thay đổi từ khóa tìm kiếm hoặc đặt lại các bộ lọc.
+      {{ list.length }} / {{ allProducts.length }} sản phẩm
     </p>
-    <button class="btn btn-light-border px-4" @click="reset">Xóa bộ lọc</button>
-  </div>
+
+    <div v-if="list.length" class="row g-3">
+      <div v-for="p in list" :key="p.id" class="col-6 col-md-4 col-lg-3">
+        <ProductCard :product="p" />
+      </div>
+    </div>
+    <div v-else class="ps-card text-center p-5">
+      <div class="fs-1">👟</div>
+      <h5 class="mt-2">Không tìm thấy sản phẩm nào</h5>
+      <p class="text-muted-ps">
+        Thử thay đổi từ khóa tìm kiếm hoặc đặt lại các bộ lọc.
+      </p>
+      <button class="btn btn-light-border px-4" @click="reset">Xóa bộ lọc</button>
+    </div>
+  </template>
 </template>

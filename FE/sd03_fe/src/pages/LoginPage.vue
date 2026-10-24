@@ -1,10 +1,12 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { dangNhap } from '../api/auth'
 import { luuPhien } from '../utils/auth'
+import { fetchCart } from '../components/store'
 
 const router = useRouter()
+const route = useRoute()
 
 const form = ref({ taiKhoan: '', matKhau: '' })
 const error = ref('')
@@ -23,7 +25,19 @@ const submit = async () => {
       matKhau: form.value.matKhau,
     })
     luuPhien(resp)
-    router.push('/hoa-don')
+    try {
+      await fetchCart()
+    } catch {
+      // ignore
+    }
+    const redirect = route.query.redirect
+    if (redirect) {
+      router.push(redirect)
+    } else if (resp.vaiTro === 'ADMIN' || resp.vaiTro === 'NHAN_VIEN') {
+      router.push('/admin/hoa-don')
+    } else {
+      router.push('/cua-hang')
+    }
   } catch (e) {
     error.value = e.message || 'Đăng nhập thất bại'
   } finally {

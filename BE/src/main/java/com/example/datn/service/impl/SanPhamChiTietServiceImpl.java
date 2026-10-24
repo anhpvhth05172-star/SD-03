@@ -1,12 +1,15 @@
 package com.example.datn.service.impl;
 
+import com.example.datn.dto.DotGiamGia.GiaKhuyenMai;
 import com.example.datn.dto.SanPhamChiTietRequest;
 import com.example.datn.dto.SanPhamChiTietResponse;
 import com.example.datn.entity.*;
 import com.example.datn.repository.*;
 import com.example.datn.service.SanPhamChiTietService;
+import com.example.datn.service.impls.GiaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -17,6 +20,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,20 +35,28 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
     private final DeGiayRepository deGiayRepository;
     private final ChiTietHoaDonRepository chiTietHoaDonRepository;
     private final HinhAnhSanPhamRepository hinhAnhSanPhamRepository;
+    private final GiaService giaService;
 
     @Override
     public Page<SanPhamChiTietResponse> getAll(int page, int size, String search, Long idSanPham, Long idMauSac, Long idKichCo, Boolean trangThai) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id"));
         String keyword = search != null && !search.trim().isEmpty() ? search.trim() : null;
         Page<SanPhamChiTiet> result = sanPhamChiTietRepository.filterChiTiet(keyword, idSanPham, idMauSac, idKichCo, trangThai, pageable);
-        return result.map(spct -> mapToResponse(spct));
+        // Batch-calculate discount prices (1 query, tránh N+1)
+        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(result.getContent());
+        List<SanPhamChiTietResponse> mapped = result.getContent().stream()
+                .map(spct -> mapToResponse(spct, giaMap.get(spct.getId())))
+                .collect(Collectors.toList());
+        return new PageImpl<>(mapped, pageable, result.getTotalElements());
     }
 
     @Override
     public List<SanPhamChiTietResponse> getBySanPhamId(Long idSanPham) {
-        return sanPhamChiTietRepository.findBySanPhamId(idSanPham)
-                .stream()
-                .map(spct -> mapToResponse(spct))
+        List<SanPhamChiTiet> list = sanPhamChiTietRepository.findBySanPhamId(idSanPham);
+        // Batch-calculate discount prices
+        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(list);
+        return list.stream()
+                .map(spct -> mapToResponse(spct, giaMap.get(spct.getId())))
                 .collect(Collectors.toList());
     }
 
@@ -52,7 +64,8 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
     public SanPhamChiTietResponse getById(Long id) {
         SanPhamChiTiet item = sanPhamChiTietRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy biến thể với ID: " + id));
-        return mapToResponse(item);
+        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(List.of(item));
+        return mapToResponse(item, giaMap.get(item.getId()));
     }
 
     @Override
@@ -306,7 +319,13 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
         sanPhamChiTietRepository.delete(item);
     }
 
+    /** Overload không có thông tin giảm giá (fallback, dùng nội bộ khi cần) */
     private SanPhamChiTietResponse mapToResponse(SanPhamChiTiet spct) {
+        return mapToResponse(spct, null);
+    }
+
+    /** Overload chính: nhận GiaKhuyenMai đã được tính sẵn (batch, tránh N+1) */
+    private SanPhamChiTietResponse mapToResponse(SanPhamChiTiet spct, GiaKhuyenMai gia) {
         String colorHex = "#64748b";
         String colorName = "Mặc định";
         if (spct.getMauSac() != null) {
@@ -357,6 +376,14 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
             trangThaiTonKho = "Đang bán";
         }
 
+        // Tính giá sau giảm từ GiaKhuyenMai
+        BigDecimal giaGoc = spct.getGiaBan();
+        BigDecimal giaSauGiam = (gia != null) ? gia.giaSauGiam() : giaGoc;
+        BigDecimal phanTramGiam = (gia != null) ? gia.phanTramGiam() : null;
+        String discountLabel = (phanTramGiam != null)
+                ? phanTramGiam.stripTrailingZeros().toPlainString() + "%"
+                : "-";
+
         return SanPhamChiTietResponse.builder()
                 .id(spct.getId())
                 .idSanPham(spct.getSanPham() != null ? spct.getSanPham().getId() : null)
@@ -369,8 +396,10 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
                 .idKichCo(spct.getKichCo() != null ? spct.getKichCo().getId() : null)
                 .size(sizeName)
                 .stock(stockVal)
-                .price(spct.getGiaBan())
-                .discount("-")
+                .price(giaGoc)           // giá gốc
+                .giaSauGiam(giaSauGiam)  // giá thực (có thể = giaGoc nếu không có đợt giảm)
+                .phanTramGiam(phanTramGiam) // null nếu không có đợt giảm
+                .discount(discountLabel) // "-" hoặc "25%"
                 .trangThai(spct.getTrangThai() != null ? spct.getTrangThai() : true)
                 .trangThaiTonKho(trangThaiTonKho)
                 .img(imgUrl)

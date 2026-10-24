@@ -1,8 +1,24 @@
 <script setup>
-import { products, brands } from "../store";
+import { ref, onMounted } from "vue";
+import { getSanPhamClient } from "@/api/product";
 import ProductCard from "./ProductCard.vue";
 
-const featured = products.slice(0, 4);
+const featured = ref([]);
+const brands = ref([]);
+
+onMounted(async () => {
+  try {
+    const res = await getSanPhamClient({ page: 0, size: 8 });
+    const list = res?.content ?? res ?? [];
+    featured.value = list.slice(0, 4);
+    brands.value = [
+      ...new Set(list.map((p) => p.tenThuongHieu).filter(Boolean)),
+    ];
+  } catch {
+    // Lỗi load: hiển thị trang bình thường, không có sản phẩm featured
+  }
+});
+
 const perks = [
   { t: "Chính hãng 100%", d: "Hoàn tiền gấp đôi nếu phát hiện hàng giả." },
   { t: "Đổi size trong 7 ngày", d: "Không vừa chân, đổi miễn phí lần đầu." },
@@ -38,7 +54,7 @@ const perks = [
     </div>
   </section>
 
-  <section class="mb-5">
+  <section v-if="brands.length" class="mb-5">
     <div class="d-flex flex-wrap gap-2">
       <RouterLink
         v-for="b in brands"
@@ -50,7 +66,7 @@ const perks = [
     </div>
   </section>
 
-  <section class="mb-5">
+  <section v-if="featured.length" class="mb-5">
     <div class="d-flex justify-content-between align-items-end mb-3">
       <h3 class="mb-0">Sản phẩm nổi bật</h3>
       <RouterLink to="/cua-hang" class="fw-semibold text-decoration-none"

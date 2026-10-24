@@ -444,7 +444,7 @@ public class HoaDonService {
             throw new IllegalArgumentException("Trạng thái không được để trống");
         }
         toMaTrangThai(req.getTrangThai());
-        if (req.getIdNhanVien() == null) {
+        if (!"ONLINE".equals(toMaLoaiDon(req.getLoaiDon())) && req.getIdNhanVien() == null) {
             throw new IllegalArgumentException("Vui lòng chọn nhân viên");
         }
         if (req.getPhiVanChuyen() == null) {

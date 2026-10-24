@@ -7,7 +7,7 @@ const router = useRouter()
 const API_BASE = 'http://localhost:8080/api/v1'
 
 const navigateToAdd = () => {
-  router.push('/san-pham/them')
+  router.push('/admin/san-pham/them')
 }
 
 // State
@@ -306,7 +306,7 @@ const copyToClipboard = (text) => {
 
 const viewProductDetails = (item) => {
   router.push({
-    path: '/san-pham/bien-the',
+    path: '/admin/san-pham/bien-the',
     query: {
       idSanPham: item.id,
       maSanPham: item.maSanPham || `SP0${item.id}`,

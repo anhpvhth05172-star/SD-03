@@ -29,11 +29,6 @@ public class DotGiamGiaServiceFinal {
     private final DotGiamGiaRepository dotRepo;
     private final DotGiamGiaChiTietRepository chiTietRepo;
     private final SanPhamChiTietRepository spctRepo;
-
-    /**
-     * Gom các đợt đang hiệu lực theo biến thể, giữ lại đợt có % CAO NHẤT.
-     * Trả về: variantId -> {variantId, tenDot, phanTram}
-     */
     private Map<Long, Object[]> maxDotTheoBienThe(Long excludeId) {
         Long ex = (excludeId == null) ? -1L : excludeId;
         Map<Long, Object[]> result = new HashMap<>();
@@ -48,11 +43,6 @@ public class DotGiamGiaServiceFinal {
         return result;
     }
 
-    /**
-     * Danh sách biến thể để chọn vào đợt giảm giá.
-     * Biến thể thuộc nhiều đợt đang hiệu lực -> trả về đợt có % cao nhất
-     * (mức giảm áp dụng = max các đợt, không cộng dồn, không nhân chồng).
-     */
     @Transactional(readOnly = true)
     public List<SanPhamChiTietOptionResponse> layDanhSachSanPham(Long excludeId) {
         List<SanPhamChiTietOptionResponse> list = spctRepo.findAllActiveForDiscount().stream()
@@ -71,10 +61,6 @@ public class DotGiamGiaServiceFinal {
         return list;
     }
 
-    /**
-     * % giảm thực tế của 1 biến thể tại thời điểm hiện tại = MAX các đợt đang hiệu lực.
-     * Dùng khi tính giá cho giỏ hàng / hóa đơn. Trả về 0 nếu không thuộc đợt nào.
-     */
     @Transactional(readOnly = true)
     public BigDecimal phanTramGiamHieuLuc(Long variantId) {
         Object[] r = maxDotTheoBienThe(null).get(variantId);

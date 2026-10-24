@@ -107,8 +107,94 @@ if (route.query.code) {
       </div>
     </section>
 
+    <!-- Recent Orders List Section (Khi chưa tìm kiếm cụ thể và đã có đơn hàng) -->
+    <section v-if="!searched && recentOrders.length" class="mb-5">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h4 class="mb-1 fw-bold">
+            <i class="bi bi-clock-history me-2 text-danger"></i>Đơn hàng bạn đã đặt ({{ recentOrders.length }})
+          </h4>
+          <p class="text-muted-ps small mb-0">Nhấn tra cứu để theo dõi lộ trình hoặc xem chi tiết từng đơn hàng</p>
+        </div>
+      </div>
+
+      <div class="d-flex flex-column gap-3">
+        <div
+          v-for="o in recentOrders"
+          :key="o.id"
+          class="ps-card p-4"
+        >
+          <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center border-bottom pb-3 mb-3 gap-2">
+            <div>
+              <div class="d-flex align-items-center gap-2">
+                <span class="fw-bold fs-5 text-dark">Đơn hàng #{{ o.id }}</span>
+                <span class="badge bg-success-subtle text-success rounded-pill px-3 py-1">
+                  Đang xử lý
+                </span>
+              </div>
+              <div class="text-muted-ps small mt-1">
+                <i class="bi bi-clock me-1"></i> Ngày đặt: {{ o.date }}
+              </div>
+            </div>
+            <div class="text-sm-end">
+              <div class="text-muted-ps small">Tổng tiền:</div>
+              <span class="price fs-5">{{ money(o.total) }}</span>
+            </div>
+          </div>
+
+          <!-- Order Items -->
+          <div class="d-flex flex-column gap-2 mb-3">
+            <div
+              v-for="item in o.items"
+              :key="item.id + '-' + item.size"
+              class="d-flex align-items-center gap-3"
+            >
+              <div
+                class="ps-thumb flex-shrink-0"
+                style="width: 50px; height: 50px; font-size: 1.5rem"
+              >
+                {{ item.emoji || '👟' }}
+              </div>
+              <div class="flex-grow-1">
+                <div class="fw-bold text-dark small">{{ item.name }}</div>
+                <div class="small text-muted-ps">
+                  {{ item.brand }} · Size: {{ item.size }} · SL: {{ item.qty }}
+                </div>
+              </div>
+              <div class="text-end">
+                <span class="fw-semibold text-dark small">{{ money(item.price * item.qty) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recipient & Action Footer -->
+          <div class="bg-light p-3 rounded-3 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+            <div class="small text-muted-ps">
+              <span class="fw-semibold text-dark">{{ o.info?.name }}</span> · {{ o.info?.phone }} ·
+              <span class="text-truncate d-inline-block align-bottom" style="max-width: 320px;">
+                {{ o.info?.address }}
+              </span>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-outline-danger btn-sm px-3" @click="doSearch(o.id)">
+                <i class="bi bi-search me-1"></i>Theo dõi tiến độ
+              </button>
+              <RouterLink :to="`/don-hang/${o.id}`" class="btn btn-primary btn-sm px-3">
+                Chi tiết
+              </RouterLink>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Search Result Section -->
     <section v-if="searched" class="mb-5">
+      <div class="mb-3">
+        <button class="btn btn-sm btn-light-border px-3" @click="searched = false; searchInput = ''">
+          <i class="bi bi-arrow-left me-1"></i> Quay lại danh sách đơn hàng
+        </button>
+      </div>
       <div v-if="currentResult" class="ps-card p-4 p-md-5">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center border-bottom pb-4 mb-4 gap-3">
           <div>

@@ -55,7 +55,7 @@ const initProductHeaderInfo = () => {
 }
 
 const clearProductFilter = () => {
-  router.push('/san-pham/bien-the')
+  router.push('/admin/san-pham/bien-the')
 }
 
 let debounceTimer = null
@@ -924,7 +924,7 @@ const resetFilters = () => {
   filters.trangThai = ''
   currentPage.value = 0
   if (route.query.idSanPham || route.query.tenSanPham || route.query.maSanPham) {
-    router.push({ path: '/san-pham/bien-the' })
+    router.push({ path: '/admin/san-pham/bien-the' })
   } else {
     fetchVariants(false)
   }

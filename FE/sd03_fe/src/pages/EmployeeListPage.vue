@@ -197,7 +197,7 @@ onMounted(async () => {
           </svg>
           {{ exporting ? 'Đang xuất...' : 'Xuất File' }}
         </button>
-        <button v-if="laAdmin()" class="btn-add" type="button" @click="router.push('/nhan-vien/them')">
+        <button v-if="laAdmin()" class="btn-add" type="button" @click="router.push('/admin/nhan-vien/them')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
             <path d="M12 6v12M6 12h12" />
           </svg>
@@ -335,7 +335,7 @@ onMounted(async () => {
                         <circle cx="12" cy="12" r="3" />
                       </svg>
                     </button>
-                    <button class="act-btn is-red" type="button" aria-label="Sửa" @click="router.push(`/nhan-vien/${row.id}/sua`)">
+                    <button class="act-btn is-red" type="button" aria-label="Sửa" @click="router.push(`/admin/nhan-vien/${row.id}/sua`)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 6.5l3 3" />
                       </svg>
