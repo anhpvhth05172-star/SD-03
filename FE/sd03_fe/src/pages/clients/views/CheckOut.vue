@@ -403,63 +403,13 @@ function genMaHoaDon() {
   return `HD${stamp}${p(Math.floor(Math.random() * 1000), 3)}`;
 }
 
-/* ---------- Phương thức thanh toán: lấy danh sách thật từ back-end ---------- */
-const payOptions = ref([]); // danh sách phương thức từ /api/hoa-don/form-data
-const payKey = ref(""); // tên key chứa danh sách đó
+/* ---------- Phương thức thanh toán: id cố định theo bảng phuong_thuc_thanh_toan ---------- */
+// 11 = COD (Thanh toán khi nhận hàng), 2 = Chuyển khoản ngân hàng
+const PAY_METHOD_ID = { cod: 11, bank: 2 };
 
-async function loadFormData() {
-  try {
-    const data = await getJson(`${HOA_DON_API}/form-data`);
-    console.log("[Checkout] hoa-don/form-data:", data);
-    const key = Object.keys(data || {}).find(
-      (k) =>
-        Array.isArray(data[k]) &&
-        /thanh.?toan|phuong.?thuc|hinh.?thuc/i.test(k),
-    );
-    if (key) {
-      payKey.value = key;
-      payOptions.value = data[key];
-    } else {
-      console.warn(
-        "[Checkout] form-data không có danh sách phương thức thanh toán",
-      );
-    }
-  } catch (e) {
-    console.warn("[Checkout] Không tải được form-data:", e.message);
-  }
-}
-onMounted(loadFormData);
-
-const unaccent = (t) =>
-  String(t ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/gi, "d")
-    .toLowerCase();
-
-const optText = (o) =>
-  typeof o === "string"
-    ? o
-    : [o.ma, o.ten, o.tenPhuongThuc, o.name, o.label, o.value]
-        .filter(Boolean)
-        .join(" ");
-
-const optValue = (o) =>
-  typeof o === "string" ? o : (o.ma ?? o.value ?? o.id ?? o.ten);
-
-// kind: "cod" | "bank"
-function pickPayOption(kind) {
-  const re =
-    kind === "cod"
-      ? /tien mat|cod|nhan hang|cash/
-      : /chuyen khoan|bank|transfer/;
-  return payOptions.value.find((o) => re.test(unaccent(optText(o))));
-}
-
-function phuongThucFields(kind) {
-  const opt = pickPayOption(kind);
-  return { idPhuongThucThanhToan: opt ? opt.id : null };
-}
+const phuongThucFields = (kind) => ({
+  idPhuongThucThanhToan: PAY_METHOD_ID[kind],
+});
 
 // Các field khớp HoaDonRequest của back-end. Tiền hàng, giảm giá, tổng tiền
 // do back-end tự tính lại từ chi tiết + phiếu giảm giá nên không gửi lên.
@@ -504,12 +454,6 @@ async function submit() {
     : "Số điện thoại gồm 10 số, bắt đầu bằng 0.";
   errors.address = f.address.trim() ? "" : "Vui lòng nhập địa chỉ nhận hàng.";
   if (errors.name || errors.phone || errors.address) return;
-
-  if (!pickPayOption(f.pay)) {
-    submitError.value =
-      "Phương thức thanh toán này chưa được cấu hình trong hệ thống. Vui lòng chọn cách khác hoặc liên hệ cửa hàng.";
-    return;
-  }
 
   submitting.value = true;
   const payload = buildHoaDonRequest();
