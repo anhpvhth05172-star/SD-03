@@ -26,7 +26,9 @@ public class SanPhamChiTietResponse {
     private Long idKichCo;
     private String size;
     private Integer stock;
-    private BigDecimal price;
+    private BigDecimal price;       // giá gốc (giaBan)
+    private BigDecimal giaSauGiam;  // giá thực hiển thị (đã áp dụng đợt giảm giá nếu có)
+    private BigDecimal phanTramGiam; // % giảm từ đợt giảm giá (null = không có đợt)
     private String discount;
     private BigDecimal giaSauGiam;
     private BigDecimal phanTramGiam;

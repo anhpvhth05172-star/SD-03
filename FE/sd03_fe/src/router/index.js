@@ -14,6 +14,7 @@ import ProductCreatePage from '@/pages/Product/ProductCreatePage.vue'
 import ProductVariantPage from '@/pages/Product/ProductVariantPage.vue'
 import InvoiceListPage from '@/pages/Invoice/InvoiceListPage.vue'
 import InvoiceDetailPage from '@/pages/Invoice/InvoiceDetailPage.vue'
+import InvoiceFormPage from '@/pages/Invoice/InvoiceFormPage.vue'
 import VoucherListPage from '@/pages/Discount/VoucherListPage.vue'
 import DiscountEventPage from '@/pages/Discount/DiscountEventPage.vue'
 import EmployeeListPage from '@/pages/Employee/EmployeeListPage.vue'
@@ -56,7 +57,7 @@ const routes = [
       {
         path: '',
         // Mở khu vực khách hàng trước; khách có thể đăng nhập sau từ giao diện.
-        redirect: '/tai-khoan',
+        redirect: '/trang-chu',
       },
       { path: '/san-pham', name: 'ProductList', component: ProductListPage, meta: { ...metaBo, title: 'Quản lý sản phẩm' } },
       { path: '/san-pham/them', name: 'ProductCreate', component: ProductCreatePage, meta: { ...metaBo, title: 'Thêm mới sản phẩm' } },
@@ -65,9 +66,9 @@ const routes = [
       { path: '/thuoc-tinh', component: AttributeCategoryPage, meta: { ...metaBo, title: 'Danh mục thuộc tính' } },
       { path: '/thuoc-tinh/:category', component: AttributeCategoryPage, meta: { ...metaBo, title: 'Danh mục thuộc tính' } },
       { path: '/hoa-don', component: InvoiceListPage, meta: { ...metaBo, title: 'Quản lý hóa đơn' } },
-      { path: '/hoa-don/them', redirect: '/hoa-don' },
+      { path: '/hoa-don/them', component: InvoiceFormPage, meta: { ...metaBo, title: 'Tạo hóa đơn' } },
       { path: '/hoa-don/:id', component: InvoiceDetailPage, meta: { ...metaBo, title: 'Chi tiết hóa đơn' } },
-      { path: '/hoa-don/:id/sua', redirect: (to) => `/hoa-don/${to.params.id}` },
+      { path: '/hoa-don/:id/sua', component: InvoiceFormPage, meta: { ...metaBo, title: 'Sửa hóa đơn' } },
       { path: '/phieu-giam-gia', component: VoucherListPage, meta: { ...metaBo, title: 'Quản lý phiếu giảm giá' } },
       { path: '/phieu-giam-gia/add', component: DiscountForm, meta: { ...metaBo, title: 'Thêm phiếu giảm giá' } },
       { path: '/phieu-giam-gia/detail/:id', component: DiscountFormDetail, meta: { ...metaBo, title: 'Chi tiết phiếu giảm giá' } },

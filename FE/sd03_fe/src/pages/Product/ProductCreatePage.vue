@@ -543,7 +543,7 @@ const saveProduct = async (confirmMerge = false) => {
     showToast(data.message || 'Lưu sản phẩm thành công!')
 
     setTimeout(() => {
-      router.push('/san-pham')
+      router.push('/admin/san-pham')
     }, 1000)
   } catch (err) {
     showToast(err.message || 'Không thể kết nối đến cơ sở dữ liệu', 'error')
@@ -557,7 +557,7 @@ const confirmMergeAction = () => {
 }
 
 const goBack = () => {
-  router.push('/san-pham')
+  router.push('/admin/san-pham')
 }
 
 onMounted(() => {
