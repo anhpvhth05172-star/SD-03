@@ -16,30 +16,30 @@ export const DS_34_TINH_THANH = [
   { code: 'CT', ten: 'Thành phố Cần Thơ', subCodes: [92, 93, 94], tinhCu: ['Cần Thơ', 'Hậu Giang', 'Sóc Trăng'] },
 
   // 28 Tỉnh
-  { code: 'AG', ten: 'Tỉnh An Giang', subCodes: [89, 91], tinhCu: ['An Giang', 'Kiên Giang'] },
-  { code: 'BN', ten: 'Tỉnh Bắc Ninh', subCodes: [27, 24], tinhCu: ['Bắc Ninh', 'Bắc Giang'] },
+  { code: 'AG', ten: 'Tỉnh An Giang', subCodes: [91, 89], tinhCu: ['An Giang', 'Kiên Giang'] },
+  { code: 'BN', ten: 'Tỉnh Bắc Ninh', subCodes: [24, 27], tinhCu: ['Bắc Ninh', 'Bắc Giang'] },
   { code: 'CM', ten: 'Tỉnh Cà Mau', subCodes: [96, 95], tinhCu: ['Cà Mau', 'Bạc Liêu'] },
   { code: 'CB', ten: 'Tỉnh Cao Bằng', subCodes: [4], tinhCu: ['Cao Bằng'] },
   { code: 'DL', ten: 'Tỉnh Đắk Lắk', subCodes: [66, 54], tinhCu: ['Đắk Lắk', 'Dak Lak', 'Phú Yên'] },
   { code: 'DB', ten: 'Tỉnh Điện Biên', subCodes: [11], tinhCu: ['Điện Biên'] },
   { code: 'DNA', ten: 'Tỉnh Đồng Nai', subCodes: [75, 70], tinhCu: ['Đồng Nai', 'Bình Phước'] },
-  { code: 'DT', ten: 'Tỉnh Đồng Tháp', subCodes: [87, 82], tinhCu: ['Đồng Tháp', 'Tiền Giang'] },
-  { code: 'GL', ten: 'Tỉnh Gia Lai', subCodes: [64, 52], tinhCu: ['Gia Lai', 'Bình Định'] },
+  { code: 'DT', ten: 'Tỉnh Đồng Tháp', subCodes: [82, 87], tinhCu: ['Đồng Tháp', 'Tiền Giang'] },
+  { code: 'GL', ten: 'Tỉnh Gia Lai', subCodes: [52, 64], tinhCu: ['Gia Lai', 'Bình Định'] },
   { code: 'HT', ten: 'Tỉnh Hà Tĩnh', subCodes: [42], tinhCu: ['Hà Tĩnh'] },
   { code: 'HY', ten: 'Tỉnh Hưng Yên', subCodes: [33, 34], tinhCu: ['Hưng Yên', 'Thái Bình'] },
   { code: 'KH', ten: 'Tỉnh Khánh Hòa', subCodes: [56, 58], tinhCu: ['Khánh Hòa', 'Ninh Thuận'] },
   { code: 'LC', ten: 'Tỉnh Lai Châu', subCodes: [12], tinhCu: ['Lai Châu'] },
   { code: 'LS', ten: 'Tỉnh Lạng Sơn', subCodes: [20], tinhCu: ['Lạng Sơn'] },
-  { code: 'LCA', ten: 'Tỉnh Lào Cai', subCodes: [10, 15], tinhCu: ['Lào Cai', 'Yên Bái'] },
+  { code: 'LCA', ten: 'Tỉnh Lào Cai', subCodes: [15, 10], tinhCu: ['Lào Cai', 'Yên Bái'] },
   { code: 'LD', ten: 'Tỉnh Lâm Đồng', subCodes: [68, 67, 60], tinhCu: ['Lâm Đồng', 'Đắk Nông', 'Dak Nong', 'Bình Thuận'] },
   { code: 'NA', ten: 'Tỉnh Nghệ An', subCodes: [40], tinhCu: ['Nghệ An'] },
   { code: 'NB', ten: 'Tỉnh Ninh Bình', subCodes: [37, 35, 36], tinhCu: ['Ninh Bình', 'Hà Nam', 'Nam Định'] },
   { code: 'PT', ten: 'Tỉnh Phú Thọ', subCodes: [25, 26, 17], tinhCu: ['Phú Thọ', 'Vĩnh Phúc', 'Hòa Bình', 'Hoà Bình'] },
   { code: 'QN', ten: 'Tỉnh Quảng Ngãi', subCodes: [51, 62], tinhCu: ['Quảng Ngãi', 'Kon Tum'] },
   { code: 'QNI', ten: 'Tỉnh Quảng Ninh', subCodes: [22], tinhCu: ['Quảng Ninh'] },
-  { code: 'QT', ten: 'Tỉnh Quảng Trị', subCodes: [45, 44], tinhCu: ['Quảng Trị', 'Quảng Bình'] },
+  { code: 'QT', ten: 'Tỉnh Quảng Trị', subCodes: [44, 45], tinhCu: ['Quảng Trị', 'Quảng Bình'] },
   { code: 'SL', ten: 'Tỉnh Sơn La', subCodes: [14], tinhCu: ['Sơn La'] },
-  { code: 'TN', ten: 'Tỉnh Tây Ninh', subCodes: [72, 80], tinhCu: ['Tây Ninh', 'Long An'] },
+  { code: 'TN', ten: 'Tỉnh Tây Ninh', subCodes: [80, 72], tinhCu: ['Tây Ninh', 'Long An'] },
   { code: 'TNG', ten: 'Tỉnh Thái Nguyên', subCodes: [19, 6], tinhCu: ['Thái Nguyên', 'Bắc Kạn', 'Bắc Cạn'] },
   { code: 'TH', ten: 'Tỉnh Thanh Hóa', subCodes: [38], tinhCu: ['Thanh Hóa'] },
   { code: 'TQ', ten: 'Tỉnh Tuyên Quang', subCodes: [8, 2], tinhCu: ['Tuyên Quang', 'Hà Giang'] },
@@ -226,6 +226,18 @@ export const layPhuongXa = async (ds, tinh) => {
     for (const subCode of subCodes) {
       if (typeof subCode === 'number' || !isNaN(Number(subCode))) {
         try {
+          const resV2 = await fetch(`https://provinces.open-api.vn/api/v2/p/${subCode}?depth=2`)
+          if (resV2.ok) {
+            const dataV2 = await resV2.json()
+            if (dataV2 && Array.isArray(dataV2.wards) && dataV2.wards.length > 0) {
+              for (const w of dataV2.wards) {
+                if (w.name && !mapTen.has(w.name)) {
+                  mapTen.set(w.name, { code: w.code, ten: w.name })
+                }
+              }
+              break
+            }
+          }
           const res = await fetch(`https://provinces.open-api.vn/api/v1/p/${subCode}?depth=3`)
           if (res.ok) {
             const data = await res.json()

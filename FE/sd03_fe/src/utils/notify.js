@@ -2,6 +2,31 @@ import Swal from 'sweetalert2'
 import '@/assets/styles/custom-swal.css'
 
 /**
+ * Dọn dẹp triệt để các lớp phủ hoặc thuộc tính khóa giao diện của SweetAlert2
+ */
+export const cleanupSwalResidualDom = () => {
+  if (typeof document === 'undefined') return
+  try {
+    if (!Swal.isVisible()) {
+      document.querySelectorAll('.swal2-container').forEach((el) => el.remove())
+      document.body.classList.remove('swal2-shown', 'swal2-height-auto', 'swal2-no-backdrop', 'swal2-toast-shown', 'modal-open')
+      document.documentElement.classList.remove('swal2-shown', 'swal2-height-auto', 'swal2-no-backdrop', 'swal2-toast-shown')
+      document.body.style.removeProperty('padding-right')
+      document.body.style.removeProperty('overflow')
+      const appEl = document.getElementById('app')
+      if (appEl && appEl.getAttribute('aria-hidden') === 'true') {
+        appEl.removeAttribute('aria-hidden')
+      }
+      document.querySelectorAll('[aria-hidden="true"]').forEach((el) => {
+        if (el.id === 'app' || el.classList.contains('app-layout') || el.classList.contains('main-content-wrapper')) {
+          el.removeAttribute('aria-hidden')
+        }
+      })
+    }
+  } catch {}
+}
+
+/**
  * Format string quotes into clean strong tags
  */
 const formatHighlight = (text) => {
@@ -51,13 +76,27 @@ const MINIMAL_ICONS = {
   `
 }
 
+const NO_HIDE_ANIMATION = {
+  showClass: {
+    popup: 'swal2-show',
+    backdrop: 'swal2-backdrop-show',
+    icon: ''
+  },
+  hideClass: {
+    popup: '',
+    backdrop: '',
+    icon: ''
+  },
+  returnFocus: false
+}
+
 /**
- * Hiển thị thông báo thành công (Icon xanh lá nhạt, tự động tắt sau 1.5s)
+ * Hiển thị thông báo thành công (Không chặn click nền để thu ngân thao tác liên tục)
  * @param {string} title Nội dung thông báo
  * @param {string} [text] Nội dung phụ
- * @param {number} [timer=1500] Thời gian tự tắt (ms)
+ * @param {number} [timer=1400] Thời gian tự tắt (ms)
  */
-export const notifySuccess = (title, text = '', timer = 1500) => {
+export const notifySuccess = (title, text = '', timer = 1400) => {
   const contentHtml = `
     ${MINIMAL_ICONS.success}
     <div class="minimal-title">${formatHighlight(title || 'Thành công')}</div>
@@ -65,15 +104,17 @@ export const notifySuccess = (title, text = '', timer = 1500) => {
   `
 
   return Swal.fire({
+    ...NO_HIDE_ANIMATION,
     html: contentHtml,
     showConfirmButton: false,
     timer: timer,
     timerProgressBar: false,
+    backdrop: false,
     allowOutsideClick: true,
     allowEscapeKey: true,
     customClass: {
-      popup: 'custom-swal-popup',
-      container: 'custom-swal-container'
+      popup: 'custom-swal-popup is-non-blocking-popup',
+      container: 'custom-swal-container is-non-blocking-container'
     },
     didOpen: (popup) => {
       if (popup) {
@@ -82,6 +123,9 @@ export const notifySuccess = (title, text = '', timer = 1500) => {
           Swal.close()
         })
       }
+    },
+    didClose: () => {
+      setTimeout(cleanupSwalResidualDom, 10)
     }
   })
 }
@@ -97,23 +141,29 @@ export const notifyError = (title, text = '') => {
   `
 
   return Swal.fire({
+    ...NO_HIDE_ANIMATION,
     html: contentHtml,
     showConfirmButton: true,
     confirmButtonText: 'Đóng',
+    allowOutsideClick: true,
+    allowEscapeKey: true,
     customClass: {
       popup: 'custom-swal-popup',
       container: 'custom-swal-container',
       actions: 'custom-swal-actions',
       confirmButton: 'custom-swal-confirm-btn'
     },
-    buttonsStyling: false
+    buttonsStyling: false,
+    didClose: () => {
+      setTimeout(cleanupSwalResidualDom, 10)
+    }
   })
 }
 
 /**
  * Hiển thị thông báo cảnh báo
  */
-export const notifyWarning = (title, text = '') => {
+export const notifyWarning = (title, text = '', timer = undefined) => {
   const contentHtml = `
     ${MINIMAL_ICONS.warning}
     <div class="minimal-title">${title || 'Cảnh báo'}</div>
@@ -121,16 +171,23 @@ export const notifyWarning = (title, text = '') => {
   `
 
   return Swal.fire({
+    ...NO_HIDE_ANIMATION,
     html: contentHtml,
     showConfirmButton: true,
     confirmButtonText: 'Đã hiểu',
+    timer: timer,
+    allowOutsideClick: true,
+    allowEscapeKey: true,
     customClass: {
       popup: 'custom-swal-popup',
       container: 'custom-swal-container',
       actions: 'custom-swal-actions',
       confirmButton: 'custom-swal-confirm-btn'
     },
-    buttonsStyling: false
+    buttonsStyling: false,
+    didClose: () => {
+      setTimeout(cleanupSwalResidualDom, 10)
+    }
   })
 }
 
@@ -149,22 +206,32 @@ export const notifyConfirm = async (
     ${text ? `<div class="minimal-desc">${formatHighlight(text)}</div>` : ''}
   `
 
-  const result = await Swal.fire({
-    html: contentHtml,
-    showCancelButton: true,
-    confirmButtonText,
-    cancelButtonText,
-    reverseButtons: true,
-    customClass: {
-      popup: 'custom-swal-popup',
-      container: 'custom-swal-container',
-      actions: 'custom-swal-actions',
-      confirmButton: 'custom-swal-confirm-btn',
-      cancelButton: 'custom-swal-cancel-btn'
-    },
-    buttonsStyling: false
-  })
-  return result.isConfirmed
+  try {
+    const result = await Swal.fire({
+      ...NO_HIDE_ANIMATION,
+      html: contentHtml,
+      showCancelButton: true,
+      confirmButtonText,
+      cancelButtonText,
+      reverseButtons: true,
+      allowOutsideClick: true,
+      allowEscapeKey: true,
+      customClass: {
+        popup: 'custom-swal-popup',
+        container: 'custom-swal-container',
+        actions: 'custom-swal-actions',
+        confirmButton: 'custom-swal-confirm-btn',
+        cancelButton: 'custom-swal-cancel-btn'
+      },
+      buttonsStyling: false,
+      didClose: () => {
+        setTimeout(cleanupSwalResidualDom, 10)
+      }
+    })
+    return Boolean(result && result.isConfirmed)
+  } finally {
+    setTimeout(cleanupSwalResidualDom, 20)
+  }
 }
 
 /**
@@ -180,5 +247,6 @@ export default {
   error: notifyError,
   warning: notifyWarning,
   confirm: notifyConfirm,
-  deleteConfirm: notifyDeleteConfirm
+  deleteConfirm: notifyDeleteConfirm,
+  cleanup: cleanupSwalResidualDom
 }

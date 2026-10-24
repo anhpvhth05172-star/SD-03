@@ -7,18 +7,83 @@ import { getProvinces, getWards, getServices, tinhPhi } from '@/api/shipping'
 import { DS_63_TINH_THANH } from '@/api/diaGioi'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import { formatVnd } from '@/utils/format'
+import CurrencyInput from '@/components/CurrencyInput.vue'
 
-import { getUser } from '@/utils/auth'
+import { getUser, dangXuat } from '@/utils/auth'
+import { datVaiTro, vaiTroHienTai } from '@/utils/session'
 
 const API_BASE = 'http://localhost:8080/api/v1'
 
-const staffUser = computed(() => getUser())
-const staffName = computed(() => staffUser.value?.tenKhachHang || staffUser.value?.tenTaiKhoan || 'Nhân viên')
+const staffUserRef = ref(getUser())
+const selectedStaffId = ref(staffUserRef.value?.idNhanVien || null)
+const allEmployeesFull = ref([])
+const staffSnapshotMap = new Map()
+const pendingSyncAlerts = ref([])
+let isSyncingHardCases = false
+let realtimePollTimer = null
+
+const staffUser = computed(() => staffUserRef.value)
+const activePosStaff = computed(() => {
+  if (selectedStaffId.value) {
+    const found = allEmployeesFull.value.find(e => Number(e.id) === Number(selectedStaffId.value))
+      || allEmployees.value.find(e => Number(e.id) === Number(selectedStaffId.value))
+    if (found) return found
+  }
+  if (staffUserRef.value?.idNhanVien) {
+    const found = allEmployeesFull.value.find(e => Number(e.id) === Number(staffUserRef.value.idNhanVien))
+      || allEmployees.value.find(e => Number(e.id) === Number(staffUserRef.value.idNhanVien))
+    if (found) return found
+  }
+  if (staffUserRef.value?.tenTaiKhoan) {
+    const found = allEmployeesFull.value.find(e => e.tenTaiKhoan === staffUserRef.value.tenTaiKhoan)
+      || allEmployees.value.find(e => (e.ten || e.tenTaiKhoan) === staffUserRef.value.tenTaiKhoan)
+    if (found) return found
+  }
+  return allEmployeesFull.value[0] || allEmployees.value[0] || null
+})
+
+const staffName = computed(() => {
+  const active = activePosStaff.value
+  if (active) return active.tenTaiKhoan || active.ten || 'Nhân viên'
+  return staffUserRef.value?.tenKhachHang || staffUserRef.value?.tenTaiKhoan || 'Nhân viên'
+})
+
+const staffRoleLabel = computed(() => {
+  const active = activePosStaff.value
+  if (active?.maVaiTro) {
+    return String(active.maVaiTro).toUpperCase() === 'ADMIN' ? 'Admin' : 'Nhân viên'
+  }
+  if (active?.tenVaiTro) return active.tenVaiTro
+  return vaiTroHienTai.value === 'ADMIN' ? 'Admin' : 'Nhân viên'
+})
 
 const MAX_ORDERS = 5
 const POS_PENDING_STORAGE_KEY = 'polyshoes_pos_pending_orders_v1'
 const POS_ACTIVE_IDX_STORAGE_KEY = 'polyshoes_pos_active_idx_v1'
 const POS_RECENT_INVOICES_KEY = 'polyshoes_pos_recent_invoices_v1'
+const POS_STAFF_SNAPSHOT_KEY = 'polyshoes_pos_staff_snapshot_v1'
+
+const loadStaffSnapshotFromStorage = () => {
+  try {
+    const raw = sessionStorage.getItem(POS_STAFF_SNAPSHOT_KEY)
+    if (!raw) return false
+    const entries = JSON.parse(raw)
+    if (Array.isArray(entries) && entries.length > 0) {
+      staffSnapshotMap.clear()
+      for (const [k, v] of entries) {
+        staffSnapshotMap.set(Number(k), v)
+      }
+      return true
+    }
+  } catch {}
+  return false
+}
+
+const saveStaffSnapshotToStorage = () => {
+  try {
+    sessionStorage.setItem(POS_STAFF_SNAPSHOT_KEY, JSON.stringify(Array.from(staffSnapshotMap.entries())))
+  } catch {}
+}
 
 const pendingOrders = ref([])
 const activeOrderIndex = ref(0)
@@ -171,7 +236,8 @@ const savePendingOrdersToStorage = () => {
         shippingFee: Number(o.deliveryInfo?.shippingFee || 0),
         feeLoading: false,
         feeError: '',
-        legacy: o.deliveryInfo?.legacy || null
+        legacy: o.deliveryInfo?.legacy || null,
+        saveToCustomerProfile: Boolean(o.deliveryInfo?.saveToCustomerProfile)
       },
       paymentMethod: o.paymentMethod || 'TIEN_MAT',
       selectedVoucher: o.selectedVoucher || null,
@@ -214,7 +280,8 @@ const restorePendingOrdersFromStorage = () => {
         shippingFee: Number(o.deliveryInfo?.shippingFee || 0),
         feeLoading: false,
         feeError: '',
-        legacy: o.deliveryInfo?.legacy || null
+        legacy: o.deliveryInfo?.legacy || null,
+        saveToCustomerProfile: Boolean(o.deliveryInfo?.saveToCustomerProfile)
       },
       paymentMethod: o.paymentMethod || 'TIEN_MAT',
       selectedVoucher: o.selectedVoucher || null,
@@ -277,7 +344,8 @@ const createNewOrder = (silent = false) => {
       shippingFee: 0,
       feeLoading: false,
       feeError: '',
-      legacy: null
+      legacy: null,
+      saveToCustomerProfile: false
     },
     paymentMethod: 'TIEN_MAT',
     selectedVoucher: null,
@@ -295,6 +363,10 @@ const createNewOrder = (silent = false) => {
 
 const selectOrderTab = (index) => {
   activeOrderIndex.value = index
+  const ord = pendingOrders.value[index]
+  if (ord?.customer?.id && !customerAddressesMap[ord.customer.id]) {
+    fetchAndSyncCustomerAddresses(ord.customer, false, false)
+  }
 }
 
 const closeOrderTab = async (index, event) => {
@@ -427,6 +499,7 @@ const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
       originalPrice: Number(productVariant.price || productVariant.giaBan || 0),
       discount: productVariant.discount || null,
       quantity: qtyToAdd,
+      maxStock: getServerBaseStock(targetProd || productVariant),
       img: productVariant.img || ''
     })
   }
@@ -439,18 +512,49 @@ const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
   }
 }
 
+const getMaxAllowedForCartItem = (item) => {
+  if (!item) return 1
+  const targetProd = allProducts.value.find(p => Number(p.id) === Number(item.idCtsp))
+  const serverStock = targetProd
+    ? getServerBaseStock(targetProd)
+    : Number(item.maxStock || (Number(item.quantity || 1) + getRemainingStock(item.idCtsp)))
+  const reservedOther = getReservedInOtherOrders(item.idCtsp)
+  return Math.max(1, serverStock - reservedOther)
+}
+
+const handleCartItemQtyInput = (item, event) => {
+  if (!item || !event?.target) return
+  const rawVal = event.target.value.trim()
+  if (rawVal === '') return
+  
+  const parsed = parseInt(rawVal, 10)
+  if (isNaN(parsed) || parsed < 1) return
+
+  const maxAllowed = getMaxAllowedForCartItem(item)
+  if (parsed <= maxAllowed) {
+    item.quantity = parsed
+    recalculateAvailableStocks()
+    savePendingOrdersToStorage()
+  }
+}
+
 const updateCartItemQty = async (item, rawNewQty, event = null) => {
-  const newQty = Math.floor(Number(rawNewQty))
+  if (!item) return
+  const raw = event?.target ? event.target.value.trim() : String(rawNewQty).trim()
+  let newQty = parseInt(raw, 10)
+
+  // Nếu để trống hoặc <= 0, khôi phục về 1 (không tự ý xóa sản phẩm của người dùng khi đang sửa số)
   if (isNaN(newQty) || newQty <= 0) {
-    if (event?.target) event.target.value = item.quantity
-    await removeCartItem(item)
+    newQty = 1
+    if (event?.target) event.target.value = 1
+    item.quantity = 1
+    recalculateAvailableStocks()
+    savePendingOrdersToStorage()
     return
   }
 
-  const targetProd = allProducts.value.find(p => Number(p.id) === Number(item.idCtsp))
-  const serverStock = targetProd ? getServerBaseStock(targetProd) : (item.quantity + getRemainingStock(item.idCtsp))
+  const maxAllowedForThisOrder = getMaxAllowedForCartItem(item)
   const reservedOther = getReservedInOtherOrders(item.idCtsp)
-  const maxAllowedForThisOrder = Math.max(0, serverStock - reservedOther)
 
   if (newQty > maxAllowedForThisOrder) {
     const extraMsg = reservedOther > 0
@@ -460,18 +564,16 @@ const updateCartItemQty = async (item, rawNewQty, event = null) => {
       'Vượt quá tồn kho khả dụng!',
       `Tối đa có thể đặt cho đơn này là ${maxAllowedForThisOrder} sản phẩm${extraMsg}.`
     )
-    item.quantity = Math.max(1, maxAllowedForThisOrder)
-    if (event?.target) event.target.value = item.quantity
-    recalculateAvailableStocks()
-    savePendingOrdersToStorage()
-    return
+    newQty = Math.max(1, maxAllowedForThisOrder)
   }
 
   item.quantity = newQty
-  if (event?.target) event.target.value = item.quantity
+  if (event?.target) event.target.value = newQty
   recalculateAvailableStocks()
   savePendingOrdersToStorage()
 }
+
+
 
 const removeCartItem = async (item) => {
   if (!currentOrder.value) return
@@ -524,19 +626,16 @@ const handleBarcodeSearchSubmit = async () => {
       if (res.ok) {
         const data = await res.json()
         if (data && data.content && data.content.length > 0) {
-          found = data.content[0]
-          if (!allProducts.value.some(p => p.id === found.id)) {
-            allProducts.value.push(found)
-          }
+          found = ensureProductInCatalog(data.content[0]) || data.content[0]
         }
       }
     } catch { }
   }
 
   if (found) {
-    const stock = found.stock !== undefined ? found.stock : (found.soLuong || 0)
+    const stock = getRemainingStock(found.id)
     if (stock <= 0) {
-      notifyWarning('Hết hàng', `Sản phẩm "${found.tenSp || found.tenSanPham}" đã hết tồn kho!`)
+      notifyWarning('Hết hàng', `Sản phẩm "${found.tenSp || found.tenSanPham}" đã hết tồn kho khả dụng!`)
       return
     }
     addToCart(found, 1)
@@ -547,8 +646,11 @@ const handleBarcodeSearchSubmit = async () => {
 }
 
 const getRemainingStock = (idCtsp) => {
-  const prod = allProducts.value.find(p => p.id === idCtsp)
-  return prod ? (prod.stock !== undefined ? prod.stock : (prod.soLuong || 0)) : 0
+  const prod = allProducts.value.find(p => Number(p.id) === Number(idCtsp))
+  if (!prod) return 0
+  const baseStock = getServerBaseStock(prod)
+  const reserved = getReservedQtyAcrossOrders(idCtsp)
+  return Math.max(0, baseStock - reserved)
 }
 
 const setQuickCash = (amount) => {
@@ -581,20 +683,319 @@ const filteredCustomers = computed(() => {
   ).slice(0, 8)
 })
 
-const selectCustomer = (cust) => {
+const customerAddressesMap = reactive({})
+const isSavingCustomerAddress = ref(false)
+
+const normalizePlaceName = (str) => {
+  if (!str) return ''
+  return String(str)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/\b(tinh|thanh pho|tp\.?|phuong|xa|thi tran|p\.?|x\.?|tt\.?)\b/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const isPlaceholderCounterAddress = (addr) => {
+  if (!addr) return true
+  const tp = String(addr.thanhPho || addr.tinhThanhPho || '').trim().toLowerCase()
+  const dc = String(addr.diaChiCuThe || '').trim().toLowerCase()
+  return !tp || tp === 'tại quầy' || dc === 'mua hàng trực tiếp tại quầy' || dc === 'tại quầy'
+}
+
+const matchProvinceByName = (name) => {
+  const target = normalizePlaceName(name)
+  if (!target || !Array.isArray(provincesList.value)) return null
+  return (
+    provincesList.value.find(p => normalizePlaceName(p.name) === target) ||
+    provincesList.value.find(p => {
+      const pn = normalizePlaceName(p.name)
+      return pn && (pn.includes(target) || target.includes(pn))
+    }) ||
+    null
+  )
+}
+
+const matchWardByName = (name) => {
+  const target = normalizePlaceName(name)
+  if (!target || !Array.isArray(wardsList.value)) return null
+  return (
+    wardsList.value.find(w => normalizePlaceName(w.name) === target) ||
+    wardsList.value.find(w => {
+      const wn = normalizePlaceName(w.name)
+      return wn && (wn.includes(target) || target.includes(wn))
+    }) ||
+    null
+  )
+}
+
+const currentCustomerAddressEntry = computed(() => {
+  const custId = currentOrder.value?.customer?.id
+  if (!custId) return null
+  return customerAddressesMap[custId] || null
+})
+
+const currentCustomerSavedAddresses = computed(() => {
+  return currentCustomerAddressEntry.value?.realAddresses || []
+})
+
+const hasCustomerSavedAddress = computed(() => {
+  return currentCustomerSavedAddresses.value.length > 0
+})
+
+const isCurrentDeliveryAddressComplete = computed(() => {
+  const d = currentOrder.value?.deliveryInfo
+  if (!d) return false
+  return Boolean(d.province?.name && d.ward?.name && d.recipientAddress?.trim())
+})
+
+const isCurrentDeliveryAddressSaved = computed(() => {
+  const d = currentOrder.value?.deliveryInfo
+  if (!d || !isCurrentDeliveryAddressComplete.value) return false
+  const curProv = normalizePlaceName(d.province?.name)
+  const curWard = normalizePlaceName(d.ward?.name)
+  const curStreet = String(d.recipientAddress || '').trim().toLowerCase()
+
+  return currentCustomerSavedAddresses.value.some(a => {
+    const savedProv = normalizePlaceName(a.thanhPho || a.tinhThanhPho)
+    const savedWard = normalizePlaceName(a.phuong)
+    const savedStreet = String(a.diaChiCuThe || '').trim().toLowerCase()
+    return savedProv === curProv && savedWard === curWard && savedStreet === curStreet
+  })
+})
+
+const applySavedAddressToDeliveryForm = async (addrObj, cust = null, showToast = false) => {
+  if (!currentOrder.value?.deliveryInfo || !addrObj) return
+  const d = currentOrder.value.deliveryInfo
+  const activeCust = cust || currentOrder.value.customer
+
+  if (activeCust) {
+    d.recipientName = activeCust.ten || activeCust.tenKhachHang || d.recipientName || ''
+    d.recipientPhone = activeCust.soDienThoai || d.recipientPhone || ''
+  }
+
+  d.recipientAddress = addrObj.diaChiCuThe || ''
+
+  if (!provincesList.value || provincesList.value.length === 0) {
+    await loadProvinces()
+  }
+
+  const matchedProv = matchProvinceByName(addrObj.thanhPho || addrObj.tinhThanhPho)
+  if (matchedProv) {
+    d.province = matchedProv
+    await onProvinceChange()
+    const matchedWard = matchWardByName(addrObj.phuong)
+    if (matchedWard) {
+      d.ward = matchedWard
+      await tinhPhiVanChuyen()
+    }
+  }
+
+  d.saveToCustomerProfile = false
+
+  if (showToast) {
+    const fullStr = [addrObj.diaChiCuThe, addrObj.phuong, addrObj.thanhPho || addrObj.tinhThanhPho].filter(Boolean).join(', ')
+    notifySuccess('Đã tự động điền địa chỉ', fullStr || 'Đã điền thông tin người nhận từ hồ sơ khách hàng!', 1800)
+  }
+}
+
+const fetchAndSyncCustomerAddresses = async (cust, autoFillIfDelivery = true, showToast = false) => {
+  if (!cust || !cust.id) return null
+  try {
+    const res = await http.get(`/khach-hang/${cust.id}/dia-chi`)
+    const list = Array.isArray(res.data) ? res.data : []
+    const realAddresses = list.filter(a => a.trangThai !== false && !isPlaceholderCounterAddress(a))
+    const placeholderAddress = list.find(a => isPlaceholderCounterAddress(a)) || null
+    const defaultAddress = realAddresses.find(a => a.macDinh) || realAddresses[0] || null
+
+    customerAddressesMap[cust.id] = {
+      realAddresses,
+      placeholderAddress,
+      defaultAddress
+    }
+
+    if (defaultAddress) {
+      cust.diaChi = defaultAddress.diaChiCuThe || ''
+      cust.tinhThanhPho = defaultAddress.thanhPho || ''
+      cust.phuong = defaultAddress.phuong || ''
+      cust.defaultAddress = defaultAddress
+    }
+
+    if (currentOrder.value?.isDelivery && autoFillIfDelivery && currentOrder.value?.customer?.id === cust.id) {
+      const d = currentOrder.value.deliveryInfo
+      d.recipientName = cust.ten || cust.tenKhachHang || d.recipientName || ''
+      d.recipientPhone = cust.soDienThoai || d.recipientPhone || ''
+
+      if (defaultAddress) {
+        await applySavedAddressToDeliveryForm(defaultAddress, cust, showToast)
+      } else {
+        d.saveToCustomerProfile = true
+        if (showToast) {
+          notifyWarning(
+            'Khách chưa có địa chỉ lưu sẵn',
+            'Đã điền Họ tên & SĐT. Vui lòng chọn Tỉnh/Phường/Số nhà — hệ thống sẽ lưu vào hồ sơ khách cho lần mua sau!'
+          )
+        }
+      }
+    }
+    return customerAddressesMap[cust.id]
+  } catch (err) {
+    console.warn('Không thể tải sổ địa chỉ khách hàng:', err)
+    return null
+  }
+}
+
+const saveDeliveryAddressToCustomerProfile = async (silent = false) => {
+  const cust = currentOrder.value?.customer
+  const d = currentOrder.value?.deliveryInfo
+  if (!cust || !cust.id || !d) return false
+
+  if (!d.province?.name || !d.ward?.name || !d.recipientAddress?.trim()) {
+    if (!silent) {
+      notifyWarning('Thiếu địa chỉ', 'Vui lòng chọn đầy đủ Tỉnh/Thành phố, Phường/Xã và nhập Địa chỉ cụ thể trước khi lưu vào hồ sơ khách hàng!')
+    }
+    return false
+  }
+
+  isSavingCustomerAddress.value = true
+  try {
+    let entry = customerAddressesMap[cust.id]
+    if (!entry) {
+      entry = await fetchAndSyncCustomerAddresses(cust, false, false)
+    }
+
+    const curProv = normalizePlaceName(d.province.name)
+    const curWard = normalizePlaceName(d.ward.name)
+    const curStreet = d.recipientAddress.trim().toLowerCase()
+
+    const existingSame = (entry?.realAddresses || []).find(a =>
+      normalizePlaceName(a.thanhPho || a.tinhThanhPho) === curProv &&
+      normalizePlaceName(a.phuong) === curWard &&
+      String(a.diaChiCuThe || '').trim().toLowerCase() === curStreet
+    )
+
+    const payload = {
+      tenDiaChi: 'Địa chỉ giao hàng',
+      tinhThanhPho: d.province.name,
+      phuong: d.ward.name,
+      diaChiCuThe: d.recipientAddress.trim(),
+      macDinh: true,
+      trangThai: true
+    }
+
+    if (existingSame) {
+      if (!existingSame.macDinh) {
+        await http.put(`/khach-hang/${cust.id}/dia-chi/${existingSame.id}/mac-dinh`)
+      }
+    } else if (entry?.placeholderAddress && (!entry.realAddresses || entry.realAddresses.length === 0)) {
+      await http.put(`/khach-hang/${cust.id}/dia-chi/${entry.placeholderAddress.id}`, payload)
+    } else {
+      await http.post(`/khach-hang/${cust.id}/dia-chi`, payload)
+    }
+
+    await fetchAndSyncCustomerAddresses(cust, false, false)
+    d.saveToCustomerProfile = false
+
+    if (!silent) {
+      notifySuccess(
+        'Đã lưu vào hồ sơ khách hàng!',
+        `Địa chỉ "${d.recipientAddress.trim()}, ${d.ward.name}, ${d.province.name}" đã được đặt làm mặc định cho khách ${cust.ten || cust.tenKhachHang}.`,
+        2200
+      )
+    }
+    return true
+  } catch (err) {
+    console.error('Lỗi lưu địa chỉ vào hồ sơ khách hàng:', err)
+    if (!silent) {
+      notifyError('Không thể lưu địa chỉ', err.message || 'Đã xảy ra lỗi khi lưu địa chỉ vào hồ sơ khách hàng.')
+    }
+    return false
+  } finally {
+    isSavingCustomerAddress.value = false
+  }
+}
+
+const selectCustomer = async (cust) => {
   if (!currentOrder.value) createNewOrder()
   currentOrder.value.customer = cust
   customerSearchQuery.value = ''
   showCustomerDropdown.value = false
-  if (currentOrder.value.isDelivery && cust) {
-    currentOrder.value.deliveryInfo.recipientName = cust.ten
-    currentOrder.value.deliveryInfo.recipientPhone = cust.soDienThoai
+  if (cust) {
+    if (currentOrder.value.isDelivery) {
+      currentOrder.value.deliveryInfo.recipientName = cust.ten || cust.tenKhachHang || ''
+      currentOrder.value.deliveryInfo.recipientPhone = cust.soDienThoai || ''
+    }
+    await fetchAndSyncCustomerAddresses(cust, true, false)
   }
 }
+
+const fillDeliveryFromCustomer = async () => {
+  if (!currentOrder.value?.customer || !currentOrder.value?.deliveryInfo) return
+  const cust = currentOrder.value.customer
+  currentOrder.value.deliveryInfo.recipientName = cust.ten || cust.tenKhachHang || ''
+  currentOrder.value.deliveryInfo.recipientPhone = cust.soDienThoai || ''
+  await fetchAndSyncCustomerAddresses(cust, true, true)
+}
+
+const clearDeliveryForm = () => {
+  const d = currentOrder.value?.deliveryInfo
+  if (!d) return
+  d.recipientName = ''
+  d.recipientPhone = ''
+  d.province = null
+  d.ward = null
+  d.recipientAddress = ''
+  d.shippingFee = 0
+  d.legacy = null
+  d.feeError = ''
+  d.services = []
+  d.servicesDistrictId = null
+  d.serviceTypeId = null
+  d.saveToCustomerProfile = !hasCustomerSavedAddress.value
+  wardsList.value = []
+}
+
+watch(() => currentOrder.value?.isDelivery, async (enabled) => {
+  if (enabled && currentOrder.value?.customer && currentOrder.value?.deliveryInfo) {
+    const cust = currentOrder.value.customer
+    const d = currentOrder.value.deliveryInfo
+    if (!d.recipientName) d.recipientName = cust.ten || cust.tenKhachHang || ''
+    if (!d.recipientPhone) d.recipientPhone = cust.soDienThoai || ''
+    const cached = customerAddressesMap[cust.id]
+    if (cached?.defaultAddress && !d.province) {
+      await applySavedAddressToDeliveryForm(cached.defaultAddress, cust, false)
+    } else if (!cached) {
+      await fetchAndSyncCustomerAddresses(cust, true, false)
+    } else if (!cached.defaultAddress) {
+      d.saveToCustomerProfile = true
+    }
+  }
+})
+
+watch(
+  [
+    () => currentOrder.value?.deliveryInfo?.province,
+    () => currentOrder.value?.deliveryInfo?.ward,
+    () => currentOrder.value?.deliveryInfo?.recipientAddress
+  ],
+  () => {
+    const d = currentOrder.value?.deliveryInfo
+    if (!d || !currentOrder.value?.customer?.id) return
+    if (isCurrentDeliveryAddressComplete.value && !isCurrentDeliveryAddressSaved.value && !hasCustomerSavedAddress.value) {
+      d.saveToCustomerProfile = true
+    }
+  }
+)
 
 const removeSelectedCustomer = () => {
   if (currentOrder.value) {
     currentOrder.value.customer = null
+    if (currentOrder.value.deliveryInfo) {
+      currentOrder.value.deliveryInfo.saveToCustomerProfile = false
+    }
   }
 }
 
@@ -617,13 +1018,17 @@ const saveQuickCustomer = async () => {
 
   isSavingCustomer.value = true
   try {
+    const rawAddress = newCustomerForm.diaChi?.trim() || ''
+    const fallbackEmail = newCustomerForm.email?.trim() || `khachle.${phone}@polyshoes.vn`
     const payload = {
       tenKhachHang: newCustomerForm.tenKhachHang.trim(),
-      soDienThoai: phone,
-      email: newCustomerForm.email?.trim() || undefined,
-      gioiTinh: newCustomerForm.gioiTinh || undefined,
+      soDienThoai: phone.slice(0, 10),
+      email: fallbackEmail,
+      gioiTinh: newCustomerForm.gioiTinh || 'Nam',
       ngaySinh: newCustomerForm.ngaySinh || undefined,
-      diaChiCuThe: newCustomerForm.diaChi?.trim() || undefined,
+      tinhThanhPho: 'Tại quầy',
+      phuong: 'Tại quầy',
+      diaChiCuThe: rawAddress || 'Mua hàng trực tiếp tại quầy',
       trangThai: true
     }
 
@@ -634,7 +1039,7 @@ const saveQuickCustomer = async () => {
       ten: newCust.tenKhachHang,
       soDienThoai: newCust.soDienThoai,
       email: newCust.email,
-      diaChi: newCust.diaChiMacDinh ? newCust.diaChiMacDinh.diaChiCuThe : (newCustomerForm.diaChi?.trim() || '')
+      diaChi: rawAddress || (newCust.diaChiMacDinh ? newCust.diaChiMacDinh.diaChiCuThe : '')
     }
 
     allCustomers.value.unshift(createdCust)
@@ -750,6 +1155,7 @@ const openProductPicker = () => {
   if (!currentOrder.value) {
     createNewOrder()
   }
+  validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: true })
   resetModalFilters()
   modalSelectedIds.value = []
   isProductModalOpen.value = true
@@ -797,6 +1203,15 @@ const handleSelectProductFromModal = (product) => {
     return
   }
   toggleModalSelect(product.id)
+}
+
+const quickAddSingleProductFromModal = (product) => {
+  const stock = product.stock !== undefined ? product.stock : (product.soLuong || 0)
+  if (stock <= 0) {
+    notifyWarning('Hết hàng', 'Sản phẩm này hiện đã hết tồn kho!')
+    return
+  }
+  addToCart(product, 1, false)
 }
 
 const closeProductPicker = () => {
@@ -932,10 +1347,7 @@ const handleScannedResult = async (decodedText) => {
       if (res.ok) {
         const data = await res.json()
         if (data && data.content && data.content.length > 0) {
-          found = data.content[0]
-          if (!allProducts.value.some(p => p.id === found.id)) {
-            allProducts.value.push(found)
-          }
+          found = ensureProductInCatalog(data.content[0]) || data.content[0]
         }
       }
     } catch (err) {
@@ -948,9 +1360,9 @@ const handleScannedResult = async (decodedText) => {
     scanSuccessAnim.value = true
     scannedProductName.value = `${found.tenSp || found.tenSanPham || 'Sản phẩm'} (${found.color || found.tenMau || ''} - Size ${found.size || found.tenKichCo || ''})`
 
-    const stock = found.stock !== undefined ? found.stock : (found.soLuong || 0)
+    const stock = getRemainingStock(found.id)
     if (stock <= 0) {
-      notifyWarning('Hết hàng', `Sản phẩm "${found.tenSp || found.tenSanPham}" đã hết tồn kho!`)
+      notifyWarning('Hết hàng', `Sản phẩm "${found.tenSp || found.tenSanPham}" đã hết tồn kho khả dụng!`)
       isProcessingScan.value = false
       scanSuccessAnim.value = false
       return
@@ -1399,18 +1811,9 @@ const provincesList = ref([])
 const wardsList = ref([])
 
 const loadProvinces = async () => {
+  // 1. Ưu tiên gọi API Địa giới hành chính mới nhất 2026 (v2 - 2 cấp Tỉnh/Thành phố -> Phường/Xã)
   try {
-    const list = await getProvinces()
-    if (Array.isArray(list) && list.length > 0) {
-      provincesList.value = list
-      return
-    }
-  } catch (e) {
-    console.warn('Backend /shipping/provinces failed, falling back to open-api...', e)
-  }
-
-  try {
-    const res = await fetch('https://provinces.open-api.vn/api/v1/p/')
+    const res = await fetch('https://provinces.open-api.vn/api/v2/p/')
     if (res.ok) {
       const data = await res.json()
       if (Array.isArray(data) && data.length > 0) {
@@ -1419,9 +1822,21 @@ const loadProvinces = async () => {
       }
     }
   } catch (err) {
-    console.warn('Open API fallback failed, using local Vietnam list...', err)
+    console.warn('Open API v2 (2026) failed, checking backend /shipping/provinces...', err)
   }
 
+  // 2. Fallback sang Backend /shipping/provinces (chỉ nhận nếu đã cập nhật danh sách tỉnh mới <= 35 tỉnh)
+  try {
+    const list = await getProvinces()
+    if (Array.isArray(list) && list.length > 0 && list.length <= 35) {
+      provincesList.value = list
+      return
+    }
+  } catch (e) {
+    console.warn('Backend /shipping/provinces failed, using local 2026 province list...', e)
+  }
+
+  // 3. Fallback danh sách tỉnh/thành phố mới 2026 lưu cục bộ
   provincesList.value = DS_63_TINH_THANH.map((p, idx) => ({
     id: p.subCodes?.[0] || (idx + 1),
     name: p.ten
@@ -1441,36 +1856,34 @@ const onProvinceChange = async () => {
   d.serviceTypeId = null
   if (d.province) {
     d.wardsLoading = true
+    // 1. Ưu tiên lấy danh sách Phường/Xã trực thuộc Tỉnh/Thành phố theo chuẩn 2 cấp mới 2026 (API v2)
     try {
-      const list = await getWards(d.province.id)
-      const isDummy = Array.isArray(list) && list.length === 2 && list[0]?.id === 1 && list[1]?.id === 2
-      if (Array.isArray(list) && list.length > 0 && !isDummy) {
-        wardsList.value = list
-        d.wardsLoading = false
-        return
+      const res = await fetch(`https://provinces.open-api.vn/api/v2/p/${d.province.id}?depth=2`)
+      if (res.ok) {
+        const pData = await res.json()
+        if (pData && Array.isArray(pData.wards) && pData.wards.length > 0) {
+          wardsList.value = pData.wards.map(w => ({
+            id: w.code,
+            name: w.name
+          }))
+          d.wardsLoading = false
+          return
+        }
       }
     } catch {
     }
 
+    // 2. Fallback sang Backend /shipping/wards
     try {
-      const res = await fetch(`https://provinces.open-api.vn/api/v1/p/${d.province.id}?depth=3`)
-      if (res.ok) {
-        const pData = await res.json()
-        const allWards = []
-        if (pData.districts && Array.isArray(pData.districts)) {
-          for (const dist of pData.districts) {
-            if (dist.wards && Array.isArray(dist.wards)) {
-              for (const w of dist.wards) {
-                allWards.push({ id: w.code, name: `${w.name} (${dist.name})` })
-              }
-            }
-          }
-        }
-        if (allWards.length > 0) {
-          wardsList.value = allWards
-          d.wardsLoading = false
-          return
-        }
+      const list = await getWards(d.province.id)
+      const isDummy = Array.isArray(list) && list.length === 2 && list[0]?.id === 1 && list[1]?.id === 2
+      if (Array.isArray(list) && list.length > 0 && !isDummy) {
+        wardsList.value = list.map(w => ({
+          id: w.id,
+          name: String(w.name || '').replace(/\s*\([^)]*\)\s*$/, '').trim() || w.name
+        }))
+        d.wardsLoading = false
+        return
       }
     } catch {
     }
@@ -1806,10 +2219,342 @@ const getVoucherIneligibilityReason = (v) => {
   return ''
 }
 
+const normalizeDiscountStr = (val) => {
+  if (!val) return ''
+  const s = String(val).trim()
+  if (s === '-' || s === '0%' || s === '-0%') return ''
+  return s
+}
+
+const syncEmployeeListAndCheckRole = (empList, isInitial = false) => {
+  const changes = []
+  let abortedByStaffLock = false
+
+  if (!Array.isArray(empList) || empList.length === 0) {
+    return { abortedByStaffLock, changes }
+  }
+
+  const loggedId = staffUserRef.value?.idNhanVien ? Number(staffUserRef.value.idNhanVien) : null
+  const loggedAccount = staffUserRef.value?.tenTaiKhoan || ''
+
+  for (const emp of empList) {
+    const empId = Number(emp.id)
+    const newRole = String(emp.maVaiTro || 'STAFF').toUpperCase()
+    const newRoleLabel = newRole === 'ADMIN' ? 'Admin' : 'Nhân viên'
+    const newActive = emp.trangThai !== false
+    const empName = emp.tenTaiKhoan || emp.ten || `NV#${empId}`
+
+    const prev = staffSnapshotMap.get(empId)
+    const isLoggedEmp = (loggedId && empId === loggedId) || (loggedAccount && empName === loggedAccount)
+    const isSelectedPosEmp = selectedStaffId.value && Number(selectedStaffId.value) === empId
+
+    if (!isInitial && prev) {
+      // Kiểm tra khóa/mở khóa tài khoản nhân viên
+      if (prev.trangThai !== newActive) {
+        if (!newActive) {
+          if (isLoggedEmp) {
+            abortedByStaffLock = true
+            notifyError(
+              'Tài khoản nhân viên đã bị khóa!',
+              `Tài khoản "${empName}" vừa bị Quản trị viên khóa. Không thể tiếp tục bán hàng, hệ thống sẽ đăng xuất!`,
+              5000
+            )
+            setTimeout(() => {
+              dangXuat()
+              window.location.href = '/dang-nhap'
+            }, 1500)
+          } else if (isSelectedPosEmp) {
+            const fallbackActive = empList.find(e => e.trangThai !== false && Number(e.id) !== empId)
+            selectedStaffId.value = fallbackActive ? fallbackActive.id : null
+            changes.push(`Nhân viên phụ trách "${empName}" vừa bị khóa tài khoản (đã tự động chuyển sang ${fallbackActive?.tenTaiKhoan || 'nhân viên khác'})`)
+          } else {
+            changes.push(`Tài khoản nhân viên "${empName}" vừa bị khóa trên hệ thống`)
+          }
+        } else {
+          changes.push(`Tài khoản nhân viên "${empName}" vừa được mở khóa hoạt động trở lại`)
+        }
+      }
+
+      // Kiểm tra chuyển quyền nhân viên (Admin <-> Nhân viên)
+      if (prev.maVaiTro && prev.maVaiTro !== newRole) {
+        const oldRoleLabel = prev.maVaiTro === 'ADMIN' ? 'Admin' : 'Nhân viên'
+        if (isLoggedEmp || !loggedId) {
+          datVaiTro(newRole)
+          try {
+            const rawU = localStorage.getItem('polyshoes_user')
+            if (rawU) {
+              const parsedU = JSON.parse(rawU)
+              parsedU.vaiTro = newRole
+              localStorage.setItem('polyshoes_user', JSON.stringify(parsedU))
+              staffUserRef.value = parsedU
+            }
+            window.dispatchEvent(new Event('polyshoes-user-updated'))
+          } catch {}
+        }
+        changes.push(`Chuyển quyền nhân viên: Tài khoản "${empName}" vừa thay đổi vai trò từ [${oldRoleLabel}] sang [${newRoleLabel}]`)
+      }
+    }
+
+    // Nếu lúc đầu đăng nhập quyền trong localStorage bị lệch với DB thì đồng bộ lại
+    if (isLoggedEmp && staffUserRef.value?.vaiTro && String(staffUserRef.value.vaiTro).toUpperCase() !== newRole) {
+      const oldRoleLabel = String(staffUserRef.value.vaiTro).toUpperCase() === 'ADMIN' ? 'Admin' : 'Nhân viên'
+      datVaiTro(newRole)
+      try {
+        const rawU = localStorage.getItem('polyshoes_user')
+        if (rawU) {
+          const parsedU = JSON.parse(rawU)
+          parsedU.vaiTro = newRole
+          localStorage.setItem('polyshoes_user', JSON.stringify(parsedU))
+          staffUserRef.value = parsedU
+        }
+        window.dispatchEvent(new Event('polyshoes-user-updated'))
+      } catch {}
+      if (!isInitial && !changes.some(c => c.includes(empName))) {
+        changes.push(`Chuyển quyền nhân viên: Tài khoản "${empName}" vừa thay đổi vai trò từ [${oldRoleLabel}] sang [${newRoleLabel}]`)
+      }
+    }
+
+    staffSnapshotMap.set(empId, {
+      maVaiTro: newRole,
+      tenVaiTro: newRoleLabel,
+      trangThai: newActive,
+      tenTaiKhoan: empName
+    })
+  }
+
+  allEmployeesFull.value = empList
+  const activeEmps = empList.filter(e => e.trangThai !== false)
+  if (activeEmps.length > 0) {
+    allEmployees.value = activeEmps.map(e => ({ id: e.id, ten: e.tenTaiKhoan || e.ten, maVaiTro: e.maVaiTro, trangThai: e.trangThai }))
+  }
+
+  if (!selectedStaffId.value || !activeEmps.some(e => Number(e.id) === Number(selectedStaffId.value))) {
+    const matchLogged = activeEmps.find(e =>
+      (loggedId && Number(e.id) === loggedId) ||
+      (loggedAccount && (e.tenTaiKhoan === loggedAccount || e.ten === loggedAccount))
+    )
+    selectedStaffId.value = matchLogged ? matchLogged.id : (activeEmps[0]?.id || null)
+  }
+
+  saveStaffSnapshotToStorage()
+  return { abortedByStaffLock, changes }
+}
+
+const withRequestTimeout = (promise, ms = 4000) => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('POS sync timeout')), ms))
+  ])
+}
+
+// --- KIỂM TRA & ĐỒNG BỘ 4 CASE KHÓ BÁN HÀNG TẠI QUẦY ---
+// 1. Đổi giá sản phẩm (giá bán gốc thay đổi hoặc ngừng kinh doanh)
+// 2. Sửa voucher (hết hạn, hết hạn do edit, khóa voucher, hết lượt, thay đổi giá trị giảm / đơn tối thiểu)
+// 3. Chuyển quyền nhân viên (đổi vai trò Admin <-> Nhân viên hoặc khóa tài khoản nhân viên)
+// 4. Đợt giảm giá thay đổi (bắt đầu / kết thúc / tắt đợt giảm giá / thay đổi % giảm)
+const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, silentToast: false }) => {
+  if (isSyncingHardCases) return { abortedByStaffLock: false, changes: [] }
+  if (!options.isBeforeCheckout) {
+    const hasOpenModalOrDialog =
+      isProductModalOpen.value ||
+      isVoucherModalOpen.value ||
+      isQrModalOpen.value ||
+      isAddCustomerModalOpen.value ||
+      isSwapModalOpen.value ||
+      isReceiptModalOpen.value ||
+      isRecentInvoicesModalOpen.value ||
+      isProcessingCheckout.value ||
+      (typeof document !== 'undefined' && document.body.classList.contains('swal2-shown'))
+    if (hasOpenModalOrDialog) {
+      return { abortedByStaffLock: false, changes: [] }
+    }
+  }
+  isSyncingHardCases = true
+  const changes = []
+  let abortedByStaffLock = false
+
+  try {
+    const [formRes, prodRes, empRes] = await Promise.allSettled([
+      withRequestTimeout(http.get('/hoa-don/form-data'), 4000),
+      withRequestTimeout(fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500`).then(r => r.json()), 4000),
+      withRequestTimeout(http.get('/nhan-vien', { params: { page: 0, size: 100 } }), 4000)
+    ])
+
+    // --- CASE 3: CHUYỂN QUYỀN NHÂN VIÊN & TRẠNG THÁI TÀI KHOẢN ---
+    if (empRes.status === 'fulfilled' && empRes.value?.data?.content) {
+      const staffCheck = syncEmployeeListAndCheckRole(empRes.value.data.content, false)
+      if (staffCheck.abortedByStaffLock) {
+        abortedByStaffLock = true
+        return { abortedByStaffLock, changes: staffCheck.changes }
+      }
+      if (staffCheck.changes.length > 0) {
+        changes.push(...staffCheck.changes)
+      }
+    }
+
+    // Lưu tạm tổng tiền hàng cũ của từng đơn trước khi cập nhật giá mới để đối chiếu voucher chính xác
+    const oldSubTotalsMap = new Map()
+    for (const order of pendingOrders.value) {
+      const oldSub = (order.cart || []).reduce((sum, i) => sum + (Number(i.price || 0) * Number(i.quantity || 0)), 0)
+      oldSubTotalsMap.set(order.id, oldSub)
+    }
+
+    // --- CASE 1 (ĐỔI GIÁ) & CASE 4 (ĐỢT GIẢM GIÁ THAY ĐỔI) ---
+    if (prodRes.status === 'fulfilled' && prodRes.value && Array.isArray(prodRes.value.content)) {
+      const rawProducts = prodRes.value.content
+      const prodMap = new Map(rawProducts.map(p => [Number(p.id), p]))
+
+      for (const order of pendingOrders.value) {
+        if (!Array.isArray(order.cart) || order.cart.length === 0) continue
+        const orderLabel = pendingOrders.value.length > 1 ? ` (${order.title})` : ''
+
+        for (let i = order.cart.length - 1; i >= 0; i--) {
+          const item = order.cart[i]
+          const freshProd = prodMap.get(Number(item.idCtsp))
+
+          // Kiểm tra sản phẩm bị ngừng bán hoặc xóa
+          if (!freshProd || freshProd.trangThai === false) {
+            changes.push(`Sản phẩm "${item.name}" (Size ${item.size} - ${item.color})${orderLabel} vừa ngừng kinh doanh và đã được gỡ khỏi giỏ hàng`)
+            order.cart.splice(i, 1)
+            continue
+          }
+
+          const oldOriginalPrice = Number(item.originalPrice || item.price || 0)
+          const newOriginalPrice = Number(freshProd.price || freshProd.giaBan || 0)
+          const oldEffectivePrice = Number(item.price || 0)
+          const newEffectivePrice = getEffectivePrice(freshProd)
+          const oldDisc = normalizeDiscountStr(item.discount)
+          const newDisc = normalizeDiscountStr(freshProd.discount)
+
+          // Case 1: Đổi giá bán gốc
+          if (oldOriginalPrice !== newOriginalPrice) {
+            item.originalPrice = newOriginalPrice
+            item.price = newEffectivePrice
+            item.discount = freshProd.discount || null
+            changes.push(
+              `Đổi giá: Sản phẩm "${item.name}" (Size ${item.size} - ${item.color})${orderLabel} thay đổi giá gốc từ ${formatVnd(oldOriginalPrice)} → ${formatVnd(newOriginalPrice)} (Đơn giá mới: ${formatVnd(newEffectivePrice)})`
+            )
+          }
+          // Case 4: Đợt giảm giá thay đổi (giá gốc giữ nguyên nhưng % khuyến mãi hoặc giá sau giảm thay đổi)
+          else if (oldEffectivePrice !== newEffectivePrice || oldDisc !== newDisc) {
+            item.originalPrice = newOriginalPrice
+            item.price = newEffectivePrice
+            item.discount = freshProd.discount || null
+            if (!newDisc) {
+              changes.push(
+                `Đợt giảm giá kết thúc: Sản phẩm "${item.name}" (Size ${item.size} - ${item.color})${orderLabel} đã hết khuyến mãi (${oldDisc || 'KM'}), đơn giá về giá gốc ${formatVnd(newEffectivePrice)}`
+              )
+            } else if (!oldDisc) {
+              changes.push(
+                `Đợt giảm giá mới: Sản phẩm "${item.name}" (Size ${item.size} - ${item.color})${orderLabel} được áp dụng khuyến mãi ${newDisc} (${formatVnd(oldEffectivePrice)} → ${formatVnd(newEffectivePrice)})`
+              )
+            } else {
+              changes.push(
+                `Đợt giảm giá thay đổi: Sản phẩm "${item.name}" (Size ${item.size} - ${item.color})${orderLabel} đổi mức khuyến mãi từ ${oldDisc} → ${newDisc} (Đơn giá: ${formatVnd(oldEffectivePrice)} → ${formatVnd(newEffectivePrice)})`
+              )
+            }
+          }
+        }
+      }
+
+      // Cập nhật danh sách sản phẩm đang kinh doanh và đồng bộ lại tồn kho khả dụng
+      const activeProducts = rawProducts.filter(p => p.trangThai !== false)
+      setServerProductsList(activeProducts)
+    }
+
+    // --- CASE 2: SỬA VOUCHER (HẾT HẠN / HẾT HẠN DO ĐỔI EDIT / KHÓA / HẾT LƯỢT / ĐỔI GIÁ TRỊ GIẢM) ---
+    if (formRes.status === 'fulfilled' && formRes.value?.data) {
+      const d = formRes.value.data
+      allCustomers.value = d.khachHangs || []
+      const rawVouchers = d.phieuGiamGias || []
+      allVouchers.value = rawVouchers.filter(v => v.trangThai !== false)
+
+      const now = new Date()
+      for (const order of pendingOrders.value) {
+        if (!order.selectedVoucher) continue
+        const oldV = order.selectedVoucher
+        const vCode = oldV.ma || oldV.maPhieuGiamGia || 'Voucher'
+        const orderLabel = pendingOrders.value.length > 1 ? ` (${order.title})` : ''
+        const freshV = rawVouchers.find(v =>
+          Number(v.id) === Number(oldV.id) ||
+          (v.ma && String(v.ma).toUpperCase() === String(vCode).toUpperCase())
+        )
+
+        const newOrderSubTotal = (order.cart || []).reduce((sum, i) => sum + (Number(i.price || 0) * Number(i.quantity || 0)), 0)
+        const oldOrderSubTotal = oldSubTotalsMap.get(order.id) ?? newOrderSubTotal
+        const oldDiscAmt = calculateVoucherDiscount(oldV, oldOrderSubTotal)
+
+        if (!freshV || freshV.trangThai === false) {
+          order.selectedVoucher = null
+          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} đã bị khóa hoặc ngừng hoạt động và được tự động gỡ`)
+        } else if (freshV.ngayKetThuc && new Date(freshV.ngayKetThuc) < now) {
+          order.selectedVoucher = null
+          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} đã hết hạn sử dụng (${formatDateVn(freshV.ngayKetThuc)}) và được tự động gỡ`)
+        } else if (freshV.ngayBatDau && new Date(freshV.ngayBatDau) > now) {
+          order.selectedVoucher = null
+          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} chưa đến thời gian hiệu lực (${formatDateVn(freshV.ngayBatDau)}) và được tự động gỡ`)
+        } else if (freshV.soLuong && freshV.soLuongDaSuDung !== undefined && Number(freshV.soLuongDaSuDung) >= Number(freshV.soLuong)) {
+          order.selectedVoucher = null
+          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} đã hết lượt sử dụng (${freshV.soLuongDaSuDung}/${freshV.soLuong}) và được tự động gỡ`)
+        } else if (newOrderSubTotal < Number(freshV.hoaDonToiThieu || 0)) {
+          order.selectedVoucher = null
+          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} yêu cầu đơn tối thiểu ${formatVnd(freshV.hoaDonToiThieu)} (hiện tại ${formatVnd(newOrderSubTotal)}) nên đã được tự động gỡ`)
+        } else {
+          const newDiscAmt = calculateVoucherDiscount(freshV, newOrderSubTotal)
+          const valueEdited =
+            Number(oldV.giaTriGiam || 0) !== Number(freshV.giaTriGiam || 0) ||
+            String(oldV.loaiGiamGia || '') !== String(freshV.loaiGiamGia || '') ||
+            Number(oldV.giamToiDa || 0) !== Number(freshV.giamToiDa || 0) ||
+            Number(oldV.hoaDonToiThieu || 0) !== Number(freshV.hoaDonToiThieu || 0)
+
+          if (valueEdited) {
+            order.selectedVoucher = freshV
+            changes.push(
+              `Sửa voucher: Phiếu giảm giá "${freshV.ma || vCode}"${orderLabel} vừa thay đổi giá trị giảm (Số tiền giảm: ${formatVnd(oldDiscAmt)} → ${formatVnd(newDiscAmt)})`
+            )
+          } else if (oldDiscAmt !== newDiscAmt && oldOrderSubTotal !== newOrderSubTotal) {
+            order.selectedVoucher = freshV
+            changes.push(
+              `Cập nhật voucher "${freshV.ma || vCode}"${orderLabel}: Mức giảm điều chỉnh từ ${formatVnd(oldDiscAmt)} → ${formatVnd(newDiscAmt)} theo đơn giá mới`
+            )
+          }
+        }
+      }
+    }
+
+    if (changes.length > 0) {
+      savePendingOrdersToStorage()
+      for (const msg of changes) {
+        if (!pendingSyncAlerts.value.includes(msg)) {
+          pendingSyncAlerts.value.push(msg)
+        }
+      }
+      if (isBankQrModalOpen.value) {
+        stopAutoCheckoutCountdown()
+        if (finalTotal.value > 0) {
+          generateBankTransferQr()
+        } else {
+          isBankQrModalOpen.value = false
+        }
+      }
+      if (!options.silentToast) {
+        notifyWarning('Dữ liệu bán hàng vừa thay đổi!', changes.join(' • '), 6500)
+      }
+    }
+  } catch (err) {
+    console.warn('Đồng bộ dữ liệu thời gian thực POS thất bại:', err)
+  } finally {
+    isSyncingHardCases = false
+  }
+
+  return { abortedByStaffLock, changes }
+}
+
 const openVoucherModal = () => {
   if (!currentOrder.value) createNewOrder()
   voucherSearchQuery.value = ''
   isVoucherModalOpen.value = true
+  validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: true })
 }
 
 const applyVoucher = (voucher) => {
@@ -1832,18 +2577,26 @@ const removeVoucher = () => {
   }
 }
 
-const handleApplyManualVoucher = () => {
+const handleApplyManualVoucher = async () => {
   const code = voucherInputCode.value.trim().toUpperCase()
   if (!code) return
   if (!currentOrder.value) createNewOrder()
 
-  const found = allVouchers.value.find(v =>
+  let found = allVouchers.value.find(v =>
     (v.ma && v.ma.toUpperCase() === code) ||
     (v.maPhieuGiamGia && v.maPhieuGiamGia.toUpperCase() === code)
   )
 
   if (!found) {
-    notifyError('Mã không hợp lệ', `Không tìm thấy mã giảm giá "${code}". Vui lòng kiểm tra lại!`)
+    await validateAndSyncHardCases({ isBeforeCheckout: true, silentToast: true })
+    found = allVouchers.value.find(v =>
+      (v.ma && v.ma.toUpperCase() === code) ||
+      (v.maPhieuGiamGia && v.maPhieuGiamGia.toUpperCase() === code)
+    )
+  }
+
+  if (!found) {
+    notifyError('Mã không hợp lệ', `Không tìm thấy mã giảm giá "${code}" hoặc mã đã bị khóa/hết hạn!`)
     return
   }
 
@@ -1887,9 +2640,32 @@ const handleCheckout = async (options = {}) => {
     return
   }
 
+  // Bắt buộc kiểm tra & đồng bộ 4 Case khó (Đổi giá, Sửa voucher, Chuyển quyền NV, Đợt giảm giá) ngay trước khi thanh toán
+  const syncRes = await validateAndSyncHardCases({ isBeforeCheckout: true, silentToast: true })
+  if (syncRes.abortedByStaffLock) return
+
+  const combinedAlerts = [...new Set([...pendingSyncAlerts.value, ...syncRes.changes])]
+  pendingSyncAlerts.value = []
+
+  if (currentOrder.value.cart.length === 0) {
+    notifyWarning('Giỏ hàng trống', combinedAlerts.join(' • ') || 'Các sản phẩm trong giỏ đã ngừng kinh doanh hoặc hết hàng!')
+    return
+  }
+
+  if (combinedAlerts.length > 0) {
+    notifyWarning('Dữ liệu đơn hàng vừa thay đổi!', combinedAlerts.join(' • '), 6500)
+    const okAfterChange = await notifyConfirm(
+      'Cảnh báo dữ liệu vừa thay đổi!',
+      `${combinedAlerts.join(' | ')} — Tổng khách phải trả hiện tại là ${formatVnd(finalTotal.value)}. Bạn có xác nhận tiếp tục thanh toán theo dữ liệu mới không?`,
+      'Tiếp tục thanh toán',
+      'Kiểm tra lại đơn'
+    )
+    if (!okAfterChange) return
+  }
+
   if (currentOrder.value.paymentMethod === 'TIEN_MAT') {
     if ((currentOrder.value.cashGiven || 0) < finalTotal.value) {
-      notifyWarning('Chưa đủ tiền', `Số tiền khách đưa chưa đủ! Cần thêm ${formatVnd(finalTotal.value - (currentOrder.value.cashGiven || 0))}`)
+      notifyWarning('Chưa đủ tiền', `Số tiền khách đưa chưa đủ theo tổng tiền mới (${formatVnd(finalTotal.value)})! Cần thêm ${formatVnd(finalTotal.value - (currentOrder.value.cashGiven || 0))}`)
       return
     }
   }
@@ -1897,23 +2673,25 @@ const handleCheckout = async (options = {}) => {
   if (currentOrder.value.paymentMethod === 'KET_HOP') {
     const totalPaid = Number(currentOrder.value.cashGiven || 0) + Number(currentOrder.value.transferGiven || 0)
     if (totalPaid < finalTotal.value) {
-      notifyWarning('Chưa đủ tiền', `Tổng tiền thanh toán kết hợp chưa đủ! Cần thêm ${formatVnd(finalTotal.value - totalPaid)}`)
+      notifyWarning('Chưa đủ tiền', `Tổng tiền thanh toán kết hợp chưa đủ theo tổng tiền mới (${formatVnd(finalTotal.value)})! Cần thêm ${formatVnd(finalTotal.value - totalPaid)}`)
       return
     }
   }
 
-  if (!skipConfirm) {
-    const ok = await notifyConfirm(
-      'Xác nhận thanh toán',
-      `Thanh toán hóa đơn "${currentOrder.value.code}" với tổng số tiền ${formatVnd(finalTotal.value)}?`,
-      'Xác nhận thanh toán',
-      'Kiểm tra lại'
-    )
-    if (!ok) return
-  }
-
   if (currentOrder.value.isDelivery) {
     const d = currentOrder.value.deliveryInfo
+    if (!d.recipientName?.trim()) {
+      notifyWarning('Thiếu thông tin giao hàng', 'Vui lòng nhập họ và tên người nhận hàng!')
+      return
+    }
+    if (!d.recipientPhone?.trim()) {
+      notifyWarning('Thiếu thông tin giao hàng', 'Vui lòng nhập số điện thoại người nhận hàng!')
+      return
+    }
+    if (!d.province || !d.ward || !d.recipientAddress?.trim()) {
+      notifyWarning('Thiếu địa chỉ giao hàng', 'Vui lòng chọn Tỉnh/Thành phố, Phường/Xã và nhập địa chỉ cụ thể!')
+      return
+    }
     if (d.feeLoading) {
       notifyWarning('Phí vận chuyển', 'Đang tính phí vận chuyển, vui lòng đợi trong giây lát...')
       return
@@ -1922,6 +2700,16 @@ const handleCheckout = async (options = {}) => {
       notifyWarning('Phí vận chuyển', 'Chưa tính được phí vận chuyển. Vui lòng chọn địa chỉ giao hàng hợp lệ và thử lại.')
       return
     }
+  }
+
+  if (!skipConfirm && combinedAlerts.length === 0) {
+    const ok = await notifyConfirm(
+      'Xác nhận thanh toán',
+      `Thanh toán hóa đơn "${currentOrder.value.code}" với tổng số tiền ${formatVnd(finalTotal.value)}?`,
+      'Xác nhận thanh toán',
+      'Kiểm tra lại'
+    )
+    if (!ok) return
   }
 
   isProcessingCheckout.value = true
@@ -1944,17 +2732,21 @@ const handleCheckout = async (options = {}) => {
     }
 
     const paymentMethodId = getPaymentMethodId(currentOrder.value.paymentMethod)
-    const employeeId = allEmployees.value.length > 0 ? allEmployees.value[0].id : 2
-
-    const customerPhone = currentOrder.value.customer && currentOrder.value.customer.soDienThoai
-      ? currentOrder.value.customer.soDienThoai
-      : '0988888888'
-
-    const customerName = currentOrder.value.customer
-      ? (currentOrder.value.customer.ten || currentOrder.value.customer.tenKhachHang)
-      : 'Khách lẻ'
+    const employeeId = selectedStaffId.value || staffUserRef.value?.idNhanVien || (allEmployees.value.length > 0 ? allEmployees.value[0].id : 2)
 
     const delivery = currentOrder.value.isDelivery ? currentOrder.value.deliveryInfo : null
+
+    const customerPhone = (delivery && delivery.recipientPhone?.trim())
+      ? delivery.recipientPhone.trim()
+      : (currentOrder.value.customer && currentOrder.value.customer.soDienThoai
+        ? currentOrder.value.customer.soDienThoai.trim()
+        : '')
+
+    const customerName = (delivery && delivery.recipientName?.trim())
+      ? delivery.recipientName.trim()
+      : (currentOrder.value.customer
+        ? (currentOrder.value.customer.ten || currentOrder.value.customer.tenKhachHang)
+        : 'Khách lẻ')
     const payload = {
       maHoaDon: currentOrder.value.code,
       loaiDon: currentOrder.value.isDelivery ? 'Online' : 'Tại quầy',
@@ -1983,7 +2775,17 @@ const handleCheckout = async (options = {}) => {
     }
 
     const soldCartSnapshot = currentOrder.value.cart.map(item => ({ ...item }))
-    await http.post('/hoa-don', payload)
+    const invoiceRes = await http.post('/hoa-don', payload)
+    const savedDto = invoiceRes?.data || null
+
+    if (
+      currentOrder.value.isDelivery &&
+      currentOrder.value.customer?.id &&
+      (delivery?.saveToCustomerProfile || !hasCustomerSavedAddress.value) &&
+      !isCurrentDeliveryAddressSaved.value
+    ) {
+      await saveDeliveryAddressToCustomerProfile(true)
+    }
 
     const completedRecord = {
       code: currentOrder.value.code,
@@ -1992,9 +2794,9 @@ const handleCheckout = async (options = {}) => {
       customerPhone: payload.soDienThoaiKhachHang,
       cart: soldCartSnapshot,
       subTotal: subTotal.value,
-      discount: discountAmount.value,
+      discount: savedDto?.tienGiam !== undefined && savedDto?.tienGiam !== null ? Number(savedDto.tienGiam) : discountAmount.value,
       shippingFee: payload.phiVanChuyen,
-      finalTotal: finalTotal.value,
+      finalTotal: savedDto?.tienSauGiamGia !== undefined && savedDto?.tienSauGiamGia !== null ? Number(savedDto.tienSauGiamGia) : finalTotal.value,
       paymentMethod: currentOrder.value.paymentMethod,
       cashGiven: currentOrder.value.cashGiven,
       changeDue: Math.max(0, changeDue.value),
@@ -2022,20 +2824,12 @@ const handleCheckout = async (options = {}) => {
       activeOrderIndex.value = Math.max(0, pendingOrders.value.length - 1)
     }
 
-    // Đồng bộ lại tồn kho khả dụng cho các hóa đơn chờ còn lại
+    // Đồng bộ lại tồn kho khả dụng và số lượt dùng voucher mới nhất cho các hóa đơn chờ còn lại
     reconcilePendingOrdersWithServerStock()
     recalculateAvailableStocks()
     savePendingOrdersToStorage()
 
-    fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&trangThai=true`)
-      .then(r => r.json())
-      .then(data => {
-        if (data && data.content) {
-          setServerProductsList(data.content)
-          savePendingOrdersToStorage()
-        }
-      })
-      .catch(() => { })
+    validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: true })
 
     isReceiptModalOpen.value = true
 
@@ -2355,13 +3149,17 @@ const handleKeyDown = (e) => {
 const loadInitialData = async () => {
   isLoadingData.value = true
   try {
-    const [formRes, prodRes, brandRes, catRes, colorRes, sizeRes] = await Promise.allSettled([
+    const hadStaffSnapshot = loadStaffSnapshotFromStorage()
+    const restoredOrders = restorePendingOrdersFromStorage()
+
+    const [formRes, prodRes, brandRes, catRes, colorRes, sizeRes, empRes] = await Promise.allSettled([
       http.get('/hoa-don/form-data'),
-      fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&trangThai=true`).then(r => r.json()),
+      fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500`).then(r => r.json()),
       fetch(`${API_BASE}/attributes/thuong_hieu`).then(r => r.json()),
       fetch(`${API_BASE}/attributes/loai_giay`).then(r => r.json()),
       fetch(`${API_BASE}/attributes/mau_sac`).then(r => r.json()),
-      fetch(`${API_BASE}/attributes/kich_co`).then(r => r.json())
+      fetch(`${API_BASE}/attributes/kich_co`).then(r => r.json()),
+      http.get('/nhan-vien', { params: { page: 0, size: 100 } })
     ])
 
     if (formRes.status === 'fulfilled' && formRes.value.data) {
@@ -2370,6 +3168,10 @@ const loadInitialData = async () => {
       allVouchers.value = (d.phieuGiamGias || []).filter(v => v.trangThai !== false)
       allEmployees.value = d.nhanViens || []
       allPaymentMethods.value = d.phuongThucThanhToans || d.phuongThucs || []
+    }
+
+    if (empRes.status === 'fulfilled' && empRes.value?.data?.content && !hadStaffSnapshot) {
+      syncEmployeeListAndCheckRole(empRes.value.data.content, true)
     }
 
     if (allPaymentMethods.value.length === 0) {
@@ -2386,7 +3188,7 @@ const loadInitialData = async () => {
 
     let loadedProducts = []
     if (prodRes.status === 'fulfilled' && prodRes.value && prodRes.value.content) {
-      loadedProducts = prodRes.value.content
+      loadedProducts = prodRes.value.content.filter(p => p.trangThai !== false)
     }
 
     if (loadedProducts.length === 0) {
@@ -2456,9 +3258,15 @@ const loadInitialData = async () => {
 
     setServerProductsList(loadedProducts)
 
-    const restored = restorePendingOrdersFromStorage()
-    if (!restored || pendingOrders.value.length === 0) {
+    if (!restoredOrders || pendingOrders.value.length === 0) {
       createNewOrder(true)
+    } else if (currentOrder.value?.customer?.id) {
+      fetchAndSyncCustomerAddresses(currentOrder.value.customer, false, false)
+    }
+
+    // Nếu quay lại màn hình POS từ các màn quản lý khác (cùng 1 tab), kiểm tra ngay 4 case khó
+    if (restoredOrders || hadStaffSnapshot) {
+      await validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: false })
     }
   } catch (error) {
     console.error('Error loading POS data:', error)
@@ -2476,17 +3284,51 @@ const handleWindowClick = (e) => {
   }
 }
 
+const handleWindowFocusOrVisible = () => {
+  if (document.visibilityState === 'visible') {
+    validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: false })
+  }
+}
+
+const handleCrossTabStorageSync = (e) => {
+  if (!e || !e.key) return
+  if (
+    e.key === 'polyshoes_pos_sync_signal' ||
+    e.key === 'polyshoes_last_updated_staff' ||
+    e.key === 'vaiTroHienTai' ||
+    e.key === 'polyshoes_user'
+  ) {
+    staffUserRef.value = getUser()
+    validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: false })
+  }
+}
+
 onMounted(() => {
   loadRecentInvoicesFromStorage()
   loadInitialData()
   loadProvinces()
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('click', handleWindowClick)
+  window.addEventListener('focus', handleWindowFocusOrVisible)
+  document.addEventListener('visibilitychange', handleWindowFocusOrVisible)
+  window.addEventListener('storage', handleCrossTabStorageSync)
+  realtimePollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: false })
+    }
+  }, 5000)
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('click', handleWindowClick)
+  window.removeEventListener('focus', handleWindowFocusOrVisible)
+  document.removeEventListener('visibilitychange', handleWindowFocusOrVisible)
+  window.removeEventListener('storage', handleCrossTabStorageSync)
+  if (realtimePollTimer) {
+    clearInterval(realtimePollTimer)
+    realtimePollTimer = null
+  }
   stopCameraScanner()
 })
 </script>
@@ -2516,6 +3358,12 @@ onUnmounted(() => {
             </div>
 
             <div class="pos-tabs-right-group">
+              <div class="pos-orders-counter-pill" :title="`Nhân viên phụ trách: ${staffName} (${staffRoleLabel})`">
+                <span class="counter-lbl">NV:</span>
+                <span class="counter-num">{{ staffName }}</span>
+                <span class="counter-lbl">({{ staffRoleLabel }})</span>
+              </div>
+
               <button type="button" class="btn-recent-pos-invoices" @click="openRecentInvoicesModal"
                 title="Xem lịch sử đơn vừa bán trong ca và in lại hóa đơn">
                 <span>Đơn vừa bán</span>
@@ -2571,8 +3419,8 @@ onUnmounted(() => {
                       <th>SẢN PHẨM</th>
                       <th width="140" class="text-center">PHÂN LOẠI</th>
                       <th width="130" class="text-center">SỐ LƯỢNG</th>
-                      <th width="130" class="text-end">ĐƠN GIÁ</th>
-                      <th width="140" class="text-end">THÀNH TIỀN</th>
+                      <th width="130" class="text-center">ĐƠN GIÁ</th>
+                      <th width="140" class="text-center">THÀNH TIỀN</th>
                       <th width="70" class="text-center">THAO TÁC</th>
                     </tr>
                   </thead>
@@ -2608,32 +3456,44 @@ onUnmounted(() => {
                           <button class="step-btn" @click="updateCartItemQty(item, item.quantity - 1)"
                             :disabled="item.quantity <= 1">−</button>
                           <input type="number" class="step-input" :value="item.quantity"
-                            @change="updateCartItemQty(item, $event.target.value, $event)" min="1" />
+                            min="1" :max="getMaxAllowedForCartItem(item)"
+                            @input="handleCartItemQtyInput(item, $event)"
+                            @change="updateCartItemQty(item, $event.target.value, $event)"
+                            @blur="updateCartItemQty(item, $event.target.value, $event)"
+                            @keydown.enter="$event.target.blur()" />
                           <button class="step-btn" @click="updateCartItemQty(item, item.quantity + 1)"
-                            :disabled="getRemainingStock(item.idCtsp) <= 0">+</button>
+                            :disabled="getRemainingStock(item.idCtsp) <= 0 || item.quantity >= getMaxAllowedForCartItem(item)">+</button>
                         </div>
                         <div class="stock-hint-txt" v-if="getRemainingStock(item.idCtsp) < 10">
-                          Còn lại: {{ getRemainingStock(item.idCtsp) }}
+                          Còn lại: {{ getRemainingStock(item.idCtsp) }} / Tối đa: {{ getMaxAllowedForCartItem(item) }}
                         </div>
                         <div class="cross-order-stock-hint" v-if="getReservedInOtherOrders(item.idCtsp) > 0">
                           Đơn chờ khác giữ: {{ getReservedInOtherOrders(item.idCtsp) }}
                         </div>
                       </td>
-                      <td class="text-end">
+                      <td class="text-center">
                         <div class="price-stack">
                           <span class="price-active">{{ formatVnd(item.price) }}</span>
                           <span v-if="item.originalPrice && item.originalPrice > item.price"
                             class="price-strikethrough">
                             {{ formatVnd(item.originalPrice) }}
+                            <strong v-if="normalizeDiscountStr(item.discount)" style="color: #dc2626; font-size: 11px; margin-left: 4px; text-decoration: none; display: inline-block;">
+                              ({{ normalizeDiscountStr(item.discount) }})
+                            </strong>
                           </span>
                         </div>
                       </td>
-                      <td class="text-end cell-total-price">
+                      <td class="text-center cell-total-price">
                         {{ formatVnd(item.price * item.quantity) }}
                       </td>
                       <td class="text-center">
                         <button class="btn-del-item" @click="removeCartItem(item)" title="Xóa khỏi giỏ hàng">
-                          <span>Xóa</span>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                          </svg>
                         </button>
                       </td>
                     </tr>
@@ -2660,6 +3520,233 @@ onUnmounted(() => {
                 <button class="btn-empty-add-prod" @click="openProductPicker">
                   <span>Chọn sản phẩm ngay</span>
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FORM ĐIỀN THÔNG TIN GIAO HÀNG (Nằm ngay sau giỏ hàng khi bật Giao hàng) -->
+        <div v-if="currentOrder && currentOrder.isDelivery" class="pos-delivery-form-card">
+          <div class="pos-delivery-card-head">
+            <div class="pos-delivery-title-group">
+              <div class="pos-delivery-icon-badge">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="1" y="3" width="15" height="13" rx="2"></rect>
+                  <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+                  <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                  <circle cx="18.5" cy="18.5" r="2.5"></circle>
+                </svg>
+              </div>
+              <div class="pos-delivery-head-text">
+                <h4 class="pos-delivery-title">Thông tin giao hàng</h4>
+                <p class="pos-delivery-subtitle">Điền địa chỉ người nhận theo địa giới hành chính mới để tính phí vận chuyển GHN</p>
+              </div>
+            </div>
+
+            <div class="pos-delivery-head-actions">
+              <button v-if="currentOrder.customer" type="button" class="btn-del-action-fill" @click="fillDeliveryFromCustomer" title="Lấy họ tên, SĐT và địa chỉ từ khách hàng đã chọn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <span>Điền từ khách hàng</span>
+              </button>
+              <button type="button" class="btn-del-action-reset" @click="clearDeliveryForm" title="Làm mới các ô thông tin nhận hàng">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                  <path d="M3 3v5h5"></path>
+                </svg>
+                <span>Làm mới</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="pos-delivery-card-body">
+            <!-- Sổ địa chỉ đã lưu của khách hàng (chọn nhanh 1 chạm) -->
+            <div v-if="currentOrder.customer && currentCustomerSavedAddresses.length > 0" class="pos-del-saved-addresses-bar">
+              <div class="saved-addr-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <span>Địa chỉ đã lưu của <strong>{{ currentOrder.customer.ten || currentOrder.customer.tenKhachHang }}</strong>:</span>
+              </div>
+              <div class="saved-addr-pills">
+                <button
+                  v-for="addr in currentCustomerSavedAddresses"
+                  :key="addr.id"
+                  type="button"
+                  class="saved-addr-pill"
+                  :class="{
+                    active:
+                      normalizePlaceName(currentOrder.deliveryInfo.province?.name) === normalizePlaceName(addr.thanhPho) &&
+                      normalizePlaceName(currentOrder.deliveryInfo.ward?.name) === normalizePlaceName(addr.phuong) &&
+                      String(currentOrder.deliveryInfo.recipientAddress || '').trim().toLowerCase() === String(addr.diaChiCuThe || '').trim().toLowerCase()
+                  }"
+                  @click="applySavedAddressToDeliveryForm(addr, currentOrder.customer, true)"
+                  :title="[addr.diaChiCuThe, addr.phuong, addr.thanhPho].filter(Boolean).join(', ')"
+                >
+                  <span v-if="addr.macDinh" class="pill-default-tag">Mặc định</span>
+                  <span class="pill-addr-text">{{ [addr.diaChiCuThe, addr.phuong, addr.thanhPho].filter(Boolean).join(', ') }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="pos-delivery-form-grid">
+              <!-- Họ và tên người nhận -->
+              <div class="pos-del-field">
+                <label class="pos-del-label">
+                  Họ và tên người nhận <span class="req-star">*</span>
+                </label>
+                <div class="pos-del-input-wrap">
+                  <span class="pos-del-field-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                  </span>
+                  <input type="text" class="pos-del-control with-icon" placeholder="Nhập họ và tên người nhận hàng..."
+                    v-model="currentOrder.deliveryInfo.recipientName" />
+                </div>
+              </div>
+
+              <!-- Số điện thoại người nhận -->
+              <div class="pos-del-field">
+                <label class="pos-del-label">
+                  Số điện thoại nhận hàng <span class="req-star">*</span>
+                </label>
+                <div class="pos-del-input-wrap">
+                  <span class="pos-del-field-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                    </svg>
+                  </span>
+                  <input type="tel" class="pos-del-control with-icon" placeholder="Nhập SĐT liên hệ giao hàng (VD: 0987...)"
+                    v-model="currentOrder.deliveryInfo.recipientPhone" maxlength="11" />
+                </div>
+              </div>
+
+              <!-- Tỉnh / Thành phố -->
+              <div class="pos-del-field">
+                <label class="pos-del-label">
+                  Tỉnh / Thành phố <span class="req-star">*</span>
+                </label>
+                <select class="pos-del-control" v-model="currentOrder.deliveryInfo.province" @change="onProvinceChange">
+                  <option :value="null" disabled>-- Chọn Tỉnh / Thành phố --</option>
+                  <option v-for="p in provincesList" :key="p.id" :value="p">{{ p.name }}</option>
+                </select>
+              </div>
+
+              <!-- Phường / Xã -->
+              <div class="pos-del-field">
+                <label class="pos-del-label">
+                  Phường / Xã <span class="req-star">*</span>
+                </label>
+                <select class="pos-del-control" v-model="currentOrder.deliveryInfo.ward" @change="onWardChange"
+                  :disabled="!currentOrder.deliveryInfo.province || currentOrder.deliveryInfo.wardsLoading">
+                  <option :value="null" disabled>
+                    {{ currentOrder.deliveryInfo.wardsLoading ? 'Đang tải danh sách Phường / Xã...' : '-- Chọn Phường / Xã --' }}
+                  </option>
+                  <option v-for="w in wardsList" :key="w.id" :value="w">{{ w.name }}</option>
+                </select>
+              </div>
+
+              <!-- Địa chỉ chi tiết -->
+              <div class="pos-del-field" :class="{ 'col-span-2': !(currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length) }">
+                <label class="pos-del-label">
+                  Địa chỉ cụ thể (Số nhà, ngõ, tên đường, tòa nhà...) <span class="req-star">*</span>
+                </label>
+                <div class="pos-del-input-wrap">
+                  <span class="pos-del-field-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                      <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                  </span>
+                  <input type="text" class="pos-del-control with-icon" placeholder="VD: Số 120 đường Cầu Giấy, Tòa nhà Discovery..."
+                    v-model="currentOrder.deliveryInfo.recipientAddress" />
+                </div>
+              </div>
+
+              <!-- Gói dịch vụ vận chuyển (nếu có) -->
+              <div class="pos-del-field" v-if="currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length">
+                <label class="pos-del-label">Gói dịch vụ vận chuyển GHN</label>
+                <select class="pos-del-control" v-model="currentOrder.deliveryInfo.serviceTypeId" @change="onServiceChange">
+                  <option v-for="s in currentOrder.deliveryInfo.services" :key="s.serviceTypeId" :value="s.serviceTypeId">
+                    {{ s.shortName || ('Dịch vụ GHN #' + s.serviceTypeId) }}
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Tùy chọn & Nút lưu địa chỉ vào hồ sơ khách hàng cho các lần mua sau -->
+            <div v-if="currentOrder.customer" class="pos-del-save-profile-bar" :class="{ 'is-saved': isCurrentDeliveryAddressSaved }">
+              <div class="save-profile-left">
+                <span v-if="!hasCustomerSavedAddress" class="save-profile-badge badge-warning">
+                  Khách chưa có địa chỉ lưu sẵn
+                </span>
+                <span v-else-if="isCurrentDeliveryAddressSaved" class="save-profile-badge badge-saved">
+                  ✓ Đã khớp địa chỉ trong hồ sơ KH
+                </span>
+                <span v-else class="save-profile-badge badge-new">
+                  Địa chỉ giao hàng mới
+                </span>
+
+                <label v-if="!isCurrentDeliveryAddressSaved" class="save-profile-chk-label">
+                  <input
+                    type="checkbox"
+                    class="custom-chk pos-chk"
+                    v-model="currentOrder.deliveryInfo.saveToCustomerProfile"
+                  />
+                  <span>Tự động lưu làm địa chỉ mặc định của <strong>{{ currentOrder.customer.ten || currentOrder.customer.tenKhachHang }}</strong> khi Thanh toán</span>
+                </label>
+                <span v-else class="save-profile-saved-note">
+                  Lần mua tiếp theo hệ thống sẽ tự động điền Tỉnh/Phường/Số nhà này cho khách.
+                </span>
+              </div>
+
+              <button
+                v-if="!isCurrentDeliveryAddressSaved"
+                type="button"
+                class="btn-save-addr-profile"
+                :disabled="!isCurrentDeliveryAddressComplete || isSavingCustomerAddress"
+                @click="saveDeliveryAddressToCustomerProfile(false)"
+                title="Lưu ngay Tỉnh/Phường/Số nhà này vào hồ sơ khách hàng"
+              >
+                <span v-if="isSavingCustomerAddress" class="fee-spinner"></span>
+                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                  <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                <span>{{ isSavingCustomerAddress ? 'Đang lưu...' : 'Lưu vào hồ sơ KH' }}</span>
+              </button>
+            </div>
+
+            <!-- Thanh trạng thái & Phí vận chuyển GHN -->
+            <div class="pos-delivery-footer-bar">
+              <div class="pos-del-carrier-info">
+                <span class="carrier-badge">GHN Express</span>
+                <span class="carrier-address-preview" v-if="currentOrder.deliveryInfo.province && currentOrder.deliveryInfo.ward">
+                  Giao tới: <strong>{{ [currentOrder.deliveryInfo.recipientAddress, currentOrder.deliveryInfo.ward?.name, currentOrder.deliveryInfo.province?.name].filter(Boolean).join(', ') }}</strong>
+                </span>
+                <span class="carrier-address-hint" v-else>
+                  Vui lòng chọn Tỉnh/Thành phố và Phường/Xã để tự động tính cước phí vận chuyển
+                </span>
+              </div>
+
+              <div class="pos-del-fee-status">
+                <div v-if="currentOrder.deliveryInfo.feeLoading" class="del-fee-loading">
+                  <span class="fee-spinner"></span>
+                  <span>Đang tính phí GHN...</span>
+                </div>
+                <div v-else-if="currentOrder.deliveryInfo.feeError" class="del-fee-error">
+                  <span>{{ currentOrder.deliveryInfo.feeError }}</span>
+                  <button type="button" class="btn-fee-retry" @click="tinhPhiVanChuyen">Thử lại</button>
+                </div>
+                <div v-else class="del-fee-value-box">
+                  <span class="del-fee-lbl">Phí vận chuyển:</span>
+                  <strong class="del-fee-amount">{{ formatVnd(currentOrder.deliveryInfo.shippingFee || 0) }}</strong>
+                </div>
               </div>
             </div>
           </div>
@@ -2733,38 +3820,16 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div v-if="currentOrder && currentOrder.isDelivery" class="delivery-drawer-box">
-            <div class="drawer-title">Thông tin nhận hàng</div>
-            <input type="text" class="del-input" placeholder="Tên người nhận hàng..."
-              v-model="currentOrder.deliveryInfo.recipientName" />
-            <input type="text" class="del-input" placeholder="Số điện thoại người nhận..."
-              v-model="currentOrder.deliveryInfo.recipientPhone" />
-            <select class="del-input" v-model="currentOrder.deliveryInfo.province" @change="onProvinceChange">
-              <option :value="null" disabled>Chọn Tỉnh / Thành phố...</option>
-              <option v-for="p in provincesList" :key="p.id" :value="p">{{ p.name }}</option>
-            </select>
-            <select class="del-input" v-model="currentOrder.deliveryInfo.ward" @change="onWardChange"
-              :disabled="!currentOrder.deliveryInfo.province || currentOrder.deliveryInfo.wardsLoading">
-              <option :value="null" disabled>{{ currentOrder.deliveryInfo.wardsLoading ? 'Đang tải phường/xã...' : 'Chọn Phường / Xã...' }}</option>
-              <option v-for="w in wardsList" :key="w.id" :value="w">{{ w.name }}</option>
-            </select>
-            <input type="text" class="del-input" placeholder="Số nhà, tên đường chi tiết..."
-              v-model="currentOrder.deliveryInfo.recipientAddress" />
-            <select v-if="currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length"
-              class="del-input" v-model="currentOrder.deliveryInfo.serviceTypeId" @change="onServiceChange">
-              <option v-for="s in currentOrder.deliveryInfo.services" :key="s.serviceTypeId" :value="s.serviceTypeId">{{
-                s.shortName || ('Dịch vụ ' + s.serviceTypeId) }}</option>
-            </select>
-            <div v-if="currentOrder.deliveryInfo.feeLoading" class="fee-info">
-              Đang tính phí vận chuyển với GHN...
-            </div>
-            <div v-else-if="currentOrder.deliveryInfo.feeError" class="fee-error">
-              <span>{{ currentOrder.deliveryInfo.feeError }}</span>
-              <button type="button" class="fee-retry" @click="tinhPhiVanChuyen">Thử lại</button>
-            </div>
-            <div v-else-if="currentOrder.deliveryInfo.shippingFee > 0" class="fee-info">
-              Phí vận chuyển (GHN): <strong style="color: #d92d20;">{{ formatVnd(currentOrder.deliveryInfo.shippingFee)
-              }}</strong>
+          <div v-if="currentOrder && currentOrder.isDelivery" class="delivery-active-summary-badge">
+            <div class="delivery-summary-row">
+              <span class="delivery-summary-dot"></span>
+              <span class="delivery-summary-txt" v-if="currentOrder.deliveryInfo.recipientName || currentOrder.deliveryInfo.recipientPhone">
+                Người nhận: <strong>{{ currentOrder.deliveryInfo.recipientName || 'Chưa nhập tên' }}</strong>
+                <template v-if="currentOrder.deliveryInfo.recipientPhone"> ({{ currentOrder.deliveryInfo.recipientPhone }})</template>
+              </span>
+              <span class="delivery-summary-txt" v-else>
+                Vui lòng điền <strong>Form thông tin giao hàng</strong> ngay bên dưới giỏ hàng
+              </span>
             </div>
           </div>
 
@@ -2870,11 +3935,7 @@ onUnmounted(() => {
           <div class="cash-settlement-box" v-if="currentOrder && currentOrder.paymentMethod !== 'CHUYEN_KHOAN'">
             <div class="cash-input-field">
               <span class="cash-label">Khách thanh toán tiền mặt</span>
-              <div class="cash-input-wrap">
-                <input type="number" class="del-input cash-amount-inp" placeholder="Nhập số tiền khách đưa..."
-                  v-model.number="currentOrder.cashGiven" />
-                <span class="cash-currency-badge">₫</span>
-              </div>
+              <CurrencyInput v-model="currentOrder.cashGiven" placeholder="Nhập số tiền khách đưa..." />
             </div>
             <div class="quick-cash-row">
               <button class="quick-chip chip-exact" @click="setQuickCash('EXACT')">Đủ tiền</button>
@@ -2888,11 +3949,7 @@ onUnmounted(() => {
           <div class="cash-settlement-box" v-if="currentOrder && currentOrder.paymentMethod === 'KET_HOP'">
             <div class="cash-input-field">
               <span class="cash-label">Số tiền chuyển khoản</span>
-              <div class="cash-input-wrap">
-                <input type="number" class="del-input cash-amount-inp" placeholder="Nhập số tiền chuyển khoản..."
-                  v-model.number="currentOrder.transferGiven" />
-                <span class="cash-currency-badge">₫</span>
-              </div>
+              <CurrencyInput v-model="currentOrder.transferGiven" placeholder="Nhập số tiền chuyển khoản..." />
             </div>
           </div>
 
@@ -3042,12 +4099,12 @@ onUnmounted(() => {
                     </th>
                     <th width="45" class="text-center">STT</th>
                     <th width="64" class="text-center">ẢNH</th>
-                    <th width="140">MÃ CTSP</th>
+                    <th width="140" class="text-center">MÃ CTSP</th>
                     <th>SẢN PHẨM</th>
-                    <th width="110">MÀU SẮC</th>
+                    <th width="110" class="text-center">MÀU SẮC</th>
                     <th width="75" class="text-center">SIZE</th>
                     <th width="90" class="text-center">TỒN KHO</th>
-                    <th width="130" class="text-end">ĐƠN GIÁ</th>
+                    <th width="130" class="text-center">ĐƠN GIÁ</th>
                     <th width="90" class="text-center">CHỌN</th>
                   </tr>
                 </thead>
@@ -3065,13 +4122,13 @@ onUnmounted(() => {
                         <img :src="getShoeImage(item)" class="modal-thumb-img" alt="shoe" />
                       </div>
                     </td>
-                    <td>
+                    <td class="text-center">
                       <span class="code-pill-modal">{{ item.maCtsp || item.maChiTietSanPham || item.maSp }}</span>
                     </td>
                     <td class="modal-prod-name">
                       <span class="prod-text-title">{{ item.tenSp || item.tenSanPham }}</span>
                     </td>
-                    <td>
+                    <td class="text-center">
                       <div class="modal-color-cell">
                         <span class="modal-color-dot" :style="{ backgroundColor: (item.colorHex || '#64748b') }"></span>
                         <span class="modal-color-name">{{ item.color || item.tenMau || '---' }}</span>
@@ -3092,7 +4149,7 @@ onUnmounted(() => {
                         Đang giữ: {{ getReservedQtyAcrossOrders(item.id) }}
                       </div>
                     </td>
-                    <td class="text-end">
+                    <td class="text-center">
                       <div class="prod-modal-price-box">
                         <span class="price-now">{{ formatVnd(getEffectivePrice(item)) }}</span>
                         <span v-if="item.discount && item.discount !== '-'" class="price-was">{{ formatVnd(item.price ||
@@ -3102,13 +4159,13 @@ onUnmounted(() => {
                     <td class="text-center" @click.stop>
                       <button class="btn-select-add-cart"
                         :disabled="(item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0"
-                        @click="handleSelectProductFromModal(item)">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        @click="quickAddSingleProductFromModal(item)">
+                        <svg v-if="(item.stock !== undefined ? item.stock : (item.soLuong || 0)) > 0" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                           stroke-width="2.5">
                           <line x1="12" y1="5" x2="12" y2="19"></line>
                           <line x1="5" y1="12" x2="19" y2="12"></line>
                         </svg>
-                        Thêm
+                        {{ (item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0 ? 'Hết hàng' : 'Thêm' }}
                       </button>
                     </td>
                   </tr>
@@ -3186,9 +4243,16 @@ onUnmounted(() => {
         <div class="pos-modal-dialog modal-voucher-dialog">
           <div class="pos-modal-head">
             <div class="modal-head-title">
-              <h3>Phiếu giảm giá khả dụng</h3>
-              <span class="modal-badge-count">{{ availableEligibleVouchersCount }}/{{ allVouchers.length }} khả
-                dụng</span>
+              <div class="modal-title-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                  <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                </svg>
+              </div>
+              <div class="modal-title-text-group">
+                <h3>Phiếu giảm giá khả dụng</h3>
+                <span class="modal-badge-count">{{ availableEligibleVouchersCount }}/{{ allVouchers.length }} khả dụng</span>
+              </div>
             </div>
             <button class="pos-modal-close" @click="isVoucherModalOpen = false" title="Đóng (Esc)">×</button>
           </div>
@@ -3514,19 +4578,18 @@ onUnmounted(() => {
       <div v-if="isSwapModalOpen" class="pos-modal-overlay" @click.self="isSwapModalOpen = false">
         <div class="pos-modal-dialog modal-swap-variant">
           <div class="pos-modal-head">
-            <div class="swap-modal-head-titles">
-              <div class="swap-head-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <div class="modal-head-title">
+              <div class="modal-title-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4" />
                 </svg>
               </div>
-              <div>
-                <h3 class="pos-modal-title">Đổi Size / Phối Màu (Smart Swap)</h3>
-                <span class="pos-modal-subtitle">Hoán đổi biến thể tức thì trên giỏ hàng không cần xóa đi thêm
-                  lại</span>
+              <div class="modal-title-text-group">
+                <h3>Đổi Size / Màu sắc sản phẩm</h3>
+                <span class="modal-badge-count">{{ swapVariants.length }} biến thể</span>
               </div>
             </div>
-            <button class="pos-modal-close" @click="isSwapModalOpen = false">×</button>
+            <button class="pos-modal-close" @click="isSwapModalOpen = false" title="Đóng (Esc)">×</button>
           </div>
 
           <div class="pos-modal-body">
@@ -3635,14 +4698,14 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="pos-modal-foot">
-            <button type="button" class="btn-cancel-modal" @click="isSwapModalOpen = false">
+          <div class="pos-modal-footer cust-modal-footer swap-modal-footer">
+            <button type="button" class="btn-cust-cancel" @click="isSwapModalOpen = false">
               Hủy bỏ
             </button>
             <button type="button" class="btn-confirm-swap-action"
               :disabled="!selectedNewVariant || selectedNewVariant.id === swapCartItem?.idCtsp"
               @click="executeSwap(selectedNewVariant)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
               <span v-if="selectedNewVariant">
@@ -3955,17 +5018,25 @@ onUnmounted(() => {
     </transition>
 
     <!-- MODAL LỊCH SỬ ĐƠN VỪA BÁN TRONG CA & IN LẠI HÓA ĐƠN -->
-    <transition name="modal-fade">
-      <div v-if="isRecentInvoicesModalOpen" class="pos-modal-backdrop" @click.self="isRecentInvoicesModalOpen = false">
-        <div class="pos-modal-box recent-invoices-modal-box">
+    <transition name="fade">
+      <div v-if="isRecentInvoicesModalOpen" class="pos-modal-overlay" @click.self="isRecentInvoicesModalOpen = false">
+        <div class="pos-modal-dialog recent-invoices-modal-box">
           <div class="pos-modal-head">
-            <div class="modal-head-left">
-              <div>
-                <h4 class="modal-title-text">Lịch sử đơn vừa bán trong ca</h4>
-                <p class="modal-sub-text">Xem lại hóa đơn vừa thanh toán tại quầy và in lại hóa đơn nhiệt 80mm</p>
+            <div class="modal-head-title">
+              <div class="modal-title-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>
+              </div>
+              <div class="modal-title-text-group">
+                <h3>Lịch sử đơn vừa bán trong ca</h3>
+                <span class="modal-badge-count">{{ recentPosInvoices.length }} hóa đơn</span>
               </div>
             </div>
-            <button class="btn-modal-close" @click="isRecentInvoicesModalOpen = false">×</button>
+            <button class="pos-modal-close" @click="isRecentInvoicesModalOpen = false" title="Đóng (Esc)">×</button>
           </div>
 
           <div class="pos-modal-body recent-invoices-modal-body">
@@ -3993,25 +5064,26 @@ onUnmounted(() => {
               <table class="recent-invoices-table">
                 <thead>
                   <tr>
-                    <th width="120">MÃ HÓA ĐƠN</th>
-                    <th width="150">THỜI GIAN</th>
-                    <th>KHÁCH HÀNG</th>
+                    <th width="120" class="text-center">MÃ HÓA ĐƠN</th>
+                    <th width="150" class="text-center">THỜI GIAN</th>
+                    <th class="text-center">KHÁCH HÀNG</th>
                     <th width="90" class="text-center">SỐ SP</th>
-                    <th width="145">THANH TOÁN</th>
-                    <th width="135" class="text-end">TỔNG TIỀN</th>
+                    <th width="145" class="text-center">THANH TOÁN</th>
+                    <th width="135" class="text-center">TỔNG TIỀN</th>
                     <th width="195" class="text-center">THAO TÁC</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="inv in filteredRecentInvoices" :key="inv.code">
-                    <td>
+                    <td class="text-center">
                       <span class="recent-inv-code">{{ inv.code }}</span>
                     </td>
-                    <td class="recent-inv-date">{{ inv.date }}</td>
-                    <td>
+                    <td class="text-center recent-inv-date">{{ inv.date }}</td>
+                    <td class="text-center">
                       <div class="recent-cust-info">
                         <span class="recent-cust-name">{{ inv.customerName || 'Khách lẻ' }}</span>
                         <span class="recent-cust-phone" v-if="inv.customerPhone">{{ inv.customerPhone }}</span>
+                        <span class="recent-cust-phone text-muted" v-else>Không có SĐT</span>
                       </div>
                     </td>
                     <td class="text-center">
@@ -4019,10 +5091,10 @@ onUnmounted(() => {
                         {{ Array.isArray(inv.cart) ? inv.cart.reduce((s, i) => s + Number(i.quantity || 0), 0) : 0 }}
                       </span>
                     </td>
-                    <td>
+                    <td class="text-center">
                       <span class="recent-method-badge">{{ formatPaymentMethodName(inv.paymentMethod) }}</span>
                     </td>
-                    <td class="text-end">
+                    <td class="text-center">
                       <strong class="recent-total-val">{{ formatVnd(inv.finalTotal) }}</strong>
                     </td>
                     <td class="text-center">

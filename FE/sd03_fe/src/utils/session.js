@@ -33,3 +33,20 @@ export const tenVaiTro = () => (laAdmin() ? 'Admin' : 'Nhân viên')
 
 export const datNguoiDung = (ten) => ghi(khoaNguoiDung, ten || '')
 export const layNguoiDung = () => doc(khoaNguoiDung) || 'admin'
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === khoaVaiTro) {
+      vaiTroHienTai.value = String(e.newValue || '').toUpperCase()
+    } else if (e.key === 'polyshoes_user' && e.newValue) {
+      try {
+        const parsed = JSON.parse(e.newValue)
+        if (parsed?.vaiTro) {
+          vaiTroHienTai.value = String(parsed.vaiTro).toUpperCase()
+        }
+      } catch {
+        // ignore parse error
+      }
+    }
+  })
+}

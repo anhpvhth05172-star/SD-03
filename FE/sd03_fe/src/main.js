@@ -11,7 +11,6 @@ import { caiDatFetchAuth } from "./api/fetch-auth";
 
 caiDatFetchAuth();
 
-// Loại bỏ ngay lập tức bất kỳ backdrop/overlay rác nào trước khi mount ứng dụng
 if (typeof document !== 'undefined') {
   document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
   document.querySelectorAll('vue-devtools-host, #vue-devtools-anchor').forEach(el => el.remove());

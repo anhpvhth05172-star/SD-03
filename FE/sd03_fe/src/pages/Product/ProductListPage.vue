@@ -21,6 +21,47 @@ const pageSize = ref(10)
 const pageSizeOptions = [5, 10, 20, 50]
 
 const selectedIds = ref([])
+const posPendingOrders = ref([])
+
+const loadPosPendingOrders = () => {
+  try {
+    const raw = localStorage.getItem('polyshoes_pos_pending_orders_v1')
+    posPendingOrders.value = raw ? JSON.parse(raw) : []
+  } catch {
+    posPendingOrders.value = []
+  }
+}
+
+const getPosReservedForProduct = (item) => {
+  if (!item || !Array.isArray(posPendingOrders.value)) return 0
+  let reserved = 0
+  for (const order of posPendingOrders.value) {
+    if (!Array.isArray(order.cart)) continue
+    for (const c of order.cart) {
+      const matchId = c.idSanPham && item.id && Number(c.idSanPham) === Number(item.id)
+      const matchCode = c.maSp && item.maSanPham && String(c.maSp).toUpperCase() === String(item.maSanPham).toUpperCase()
+      const matchName = !c.idSanPham && c.name && item.tenSanPham && String(c.name).trim() === String(item.tenSanPham).trim()
+      if (matchId || matchCode || matchName) {
+        reserved += Number(c.quantity || 0)
+      }
+    }
+  }
+  return reserved
+}
+
+const getAvailableProductStock = (item) => {
+  const base = Number(item?.soLuong ?? 0)
+  return Math.max(0, base - getPosReservedForProduct(item))
+}
+
+const handlePosStorageSync = (e) => {
+  if (!e || !e.key || e.key === 'polyshoes_pos_pending_orders_v1' || e.key === 'polyshoes_pos_sync_signal') {
+    loadPosPendingOrders()
+    if (e?.key === 'polyshoes_pos_sync_signal') {
+      fetchProducts()
+    }
+  }
+}
 
 const filters = reactive({
   keyword: '',
@@ -635,10 +676,15 @@ const generateAiContent = async (targetForm) => {
 }
 
 onMounted(() => {
+  loadPosPendingOrders()
+  window.addEventListener('storage', handlePosStorageSync)
+  window.addEventListener('focus', loadPosPendingOrders)
   Promise.allSettled([fetchOptions(), fetchProducts()])
 })
 
 onUnmounted(() => {
+  window.removeEventListener('storage', handlePosStorageSync)
+  window.removeEventListener('focus', loadPosPendingOrders)
   if (debounceTimer) clearTimeout(debounceTimer)
   if (currentAbortController) currentAbortController.abort()
 })
@@ -761,12 +807,12 @@ onUnmounted(() => {
           <thead>
             <tr>
               <th width="60" class="text-center">STT</th>
-              <th width="120">MÃ SẢN PHẨM</th>
-              <th width="320">SẢN PHẨM</th>
-              <th width="140">THƯƠNG HIỆU</th>
-              <th width="140">LOẠI GIÀY</th>
-              <th width="100" class="text-center">SỐ LƯỢNG</th>
-              <th width="160" class="text-end">GIÁ BÁN</th>
+              <th width="130" class="text-center">MÃ SẢN PHẨM</th>
+              <th width="280">SẢN PHẨM</th>
+              <th width="140" class="text-center">THƯƠNG HIỆU</th>
+              <th width="140" class="text-center">LOẠI GIÀY</th>
+              <th width="110" class="text-center">SỐ LƯỢNG</th>
+              <th width="170" class="text-center">GIÁ BÁN</th>
               <th width="140" class="text-center">TRẠNG THÁI</th>
               <th width="120" class="text-center">HÀNH ĐỘNG</th>
             </tr>
@@ -774,18 +820,22 @@ onUnmounted(() => {
           <tbody>
             <tr v-for="(item, idx) in products" :key="item.id">
               <td class="text-center text-muted">{{ currentPage * pageSize + idx + 1 }}</td>
-              <td class="code-plain-text">{{ item.maSanPham || `SP0${item.id}` }}</td>
+              <td class="text-center code-plain-text">{{ item.maSanPham || `SP0${item.id}` }}</td>
               <td>
                 <div class="product-details-col">
                   <span class="name-plain-text">{{ item.tenSanPham }}</span>
                   <span v-if="item.doiTuong" class="target-badge">{{ item.doiTuong }}</span>
                 </div>
               </td>
-              <td class="attr-plain-text">{{ item.tenThuongHieu || '---' }}</td>
-              <td class="attr-plain-text">{{ item.tenLoaiGiay || '---' }}</td>
-              <td class="text-center qty-plain-text">{{ formatNumber(item.soLuong !== undefined && item.soLuong !== null
-                ? item.soLuong : 0) }}</td>
-              <td class="text-end price-plain-text">
+              <td class="text-center attr-plain-text">{{ item.tenThuongHieu || '---' }}</td>
+              <td class="text-center attr-plain-text">{{ item.tenLoaiGiay || '---' }}</td>
+              <td class="text-center qty-plain-text">
+                <div>{{ formatNumber(getAvailableProductStock(item)) }}</div>
+                <div v-if="getPosReservedForProduct(item) > 0" style="font-size: 11px; color: #d97706; font-weight: 600; margin-top: 2px;">
+                  Giữ tại quầy: {{ getPosReservedForProduct(item) }} (Kho: {{ formatNumber(item.soLuong || 0) }})
+                </div>
+              </td>
+              <td class="text-center price-plain-text">
                 <div v-if="hasProductDiscount(item)" class="product-price-discount-box">
                   <div class="product-sale-price-row">
                     <span class="product-sale-price">{{ formatProductDiscountedPrice(item) }}</span>

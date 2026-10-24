@@ -10,7 +10,6 @@ const router = useRouter()
 
 const purgeOrphanOverlays = () => {
   if (typeof document === 'undefined') return
-  // Loại bỏ bất kỳ backdrop mồ côi hoặc container SweetAlert/Devtools nào còn sót trên body
   document.querySelectorAll('.modal-backdrop').forEach(el => el.remove())
   document.querySelectorAll('.swal2-container:not(.swal2-shown)').forEach(el => el.remove())
   document.querySelectorAll('vue-devtools-host, #vue-devtools-anchor, [class*="vue-devtools"]').forEach(el => el.remove())

@@ -601,17 +601,19 @@ public class HoaDonService {
         if (!TEN_KHACH_HANG_HOP_LE.matcher(ten).matches()) {
             throw new IllegalArgumentException("Tên khách hàng chứa ký tự không hợp lệ");
         }
+        boolean isTaiQuay = "TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon()));
         if (isBlank(req.getSoDienThoaiKhachHang())) {
-            if ("TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon()))) {
-                req.setSoDienThoaiKhachHang("0988888888");
-            } else {
+            if (!isTaiQuay) {
                 throw new IllegalArgumentException("Số điện thoại không được để trống");
             }
-        }
-        String sdt = req.getSoDienThoaiKhachHang().trim();
-        if (!SO_DIEN_THOAI_HOP_LE.matcher(sdt).matches()) {
-            throw new IllegalArgumentException(
-                "Số điện thoại phải gồm 10 hoặc 11 chữ số và bắt đầu bằng 0");
+            req.setSoDienThoaiKhachHang(null);
+        } else {
+            String sdt = req.getSoDienThoaiKhachHang().trim();
+            if (!SO_DIEN_THOAI_HOP_LE.matcher(sdt).matches()) {
+                throw new IllegalArgumentException(
+                    "Số điện thoại phải gồm 10 hoặc 11 chữ số và bắt đầu bằng 0");
+            }
+            req.setSoDienThoaiKhachHang(sdt);
         }
         boolean online = "ONLINE".equals(toMaLoaiDon(req.getLoaiDon()));
         if (isBlank(req.getDiaChiNhanHang())) {
@@ -700,10 +702,7 @@ public class HoaDonService {
         hoaDon.setKhachHang(req.getIdKhachHang() != null
             ? timKhachHang(req.getIdKhachHang())
             : null);
-        hoaDon.setNhanVien(req.getIdNhanVien() != null
-            ? nhanVienRepository.findById(req.getIdNhanVien())
-                .orElseThrow(() -> new IllegalArgumentException("Nhân viên không tồn tại"))
-            : null);
+        hoaDon.setNhanVien(req.getIdNhanVien() != null ? timNhanVien(req.getIdNhanVien()) : null);
         hoaDon.setPhuongThucThanhToan(req.getIdPhuongThucThanhToan() != null
             ? phuongThucThanhToanRepository.findById(req.getIdPhuongThucThanhToan())
                 .orElseThrow(() -> new IllegalArgumentException("Phương thức thanh toán không tồn tại"))
@@ -721,6 +720,15 @@ public class HoaDonService {
                 hoaDon.setSoDienThoaiKhachHang(hoaDon.getKhachHang().getSoDienThoai());
             }
         }
+    }
+
+    private NhanVien timNhanVien(Long id) {
+        NhanVien nv = nhanVienRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Nhân viên không tồn tại"));
+        if (Boolean.FALSE.equals(nv.getTrangThai())) {
+            throw new IllegalArgumentException("Tài khoản nhân viên đã bị khóa hoặc ngừng hoạt động");
+        }
+        return nv;
     }
 
     private KhachHang timKhachHang(Long id) {
@@ -865,6 +873,9 @@ public class HoaDonService {
     }
 
     private void ghiLichSuSuDung(HoaDon hoaDon, PhieuGiamGia phieu) {
+        int daDung = phieu.getSoLuongDaSuDung() != null ? phieu.getSoLuongDaSuDung() : 0;
+        phieu.setSoLuongDaSuDung(daDung + 1);
+        phieuGiamGiaRepository.save(phieu);
         if (hoaDon.getKhachHang() == null) {
             return;
         }

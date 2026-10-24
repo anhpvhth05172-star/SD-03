@@ -543,7 +543,21 @@ const submit = async () => {
     const payload = buildPayload()
     let msg = ''
     if (isEdit) {
-      await updateEmployee(route.params.id, payload)
+      const capNhat = await updateEmployee(route.params.id, payload)
+      try {
+        localStorage.setItem('polyshoes_last_updated_staff', JSON.stringify({ ...capNhat, _ts: Date.now() }))
+        const rawUser = localStorage.getItem('polyshoes_user')
+        if (rawUser) {
+          const parsedUser = JSON.parse(rawUser)
+          if (Number(parsedUser?.idNhanVien) === Number(capNhat?.id) || parsedUser?.tenTaiKhoan === capNhat?.tenTaiKhoan) {
+            if (capNhat?.maVaiTro) {
+              datVaiTro(capNhat.maVaiTro)
+              parsedUser.vaiTro = capNhat.maVaiTro
+              localStorage.setItem('polyshoes_user', JSON.stringify(parsedUser))
+            }
+          }
+        }
+      } catch {}
       msg = `Đã cập nhật thông tin nhân viên "${form.value.tenTaiKhoan}" thành công!`
       setFlash(msg)
     } else {

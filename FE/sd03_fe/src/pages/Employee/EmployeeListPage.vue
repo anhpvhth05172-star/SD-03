@@ -179,7 +179,8 @@ const toggleStatus = async (row) => {
 
   const moi = !row.trangThai
   try {
-    await updateEmployeeStatus(row.id, moi ? 'true' : 'false')
+    const capNhat = await updateEmployeeStatus(row.id, moi ? 'true' : 'false')
+    try { localStorage.setItem('polyshoes_last_updated_staff', JSON.stringify({ ...(capNhat || row), trangThai: moi, _ts: Date.now() })) } catch {}
     row.trangThai = moi
     row.trangThaiLabel = moi ? 'Đang hoạt động' : 'Đã khóa'
     notifySuccess(`Đã ${actionText} tài khoản "${row.tenTaiKhoan}" thành công!`)
@@ -194,6 +195,7 @@ const removeEmployee = async (row) => {
   if (!ok) return
   try {
     await deleteEmployee(row.id)
+    try { localStorage.setItem('polyshoes_last_updated_staff', JSON.stringify({ ...row, trangThai: false, _ts: Date.now() })) } catch {}
     notifySuccess(`Đã xóa nhân viên "${row.tenTaiKhoan}" thành công!`)
     await load()
   } catch (e) {

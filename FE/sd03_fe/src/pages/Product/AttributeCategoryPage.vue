@@ -469,8 +469,8 @@ const executeDeleteFast = async (item) => {
             <tr>
               <th width="60" class="text-center">STT</th>
               <th width="150" class="text-center">MÃ THUỘC TÍNH</th>
-              <th width="240">TÊN {{ activeTabInfo.label.toUpperCase() }}</th>
-              <th>MÔ TẢ / GIÁ TRỊ</th>
+              <th width="240" class="text-center">TÊN {{ activeTabInfo.label.toUpperCase() }}</th>
+              <th class="text-center">MÔ TẢ / GIÁ TRỊ</th>
               <th width="170" class="text-center">TRẠNG THÁI</th>
               <th width="120" class="text-center">THAO TÁC</th>
             </tr>
@@ -481,12 +481,12 @@ const executeDeleteFast = async (item) => {
               <td class="text-center code-plain-text">
                 {{ (item.ma || (activeTabInfo.codePrefix + String(item.id).padStart(3, '0'))).toUpperCase() }}
               </td>
-              <td>
+              <td class="text-center">
                 <div class="name-col">
                   <span class="name-main">{{ activeTab === 'kich_co' ? `Size ${item.ten}` : item.ten }}</span>
                 </div>
               </td>
-              <td>
+              <td class="text-center">
                 <div v-if="activeTab === 'mau_sac'" class="color-preview-cell" @click="copyHex(item.mo_ta)"
                   title="Click để sao chép mã màu">
                   <span class="color-circle"

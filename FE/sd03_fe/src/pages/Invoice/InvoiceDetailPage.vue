@@ -240,6 +240,158 @@ const chiTietLoc = computed(() => {
   return list
 })
 
+const API_V1 = 'http://localhost:8080/api/v1'
+const DEFAULT_SHOE_IMG = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=160&auto=format&fit=crop&q=80'
+const variantInfoMap = ref({})
+
+const COLOR_HEX_FALLBACK = {
+  'đen': '#111827',
+  'trắng': '#f8fafc',
+  'đỏ': '#ef4444',
+  'xanh': '#2563eb',
+  'xanh dương': '#2563eb',
+  'xanh navy': '#1e3a8a',
+  'xanh lá': '#16a34a',
+  'vàng': '#eab308',
+  'xám': '#64748b',
+  'ghi': '#64748b',
+  'nâu': '#78350f',
+  'hồng': '#ec4899',
+  'tím': '#9333ea',
+  'cam': '#f97316',
+  'kem': '#fef3c7',
+  'be': '#e7e5e4',
+}
+
+const getLineVariant = (line) => {
+  if (!line) return null
+  if (line.idSanPhamChiTiet && variantInfoMap.value[line.idSanPhamChiTiet]) {
+    return variantInfoMap.value[line.idSanPhamChiTiet]
+  }
+  if (line.maSanPhamChiTiet && variantInfoMap.value[line.maSanPhamChiTiet]) {
+    return variantInfoMap.value[line.maSanPhamChiTiet]
+  }
+  return null
+}
+
+const getLineImage = (line) => {
+  if (!line) return DEFAULT_SHOE_IMG
+  if (line._imgBroken) return DEFAULT_SHOE_IMG
+  const v = getLineVariant(line)
+  const rawImg = line.hinhAnh || line.img || v?.img || ''
+  if (rawImg && String(rawImg).trim()) {
+    return String(rawImg).trim()
+  }
+  return DEFAULT_SHOE_IMG
+}
+
+const onLineImgError = (line, event) => {
+  if (line) line._imgBroken = true
+  if (event?.target && event.target.src !== DEFAULT_SHOE_IMG) {
+    event.target.src = DEFAULT_SHOE_IMG
+  }
+}
+
+const getLineColorHex = (line) => {
+  const v = getLineVariant(line)
+  if (v?.colorHex && String(v.colorHex).startsWith('#')) return v.colorHex
+  if (line?.maMau && String(line.maMau).startsWith('#')) return line.maMau
+  const name = String(line?.tenMau || '').trim().toLowerCase()
+  return COLOR_HEX_FALLBACK[name] || '#64748b'
+}
+
+const getLineOriginalTotal = (line) => {
+  if (!line) return 0
+  const v = getLineVariant(line)
+  const origUnit = Number(line.giaGoc || v?.price || v?.giaBan || 0)
+  const qty = Number(line.soLuong || 1)
+  return origUnit * qty
+}
+
+const getLineDiscountBadge = (line) => {
+  if (!line) return null
+  const v = getLineVariant(line)
+  const origUnit = Number(line.giaGoc || v?.price || v?.giaBan || 0)
+  const soldUnit = Number(line.donGia || 0)
+
+  // 1. Ưu tiên % giảm giữa giá gốc biến thể và đơn giá bán trong hóa đơn
+  if (origUnit > soldUnit && soldUnit > 0) {
+    const pct = Math.round(((origUnit - soldUnit) / origUnit) * 100)
+    if (pct > 0) return `-${pct}%`
+  }
+
+  // 2. Nếu biến thể có % giảm từ đợt khuyến mãi
+  if (line.phanTramGiam && Number(line.phanTramGiam) > 0) {
+    return `-${Math.round(Number(line.phanTramGiam))}%`
+  }
+  if (v?.phanTramGiam && Number(v.phanTramGiam) > 0) {
+    return `-${Math.round(Number(v.phanTramGiam))}%`
+  }
+  if (v?.discount && v.discount !== '-') {
+    const dStr = String(v.discount).trim()
+    return dStr.startsWith('-') ? dStr : `-${dStr}`
+  }
+
+  // 3. Nếu hóa đơn có áp dụng giảm giá theo % hoặc số tiền giảm trên tổng đơn
+  if (data.value?.loaiGiamGia === 'PERCENT' && Number(data.value?.giaTriGiam) > 0) {
+    return `-${Math.round(Number(data.value.giaTriGiam))}%`
+  }
+  if (Number(data.value?.tienGiam) > 0 && tienHang.value > 0) {
+    const invPct = Math.round((Number(data.value.tienGiam) / tienHang.value) * 100)
+    if (invPct > 0) return `-${invPct}%`
+  }
+
+  return null
+}
+
+const enrichInvoiceLinesWithVariantData = async (lines) => {
+  if (!Array.isArray(lines) || lines.length === 0) return
+  const map = { ...variantInfoMap.value }
+
+  await Promise.allSettled(
+    lines.map(async (line) => {
+      try {
+        let variant = null
+        if (line.idSanPhamChiTiet) {
+          const res = await fetch(`${API_V1}/san-pham-chi-tiet/${line.idSanPhamChiTiet}`)
+          if (res.ok) {
+            variant = await res.json()
+          }
+        }
+        if (!variant && line.maSanPhamChiTiet) {
+          const res = await fetch(`${API_V1}/san-pham-chi-tiet?search=${encodeURIComponent(line.maSanPhamChiTiet)}&size=5`)
+          if (res.ok) {
+            const pageData = await res.json()
+            if (Array.isArray(pageData?.content) && pageData.content.length > 0) {
+              variant = pageData.content.find(p => p.maCtsp === line.maSanPhamChiTiet) || pageData.content[0]
+            }
+          }
+        }
+
+        if (variant && !variant.img && variant.idSanPham) {
+          try {
+            const sibRes = await fetch(`${API_V1}/san-pham-chi-tiet/by-san-pham/${variant.idSanPham}`)
+            if (sibRes.ok) {
+              const siblings = await sibRes.json()
+              if (Array.isArray(siblings)) {
+                const withImg = siblings.find(s => s.img && String(s.img).trim())
+                if (withImg) variant.img = withImg.img
+              }
+            }
+          } catch {}
+        }
+
+        if (variant) {
+          if (line.idSanPhamChiTiet) map[line.idSanPhamChiTiet] = variant
+          if (line.maSanPhamChiTiet) map[line.maSanPhamChiTiet] = variant
+        }
+      } catch {}
+    })
+  )
+
+  variantInfoMap.value = map
+}
+
 const load = async () => {
   const id = route.params.id
   if (!/^\d+$/.test(String(id))) {
@@ -255,6 +407,7 @@ const load = async () => {
   qrReady.value = false
   try {
     data.value = await getInvoice(id)
+    await enrichInvoiceLinesWithVariantData(data.value?.chiTiet || [])
   } catch (e) {
     error.value = e.message || 'Không tải được chi tiết hóa đơn'
     loading.value = false
@@ -587,40 +740,61 @@ onBeforeUnmount(() => {
               <table class="prod-table">
                 <thead>
                   <tr>
-                    <th class="th-stt">STT</th>
-                    <th class="th-img">Ảnh</th>
+                    <th class="th-stt text-center">STT</th>
+                    <th class="th-img text-center">Ảnh</th>
                     <th>Tên sản phẩm</th>
-                    <th>Màu sắc</th>
-                    <th>Kích cỡ</th>
-                    <th class="num">Số lượng</th>
-                    <th class="num">Đơn giá</th>
+                    <th class="text-center">Màu sắc</th>
+                    <th class="text-center">Kích cỡ</th>
+                    <th class="text-center">Số lượng</th>
                     <th class="num">Thành tiền</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="!chiTietLoc.length">
-                    <td colspan="8" class="empty">Không có dòng sản phẩm nào</td>
+                    <td colspan="7" class="empty">Không có dòng sản phẩm nào</td>
                   </tr>
                   <tr v-for="(line, i) in chiTietLoc" :key="line.id || i">
-                    <td class="td-stt">{{ i + 1 }}</td>
-                    <td class="td-img">
-                      <div class="ph-img">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                          <rect x="3" y="4" width="18" height="16" rx="2" />
-                          <circle cx="9" cy="10" r="2" />
-                          <path d="M3 17l5-4 4 3 3-2 6 5" />
-                        </svg>
+                    <td class="td-stt text-center">{{ i + 1 }}</td>
+                    <td class="td-img text-center">
+                      <div class="prod-thumb-wrap">
+                        <img
+                          :src="getLineImage(line)"
+                          :alt="line.tenSanPham || 'Ảnh sản phẩm'"
+                          class="prod-thumb-img"
+                          @error="onLineImgError(line, $event)"
+                        />
+                        <span v-if="getLineDiscountBadge(line)" class="prod-img-discount-badge">
+                          {{ getLineDiscountBadge(line) }}
+                        </span>
                       </div>
                     </td>
                     <td>
                       <div class="p-name">{{ line.tenSanPham || '—' }}</div>
                       <div class="p-sku">{{ line.maSanPhamChiTiet || '—' }}</div>
                     </td>
-                    <td>{{ line.tenMau || '—' }}</td>
-                    <td>{{ line.tenKichCo || '—' }}</td>
-                    <td class="num">{{ line.soLuong }}</td>
-                    <td class="num">{{ formatVnd(line.donGia) }}</td>
-                    <td class="num strong">{{ formatVnd(line.thanhTien) }}</td>
+                    <td class="text-center">
+                      <div class="inv-color-cell">
+                        <span class="inv-color-dot" :style="{ backgroundColor: getLineColorHex(line) }"></span>
+                        <span>{{ line.tenMau || '—' }}</span>
+                      </div>
+                    </td>
+                    <td class="text-center">
+                      <span class="inv-size-pill">{{ line.tenKichCo || '—' }}</span>
+                    </td>
+                    <td class="text-center">
+                      <span class="inv-qty-badge">{{ line.soLuong }}</span>
+                    </td>
+                    <td class="num">
+                      <div class="inv-total-stack">
+                        <span class="strong inv-total-now">{{ formatVnd(line.thanhTien) }}</span>
+                        <span
+                          v-if="getLineOriginalTotal(line) > Number(line.thanhTien || 0)"
+                          class="inv-total-was"
+                        >
+                          {{ formatVnd(getLineOriginalTotal(line)) }}
+                        </span>
+                      </div>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -1630,11 +1804,12 @@ button.stepper-step.is-next:disabled {
 }
 
 .th-img {
-  width: 52px;
+  width: 68px;
+  text-align: center !important;
 }
 
 .th-stt {
-  width: 40px;
+  width: 48px;
   text-align: center !important;
 }
 
@@ -1642,27 +1817,113 @@ button.stepper-step.is-next:disabled {
   text-align: center !important;
   color: #94a3b8;
   font-size: 12px;
+  font-weight: 600;
 }
 
 .td-img {
-  width: 52px;
+  width: 68px;
+  text-align: center !important;
 }
 
-.ph-img {
-  width: 42px;
-  height: 42px;
-  border-radius: 8px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  color: #94a3b8;
-  display: flex;
+.prod-table .text-center {
+  text-align: center !important;
+}
+
+.prod-thumb-wrap {
+  position: relative;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
 }
 
-.ph-img svg {
-  width: 20px;
-  height: 20px;
+.prod-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 9px;
+  display: block;
+}
+
+.prod-img-discount-badge {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 5px;
+  border-radius: 5px;
+  line-height: 1.15;
+  box-shadow: 0 2px 5px rgba(220, 38, 38, 0.35);
+  border: 1.5px solid #ffffff;
+  pointer-events: none;
+  z-index: 2;
+  white-space: nowrap;
+}
+
+.inv-color-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-weight: 500;
+  color: #334155;
+}
+
+.inv-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  flex-shrink: 0;
+}
+
+.inv-size-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.inv-qty-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.inv-total-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.inv-total-now {
+  color: #0f172a;
+  font-size: 13.5px;
+}
+
+.inv-total-was {
+  font-size: 11.5px;
+  color: #94a3b8;
+  text-decoration: line-through;
+  font-weight: 500;
 }
 
 .p-name {
