@@ -6,6 +6,7 @@ import {
   dangXuat,
   isNhanVienDangNhap,
   isKhachHangDangNhap,
+  getUser,
 } from '../utils/auth'
 import { refreshSession } from '../api/http'
 import AdminLayout from '../layouts/AdminLayout.vue'
@@ -42,7 +43,12 @@ import GiaoCaListPage from '@/pages/Ca/GiaoCaListPage.vue'
 const metaBo = { requiresAuth: true, canBo: true }
 
 const routes = [
-  { path: '/dang-nhap', component: LoginPage, meta: { title: 'Đăng nhập' } },
+  { path: '/login', component: LoginPage, meta: { title: 'Đăng nhập khách hàng', loginPage: true, loginMode: 'khach' } },
+  { path: '/login-nhan-vien', component: LoginPage, meta: { title: 'Đăng nhập nhân viên', loginPage: true, loginMode: 'nhan-vien' } },
+  {
+    path: '/dang-nhap',
+    redirect: (to) => ({ path: to.query.cheDo === 'khach' ? '/login' : '/login-nhan-vien', query: to.query.redirect ? { redirect: to.query.redirect } : {} }),
+  },
   { path: '/dang-ky', component: RegisterPage, meta: { title: 'Đăng ký' } },
   { path: '/quen-mat-khau', component: QuenMatKhauPage, meta: { title: 'Quên mật khẩu' } },
   {
@@ -83,17 +89,17 @@ const routes = [
       {
         path: '/thong-ke',
         component: StatisticsPage,
-        meta: { ...metaBo, title: 'Thống kê' },
+        meta: { ...metaBo, title: 'Thống kê', roles: ['ADMIN', 'STAFF', 'NHAN_VIEN'] },
       },
       {
         path: '/lich-lam-viec',
         component: WorkSchedulePage,
-        meta: { ...metaBo, title: 'Quản lý lịch làm việc' },
+        meta: { ...metaBo, title: 'Quản lý lịch làm việc', roles: ['ADMIN'] },
       },
       {
         path: '/lich-ca-lam',
         component: ShiftSchedulePage,
-        meta: { ...metaBo, title: 'Lịch ca làm' },
+        meta: { ...metaBo, title: 'Lịch ca làm', roles: ['ADMIN'] },
       },
       {
         path: '/ban-hang',
@@ -120,17 +126,17 @@ const routes = [
       {
         path: '/nhan-vien',
         component: EmployeeListPage,
-        meta: { ...metaBo, title: 'Quản lý nhân viên' },
+        meta: { ...metaBo, title: 'Quản lý nhân viên', roles: ['ADMIN'] },
       },
       {
         path: '/nhan-vien/them',
         component: EmployeeCreatePage,
-        meta: { ...metaBo, title: 'Quản lý nhân viên' },
+        meta: { ...metaBo, title: 'Quản lý nhân viên', roles: ['ADMIN'] },
       },
       {
         path: '/nhan-vien/:id/sua',
         component: EmployeeCreatePage,
-        meta: { ...metaBo, title: 'Quản lý nhân viên' },
+        meta: { ...metaBo, title: 'Quản lý nhân viên', roles: ['ADMIN'] },
       },
       {
         path: '/chat',
@@ -156,12 +162,12 @@ const routes = [
     redirect: (to) => {
       const sub = to.params.pathMatch
       const path = Array.isArray(sub) ? sub.join('/') : sub
-      return path ? `/${path}` : '/dang-nhap'
+      return path ? `/${path}` : '/login-nhan-vien'
     },
   },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/dang-nhap',
+    redirect: '/login',
   },
 ]
 
@@ -172,7 +178,7 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   // Trang đăng nhập/đăng ký: đã đăng nhập thì về trang tương ứng vai trò.
-  if (to.path === '/dang-nhap' || to.path === '/dang-ky') {
+  if (to.meta.loginPage || to.path === '/dang-ky') {
     if (isNhanVienDangNhap()) return '/hoa-don'
     if (isKhachHangDangNhap()) return '/tai-khoan'
     return true
@@ -183,29 +189,35 @@ router.beforeEach(async (to) => {
   const token = getToken()
   const refreshToken = getRefreshToken()
 
-  if (!token && !refreshToken) return '/dang-nhap'
+  if (!token && !refreshToken) return '/login-nhan-vien'
 
   if (!(token && !isTokenExpired(token))) {
     if (!refreshToken) {
       if (token) dangXuat()
-      return '/dang-nhap'
+      return '/login-nhan-vien'
     }
     try {
       await refreshSession()
     } catch {
       dangXuat()
-      return '/dang-nhap'
+      return '/login-nhan-vien'
     }
   }
 
   // Vùng quản trị: chỉ nhân viên. Khách hàng về trang tài khoản, chưa đăng nhập về đăng nhập.
   if (to.meta.canBo && !isNhanVienDangNhap()) {
-    return isKhachHangDangNhap() ? '/tai-khoan' : '/dang-nhap'
+    return isKhachHangDangNhap() ? '/tai-khoan' : '/login-nhan-vien'
   }
 
   // Trang khách hàng: nhân viên về trang quản trị.
   if (to.meta.canKhach && isNhanVienDangNhap()) {
     return '/hoa-don'
+  }
+
+  const allowedRoles = to.meta.roles
+  if (allowedRoles?.length) {
+    const role = String(getUser()?.vaiTro || '').trim().toUpperCase()
+    if (!allowedRoles.includes(role)) return '/hoa-don'
   }
 
   return true

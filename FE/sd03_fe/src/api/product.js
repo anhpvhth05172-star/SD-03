@@ -12,7 +12,7 @@ export const getSanPham = (id) => http.get(`/v1/san-pham/${id}`).then((r) => r.d
 export const createSanPham = (data) => http.post('/v1/san-pham', data).then((r) => r.data)
 
 export const getSanPhamChiTiets = (id) =>
-  http.get(`/v1/san-pham/${id}/chi-tiet`).then((r) => r.data)
+  http.get(`/v1/san-pham-chi-tiet/by-san-pham/${id}`).then((r) => r.data)
 
 export const createSanPhamChiTiet = (id, data) =>
   http.post(`/v1/san-pham/${id}/chi-tiet`, data).then((r) => r.data)

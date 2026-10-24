@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { getUser } from './auth'
 
 const khoaVaiTro = 'vaiTroHienTai'
 const khoaNguoiDung = 'nguoiDungHienTai'
@@ -21,7 +22,7 @@ const ghi = (key, value) => {
 
 export const vaiTroHienTai = ref((doc(khoaVaiTro) || '').toUpperCase())
 
-export const laAdmin = () => vaiTroHienTai.value === 'ADMIN'
+export const laAdmin = () => String(getUser()?.vaiTro || '').toUpperCase() === 'ADMIN'
 
 export const datVaiTro = (vaiTro) => {
   const v = String(vaiTro || '').toUpperCase()

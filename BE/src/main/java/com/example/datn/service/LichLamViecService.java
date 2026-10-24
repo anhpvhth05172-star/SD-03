@@ -96,7 +96,13 @@ public class LichLamViecService {
         }
         NhanVien nhanVien = nhanVienRepository.findByMaNhanVien(request.maNhanVien().trim())
             .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhân viên " + request.maNhanVien()));
+        if (!Boolean.TRUE.equals(nhanVien.getTrangThai())) {
+            throw new IllegalArgumentException("Không thể xếp lịch cho nhân viên đã ngừng hoạt động");
+        }
         DanhMucCaLamViec ca = timCa(request.idCa());
+        if (!ca.isDangBat()) {
+            throw new IllegalArgumentException("Không thể xếp lịch vào ca đã tắt");
+        }
         Long idHienTai = lich == null ? null : lich.getId();
         boolean biTrung = idHienTai == null
             ? lichRepository.existsByNhanVienIdAndCaLamViecIdAndNgay(
@@ -123,6 +129,9 @@ public class LichLamViecService {
         boolean tenTrung = id == null ? caRepository.existsByTenIgnoreCase(ten) : caRepository.existsByTenIgnoreCaseAndIdNot(ten, id);
         if (maTrung) throw new DuplicateRecordException("Mã ca làm đã tồn tại");
         if (tenTrung) throw new DuplicateRecordException("Tên ca làm đã tồn tại");
+        if (caRepository.existsCaBiChongGio(request.batDau(), request.ketThuc(), id)) {
+            throw new DuplicateRecordException("Khung giờ này trùng với ca làm khác");
+        }
     }
 
     private void capNhat(DanhMucCaLamViec ca, CaLamViecLichRequest request) {

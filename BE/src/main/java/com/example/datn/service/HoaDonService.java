@@ -9,6 +9,7 @@ import com.example.datn.dto.HoaDon.HoaDonRequest;
 import com.example.datn.dto.HoaDon.LichSuHoaDonDTO;
 import com.example.datn.dto.Common.PageResponse;
 import com.example.datn.dto.ShippingFeeRequest;
+import com.example.datn.dto.DotGiamGia.GiaKhuyenMai;
 import com.example.datn.entity.ChiTietHoaDon;
 import com.example.datn.entity.DiaChiKhachHang;
 import com.example.datn.entity.HoaDon;
@@ -23,6 +24,7 @@ import com.example.datn.repository.ChiTietHoaDonRepository;
 import com.example.datn.repository.HoaDonRepository;
 import com.example.datn.repository.DiaChiKhachHangRepository;
 import com.example.datn.repository.KhachHangRepository;
+import com.example.datn.repository.KhachHangPhieuGiamGiaRepository;
 import com.example.datn.repository.LichSuHoaDonRepository;
 import com.example.datn.repository.LichSuSuDungPhieuGiamGiaRepository;
 import com.example.datn.repository.NhanVienRepository;
@@ -120,6 +122,12 @@ public class HoaDonService {
 
     @Autowired
     private GiaoCaService giaoCaService;
+
+    @Autowired
+    private com.example.datn.service.impls.GiaService giaService;
+
+    @Autowired
+    private KhachHangPhieuGiamGiaRepository khachHangPhieuGiamGiaRepository;
 
     public HoaDonService(
         HoaDonRepository hoaDonRepository,
@@ -319,6 +327,7 @@ public class HoaDonService {
 
     @Transactional
     public HoaDonDTO create(HoaDonRequest req) {
+        kiemTraNguoiTaoHoaDon(req);
         validateHeader(req, null);
         CaLamViecDto caDangMo = chuanBiTaoHdTaiQuay(req);
         xacDinhPhiVanChuyenOnline(req);
@@ -339,6 +348,36 @@ public class HoaDonService {
             ghiLichSuSuDung(hoaDon, phieu);
         }
         return toFullDTO(hoaDon);
+    }
+
+    private void kiemTraNguoiTaoHoaDon(HoaDonRequest req) {
+        if (req == null) throw new IllegalArgumentException("Thiếu thông tin hóa đơn");
+        String loaiDon = toMaLoaiDon(req.getLoaiDon());
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean nhanVien = auth != null && auth.getPrincipal() instanceof Long
+            && auth.getAuthorities().stream().anyMatch(a -> "ROLE_NHAN_VIEN".equals(a.getAuthority()));
+        boolean khachHang = auth != null && auth.getPrincipal() instanceof Long
+            && auth.getAuthorities().stream().anyMatch(a -> "ROLE_KHACH_HANG".equals(a.getAuthority()));
+
+        if (nhanVien) {
+            if (!"TAI_QUAY".equals(loaiDon)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Nhân viên chỉ được tạo hóa đơn tại quầy");
+            }
+            return;
+        }
+        if (!"ONLINE".equals(loaiDon)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ nhân viên mới được tạo hóa đơn tại quầy");
+        }
+        if (khachHang) {
+            Long idDangNhap = (Long) auth.getPrincipal();
+            if (req.getIdKhachHang() != null && !req.getIdKhachHang().equals(idDangNhap)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không thể đặt hàng thay cho tài khoản khác");
+            }
+            req.setIdKhachHang(idDangNhap);
+        } else {
+            req.setIdKhachHang(null);
+        }
+        req.setIdNhanVien(null);
     }
 
     /**
@@ -389,6 +428,17 @@ public class HoaDonService {
         if (phieu != null && req.getIdKhachHang() != null) {
             kiemTraGioiHanSuDung(phieu, req.getIdKhachHang(), hoaDon.getId());
         }
+        List<Long> idsCanKhoa = new ArrayList<>();
+        chiTietHoaDonRepository.findByHoaDonId(hoaDon.getId()).stream()
+            .map(c -> c.getSanPhamChiTiet().getId()).forEach(idsCanKhoa::add);
+        if (req.getChiTiet() != null) {
+            req.getChiTiet().stream().map(ChiTietHoaDonRequest::getIdSanPhamChiTiet)
+                .filter(java.util.Objects::nonNull).forEach(idsCanKhoa::add);
+        }
+        if (!idsCanKhoa.isEmpty()) {
+            sanPhamChiTietRepository.findAllByIdForUpdate(idsCanKhoa.stream().distinct().sorted().toList());
+        }
+        hoanTonKho(hoaDon.getId());
         List<DongTinh> lines = tinhToanVaLuu(hoaDon, req);
         chiTietHoaDonRepository.deleteByHoaDonId(hoaDon.getId());
         luuCacDong(hoaDon, lines, req);
@@ -408,7 +458,7 @@ public class HoaDonService {
             );
         }
         hoaDon.setDaXoa(true);
-        hoaDon.setNguoiCapNhat("admin");
+        hoaDon.setNguoiCapNhat(nguoiCapNhatHienTai());
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         hoaDonRepository.save(hoaDon);
     }
@@ -421,7 +471,7 @@ public class HoaDonService {
             throw new IllegalArgumentException("Hóa đơn " + hoaDon.getMaHoaDon() + " chưa bị xóa");
         }
         hoaDon.setDaXoa(false);
-        hoaDon.setNguoiCapNhat("admin");
+        hoaDon.setNguoiCapNhat(nguoiCapNhatHienTai());
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         return toFullDTO(hoaDonRepository.save(hoaDon));
     }
@@ -467,15 +517,19 @@ public class HoaDonService {
             && lichSuHoaDonRepository.countByHoaDonIdAndTrangThai(id, "GIAO_HANG_THAT_BAI")
                 >= SO_LAN_GIAO_THAT_BAI_TU_DONG_HUY - 1;
         hoaDon.setTrangThai(maMoi);
-        hoaDon.setNguoiCapNhat("admin");
+        hoaDon.setNguoiCapNhat(nguoiCapNhatHienTai());
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         HoaDon saved = hoaDonRepository.save(hoaDon);
         ghiLichSuTrangThai(saved, maHienTai, maMoi, ghiChuHopLe);
+        if ("DA_HUY".equals(maMoi)) {
+            hoanTonKho(id);
+        }
         if (laLanThatBaiThuBa) {
             hoaDon.setTrangThai("DA_HUY");
-            hoaDon.setNguoiCapNhat("admin");
+            hoaDon.setNguoiCapNhat(nguoiCapNhatHienTai());
             hoaDon.setNgayCapNhat(LocalDateTime.now());
             saved = hoaDonRepository.save(hoaDon);
+            hoanTonKho(id);
             ghiLichSuTrangThai(
                 saved,
                 "GIAO_HANG_THAT_BAI",
@@ -519,6 +573,11 @@ public class HoaDonService {
             throw new IllegalArgumentException("Ghi chú chứa ký tự không hợp lệ");
         }
         return ghiChuTrim;
+    }
+
+    private static String nguoiCapNhatHienTai() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getPrincipal() instanceof Long id ? String.valueOf(id) : "KHACH_AN_DANH";
     }
 
     private void ghiLichSuTrangThai(HoaDon hoaDon, String tuMa, String denMa, String ghiChu) {
@@ -762,7 +821,7 @@ public class HoaDonService {
         hoaDon.setToWardCode(blankToNull(req.getToWardCode()));
         hoaDon.setTrangThai(toMaTrangThai(req.getTrangThai()));
         hoaDon.setGhiChu(blankToNull(req.getGhiChu()));
-        hoaDon.setNguoiCapNhat("admin");
+        hoaDon.setNguoiCapNhat(nguoiCapNhatHienTai());
         hoaDon.setNgayCapNhat(LocalDateTime.now());
 
         hoaDon.setKhachHang(req.getIdKhachHang() != null
@@ -829,17 +888,32 @@ public class HoaDonService {
         return kh;
     }
 
-    private record DongTinh(SanPhamChiTiet spct, ChiTietHoaDonRequest req, BigDecimal thanhTien) {}
+    private record DongTinh(SanPhamChiTiet spct, ChiTietHoaDonRequest req, BigDecimal donGia, BigDecimal thanhTien) {}
 
     private List<DongTinh> tinhToanVaLuu(HoaDon hoaDon, HoaDonRequest req) {
         List<DongTinh> dong = new ArrayList<>();
         Set<String> maDaCo = new HashSet<>();
+        if (req.getChiTiet() == null || req.getChiTiet().isEmpty()) {
+            throw new IllegalArgumentException("Hóa đơn phải có ít nhất một sản phẩm");
+        }
+        List<Long> ids = req.getChiTiet().stream()
+            .map(ChiTietHoaDonRequest::getIdSanPhamChiTiet)
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .sorted()
+            .toList();
+        if (ids.size() != req.getChiTiet().size()) {
+            throw new IllegalArgumentException("Mỗi dòng chi tiết phải chọn một biến thể riêng");
+        }
+        Map<Long, SanPhamChiTiet> lockedById = new HashMap<>();
+        sanPhamChiTietRepository.findAllByIdForUpdate(ids)
+            .forEach(item -> lockedById.put(item.getId(), item));
+        if (lockedById.size() != ids.size()) {
+            throw new IllegalArgumentException("Một hoặc nhiều biến thể sản phẩm không tồn tại");
+        }
+        Map<Long, GiaKhuyenMai> giaTheoBienThe = giaService.tinhGia(lockedById.values());
         for (ChiTietHoaDonRequest d : req.getChiTiet()) {
-            if (d.getIdSanPhamChiTiet() == null) {
-                throw new IllegalArgumentException("Từng dòng chi tiết phải chọn sản phẩm");
-            }
-            SanPhamChiTiet spct = sanPhamChiTietRepository.findById(d.getIdSanPhamChiTiet())
-                .orElseThrow(() -> new IllegalArgumentException("Sản phẩm chi tiết không tồn tại"));
+            SanPhamChiTiet spct = lockedById.get(d.getIdSanPhamChiTiet());
             boolean spctNgungBan = Boolean.FALSE.equals(spct.getTrangThai());
             boolean spNgungBan = spct.getSanPham() != null
                 && Boolean.FALSE.equals(spct.getSanPham().getTrangThai());
@@ -861,12 +935,12 @@ public class HoaDonService {
                     "Sản phẩm " + spct.getMaChiTietSanPham() + " chỉ còn " + spct.getSoLuong() + " trong kho"
                 );
             }
-            if (d.getDonGia() == null || d.getDonGia().compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalArgumentException("Đơn giá phải lớn hơn 0");
+            BigDecimal donGia = giaTheoBienThe.get(spct.getId()).giaSauGiam();
+            if (donGia == null || donGia.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("Giá bán của biến thể không hợp lệ");
             }
-            BigDecimal donGia = d.getDonGia();
             BigDecimal thanhTien = donGia.multiply(BigDecimal.valueOf(d.getSoLuong()));
-            dong.add(new DongTinh(spct, d, thanhTien));
+            dong.add(new DongTinh(spct, d, donGia, thanhTien));
         }
 
         BigDecimal tong = dong.stream()
@@ -942,6 +1016,13 @@ public class HoaDonService {
         if (!laPos && req.getIdKhachHang() == null) {
             throw new IllegalArgumentException("Vui lòng chọn khách hàng để sử dụng phiếu giảm giá");
         }
+        if ("CA_NHAN".equalsIgnoreCase(phieu.getPhamVi())) {
+            if (req.getIdKhachHang() == null
+                || !khachHangPhieuGiamGiaRepository.existsByPhieuGiamGia_IdAndKhachHang_IdAndTrangThaiTrue(
+                    phieu.getId(), req.getIdKhachHang())) {
+                throw new IllegalArgumentException("Phiếu giảm giá cá nhân không được cấp cho khách hàng này");
+            }
+        }
         return phieu;
     }
 
@@ -981,7 +1062,7 @@ public class HoaDonService {
             e.setHoaDon(hoaDon);
             e.setSanPhamChiTiet(d.spct());
             e.setSoLuong(d.req().getSoLuong());
-            e.setDonGia(d.req().getDonGia());
+            e.setDonGia(d.donGia());
             e.setThanhTien(d.thanhTien());
             e.setGhiChu(blankToNull(d.req().getGhiChu()));
             e.setTrangThai(d.req().getTrangThai() == null || d.req().getTrangThai());
@@ -989,13 +1070,25 @@ public class HoaDonService {
 
             // Cập nhật trừ tồn kho sản phẩm chi tiết
             SanPhamChiTiet spct = d.spct();
-            if (spct.getSoLuong() != null) {
-                int tonConLai = Math.max(0, spct.getSoLuong() - d.req().getSoLuong());
-                spct.setSoLuong(tonConLai);
-                sanPhamChiTietRepository.save(spct);
-            }
+            spct.setSoLuong(spct.getSoLuong() - d.req().getSoLuong());
+            sanPhamChiTietRepository.save(spct);
         }
         chiTietHoaDonRepository.saveAll(entities);
+    }
+
+    private void hoanTonKho(Long idHoaDon) {
+        List<ChiTietHoaDon> chiTiet = chiTietHoaDonRepository.findByHoaDonId(idHoaDon);
+        if (chiTiet.isEmpty()) return;
+        List<Long> ids = chiTiet.stream().map(c -> c.getSanPhamChiTiet().getId()).distinct().sorted().toList();
+        Map<Long, SanPhamChiTiet> locked = new HashMap<>();
+        sanPhamChiTietRepository.findAllByIdForUpdate(ids).forEach(s -> locked.put(s.getId(), s));
+        for (ChiTietHoaDon line : chiTiet) {
+            SanPhamChiTiet variant = locked.get(line.getSanPhamChiTiet().getId());
+            if (variant != null && variant.getSoLuong() != null) {
+                variant.setSoLuong(variant.getSoLuong() + line.getSoLuong());
+                sanPhamChiTietRepository.save(variant);
+            }
+        }
     }
 
     private HoaDon findOrThrow(Long id) {

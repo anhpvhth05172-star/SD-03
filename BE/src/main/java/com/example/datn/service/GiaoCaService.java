@@ -10,6 +10,7 @@ import com.example.datn.entity.NhanVien;
 import com.example.datn.exception.KhongCoQuyenException;
 import com.example.datn.repository.CaLamViecRepository;
 import com.example.datn.repository.LichSuCaRepository;
+import com.example.datn.repository.LichLamViecRepository;
 import com.example.datn.repository.NhanVienRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -42,6 +43,7 @@ public class GiaoCaService {
     private final CaLamViecRepository caLamViecRepository;
     private final LichSuCaRepository lichSuCaRepository;
     private final NhanVienRepository nhanVienRepository;
+    private final LichLamViecRepository lichLamViecRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
@@ -59,10 +61,24 @@ public class GiaoCaService {
         NhanVien nhanVien = nhanVienRepository.findById(idNhanVien)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Chưa đăng nhập"));
 
+        LocalDateTime thoiGianMo = LocalDateTime.now();
+        List<com.example.datn.entity.LichLamViec> lichDuocXep = lichLamViecRepository
+            .findCaDangBatDuocXep(idNhanVien, thoiGianMo.toLocalDate()).stream()
+            .filter(lich -> !thoiGianMo.toLocalTime().isBefore(lich.getCaLamViec().getBatDau())
+                && thoiGianMo.toLocalTime().isBefore(lich.getCaLamViec().getKetThuc()))
+            .toList();
+        if (lichDuocXep.isEmpty()) {
+            throw bad("CA_CHUA_DUOC_XEP_LICH", "Bạn chưa được xếp ca đang diễn ra hôm nay");
+        }
+        if (lichDuocXep.size() > 1) {
+            throw bad("CA_XEP_LICH_TRUNG", "Bạn có nhiều ca được xếp trùng giờ; hãy điều chỉnh lịch trước khi vào ca");
+        }
+
         CaLamViec ca = new CaLamViec();
         ca.setNhanVien(nhanVien);
+        ca.setCaTheoLich(lichDuocXep.get(0).getCaLamViec());
         ca.setTenQuy("Quầy tổng");
-        ca.setThoiGianMo(LocalDateTime.now());
+        ca.setThoiGianMo(thoiGianMo);
         ca.setTienDauCa(BigDecimal.valueOf(tienDauCa));
         ca.setTrangThai(TRANG_THAI_DANG_MO);
         ca.setDaXoa(false);
@@ -216,6 +232,7 @@ public class GiaoCaService {
         return TongKetDto.builder()
             .id(ca.getId())
             .maCa(ca.getMaCa())
+            .tenCaLich(ca.getCaTheoLich() != null ? ca.getCaTheoLich().getTen() : null)
             .idNhanVien(nv.getId())
             .tenNhanVien(nv.getTenTaiKhoan())
             .tenQuy(ca.getTenQuy())
@@ -262,6 +279,8 @@ public class GiaoCaService {
         return CaLamViecDto.builder()
             .id(ca.getId())
             .maCa(ca.getMaCa())
+            .idCaLich(ca.getCaTheoLich() != null ? ca.getCaTheoLich().getId() : null)
+            .tenCaLich(ca.getCaTheoLich() != null ? ca.getCaTheoLich().getTen() : null)
             .idNhanVien(nv.getId())
             .tenNhanVien(nv.getTenTaiKhoan())
             .tenQuy(ca.getTenQuy())

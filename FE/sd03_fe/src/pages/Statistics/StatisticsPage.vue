@@ -2,9 +2,9 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
-import { listEmployees } from '@/api/employee'
+import { getRevenueSummary, listStatisticEmployees } from '@/api/statistics'
 import { listInvoices, getInvoice } from '@/api/invoice'
-import { getSanPhams } from '@/api/product'
+import { getSanPhamChiTiets, getSanPhams } from '@/api/product'
 import { formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
 import { notifySuccess, notifyError } from '@/utils/notify'
@@ -57,6 +57,8 @@ const thuongHieus = ref([])
 const nhanViens = ref([])
 const sanPhams = ref([])
 const hoaDons = ref([])
+const productIdByVariant = ref(new Map())
+const doanhThuServer = ref({ thucTe: 0, duKien: 0 })
 const bang = ref(new Map())
 const capNhatLuc = ref(gioHienTai())
 
@@ -106,6 +108,18 @@ watch([tuNgay, denNgay], () => {
   if (tu && den && tu > den) denNgay.value = tuNgay.value
 })
 
+let revenueRequestId = 0
+watch([tuNgay, denNgay], async ([tu, den]) => {
+  if (!docInputDate(tu) || !docInputDate(den) || tu > den) return
+  const requestId = ++revenueRequestId
+  try {
+    const summary = await getRevenueSummary({ tu, den })
+    if (requestId === revenueRequestId) doanhThuServer.value = summary
+  } catch (error) {
+    if (requestId === revenueRequestId) notifyError('Không tải được doanh thu', error.message || '')
+  }
+})
+
 const datLaiBoLoc = () => {
   tuNgay.value = toInputDate(dauThang())
   denNgay.value = toInputDate(new Date())
@@ -131,7 +145,7 @@ const sanPhamHienTai = computed(() => sanPhams.value)
 const nhanVienHienTai = computed(() => nhanViens.value)
 
 const dongSanPhamAll = computed(() =>
-  tinhSanPham(sanPhamHienTai.value, hoaDons.value, tuDate.value, denDate.value)
+  tinhSanPham(sanPhamHienTai.value, hoaDons.value, tuDate.value, denDate.value, productIdByVariant.value)
 )
 const bangTH = computed(() => tinhBangThuongHieu(dongSanPhamAll.value))
 
@@ -140,6 +154,8 @@ const tyLeChon = computed(() => thuongHieuChon.value)
 const khoang = computed(() =>
   tinhKhoang(bang.value, tuDate.value, denDate.value, tyLeChon.value)
 )
+const doanhThuThucTe = computed(() => tyLeChon.value ? khoang.value.doanhThu : Number(doanhThuServer.value.thucTe || 0))
+const doanhThuDuKien = computed(() => tyLeChon.value ? khoang.value.doanhThuDuKien : Number(doanhThuServer.value.duKien || 0))
 
 const chuoiBanHang = computed(() =>
   tinhChuoiBanHang(bang.value, tuDate.value, denDate.value, kieuTongQuan.value, tyLeChon.value)
@@ -386,22 +402,29 @@ const layTatCaTrang = async (fetchPage, size) => {
 }
 
 const napDuLieuThongKe = async () => {
-  const [employees, products, invoiceHeaders] = await Promise.all([
-    layTatCaTrang(listEmployees, 50),
+  const [employees, products, invoiceHeaders, revenueSummary] = await Promise.all([
+    layTatCaTrang(listStatisticEmployees, 50),
     layTatCaTrang(getSanPhams, 50),
     layTatCaTrang(listInvoices, 10),
+    getRevenueSummary({ tu: tuNgay.value, den: denNgay.value }),
   ])
   nhanViens.value = employees
+  doanhThuServer.value = revenueSummary
   sanPhams.value = products
+  const variants = []
+  for (let start = 0; start < products.length; start += 5) {
+    variants.push(...await Promise.all(products.slice(start, start + 5).map((sp) => getSanPhamChiTiets(sp.id))))
+  }
+  productIdByVariant.value = new Map(variants.flat().map((variant) => [Number(variant.id), Number(variant.idSanPham)]))
   thuongHieus.value = [...new Set(products.map((p) => p.tenThuongHieu).filter(Boolean))]
-  const canChiTiet = invoiceHeaders.filter((hd) => ['DA_GIAO_HANG', 'DA_HOAN_THANH', 'DA_HOAN_TIEN'].includes(hd.maTrangThai))
+  const canChiTiet = invoiceHeaders.filter((hd) => ['DA_XAC_NHAN', 'DA_GIAO_HANG', 'DA_HOAN_THANH', 'DA_HOAN_TIEN'].includes(hd.maTrangThai))
   const chiTietHoaDons = []
   for (let start = 0; start < canChiTiet.length; start += 5) {
     chiTietHoaDons.push(...await Promise.all(canChiTiet.slice(start, start + 5).map((hd) => getInvoice(hd.id))))
   }
   const detailsById = new Map(chiTietHoaDons.map((hd) => [hd.id, hd]))
   hoaDons.value = invoiceHeaders.map((hd) => ({ ...hd, ...(detailsById.get(hd.id) || {}) }))
-  bang.value = taoBangNgay(hoaDons.value, sanPhams.value)
+  bang.value = taoBangNgay(hoaDons.value, sanPhams.value, productIdByVariant.value)
   capNhatLuc.value = gioHienTai()
 }
 
@@ -518,8 +541,8 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 3 THẺ SỐ LIỆU LỚN -->
-    <div class="stat-grid stat-grid-3">
+    <!-- 4 THẺ SỐ LIỆU LỚN -->
+    <div class="stat-grid stat-grid-4">
       <div class="stat-card">
         <div class="stat-icon is-emerald">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -527,8 +550,17 @@ onMounted(async () => {
             <polyline points="17 6 23 6 23 12"></polyline>
           </svg>
         </div>
-        <div class="stat-value">{{ formatVnd(khoang.doanhThu) }}</div>
-        <div class="stat-label">Tổng doanh thu</div>
+        <div class="stat-value">{{ formatVnd(doanhThuThucTe) }}</div>
+        <div class="stat-label">Doanh thu thực tế · đã hoàn thành</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon is-amber">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>
+          </svg>
+        </div>
+        <div class="stat-value">{{ formatVnd(doanhThuDuKien) }}</div>
+        <div class="stat-label">Doanh thu dự kiến · đã xác nhận</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon is-green">

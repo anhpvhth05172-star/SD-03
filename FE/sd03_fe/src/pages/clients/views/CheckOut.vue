@@ -88,11 +88,7 @@ function getLoggedInUser() {
 
 async function fetchCustomer() {
   const u = getLoggedInUser();
-  console.log("[Checkout] user đăng nhập:", u);
   if (!u) {
-    console.warn(
-      "[Checkout] Không tìm thấy user đăng nhập trong store/localStorage",
-    );
     return null;
   }
 
@@ -106,10 +102,9 @@ async function fetchCustomer() {
   if (u.id) {
     try {
       const c = await getJson(`${API}/${u.id}`);
-      console.log("[Checkout] khách hàng (chi tiết):", c);
       return c;
     } catch (e) {
-      console.warn("[Checkout] API chi tiết lỗi:", e.message);
+      // Fallback to the public customer lookup below when account details are unavailable.
     }
   }
 
@@ -118,10 +113,8 @@ async function fetchCustomer() {
     const page = await getJson(`${API}?size=1000`);
     const list = page.content || page;
     const c = list.find(matches) || null;
-    console.log("[Checkout] khách hàng (từ danh sách):", c);
     return c;
   } catch (e) {
-    console.warn("[Checkout] API danh sách lỗi (401/CORS?):", e.message);
     return u.tenKhachHang ? u : null;
   }
 }
@@ -171,7 +164,7 @@ const itemImage = (i) =>
   i.image || i.hinhAnh || i.img || "/placeholder-shoe.png";
 
 /* ================= PHIẾU GIẢM GIÁ (gọi API thật) ================= */
-const VOUCHER_API = "http://localhost:8080/admin/phieu-giam-gia";
+const VOUCHER_API = API.replace(/\/khach-hang$/, "/phieu-giam-gia");
 
 /* >>> ADAPTER: đổi tên field cho khớp entity/DTO PhieuGiamGia của bạn <<< */
 const VF = {
@@ -457,7 +450,6 @@ async function submit() {
 
   submitting.value = true;
   const payload = buildHoaDonRequest();
-  console.log("[Checkout] payload gửi hóa đơn:", payload);
   try {
     const res = await fetch(HOA_DON_API, {
       method: "POST",

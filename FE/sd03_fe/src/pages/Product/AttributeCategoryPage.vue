@@ -288,8 +288,8 @@ const saveAttributeDirectly = async () => {
       return
     }
     const num = Number(formatted)
-    if (isNaN(num) || num < 10 || num > 60) {
-      formError.value = 'Kích cỡ giày phải là số hợp lệ từ 10 đến 60!'
+    if (!Number.isFinite(num) || num <= 0) {
+      formError.value = 'Kích cỡ phải là số lớn hơn 0.'
       return
     }
   }

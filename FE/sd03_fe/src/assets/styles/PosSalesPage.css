@@ -2125,7 +2125,8 @@ input:checked + .toggle-slider:before {
 .modal-table-wrap {
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  overflow: hidden;
+  max-width: 100%;
+  overflow: auto;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   background: #ffffff;
   max-height: 480px;
@@ -2139,6 +2140,31 @@ input:checked + .toggle-slider:before {
   border-spacing: 0;
   font-size: 13px;
   text-align: left;
+}
+
+.pos-prod-table {
+  min-width: 1080px;
+  table-layout: fixed;
+}
+
+.pos-prod-table th:first-child,
+.pos-prod-table td:first-child,
+.pos-prod-table th:nth-child(2),
+.pos-prod-table td:nth-child(2),
+.pos-prod-table th:nth-child(3),
+.pos-prod-table td:nth-child(3),
+.pos-prod-table th:nth-child(7),
+.pos-prod-table td:nth-child(7),
+.pos-prod-table th:nth-child(8),
+.pos-prod-table td:nth-child(8),
+.pos-prod-table th:nth-child(10),
+.pos-prod-table td:nth-child(10) {
+  text-align: center;
+}
+
+.pos-prod-table td:nth-child(3) img {
+  display: block;
+  margin-inline: auto;
 }
 
 .pos-prod-table thead th,
@@ -2327,6 +2353,16 @@ input:checked + .toggle-slider:before {
   font-size: 11px;
   color: #94a3b8;
   text-decoration: line-through;
+}
+
+.price-discount-percent {
+  align-self: flex-end;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #fff1f2;
+  color: #be123c;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 /* Thêm vào giỏ Button */

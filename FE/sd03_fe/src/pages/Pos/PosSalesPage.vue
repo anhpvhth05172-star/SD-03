@@ -42,6 +42,24 @@ const allEmployees = ref([])
 const allPaymentMethods = ref([])
 const isLoadingData = ref(false)
 
+const loadAllProductVariants = async () => {
+  const size = 500
+  const fetchPage = async (page) => {
+    const response = await fetch(`${API_BASE}/san-pham-chi-tiet?page=${page}&size=${size}&trangThai=true`, { cache: 'no-store' })
+    if (!response.ok) throw new Error('Không tải được danh sách biến thể sản phẩm')
+    return response.json()
+  }
+  const first = await fetchPage(0)
+  const rows = [...(first.content || [])]
+  const totalPages = Number(first.totalPages || 1)
+  for (let start = 1; start < totalPages; start += 5) {
+    const pages = Array.from({ length: Math.min(5, totalPages - start) }, (_, idx) => start + idx)
+    const batches = await Promise.all(pages.map(fetchPage))
+    batches.forEach((batch) => rows.push(...(batch.content || [])))
+  }
+  return rows
+}
+
 const brandsList = ref([])
 const categoriesList = ref([])
 const colorsList = ref([])
@@ -196,6 +214,16 @@ const getEffectivePrice = (item) => {
     }
   }
   return basePrice
+}
+
+const getDiscountPercent = (item) => {
+  const effective = getEffectivePrice(item)
+  const original = Number(item.price || item.giaBan || 0)
+  const raw = String(item.discount || '')
+  const parsed = Number(raw.replace(/[^0-9.]/g, ''))
+  if (raw.includes('%') && parsed > 0) return Math.min(100, Math.round(parsed))
+  if (original > effective && original > 0) return Math.round(((original - effective) / original) * 100)
+  return 0
 }
 
 const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
@@ -595,9 +623,14 @@ watch([modalFilters, modalPageSize], () => {
 
 const modalSelectedIds = ref([])
 
-const openProductPicker = () => {
+const openProductPicker = async () => {
   if (!currentOrder.value) {
     createNewOrder()
+  }
+  try {
+    allProducts.value = await loadAllProductVariants()
+  } catch (error) {
+    console.warn('Không tải mới được danh mục biến thể POS:', error)
   }
   resetModalFilters()
   modalSelectedIds.value = []
@@ -1755,6 +1788,10 @@ const confirmMoCa = async () => {
       moCaError.value = 'Nhân viên đã có ca đang mở'
       await loadCaHienTai()
       if (caHienTai.value) isMoCaModalOpen.value = false
+    } else if (msg.includes('CA_CHUA_DUOC_XEP_LICH')) {
+      moCaError.value = 'Bạn chưa được phân công ca đang diễn ra hôm nay. Nhờ Admin xếp lịch trước khi vào ca.'
+    } else if (msg.includes('CA_XEP_LICH_TRUNG')) {
+      moCaError.value = 'Lịch của bạn có ca bị trùng giờ. Nhờ Admin điều chỉnh lịch trước khi vào ca.'
     } else {
       moCaError.value = msg || 'Không thể mở ca'
     }
@@ -1958,12 +1995,7 @@ const handleCheckout = async () => {
     }
 
     notifySuccess('Thanh toán thành công!', `Đã hoàn tất hóa đơn ${currentOrder.value.code}`)
-    fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&trangThai=true`)
-      .then(r => r.json())
-      .then(data => {
-        if (data && data.content) allProducts.value = data.content
-      })
-      .catch(() => { })
+    loadAllProductVariants().then((rows) => { allProducts.value = rows }).catch(() => {})
 
     pendingOrders.value.splice(activeOrderIndex.value, 1)
     if (pendingOrders.value.length === 0) {
@@ -2239,7 +2271,7 @@ const loadInitialData = async () => {
   try {
     const [formRes, prodRes, brandRes, catRes, colorRes, sizeRes] = await Promise.allSettled([
       http.get('/hoa-don/form-data'),
-      fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&trangThai=true`).then(r => r.json()),
+      loadAllProductVariants(),
       fetch(`${API_BASE}/attributes/thuong_hieu`).then(r => r.json()),
       fetch(`${API_BASE}/attributes/loai_giay`).then(r => r.json()),
       fetch(`${API_BASE}/attributes/mau_sac`).then(r => r.json()),
@@ -2266,74 +2298,8 @@ const loadInitialData = async () => {
     if (colorRes.status === 'fulfilled' && Array.isArray(colorRes.value)) colorsList.value = colorRes.value
     if (sizeRes.status === 'fulfilled' && Array.isArray(sizeRes.value)) sizesList.value = sizeRes.value
 
-    if (prodRes.status === 'fulfilled' && prodRes.value && prodRes.value.content) {
-      allProducts.value = prodRes.value.content
-    }
+    if (prodRes.status === 'fulfilled' && Array.isArray(prodRes.value)) allProducts.value = prodRes.value
 
-    if (allProducts.value.length === 0) {
-      allProducts.value = [
-        {
-          id: 101,
-          maSp: 'G66748',
-          maCtsp: 'G66748-MS05-37',
-          tenSp: 'ASICS GEL-Kayano 31',
-          color: 'Xám',
-          size: '37',
-          stock: 99,
-          price: 3790000,
-          discount: '-20%',
-          img: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=120&auto=format&fit=crop&q=60'
-        },
-        {
-          id: 102,
-          maSp: 'G66748',
-          maCtsp: 'G66748-MS05-36',
-          tenSp: 'ASICS GEL-Kayano 31',
-          color: 'Xám',
-          size: '36',
-          stock: 100,
-          price: 3790000,
-          discount: '-20%',
-          img: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=120&auto=format&fit=crop&q=60'
-        },
-        {
-          id: 103,
-          maSp: 'G66748',
-          maCtsp: 'G66748-MS01-37',
-          tenSp: 'ASICS GEL-Kayano 31',
-          color: 'Đen',
-          size: '37',
-          stock: 100,
-          price: 3790000,
-          discount: '-20%',
-          img: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=120&auto=format&fit=crop&q=60'
-        },
-        {
-          id: 104,
-          maSp: 'G66748',
-          maCtsp: 'G66748-MS01-36',
-          tenSp: 'ASICS GEL-Kayano 31',
-          color: 'Đen',
-          size: '36',
-          stock: 100,
-          price: 3790000,
-          discount: '-20%',
-          img: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=120&auto=format&fit=crop&q=60'
-        },
-        {
-          id: 105,
-          maSp: 'G57664',
-          maCtsp: 'G57664-MS03-37',
-          tenSp: 'New Balance 530',
-          color: 'Đỏ',
-          size: '37',
-          stock: 100,
-          price: 2500000,
-          discount: null,
-          img: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=120&auto=format&fit=crop&q=60'
-        }
-      ]
-    }
 
     if (pendingOrders.value.length === 0) {
       createNewOrder()
@@ -3004,8 +2970,10 @@ onUnmounted(() => {
                     <td class="text-end">
                       <div class="prod-modal-price-box">
                         <span class="price-now">{{ formatVnd(getEffectivePrice(item)) }}</span>
-                        <span v-if="item.discount && item.discount !== '-'" class="price-was">{{ formatVnd(item.price ||
-                          item.giaBan) }}</span>
+                        <template v-if="getDiscountPercent(item) > 0">
+                          <span class="price-was">{{ formatVnd(item.price || item.giaBan) }}</span>
+                          <span class="price-discount-percent">-{{ getDiscountPercent(item) }}%</span>
+                        </template>
                       </div>
                     </td>
                     <td class="text-center" @click.stop>
@@ -3965,7 +3933,7 @@ onUnmounted(() => {
 
             <template v-else-if="ketCaTongKet">
               <div class="ca-info-row">
-                <span><strong>Ca:</strong> {{ ketCaTongKet.maCa }}</span>
+                <span><strong>Ca:</strong> {{ ketCaTongKet.maCa }} · {{ ketCaTongKet.tenCaLich || 'Ca chưa gắn lịch' }}</span>
                 <span><strong>Nhân viên:</strong> {{ ketCaTongKet.tenNhanVien || staffName }}</span>
                 <span><strong>Mở lúc:</strong> {{ formatDateTime(ketCaTongKet.thoiGianMo) }}</span>
               </div>

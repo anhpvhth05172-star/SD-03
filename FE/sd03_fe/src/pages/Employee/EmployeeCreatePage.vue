@@ -13,7 +13,7 @@ import {
   updateEmployee,
 } from '@/api/employee'
 import { setFlash } from '@/utils/flash'
-import { datVaiTro, layNguoiDung, vaiTroHienTai } from '@/utils/session'
+import { layNguoiDung } from '@/utils/session'
 import { notifyConfirm, notifyError, notifySuccess, notifyWarning } from '@/utils/notify'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import {

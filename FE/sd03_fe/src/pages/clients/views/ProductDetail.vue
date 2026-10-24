@@ -142,7 +142,7 @@ async function add(goCart = false) {
     if (res?.needLogin) {
       addError.value = res.message || "Vui lòng đăng nhập để thêm vào giỏ hàng.";
       setTimeout(() => {
-        router.push({ path: "/dang-nhap", query: { redirect: route.fullPath } });
+        router.push({ path: "/login", query: { redirect: route.fullPath } });
       }, 1500);
       return;
     }

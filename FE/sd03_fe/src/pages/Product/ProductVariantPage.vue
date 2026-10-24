@@ -579,6 +579,10 @@ const openQuickAdd = (type) => {
 
 const handleQuickAttributeAdded = async (item) => {
   try {
+    if (item.type === 'size' && (!/^\d+(?:[.,]\d+)?$/.test(item.name.trim()) || Number(item.name.replace(',', '.')) <= 0)) {
+      showToastNotice('Kích cỡ không hợp lệ', 'Nhập kích cỡ dạng số lớn hơn 0.', 'warning')
+      return
+    }
     const endpoint = item.type === 'color' ? 'mau_sac' : 'kich_co'
     const payload = {
       ten: item.name.trim(),

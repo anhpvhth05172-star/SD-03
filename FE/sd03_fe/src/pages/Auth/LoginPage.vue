@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dangNhap, dangNhapNhanVien } from '@/api/auth'
 import { lienKetSauDangNhap } from '@/api/chat'
@@ -9,7 +9,7 @@ import { datVaiTro, datNguoiDung } from '@/utils/session'
 const router = useRouter()
 const route = useRoute()
 
-const cheDo = ref(route.query.cheDo === 'khach' ? 'khach' : 'nhan-vien') // 'nhan-vien' | 'khach'
+const cheDo = computed(() => route.meta.loginMode || 'nhan-vien')
 const form = ref({ taiKhoan: '', matKhau: '', ghiNhoDangNhap: false })
 const error = ref('')
 const loading = ref(false)
@@ -39,7 +39,12 @@ const submit = async () => {
     } else {
       // Gắn cuộc trò chuyện ẩn danh (nếu có) vào tài khoản để không mất hội thoại cũ
       lienKetSauDangNhap(getMaAnDanh()).catch(() => {})
-      router.push('/tai-khoan')
+      const redirect = typeof route.query.redirect === 'string'
+        && route.query.redirect.startsWith('/')
+        && !route.query.redirect.startsWith('//')
+        ? route.query.redirect
+        : '/tai-khoan'
+      router.push(redirect)
     }
   } catch (e) {
     error.value = e.message || 'Đăng nhập thất bại'
@@ -55,7 +60,7 @@ const submit = async () => {
       <div class="auth-brand">
         <img src="/images/logo_polyshoes_final.png" alt="PolyShoes" />
       </div>
-      <h1 class="auth-title">HỆ THỐNG QUẢN LÝ BÁN HÀNG</h1>
+      <h1 class="auth-title">{{ cheDo === 'khach' ? 'ĐĂNG NHẬP KHÁCH HÀNG' : 'ĐĂNG NHẬP NHÂN VIÊN' }}</h1>
 
       <form class="auth-form" @submit.prevent="submit">
         <div class="field">
@@ -70,7 +75,7 @@ const submit = async () => {
         <div class="field">
           <div class="field-heading">
             <label for="login-password">Mật khẩu</label>
-            <router-link to="/quen-mat-khau" class="auth-forgot">
+            <router-link :to="{ path: '/quen-mat-khau', query: { cheDo } }" class="auth-forgot">
               Quên mật khẩu?
             </router-link>
           </div>
@@ -88,13 +93,19 @@ const submit = async () => {
         <p v-if="error" class="auth-error">{{ error }}</p>
 
         <button class="auth-btn" type="submit" :disabled="loading">
-          {{ loading ? 'Đang đăng nhập...' : 'Đăng nhập vào hệ thống' }}
+      {{ loading ? 'Đang đăng nhập...' : cheDo === 'khach' ? 'Đăng nhập khách hàng' : 'Đăng nhập nhân viên' }}
         </button>
       </form>
 
       <p class="auth-footer">© 2026 FF T-Shirt Fashion Store. Hệ thống quản lý bán hàng.</p>
       <p v-if="cheDo === 'khach'" class="auth-customer-links">
         Chưa có tài khoản? <router-link to="/dang-ky">Đăng ký</router-link>
+      </p>
+      <p class="auth-customer-links">
+        {{ cheDo === 'khach' ? 'Bạn là nhân viên?' : 'Bạn là khách hàng?' }}
+        <router-link :to="cheDo === 'khach' ? '/login-nhan-vien' : '/login'">
+          {{ cheDo === 'khach' ? 'Đăng nhập nhân viên' : 'Đăng nhập khách hàng' }}
+        </router-link>
       </p>
     </div>
   </div>

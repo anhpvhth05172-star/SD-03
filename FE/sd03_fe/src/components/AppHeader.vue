@@ -27,7 +27,7 @@ const xulyDangXuat = async () => {
     // Bỏ qua lỗi gọi API đăng xuất phía server.
   }
   dangXuat()
-  router.push('/dang-nhap')
+  router.push('/login-nhan-vien')
 }
 </script>
 

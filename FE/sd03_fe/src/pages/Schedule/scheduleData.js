@@ -16,7 +16,7 @@ import {
 
 export const danhSachCa = reactive([])
 
-export const caDangBat = computed(() => danhSachCa.filter((c) => c.dangBat))
+export const caDangBat = computed(() => danhSachCa.filter((c) => c.dangBat).sort((a, b) => a.batDau.localeCompare(b.batDau)))
 
 export const danhSachLich = reactive([])
 
@@ -131,7 +131,7 @@ export const xepCaTuDong = async (ngay, danhSachNhanVien) => {
   const caList = caDangBat.value
   if (!ngay || !caList.length) return { themMoi: 0, lyDo: 'khongCa' }
   const daCo = new Set(lichCuaNgay(ngay).map((l) => l.maNhanVien))
-  const ungVien = (danhSachNhanVien || []).filter((nv) => !daCo.has(nv.maNhanVien))
+  const ungVien = (danhSachNhanVien || []).filter((nv) => nv.trangThai !== false && !daCo.has(nv.maNhanVien))
   if (!ungVien.length) return { themMoi: 0, lyDo: 'khongUngVien' }
   const rows = ungVien.map((nv, i) => {
     const ca = caList[i % caList.length]

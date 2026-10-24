@@ -32,7 +32,7 @@ const xulyDangXuat = async () => {
     // Bỏ qua lỗi gọi API.
   }
   dangXuat()
-  router.push('/dang-nhap')
+  router.push('/login')
 }
 </script>
 
@@ -46,7 +46,7 @@ const xulyDangXuat = async () => {
           <button type="button" class="btn-logout" @click="xulyDangXuat">Đăng xuất</button>
         </template>
         <template v-else>
-          <router-link to="/dang-nhap?cheDo=khach" class="btn-login">Đăng nhập</router-link>
+          <router-link to="/login" class="btn-login">Đăng nhập</router-link>
           <router-link to="/dang-ky" class="btn-register">Đăng ký</router-link>
         </template>
       </div>
@@ -56,7 +56,7 @@ const xulyDangXuat = async () => {
       <section v-if="!daDangNhap" class="tk-card tk-welcome">
         <h1>Chào mừng đến với PolyShoes</h1>
         <p>Đăng nhập để xem thông tin tài khoản và phiếu giảm giá dành cho bạn.</p>
-        <router-link to="/dang-nhap?cheDo=khach" class="btn-login">Đăng nhập tài khoản khách hàng</router-link>
+        <router-link to="/login" class="btn-login">Đăng nhập tài khoản khách hàng</router-link>
       </section>
 
       <template v-else>

@@ -18,6 +18,8 @@ public class CaLamViecDto {
 
     private Long id;
     private String maCa;
+    private Long idCaLich;
+    private String tenCaLich;
     private Long idNhanVien;
     private String tenNhanVien;
     private String tenQuy;

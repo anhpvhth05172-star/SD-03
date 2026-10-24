@@ -35,6 +35,10 @@ public class CaLamViec {
     @JoinColumn(name = "id_nhan_vien", nullable = false)
     private NhanVien nhanVien;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_ca_danh_muc")
+    private DanhMucCaLamViec caTheoLich;
+
     @Column(name = "ten_quy", length = 50)
     private String tenQuy = "Quầy tổng";
 
