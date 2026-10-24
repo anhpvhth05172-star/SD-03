@@ -30,8 +30,6 @@ public class SanPhamChiTietResponse {
     private BigDecimal giaSauGiam;  // giá thực hiển thị (đã áp dụng đợt giảm giá nếu có)
     private BigDecimal phanTramGiam; // % giảm từ đợt giảm giá (null = không có đợt)
     private String discount;
-    private BigDecimal giaSauGiam;
-    private BigDecimal phanTramGiam;
     private Boolean trangThai;
     private String trangThaiTonKho;
     private String img;

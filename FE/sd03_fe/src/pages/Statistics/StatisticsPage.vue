@@ -3,16 +3,14 @@ import { computed, onMounted, ref, watch } from 'vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { listEmployees } from '@/api/employee'
-import { API_BASE } from '@/api/http'
+import { listInvoices, getInvoice } from '@/api/invoice'
+import { getSanPhams } from '@/api/product'
 import { formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
-import { notifySuccess } from '@/utils/notify'
-import { nhanVienMau } from '@/pages/Schedule/scheduleData'
+import { notifySuccess, notifyError } from '@/utils/notify'
 import BarLineChart from '@/components/charts/BarLineChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
 import {
-  MAU_THUONG_HIEU,
-  SAN_PHAM_MAU,
   layTangTruongLabel,
   khoaNgay,
   khoangNhanh,
@@ -58,6 +56,7 @@ const timThuongHieu = ref('')
 const thuongHieus = ref([])
 const nhanViens = ref([])
 const sanPhams = ref([])
+const hoaDons = ref([])
 const bang = ref(new Map())
 const capNhatLuc = ref(gioHienTai())
 
@@ -128,23 +127,15 @@ const datLaiBoLoc = () => {
 const tuDate = computed(() => docInputDate(tuNgay.value) || new Date())
 const denDate = computed(() => docInputDate(denNgay.value) || new Date())
 
-const sanPhamHienTai = computed(() =>
-  sanPhams.value.length ? sanPhams.value : SAN_PHAM_MAU
-)
-const nhanVienHienTai = computed(() =>
-  nhanViens.value.length ? nhanViens.value : nhanVienMau
-)
+const sanPhamHienTai = computed(() => sanPhams.value)
+const nhanVienHienTai = computed(() => nhanViens.value)
 
 const dongSanPhamAll = computed(() =>
-  tinhSanPham(sanPhamHienTai.value, tuDate.value, denDate.value)
+  tinhSanPham(sanPhamHienTai.value, hoaDons.value, tuDate.value, denDate.value)
 )
 const bangTH = computed(() => tinhBangThuongHieu(dongSanPhamAll.value))
 
-const tyLeChon = computed(() => {
-  if (!thuongHieuChon.value) return 1
-  const tl = bangTH.value.tyLe[thuongHieuChon.value]
-  return tl === undefined ? 0 : tl
-})
+const tyLeChon = computed(() => thuongHieuChon.value)
 
 const khoang = computed(() =>
   tinhKhoang(bang.value, tuDate.value, denDate.value, tyLeChon.value)
@@ -178,26 +169,16 @@ const danhSachTH = computed(() => {
   return rows
 })
 
-const chaoMauNgauNhien = (seed) => {
-  const x = Math.sin(seed * 12.9898) * 43758.5453
-  return x - Math.floor(x)
-}
-
 const seriesTH = computed(() =>
-  bangTH.value.top.map((r, bi) => {
-    const tl = bangTH.value.tong > 0 ? r.doanhThu / bangTH.value.tong : 0
-    return {
-      label: r.ten,
-      color: r.mau,
-      values: chuoiBanHang.value.map((c, i) =>
-        Math.round(c.giaTri * tl * (0.6 + chaoMauNgauNhien((i + 3) * (bi + 2)) * 0.8))
-      ),
-    }
-  })
+  bangTH.value.top.map((r) => ({
+    label: r.ten,
+    color: r.mau,
+    values: tinhChuoiBanHang(bang.value, tuDate.value, denDate.value, kieuTongQuan.value, r.ten).map((x) => x.giaTri),
+  }))
 )
 
-const chuKy = computed(() => tinhChuKy(bang.value))
-const trangThai = computed(() => tinhTrangThaiDon(bang.value, tuDate.value, denDate.value, tyLeChon.value))
+const chuKy = computed(() => tinhChuKy(bang.value, new Date(), thuongHieuChon.value))
+const trangThai = computed(() => tinhTrangThaiDon(bang.value, tuDate.value, denDate.value))
 const slicesTrangThai = computed(() =>
   trangThai.value.map((x) => ({ label: x.ten, value: x.soLuong, color: x.mau }))
 )
@@ -217,7 +198,7 @@ const mauTrangThai = (ten) => {
 }
 
 /* ------------------------------- Bảng doanh thu nhân viên ------------------------------- */
-const nhanVienDayDu = computed(() => tinhNhanVien(nhanVienHienTai.value, khoang.value))
+const nhanVienDayDu = computed(() => tinhNhanVien(nhanVienHienTai.value, hoaDons.value, tuDate.value, denDate.value))
 
 const nhanVienLoc = computed(() => {
   const kw = kwNv.value.trim().toLowerCase()
@@ -360,9 +341,9 @@ const xuatSanPham = async () => {
   notifySuccess('Đã xuất Excel', 'Tệp Excel (.xlsx) đã được tải xuống')
 }
 
-const capNhatDoanhThu = () => {
-  capNhatLuc.value = gioHienTai()
-  notifySuccess('Đã cập nhật doanh thu', 'Dữ liệu minh họa đã được tính lại')
+const capNhatDoanhThu = async () => {
+  try { await napDuLieuThongKe(); notifySuccess('Đã cập nhật doanh thu', 'Đã tải lại số liệu từ hệ thống') }
+  catch (error) { notifyError('Không tải được số liệu thống kê', error.message || '') }
 }
 
 /* ---------------------------------- Nạp dữ liệu ---------------------------------- */
@@ -392,39 +373,41 @@ const onTonKhoSpChange = (val) => {
   pageSp.value = 0
 }
 
-onMounted(async () => {
-  bang.value = taoBangNgay()
+const layTatCaTrang = async (fetchPage, size) => {
+  const first = await fetchPage({ page: 0, size })
+  const rows = [...(first.content || [])]
+  const totalPages = Number(first.totalPages || 1)
+  for (let start = 1; start < totalPages; start += 5) {
+    const pages = Array.from({ length: Math.min(5, totalPages - start) }, (_, i) => start + i)
+    const batches = await Promise.all(pages.map((page) => fetchPage({ page, size })))
+    batches.forEach((batch) => rows.push(...(batch.content || [])))
+  }
+  return rows
+}
+
+const napDuLieuThongKe = async () => {
+  const [employees, products, invoiceHeaders] = await Promise.all([
+    layTatCaTrang(listEmployees, 50),
+    layTatCaTrang(getSanPhams, 50),
+    layTatCaTrang(listInvoices, 10),
+  ])
+  nhanViens.value = employees
+  sanPhams.value = products
+  thuongHieus.value = [...new Set(products.map((p) => p.tenThuongHieu).filter(Boolean))]
+  const canChiTiet = invoiceHeaders.filter((hd) => ['DA_GIAO_HANG', 'DA_HOAN_THANH', 'DA_HOAN_TIEN'].includes(hd.maTrangThai))
+  const chiTietHoaDons = []
+  for (let start = 0; start < canChiTiet.length; start += 5) {
+    chiTietHoaDons.push(...await Promise.all(canChiTiet.slice(start, start + 5).map((hd) => getInvoice(hd.id))))
+  }
+  const detailsById = new Map(chiTietHoaDons.map((hd) => [hd.id, hd]))
+  hoaDons.value = invoiceHeaders.map((hd) => ({ ...hd, ...(detailsById.get(hd.id) || {}) }))
+  bang.value = taoBangNgay(hoaDons.value, sanPhams.value)
   capNhatLuc.value = gioHienTai()
+}
 
-  try {
-    const d = await listEmployees({ page: 0, size: 500 })
-    nhanViens.value = d.content || []
-  } catch {
-    nhanViens.value = []
-  }
-
-  try {
-    const res = await fetch(`${API_BASE}/attributes/all-filter-options`)
-    if (res.ok) {
-      const data = await res.json()
-      thuongHieus.value = (data.thuongHieu || []).map((t) => t.ten || t).filter(Boolean)
-    }
-  } catch {
-    /* fallback phía dưới */
-  }
-  if (!thuongHieus.value.length) {
-    thuongHieus.value = MAU_THUONG_HIEU.map((t) => t.ten)
-  }
-
-  try {
-    const res = await fetch(`${API_BASE}/san-pham?page=0&size=500`)
-    if (res.ok) {
-      const data = await res.json()
-      sanPhams.value = data.content || []
-    }
-  } catch {
-    sanPhams.value = []
-  }
+onMounted(async () => {
+  try { await napDuLieuThongKe() }
+  catch (error) { notifyError('Không tải được số liệu thống kê', error.message || 'Vui lòng kiểm tra kết nối hệ thống') }
 })
 </script>
 
@@ -522,12 +505,10 @@ onMounted(async () => {
           Đang hiển thị dữ liệu tổng quan từ ngày <strong>{{ hienThiNgay(tuNgay) }}</strong> đến ngày
           <strong>{{ hienThiNgay(denNgay) }}</strong>
         </span>
-        <span class="mock-badge" title="API thống kê chưa được kết nối — số liệu được sinh minh họa phía frontend">
-          Dữ liệu minh họa · chưa kết nối API
-        </span>
+        <span class="mock-badge">Dữ liệu trực tiếp từ hệ thống</span>
       </div>
       <div class="info-right">
-        <span class="info-meta">Cập nhật lúc {{ capNhatLuc }} · Tự động lúc 22:00</span>
+        <span class="info-meta">Cập nhật lúc {{ capNhatLuc }}</span>
         <button class="btn-action-outline btn-refresh" type="button" @click="capNhatDoanhThu">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />

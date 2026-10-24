@@ -1,41 +1,39 @@
-/**
- * Store dữ liệu cho màn Quản lý lịch làm việc & Lịch ca làm.
- *
- * PHẦN CHƯA ĐƯỢC KẾT NỐI: backend hiện chưa có bảng/API cho lịch làm việc
- * và ca làm, nên toàn bộ dữ liệu dưới đây nằm trong bộ nhớ phía client
- * (reload trang sẽ trở về dữ liệu mẫu). Khi có API, chỉ cần thay các hàm
- * CRUD ở đây bằng lời gọi HTTP.
- */
+/** Cache giao diện cho dữ liệu ca và lịch được lưu trên backend. */
 import { computed, reactive } from 'vue'
 import { exportExcel } from '@/utils/export'
+import {
+  createScheduleShift,
+  createWorkSchedule,
+  deleteScheduleShift,
+  deleteWorkSchedule,
+  deleteWorkSchedulesForDate,
+  listScheduleShifts,
+  listWorkSchedules,
+  toggleScheduleShift,
+  updateScheduleShift,
+  updateWorkSchedule,
+} from '@/api/schedule'
 
-export const nhanVienMau = [
-  { id: 1, maNhanVien: 'NV0001', tenTaiKhoan: 'Nguyễn Quốc Huy', tenVaiTro: 'Quản trị viên', maVaiTro: 'ADMIN' },
-  { id: 2, maNhanVien: 'NV0002', tenTaiKhoan: 'Lê Minh Châu', tenVaiTro: 'Nhân viên bán hàng', maVaiTro: 'STAFF' },
-  { id: 3, maNhanVien: 'NV0003', tenTaiKhoan: 'Lê Hoàng Nam', tenVaiTro: 'Nhân viên bán hàng', maVaiTro: 'STAFF' },
-  { id: 4, maNhanVien: 'NV0004', tenTaiKhoan: 'Phạm Thu Trang', tenVaiTro: 'Nhân viên bán hàng', maVaiTro: 'STAFF' },
-  { id: 5, maNhanVien: 'NV0005', tenTaiKhoan: 'Võ Đức Long', tenVaiTro: 'Nhân viên bán hàng', maVaiTro: 'STAFF' },
-  { id: 6, maNhanVien: 'NV0006', tenTaiKhoan: 'Đặng Ngọc Mai', tenVaiTro: 'Nhân viên bán hàng', maVaiTro: 'STAFF' },
-  { id: 7, maNhanVien: 'NV0007', tenTaiKhoan: 'Bùi Gia Hân', tenVaiTro: 'Nhân viên bán hàng', maVaiTro: 'STAFF' },
-  { id: 8, maNhanVien: 'NV0008', tenTaiKhoan: 'Đỗ Thành Công', tenVaiTro: 'Nhân viên bán hàng', maVaiTro: 'STAFF' },
-  { id: 9, maNhanVien: 'NV0009', tenTaiKhoan: 'Hồ Quang Minh', tenVaiTro: 'Nhân viên bán hàng', maVaiTro: 'STAFF' },
-  { id: 10, maNhanVien: 'NV0010', tenTaiKhoan: 'Trần Thị Bích Ngọc', tenVaiTro: 'Nhân viên bán hàng', maVaiTro: 'STAFF' },
-  { id: 11, maNhanVien: 'NV0011', tenTaiKhoan: 'Dương Tuấn Kiệt', tenVaiTro: 'Nhân viên bán hàng', maVaiTro: 'STAFF' },
-  { id: 12, maNhanVien: 'NV0012', tenTaiKhoan: 'Vũ Khánh Linh', tenVaiTro: 'Nhân viên bán hàng', maVaiTro: 'STAFF' },
-]
-
-export const danhSachCa = reactive([
-  { id: 1, ma: 'sang', ten: 'Ca sáng', batDau: '08:00', ketThuc: '12:00', dangBat: true },
-  { id: 2, ma: 'chieu', ten: 'Ca chiều', batDau: '13:00', ketThuc: '17:00', dangBat: true },
-  { id: 3, ma: 'toi', ten: 'Ca tối', batDau: '17:30', ketThuc: '21:30', dangBat: true },
-])
+export const danhSachCa = reactive([])
 
 export const caDangBat = computed(() => danhSachCa.filter((c) => c.dangBat))
 
 export const danhSachLich = reactive([])
 
-let nextId = 1
-export const taoId = () => nextId++
+const chuanHoaCa = (ca) => ({
+  ...ca,
+  id: Number(ca.id),
+  batDau: String(ca.batDau || '').slice(0, 5),
+  ketThuc: String(ca.ketThuc || '').slice(0, 5),
+})
+
+const chuanHoaLich = (lich) => ({ ...lich, id: Number(lich.id), idCa: Number(lich.idCa) })
+
+export const napDuLieuLich = async () => {
+  const [ca, lich] = await Promise.all([listScheduleShifts(), listWorkSchedules()])
+  danhSachCa.splice(0, danhSachCa.length, ...ca.map(chuanHoaCa))
+  danhSachLich.splice(0, danhSachLich.length, ...lich.map(chuanHoaLich))
+}
 
 const pad2 = (x) => String(x).padStart(2, '0')
 
@@ -66,38 +64,6 @@ export const slugMaCa = (ten) =>
     .replace(/^ca\s*/, '')
     .replace(/[^a-z0-9]/g, '')
 
-/* ---------------------------------- Dữ liệu mẫu ---------------------------------- */
-const taoLichMau = () => {
-  const hom = new Date()
-  hom.setHours(0, 0, 0, 0)
-  for (let i = -7; i <= 7; i++) {
-    const d = new Date(hom)
-    d.setDate(d.getDate() + i)
-    const thu = d.getDay()
-    if (thu === 0) continue
-    const khoa = khoaNgay(d)
-    const buoi = i + 7
-    const nomsang = [(0 + buoi) % 12, (1 + buoi) % 12, (2 + buoi) % 12]
-    const nomchieu = [(3 + buoi) % 12, (4 + buoi) % 12, (5 + buoi) % 12]
-    const nomtoi = [(6 + buoi) % 12, (7 + buoi) % 12, (8 + buoi) % 12]
-    const them = (idCa, idxs) =>
-      idxs.forEach((idx) => {
-        const nv = nhanVienMau[idx]
-        danhSachLich.push({
-          id: taoId(),
-          maNhanVien: nv.maNhanVien,
-          tenNhanVien: nv.tenTaiKhoan,
-          idCa,
-          ngay: khoa,
-        })
-      })
-    them(1, nomsang)
-    them(2, nomchieu)
-    if (buoi % 5 !== 4) them(3, nomtoi)
-  }
-}
-taoLichMau()
-
 /* ---------------------------------- CRUD lịch ---------------------------------- */
 export const timCa = (id) => danhSachCa.find((c) => c.id === Number(id))
 
@@ -116,27 +82,37 @@ export const kiemTraTrung = (maNhanVien, ngay, idCa, boQuaId = null) =>
       l.idCa === Number(idCa)
   )
 
-export const themLich = (item) => {
-  const row = { id: taoId(), ...item }
+export const themLich = async (item) => {
+  const row = chuanHoaLich(await createWorkSchedule({
+    maNhanVien: item.maNhanVien,
+    idCa: Number(item.idCa),
+    ngay: item.ngay,
+  }))
   danhSachLich.push(row)
   return row
 }
 
-export const capNhatLich = (id, item) => {
+export const capNhatLich = async (id, item) => {
   const idx = danhSachLich.findIndex((l) => l.id === id)
   if (idx === -1) return null
-  danhSachLich[idx] = { ...danhSachLich[idx], ...item }
+  danhSachLich[idx] = chuanHoaLich(await updateWorkSchedule(id, {
+    maNhanVien: item.maNhanVien,
+    idCa: Number(item.idCa),
+    ngay: item.ngay,
+  }))
   return danhSachLich[idx]
 }
 
-export const xoaLich = (id) => {
+export const xoaLich = async (id) => {
   const idx = danhSachLich.findIndex((l) => l.id === id)
   if (idx === -1) return false
+  await deleteWorkSchedule(id)
   danhSachLich.splice(idx, 1)
   return true
 }
 
-export const xoaLichTheoNgay = (ngay) => {
+export const xoaLichTheoNgay = async (ngay) => {
+  await deleteWorkSchedulesForDate(ngay)
   for (let i = danhSachLich.length - 1; i >= 0; i--) {
     if (danhSachLich[i].ngay === ngay) danhSachLich.splice(i, 1)
   }
@@ -151,49 +127,58 @@ export const lichCuaCaNgay = (idCa, ngay) =>
  * Xếp ca tự động cho một ngày: lấy nhân viên chưa có lịch ngày đó,
  * chia tròn đều vào các ca đang bật.
  */
-export const xepCaTuDong = (ngay, danhSachNhanVien) => {
+export const xepCaTuDong = async (ngay, danhSachNhanVien) => {
   const caList = caDangBat.value
   if (!ngay || !caList.length) return { themMoi: 0, lyDo: 'khongCa' }
   const daCo = new Set(lichCuaNgay(ngay).map((l) => l.maNhanVien))
   const ungVien = (danhSachNhanVien || []).filter((nv) => !daCo.has(nv.maNhanVien))
   if (!ungVien.length) return { themMoi: 0, lyDo: 'khongUngVien' }
-  let them = 0
-  ungVien.forEach((nv, i) => {
+  const rows = ungVien.map((nv, i) => {
     const ca = caList[i % caList.length]
-    themLich({
+    return {
       maNhanVien: nv.maNhanVien,
       tenNhanVien: nv.tenTaiKhoan || nv.ten || '',
       idCa: ca.id,
       ngay,
-    })
-    them++
+    }
   })
-  return { themMoi: them, lyDo: 'ok' }
+  for (const row of rows) await themLich(row)
+  return { themMoi: rows.length, lyDo: 'ok' }
 }
 
 /* ---------------------------------- Ca làm ---------------------------------- */
-let nextCaId = 4
-export const taoIdCa = () => nextCaId++
-
 export const timCaById = (id) => danhSachCa.find((c) => c.id === Number(id))
 
-export const themCa = (item) => {
-  const row = { id: taoIdCa(), dangBat: true, ...item }
+export const themCa = async (item) => {
+  const row = chuanHoaCa(await createScheduleShift({
+    ma: item.ma,
+    ten: item.ten,
+    batDau: item.batDau,
+    ketThuc: item.ketThuc,
+  }))
   danhSachCa.push(row)
   return row
 }
 
-export const capNhatCa = (id, item) => {
+export const capNhatCa = async (id, item) => {
   const idx = danhSachCa.findIndex((c) => c.id === Number(id))
   if (idx === -1) return null
-  danhSachCa[idx] = { ...danhSachCa[idx], ...item }
+  danhSachCa[idx] = chuanHoaCa(await updateScheduleShift(id, {
+    ma: item.ma,
+    ten: item.ten,
+    batDau: item.batDau,
+    ketThuc: item.ketThuc,
+  }))
   return danhSachCa[idx]
 }
 
-export const doiTrangThaiCa = (id) => {
+export const doiTrangThaiCa = async (id) => {
   const ca = timCaById(id)
-  if (ca) ca.dangBat = !ca.dangBat
-  return ca
+  if (!ca) return null
+  const updated = chuanHoaCa(await toggleScheduleShift(id))
+  const idx = danhSachCa.findIndex((row) => row.id === Number(id))
+  danhSachCa[idx] = updated
+  return updated
 }
 
 export const caTrungTen = (ten, boQuaId = null) =>
@@ -204,9 +189,10 @@ export const caTrungTen = (ten, boQuaId = null) =>
 export const soLichCuaCa = (id) =>
   danhSachLich.filter((l) => l.idCa === Number(id)).length
 
-export const xoaCa = (id) => {
+export const xoaCa = async (id) => {
   const idx = danhSachCa.findIndex((c) => c.id === Number(id))
   if (idx === -1) return false
+  await deleteScheduleShift(id)
   danhSachCa.splice(idx, 1)
   return true
 }
@@ -219,9 +205,6 @@ export const xuatMauLichLamViec = async () => {
     'mau-lich-lam-viec.xlsx',
     ['Mã nhân viên', 'Mã ca (hoặc tên ca)', 'Ngày làm (dd/MM/yyyy)'],
     [
-      ['NV0001', 'sang', ngay],
-      ['NV0002', 'chieu', ngay],
-      ['NV0003', 'Ca tối', ngay],
     ],
     { sheetName: 'Lịch làm việc' }
   )
@@ -317,7 +300,7 @@ export const phanTichDongLich = (dongGoc, danhSachNhanVien) => {
 export const phanTichCsvLich = (text, danhSachNhanVien) =>
   phanTichDongLich(docFileDong(text).map(tachCot), danhSachNhanVien)
 
-export const nhapRowsVaoStore = (rows) => {
-  rows.forEach((r) => themLich({ ...r }))
+export const nhapRowsVaoStore = async (rows) => {
+  for (const row of rows) await themLich({ ...row })
   return rows.length
 }

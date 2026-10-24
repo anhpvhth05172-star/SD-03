@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { listEmployees } from '@/api/employee'
+import { fetchAllPages } from '@/utils/export'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import {
   caDangBat,
@@ -12,7 +13,6 @@ import {
   khoaNgay,
   lichCuaCaNgay,
   lichCuaNgay,
-  nhanVienMau,
   nhapRowsVaoStore,
   docNgay,
   capNhatLich,
@@ -24,19 +24,19 @@ import {
   phanTichCsvLich,
   phanTichDongLich,
   timCa,
+  napDuLieuLich,
 } from './scheduleData'
 
 const pad2 = (x) => String(x).padStart(2, '0')
 
 /* ---------------------------------- Dữ liệu nhân viên ---------------------------------- */
 const nhanViens = ref([])
-const dsNhanVien = computed(() => (nhanViens.value.length ? nhanViens.value : nhanVienMau))
+const dsNhanVien = computed(() => nhanViens.value)
 
 const tenCua = (ma) => {
   const nv = dsNhanVien.value.find((x) => String(x.maNhanVien) === String(ma))
   if (nv) return nv.tenTaiKhoan || nv.ten || ma
-  const mau = nhanVienMau.find((x) => x.maNhanVien === ma)
-  return mau ? mau.tenTaiKhoan : ma
+  return ma
 }
 
 /* ---------------------------------- Bộ lọc + bảng ---------------------------------- */
@@ -122,19 +122,23 @@ watch(fNgay, (v) => {
 })
 
 /* ---------------------------------- Thao tác hàng loạt ---------------------------------- */
-const xepCaTuDongBtn = () => {
+const xepCaTuDongBtn = async () => {
   const khoa = fNgay.value ? khoaNgay(docNgay(fNgay.value)) : ''
   if (!khoa) return
-  const kq = xepCaTuDong(khoa, dsNhanVien.value)
-  if (kq.lyDo === 'khongCa') {
-    notifyWarning('Chưa có ca đang bật', 'Hãy bật ca làm ở trang Lịch ca làm trước')
-    return
+  try {
+    const kq = await xepCaTuDong(khoa, dsNhanVien.value)
+    if (kq.lyDo === 'khongCa') {
+      notifyWarning('Chưa có ca đang bật', 'Hãy bật ca làm ở trang Lịch ca làm trước')
+      return
+    }
+    if (kq.lyDo === 'khongUngVien') {
+      notifyWarning('Không còn nhân viên trống', 'Mọi nhân viên đã có lịch trong ngày này')
+      return
+    }
+    notifySuccess('Đã xếp ca tự động', `Thêm ${kq.themMoi} lịch làm việc ngày ${hienThiNgay(khoa)}`)
+  } catch (error) {
+    notifyError('Không xếp được lịch làm việc', error.message || '')
   }
-  if (kq.lyDo === 'khongUngVien') {
-    notifyWarning('Không còn nhân viên trống', 'Mọi nhân viên đã có lịch trong ngày này')
-    return
-  }
-  notifySuccess('Đã xếp ca tự động', `Thêm ${kq.themMoi} lịch làm việc ngày ${hienThiNgay(khoa)}`)
 }
 
 const datLaiLich = async () => {
@@ -145,8 +149,12 @@ const datLaiLich = async () => {
   }
   const ok = await notifyDeleteConfirm(`tất cả lịch làm việc ngày ${hienThiNgay(khoa)}`)
   if (!ok) return
-  xoaLichTheoNgay(khoa)
-  notifySuccess('Đã đặt lại lịch', `Đã xóa lịch ngày ${hienThiNgay(khoa)}`)
+  try {
+    await xoaLichTheoNgay(khoa)
+    notifySuccess('Đã đặt lại lịch', `Đã xóa lịch ngày ${hienThiNgay(khoa)}`)
+  } catch (error) {
+    notifyError('Không đặt lại được lịch', error.message || '')
+  }
 }
 
 const taiTemplate = async () => {
@@ -230,16 +238,20 @@ const docTrenFile = async (e) => {
   }
 }
 
-const xacNhanNhap = () => {
+const xacNhanNhap = async () => {
   const p = importPreview.value
   if (!p || !p.rows.length) return
-  const n = nhapRowsVaoStore(p.rows)
-  showImport.value = false
-  view.value = 'bang'
-  notifySuccess(
-    'Hoàn tất nhập lịch làm việc',
-    `Đã thêm ${n} lịch; bỏ qua ${p.loi.length} dòng lỗi`
-  )
+  try {
+    const n = await nhapRowsVaoStore(p.rows)
+    showImport.value = false
+    view.value = 'bang'
+    notifySuccess(
+      'Hoàn tất nhập lịch làm việc',
+      `Đã thêm ${n} lịch; bỏ qua ${p.loi.length} dòng lỗi`
+    )
+  } catch (error) {
+    notifyError('Không nhập được lịch làm việc', error.message || '')
+  }
 }
 
 /* ---------------------------------- Form thêm / sửa ---------------------------------- */
@@ -297,7 +309,7 @@ const moFormSua = (row) => {
   showDetail.value = false
 }
 
-const luuForm = () => {
+const luuForm = async () => {
   formError.value = ''
   const f = form.value
   if (!f.maNhanVien) {
@@ -324,13 +336,17 @@ const luuForm = () => {
     idCa: Number(f.idCa),
     ngay: khoa,
   }
-  if (formMode.value === 'sua') capNhatLich(f.id, payload)
-  else themLich(payload)
-  showForm.value = false
-  notifySuccess(
-    formMode.value === 'sua' ? 'Đã cập nhật lịch làm việc' : 'Đã thêm lịch làm việc',
-    `${payload.maNhanVien} · ${tenCaCua(payload.idCa)} · ${hienThiNgay(khoa)}`
-  )
+  try {
+    if (formMode.value === 'sua') await capNhatLich(f.id, payload)
+    else await themLich(payload)
+    showForm.value = false
+    notifySuccess(
+      formMode.value === 'sua' ? 'Đã cập nhật lịch làm việc' : 'Đã thêm lịch làm việc',
+      `${payload.maNhanVien} · ${tenCaCua(payload.idCa)} · ${hienThiNgay(khoa)}`
+    )
+  } catch (error) {
+    formError.value = error.message || 'Không lưu được lịch làm việc'
+  }
 }
 
 /* ---------------------------------- Chi tiết / xem thêm ---------------------------------- */
@@ -349,9 +365,13 @@ const xoaChiTiet = async () => {
     `lịch làm việc của ${tenCua(row.maNhanVien)} ngày ${hienThiNgay(row.ngay)}`
   )
   if (!ok) return
-  xoaLich(row.id)
-  showDetail.value = false
-  notifySuccess('Đã xóa lịch làm việc')
+  try {
+    await xoaLich(row.id)
+    showDetail.value = false
+    notifySuccess('Đã xóa lịch làm việc')
+  } catch (error) {
+    notifyError('Không xóa được lịch làm việc', error.message || '')
+  }
 }
 
 const showXemThem = ref(false)
@@ -448,12 +468,12 @@ const datKieuXem = (kieu) => {
 }
 
 onMounted(async () => {
-  try {
-    const d = await listEmployees({ page: 0, size: 300 })
-    nhanViens.value = d.content || []
-  } catch {
-    nhanViens.value = []
-  }
+  const results = await Promise.allSettled([
+    napDuLieuLich(),
+    fetchAllPages(listEmployees, {}, 20).then((rows) => { nhanViens.value = rows }),
+  ])
+  if (results[0].status === 'rejected') notifyError('Không tải được lịch làm việc', results[0].reason?.message || '')
+  if (results[1].status === 'rejected') notifyError('Không tải được danh sách nhân viên', results[1].reason?.message || '')
 })
 </script>
 
@@ -1491,7 +1511,7 @@ onMounted(async () => {
 }
 
 .cal-day-so.is-hot {
-  background: #2563eb;
+  background: #d92d20;
   color: #ffffff;
 }
 
@@ -1505,9 +1525,9 @@ onMounted(async () => {
 .cal-chip {
   font-size: 11px;
   font-weight: 600;
-  color: #b45309;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
   border-radius: 6px;
   padding: 2px 6px;
   white-space: nowrap;
@@ -1559,18 +1579,18 @@ onMounted(async () => {
 .cal-corner.ca {
   flex-direction: column;
   gap: 4px;
-  background: #fffdf7;
+  background: #fffafa;
 }
 
 .ca-name {
   font-size: 14px;
   font-weight: 700;
-  color: #b45309;
+  color: #b91c1c;
 }
 
 .ca-time {
   font-size: 11.5px;
-  color: #d97706;
+  color: #b91c1c;
   font-weight: 600;
 }
 
@@ -1588,7 +1608,7 @@ onMounted(async () => {
 }
 
 .cal-week-day.is-today {
-  background: #eff6ff;
+  background: #fff1f2;
 }
 
 .cal-week-thu {
@@ -1621,12 +1641,12 @@ onMounted(async () => {
 }
 
 .cal-week-cell.is-today {
-  background: #f8fbff;
+  background: #fffafa;
 }
 
 .shift-card {
-  border: 1px solid #fde68a;
-  background: #fffbeb;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
   border-radius: 10px;
   padding: 12px 10px;
   display: flex;
@@ -1644,7 +1664,7 @@ onMounted(async () => {
 .shift-card-title {
   font-size: 13.5px;
   font-weight: 700;
-  color: #b45309;
+  color: #b91c1c;
 }
 
 .shift-card.is-empty .shift-card-title {
@@ -1653,7 +1673,7 @@ onMounted(async () => {
 
 .shift-card-time {
   font-size: 12px;
-  color: #d97706;
+  color: #b91c1c;
   font-weight: 600;
 }
 
@@ -1669,9 +1689,9 @@ onMounted(async () => {
 
 .shift-card-more {
   margin-top: 4px;
-  border: 1px solid #f59e0b;
+  border: 1px solid #dc2626;
   background: transparent;
-  color: #b45309;
+  color: #b91c1c;
   font-size: 12px;
   font-weight: 600;
   border-radius: 20px;
@@ -1682,7 +1702,7 @@ onMounted(async () => {
 }
 
 .shift-card-more:hover {
-  background: #fef3c7;
+  background: #fee2e2;
 }
 
 /* Modal */
@@ -1962,9 +1982,9 @@ onMounted(async () => {
 }
 
 .preview-pill.is-ok {
-  background: #ecfdf5;
-  color: #059669;
-  border-color: #d1fae5;
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fee2e2;
 }
 
 .preview-pill.is-bad {

@@ -1,11 +1,11 @@
 import http from './http'
 
 // ===== Admin APIs =====
-// NOTE: BE controller dùng /api/v1/san-pham, http.js base là /api → cần prefix /v1
-export const getSanPhams = (keyword) =>
-  http
-    .get('/v1/san-pham', { params: keyword ? { keyword } : {} })
-    .then((r) => r.data)
+// Base URL trong http.js là /api, các endpoint ở BE dùng /api/v1.
+export const getSanPhams = (filters = {}) => {
+  const params = typeof filters === 'string' ? { keyword: filters } : filters
+  return http.get('/v1/san-pham', { params }).then((r) => r.data)
+}
 
 export const getSanPham = (id) => http.get(`/v1/san-pham/${id}`).then((r) => r.data)
 

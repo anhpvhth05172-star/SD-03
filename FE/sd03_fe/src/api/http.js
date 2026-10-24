@@ -16,6 +16,11 @@ export const API_ORIGIN = new URL(
 /** URL có trỏ tới API không (tương đối /api/... hoặc tuyệt đối cùng origin). */
 export const laUrlAPI = (url) => url.startsWith(API_BASE) || url.startsWith(API_ORIGIN)
 
+// Các endpoint này phải gọi được độc lập với phiên hiện tại. Nếu token cũ hết hạn,
+// không refresh/điều hướng trước khi request đăng nhập được gửi lên máy chủ.
+const laAuthCongKhai = (url = '') =>
+  /^\/auth\/(dang-nhap|nhan-vien\/dang-nhap|dang-ky|quen-mat-khau\/gui-ma|quen-mat-khau\/dat-lai|nhan-vien\/gui-ma-quen-mat-khau|nhan-vien\/dat-lai-mat-khau)(?:\?|$)/.test(url)
+
 const http = axios.create({
   baseURL: API_BASE,
 })
@@ -72,7 +77,7 @@ const ganToken = async (config) => {
 }
 
 http.interceptors.request.use(async (config) => {
-  if (String(config.url || '').includes('/auth/refresh')) {
+  if (String(config.url || '').includes('/auth/refresh') || laAuthCongKhai(config.url)) {
     return config
   }
   return ganToken(config)
@@ -83,7 +88,7 @@ http.interceptors.request.use(async (config) => {
 axios.interceptors.request.use(async (config) => {
   const url = String(config.url || '')
   if (!laUrlAPI(url)) return config
-  if (url.includes('/auth/refresh')) return config
+  if (url.includes('/auth/refresh') || laAuthCongKhai(url)) return config
   return ganToken(config)
 })
 

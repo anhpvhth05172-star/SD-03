@@ -1,6 +1,6 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { notifySuccess, notifyWarning, notifyDeleteConfirm } from '@/utils/notify'
+import { computed, onMounted, ref } from 'vue'
+import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import {
   danhSachCa,
@@ -11,6 +11,7 @@ import {
   xoaCa,
   soLichCuaCa,
   slugMaCa,
+  napDuLieuLich,
 } from './scheduleData'
 
 /* ---------------------------------- Bộ lọc + bảng ---------------------------------- */
@@ -40,12 +41,16 @@ const datLaiBoLoc = () => {
 }
 
 /* ---------------------------------- Thao tác ---------------------------------- */
-const doiTrangThaiBtn = (ca) => {
-  doiTrangThaiCa(ca.id)
-  notifySuccess(
-    ca.dangBat ? 'Đã bật ca làm' : 'Đã tắt ca làm',
-    `${ca.ten} (${ca.batDau} - ${ca.ketThuc})`
-  )
+const doiTrangThaiBtn = async (ca) => {
+  try {
+    const updated = await doiTrangThaiCa(ca.id)
+    notifySuccess(
+      updated.dangBat ? 'Đã bật ca làm' : 'Đã tắt ca làm',
+      `${updated.ten} (${updated.batDau} - ${updated.ketThuc})`
+    )
+  } catch (error) {
+    notifyError('Không đổi được trạng thái ca', error.message || '')
+  }
 }
 
 const xoaCaBtn = async (ca) => {
@@ -59,8 +64,12 @@ const xoaCaBtn = async (ca) => {
   }
   const ok = await notifyDeleteConfirm(`ca làm "${ca.ten}"`)
   if (!ok) return
-  xoaCa(ca.id)
-  notifySuccess('Đã xóa ca làm', ca.ten)
+  try {
+    await xoaCa(ca.id)
+    notifySuccess('Đã xóa ca làm', ca.ten)
+  } catch (error) {
+    notifyError('Không xóa được ca làm', error.message || '')
+  }
 }
 
 /* ---------------------------------- Form thêm / sửa ---------------------------------- */
@@ -83,7 +92,7 @@ const moFormSua = (ca) => {
   showForm.value = true
 }
 
-const luuForm = () => {
+const luuForm = async () => {
   formError.value = ''
   const f = form.value
   const ten = f.ten.trim()
@@ -104,15 +113,27 @@ const luuForm = () => {
     return
   }
   const payload = { ten, batDau: f.batDau, ketThuc: f.ketThuc, ma: slugMaCa(ten) }
-  if (formMode.value === 'sua') {
-    capNhatCa(f.id, payload)
-    notifySuccess('Đã cập nhật ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
-  } else {
-    themCa(payload)
-    notifySuccess('Đã thêm ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
+  try {
+    if (formMode.value === 'sua') {
+      await capNhatCa(f.id, payload)
+      notifySuccess('Đã cập nhật ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
+    } else {
+      await themCa(payload)
+      notifySuccess('Đã thêm ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
+    }
+    showForm.value = false
+  } catch (error) {
+    formError.value = error.message || 'Không lưu được ca làm'
   }
-  showForm.value = false
 }
+
+onMounted(async () => {
+  try {
+    await napDuLieuLich()
+  } catch (error) {
+    notifyError('Không tải được danh sách ca làm', error.message || '')
+  }
+})
 </script>
 
 <template>
@@ -541,13 +562,13 @@ const luuForm = () => {
 }
 
 .stat-pill.is-on {
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-  color: #047857;
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
 }
 
 .stat-pill.is-on b {
-  color: #047857;
+  color: #b91c1c;
 }
 
 .stat-pill.is-off {
@@ -642,9 +663,9 @@ const luuForm = () => {
 }
 
 .status-chip.is-on {
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  color: #047857;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
 }
 
 .status-chip.is-off {
@@ -696,13 +717,13 @@ const luuForm = () => {
 }
 
 .btn-action-circle.is-toggle-on {
-  background: #ecfdf5;
-  color: #059669;
-  border-color: #a7f3d0;
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
 }
 
 .btn-action-circle.is-toggle-on:hover {
-  background: #d1fae5;
+  background: #fee2e2;
   transform: scale(1.08);
 }
 
