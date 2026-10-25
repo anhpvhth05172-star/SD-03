@@ -7,6 +7,12 @@ export const dangNhap = (data) => http.post('/auth/dang-nhap', data).then((r) =>
 export const dangNhapNhanVien = (data) =>
   http.post('/auth/nhan-vien/dang-nhap', data).then((r) => r.data)
 
+export const guiMaQuenMatKhau = (email) =>
+  http.post('/auth/quen-mat-khau/gui-ma', { email }).then((r) => r.data)
+
+export const datLaiMatKhau = (data) =>
+  http.post('/auth/quen-mat-khau/dat-lai', data).then((r) => r.data)
+
 export const thongTin = () => http.get('/auth/thong-tin').then((r) => r.data)
 
 export const huyPhien = (refreshToken) =>

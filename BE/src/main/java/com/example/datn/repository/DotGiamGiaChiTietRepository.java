@@ -49,4 +49,17 @@ public interface DotGiamGiaChiTietRepository extends JpaRepository<DotGiamGiaChi
     order by sp.tenSanPham asc, spct.maChiTietSanPham asc
     """)
     List<DotGiamGiaChiTiet> findByDotId(@Param("idDot") Long idDot);
+
+    @Query("""
+    select ct.sanPhamChiTiet.id, d.tenDotGiamGia, d.phanTramGiam
+    from DotGiamGiaChiTiet ct
+    join ct.dotGiamGia d
+    where ct.trangThai = true
+      and d.trangThai = true
+      and d.ngayBatDau <= :now
+      and d.ngayKetThuc >= :now
+      and d.id <> :excludeId
+""")
+    List<Object[]> findApDungHienTai(@Param("now") LocalDateTime now,
+                                     @Param("excludeId") Long excludeId);
 }

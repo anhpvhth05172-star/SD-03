@@ -79,6 +79,17 @@ class MaNhanVienTest {
         assertFalse(MaNhanVien.hopLe("a".repeat(26)));
     }
 
+    /** Mã sinh ra phải LUÔN hợp lệ (bắt đầu bằng chữ cái) để import lại cập nhật được. */
+    @Test
+    void sinhTenKetThucBangSo_VanBatDauBangChuCai() {
+        assertEquals("NV1234567eo", MaNhanVien.sinh("E2E One 1234567"));
+        assertEquals("NV1234567", MaNhanVien.sinh("1234567"));
+        assertEquals("NV123", MaNhanVien.sinh("123"));
+        assertTrue(MaNhanVien.hopLe(MaNhanVien.sinh("E2E One 1234567")));
+        assertTrue(MaNhanVien.hopLe(MaNhanVien.sinh("1234567")));
+        assertTrue(MaNhanVien.hopLe(MaNhanVien.congSo(MaNhanVien.sinh("E2E One 1234567"), 2)));
+    }
+
     @Test
     void gioiHanDai() {
         assertEquals(25, MaNhanVien.sinh("Nguyễn Văn " + "x".repeat(40)).length());

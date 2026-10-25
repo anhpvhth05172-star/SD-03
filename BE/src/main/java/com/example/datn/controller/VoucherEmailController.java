@@ -2,6 +2,7 @@ package com.example.datn.controller;
 
 import com.example.datn.entity.PhieuGiamGia;
 import com.example.datn.service.VoucherEmailService;
+import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +16,7 @@ import java.util.Map;
 public class VoucherEmailController {
 
     private final VoucherEmailService voucherEmailService;
+    private final ObjectMapper objectMapper;
 
     /**
      * Gửi email phiếu giảm giá cho 1 khách hàng
@@ -107,14 +109,25 @@ public class VoucherEmailController {
         }
     }
 
-    // Helper: chuyển Object sang PhieuGiamGia (nếu bạn dùng DTO thì thay bằng @RequestBody DTO)
+    // Helper: chuyển Object sang PhieuGiamGia
     private PhieuGiamGia convertToPhieuGiamGia(Object obj) {
-        // Cách đơn giản nhất: dùng ObjectMapper hoặc nhận thẳng entity/DTO
-        // Ở đây giả sử bạn truyền đủ field, bạn nên tạo DTO riêng cho sạch
-        if (obj instanceof PhieuGiamGia) {
-            return (PhieuGiamGia) obj;
+        if (obj == null) {
+            throw new IllegalArgumentException("Thiếu dữ liệu phiếu giảm giá");
         }
-        // Nếu dùng Map thì cần map thủ công hoặc dùng ObjectMapper
+        if (obj instanceof PhieuGiamGia phieu) {
+            return phieu;
+        }
+        if (obj instanceof Map<?, ?> map) {
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> m = (Map<String, Object>) map;
+                PhieuGiamGia phieu = objectMapper.convertValue(m, PhieuGiamGia.class);
+                phieu.setDotGiamGia(null); // tránh lazy-load không cần thiết khi gửi mail
+                return phieu;
+            } catch (RuntimeException e) {
+                throw new IllegalArgumentException("Dữ liệu phiếu giảm giá không hợp lệ: " + e.getMessage());
+            }
+        }
         throw new IllegalArgumentException("Dữ liệu phiếu giảm giá không hợp lệ");
     }
 }

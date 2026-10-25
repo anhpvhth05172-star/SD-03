@@ -11,7 +11,6 @@ export const createCustomer = (data) =>
 export const updateCustomer = (id, data) =>
   http.put(`/khach-hang/${id}`, data).then((r) => r.data)
 
-export const deleteCustomer = (id) => http.delete(`/khach-hang/${id}`).then((r) => r.data)
 
 export const suggestCustomerCode = (ten) =>
   http.get('/khach-hang/ma-tu-dong', { params: { ten } }).then((r) => r.data)
@@ -21,6 +20,9 @@ export const checkCustomerEmail = (email, excludeId) =>
 
 export const updateCustomerStatus = (id, trangThai) =>
   http.put(`/khach-hang/${id}/trang-thai`, null, { params: { trangThai } }).then((r) => r.data)
+
+export const changeCustomerPassword = (id, matKhauMoi, xacNhan) =>
+  http.put(`/khach-hang/${id}/doi-mat-khau`, { matKhauMoi, xacNhan }).then((r) => r.data)
 
 export const listAddresses = (idKhachHang) =>
   http.get(`/khach-hang/${idKhachHang}/dia-chi`).then((r) => r.data)

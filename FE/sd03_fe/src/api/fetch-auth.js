@@ -1,10 +1,5 @@
 import { getToken, getRefreshToken, isTokenExpired } from '../utils/auth.js'
-
-const API_BASE =
-  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE) ||
-  'http://localhost:8080/api'
-
-const API_ORIGIN = new URL(API_BASE).origin
+import { laUrlAPI } from './http.js'
 
 /**
  * Một số trang (Sản phẩm, Biến thể, Thuộc tính, POS) gọi API bằng fetch() trần,
@@ -25,7 +20,7 @@ export const caiDatFetchAuth = () => {
 
   window.fetch = async (input, init) => {
     const url = layUrl(input)
-    if (!url.startsWith(API_ORIGIN)) return goc(input, init)
+    if (!laUrlAPI(url)) return goc(input, init)
 
     const headers = new Headers(
       (init && init.headers) ||

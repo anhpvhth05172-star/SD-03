@@ -104,4 +104,7 @@ public class HoaDon {
 
     @Column(name = "da_xoa", nullable = false)
     private boolean daXoa;
+
+    @Column(name = "id_ca_lam_viec")
+    private Long idCaLamViec;
 }

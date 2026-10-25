@@ -24,8 +24,6 @@ let timer = null
 let tuId = 0
 let tuIdAI = 0
 
-const lopChat = () => (cheDo.value === 'ai' ? tinNhan : tinNhan)
-
 const moChat = async () => {
   mo.value = true
   await nextTick()
@@ -52,11 +50,13 @@ const taiHoiThoai = async () => {
   const ma = getMaAnDanh()
   if (cheDo.value === 'ai') {
     hoiThoaiAI.value = await layHoiThoaiAI()
+    tuIdAI = 0
     const ds = await layTinAI(hoiThoaiAI.value.id, tuIdAI)
     tinNhan.value = [...ds]
     if (ds.length) tuIdAI = ds[ds.length - 1].id
   } else {
     hoiThoaiNhanVien.value = await layHoiThoaiKhach()
+    tuId = 0
     const ds = await layTinKhach(hoiThoaiNhanVien.value.id, tuId)
     tinNhan.value = [...ds]
     if (ds.length) tuId = ds[ds.length - 1].id
@@ -69,7 +69,17 @@ const taiHoiThoai = async () => {
 const poll = async () => {
   if (!mo.value || dangGui.value) return
   try {
-    if (cheDo.value === 'ai') return
+    if (cheDo.value === 'ai') {
+      if (!hoiThoaiAI.value) return
+      const ds = await layTinAI(hoiThoaiAI.value.id, tuIdAI)
+      if (ds.length) {
+        tinNhan.value = [...tinNhan.value, ...ds]
+        tuIdAI = ds[ds.length - 1].id
+        await nextTick()
+        cuonDuoi()
+      }
+      return
+    }
     if (!hoiThoaiNhanVien.value) return
     const ds = await layTinKhach(hoiThoaiNhanVien.value.id, tuId)
     if (ds.length) {
@@ -132,7 +142,7 @@ const gui = async () => {
 const tenNguoiGui = (t) => {
   if (t.loaiNguoiGui === 'KHACH') return 'Bạn'
   if (t.loaiNguoiGui === 'AI') return 'Trợ lý AI'
-  return 'Nhân viên'
+  return t.tenNguoiGui ? `Nhân viên ${t.tenNguoiGui}` : 'Nhân viên'
 }
 
 onMounted(() => {

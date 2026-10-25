@@ -1,7 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { laAdmin } from '../utils/session'
 
 defineProps({
   collapsed: { type: Boolean, default: false },
@@ -12,68 +11,81 @@ const route = useRoute()
 const menu = [
   {
     label: 'Thống kê',
-    path: '/thong-ke',
+    path: '/admin/thong-ke',
     iconType: 'chart',
   },
   {
     label: 'Bán hàng tại quầy',
-    path: '/ban-hang',
+    path: '/admin/ban-hang',
     iconType: 'pos',
   },
   {
     label: 'Quản lý hóa đơn',
-    path: '/hoa-don',
+    path: '/admin/hoa-don',
     iconType: 'invoice',
   },
   {
     label: 'Quản lý sản phẩm',
-    path: '/san-pham',
+    path: '/admin/san-pham',
     iconType: 'product',
     children: [
-      { label: 'Sản phẩm', path: '/san-pham' },
-      { label: 'Biến thể sản phẩm', path: '/bien-the-san-pham' },
+      { label: 'Sản phẩm', path: '/admin/san-pham' },
+      { label: 'Biến thể sản phẩm', path: '/admin/bien-the-san-pham' },
     ],
   },
   {
     label: 'Danh mục thuộc tính',
-    path: '/thuoc-tinh',
+    path: '/admin/thuoc-tinh',
     iconType: 'attributes',
     children: [
-      { label: 'Thương hiệu', path: '/thuoc-tinh/thuong-hieu' },
-      { label: 'Xuất xứ', path: '/thuoc-tinh/xuat-xu' },
-      { label: 'Chất liệu', path: '/thuoc-tinh/chat-lieu' },
-      { label: 'Kiểu dáng', path: '/thuoc-tinh/kieu-dang' },
-      { label: 'Loại giày', path: '/thuoc-tinh/loai-giay' },
-      { label: 'Kích cỡ', path: '/thuoc-tinh/kich-co' },
-      { label: 'Màu sắc', path: '/thuoc-tinh/mau-sac' },
-      { label: 'Thân giày', path: '/thuoc-tinh/than-giay' },
-      { label: 'Đế giày', path: '/thuoc-tinh/de-giay' },
+      { label: 'Thương hiệu', path: '/admin/thuoc-tinh/thuong-hieu' },
+      { label: 'Xuất xứ', path: '/admin/thuoc-tinh/xuat-xu' },
+      { label: 'Chất liệu', path: '/admin/thuoc-tinh/chat-lieu' },
+      { label: 'Kiểu dáng', path: '/admin/thuoc-tinh/kieu-dang' },
+      { label: 'Loại giày', path: '/admin/thuoc-tinh/loai-giay' },
+      { label: 'Kích cỡ', path: '/admin/thuoc-tinh/kich-co' },
+      { label: 'Màu sắc', path: '/admin/thuoc-tinh/mau-sac' },
+      { label: 'Thân giày', path: '/admin/thuoc-tinh/than-giay' },
+      { label: 'Đế giày', path: '/admin/thuoc-tinh/de-giay' },
     ],
   },
   {
     label: 'Quản lý khách hàng',
-    path: '/khach-hang',
+    path: '/admin/khach-hang',
     iconType: 'customers',
   },
   {
     label: 'Quản lý nhân viên',
-    path: '/nhan-vien',
+    path: '/admin/nhan-vien',
     iconType: 'employees',
-    adminOnly: true,
+  },
+  {
+    label: 'Quản lý lịch làm việc',
+    path: '/lich-lam-viec',
+    iconType: 'schedule',
+    children: [
+      { label: 'Lịch làm việc', path: '/lich-lam-viec' },
+      { label: 'Lịch ca làm', path: '/lich-ca-lam' },
+    ],
   },
   {
     label: 'Quản lý giảm giá',
-    path: '/phieu-giam-gia',
+    path: '/admin/phieu-giam-gia',
     iconType: 'discounts',
     children: [
-      { label: 'Phiếu giảm giá', path: '/phieu-giam-gia' },
-      { label: 'Đợt giảm giá', path: '/dot-giam-gia' },
+      { label: 'Phiếu giảm giá', path: '/admin/phieu-giam-gia' },
+      { label: 'Đợt giảm giá', path: '/admin/dot-giam-gia' },
     ],
   },
   {
     label: 'Chat khách hàng',
     path: '/chat',
     iconType: 'chat',
+  },
+  {
+    label: 'Giao ca',
+    path: '/ca',
+    iconType: 'cashRegister',
   },
 ]
 
@@ -88,11 +100,11 @@ const isOpen = (item) => {
 }
 
 const isChildActive = (child) => {
-  if (child.path === '/san-pham') {
-    return route.path === '/san-pham' || route.path === '/san-pham/them'
+  if (child.path === '/admin/san-pham') {
+    return route.path === '/admin/san-pham' || route.path === '/admin/san-pham/them'
   }
-  if (child.path === '/bien-the-san-pham') {
-    return route.path === '/bien-the-san-pham' || route.path.startsWith('/san-pham/bien-the')
+  if (child.path === '/admin/bien-the-san-pham') {
+    return route.path === '/admin/bien-the-san-pham' || route.path.startsWith('/admin/san-pham/bien-the')
   }
   return route.path === child.path || route.path.startsWith(child.path + '/')
 }
@@ -110,13 +122,13 @@ const toggle = (item) => {
   openState.value = { ...openState.value, [item.path]: !(openState.value[item.path] ?? auto) }
 }
 
-const visibleMenu = computed(() => menu.filter((item) => !item.adminOnly || laAdmin()))
+const visibleMenu = computed(() => menu)
 </script>
 
 <template>
   <aside class="sidebar-container" :class="{ 'is-collapsed': collapsed }">
     <div class="brand-wrapper">
-      <router-link to="/san-pham" class="brand-link">
+      <router-link to="/admin/san-pham" class="brand-link">
         <div class="brand-logo-card">
           <img src="/images/logo_polyshoes_final.png" alt="PolyShoes Logo" class="brand-img" />
         </div>
@@ -166,10 +178,17 @@ const visibleMenu = computed(() => menu.filter((item) => !item.adminOnly || laAd
                 <circle cx="12" cy="7" r="4" />
               </svg>
 
-              <svg v-else-if="item.iconType === 'chat'" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
+<svg v-else-if="item.iconType === 'chat'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+
+                <svg v-else-if="item.iconType === 'cashRegister'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="9" cy="21" r="1" />
+                  <circle cx="20" cy="21" r="1" />
+                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                </svg>
             </div>
             <span class="nav-text">{{ item.label }}</span>
           </router-link>
@@ -200,6 +219,14 @@ const visibleMenu = computed(() => menu.filter((item) => !item.adminOnly || laAd
                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
                   <line x1="7" y1="7" x2="7.01" y2="7" />
+                </svg>
+
+                <svg v-else-if="item.iconType === 'schedule'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
                 </svg>
               </div>
               <span class="nav-text">{{ item.label }}</span>

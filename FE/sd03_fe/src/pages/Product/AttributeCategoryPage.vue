@@ -1,13 +1,15 @@
 <script setup>
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import PaginationBar from '@/components/PaginationBar.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import { removeVietnameseTones } from '@/utils/format'
+import { API_ORIGIN } from '@/api/http'
 
 const route = useRoute()
 const router = useRouter()
-const API_BASE = 'http://localhost:8080/api/v1/attributes'
+const API_BASE = `${API_ORIGIN}/api/v1/attributes`
 
 const showToast = (msg, type = 'success') => {
   if (type === 'success') {
@@ -177,12 +179,6 @@ const paginatedItems = computed(() => {
 
 const getIndex = (indexOnPage) => {
   return (currentPage.value - 1) * pageSize.value + indexOnPage + 1
-}
-
-const goToPage = (p) => {
-  if (p >= 1 && p <= totalPages.value) {
-    currentPage.value = p
-  }
 }
 
 const activeTabInfo = computed(() => {
@@ -532,26 +528,19 @@ const executeDeleteFast = async (item) => {
         </table>
       </div>
 
-      <div v-if="currentTabItems.length > 0" class="table-card-foot">
-        <span class="foot-info">
-          Hiển thị <strong>{{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize,
-            currentTabItems.length) }}</strong> trong tổng số <strong>{{ currentTabItems.length }}</strong> {{
-              activeTabInfo.label.toLowerCase() }}
-        </span>
-
-        <div class="foot-pager" v-if="totalPages > 1">
-          <button class="pager-btn" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">
-            ‹ Trước
-          </button>
-          <button v-for="p in totalPages" :key="p" class="pager-btn num-btn" :class="{ active: currentPage === p }"
-            @click="goToPage(p)">
-            {{ p }}
-          </button>
-          <button class="pager-btn" :disabled="currentPage === totalPages" @click="goToPage(currentPage + 1)">
-            Sau ›
-          </button>
-        </div>
-      </div>
+      <PaginationBar
+        v-if="currentTabItems.length > 0"
+        :page="currentPage - 1"
+        :total-pages="totalPages"
+        :total-elements="currentTabItems.length"
+        :page-size="pageSize"
+        :from="paginatedItems.length ? (currentPage - 1) * pageSize + 1 : 0"
+        :to="(currentPage - 1) * pageSize + paginatedItems.length"
+        :sizes="pageSizeOptions"
+        label="thuộc tính"
+        @change="(p) => { currentPage = p + 1 }"
+        @size-change="(s) => { pageSize = s; currentPage = 1 }"
+      />
     </div>
 
     <transition name="fade">

@@ -1,16 +1,24 @@
 package com.example.datn.controller;
 
 import com.example.datn.config.QuyenGuard;
+import com.example.datn.dto.NhanVien.GuiEmailHangLoatRequest;
+import com.example.datn.dto.NhanVien.GuiEmailHangLoatResponse;
 import com.example.datn.dto.NhanVien.NhanVienDTO;
+import com.example.datn.dto.NhanVien.NhanVienExcelImportResult;
 import com.example.datn.dto.NhanVien.NhanVienFormDataResponse;
 import com.example.datn.dto.NhanVien.NhanVienRequest;
+import com.example.datn.dto.NhanVien.NhanVienImportPreviewResponse;
+import com.example.datn.dto.NhanVien.NhanVienImportKetQuaResponse;
 import com.example.datn.dto.Common.PageResponse;
+import com.example.datn.service.NhanVienImportService;
 import com.example.datn.service.NhanVienService;
 import java.time.LocalDate;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/nhan-vien")
@@ -28,7 +37,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class NhanVienController {
 
     private final NhanVienService nhanVienService;
+    private final NhanVienImportService nhanVienImportService;
     private final QuyenGuard quyenGuard;
+    private final com.example.datn.service.AuthService authService;
 
     @GetMapping
     public PageResponse<NhanVienDTO> list(
@@ -56,12 +67,40 @@ public class NhanVienController {
         return Map.of("ma", nhanVienService.maNhanVienTuDong(ten));
     }
 
+    @GetMapping("/excel/template")
+    public ResponseEntity<byte[]> downloadExcelTemplate() {
+        quyenGuard.canQuanLyNhanVien();
+        byte[] bytes = nhanVienService.downloadExcelTemplate();
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename=\"Mau_Import_Nhan_Vien.xlsx\"")
+            .contentType(MediaType.parseMediaType(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .body(bytes);
+    }
+
+    @PostMapping(value = "/excel/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<NhanVienExcelImportResult> importExcel(
+        @RequestParam("file") MultipartFile file
+    ) {
+        quyenGuard.canQuanLyNhanVien();
+        return ResponseEntity.ok(nhanVienService.importFromExcel(file));
+    }
+
     @GetMapping("/check-email")
     public Map<String, Boolean> checkEmail(
         @RequestParam String email,
         @RequestParam(required = false) Long excludeId
     ) {
         return Map.of("exists", nhanVienService.checkTrungEmail(email, excludeId));
+    }
+
+    @GetMapping("/check-sdt")
+    public Map<String, Boolean> checkSdt(
+        @RequestParam String soDienThoai,
+        @RequestParam(required = false) Long excludeId
+    ) {
+        return Map.of("exists", nhanVienService.checkTrungSdt(soDienThoai, excludeId));
     }
 
     @GetMapping("/{id}")
@@ -74,6 +113,41 @@ public class NhanVienController {
     public ResponseEntity<NhanVienDTO> create(@RequestBody NhanVienRequest request) {
         quyenGuard.canQuanLyNhanVien();
         return ResponseEntity.status(HttpStatus.CREATED).body(nhanVienService.create(request));
+    }
+
+    @PostMapping("/gui-email-hang-loat")
+    public GuiEmailHangLoatResponse guiEmailHangLoat(
+        @RequestBody GuiEmailHangLoatRequest request
+    ) {
+        quyenGuard.canQuanLyNhanVien();
+        return nhanVienService.guiEmailHangLoat(request);
+    }
+
+    @GetMapping("/import/mau")
+    public ResponseEntity<byte[]> taiFileMauImport() {
+        quyenGuard.canQuanLyNhanVien();
+        return ResponseEntity.ok()
+            .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename=\"mau-nhan-vien.xlsx\"")
+            .contentType(org.springframework.http.MediaType.parseMediaType(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .body(nhanVienImportService.taoFileMau());
+    }
+
+    @PostMapping("/import/xem-truoc")
+    public NhanVienImportPreviewResponse xemTruocImport(
+        @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+    ) {
+        quyenGuard.canQuanLyNhanVien();
+        return nhanVienImportService.xemTruoc(file);
+    }
+
+    @PostMapping("/import/xac-nhan")
+    public NhanVienImportKetQuaResponse xacNhanImport(
+        @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+    ) {
+        quyenGuard.canQuanLyNhanVien();
+        return nhanVienImportService.xacNhan(file);
     }
 
     @PutMapping("/{id}")
@@ -89,6 +163,16 @@ public class NhanVienController {
     ) {
         quyenGuard.canQuanLyNhanVien();
         return nhanVienService.capNhatTrangThai(id, trangThai);
+    }
+
+    @PutMapping("/{id}/doi-mat-khau")
+    public ResponseEntity<Map<String, String>> doiMatKhau(
+        @PathVariable Long id,
+        @RequestBody com.example.datn.dto.Auth.DoiMatKhauRequest request
+    ) {
+        quyenGuard.canQuanLyNhanVien();
+        authService.doiMatKhauNhanVien(id, request.getMatKhauMoi(), request.getXacNhan());
+        return ResponseEntity.ok(Map.of("message", "Đổi mật khẩu thành công"));
     }
 
     @DeleteMapping("/{id}")

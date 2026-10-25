@@ -1,5 +1,6 @@
 package com.example.datn.service;
 
+import com.example.datn.dto.CaLamViecDto;
 import com.example.datn.dto.HoaDon.ChiTietHoaDonDTO;
 import com.example.datn.dto.HoaDon.ChiTietHoaDonRequest;
 import com.example.datn.dto.SanPham.FormDataResponse;
@@ -9,6 +10,7 @@ import com.example.datn.dto.HoaDon.LichSuHoaDonDTO;
 import com.example.datn.dto.Common.PageResponse;
 import com.example.datn.dto.ShippingFeeRequest;
 import com.example.datn.entity.ChiTietHoaDon;
+import com.example.datn.entity.DiaChiKhachHang;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.entity.LichSuHoaDon;
@@ -19,6 +21,7 @@ import com.example.datn.entity.PhuongThucThanhToan;
 import com.example.datn.entity.SanPhamChiTiet;
 import com.example.datn.repository.ChiTietHoaDonRepository;
 import com.example.datn.repository.HoaDonRepository;
+import com.example.datn.repository.DiaChiKhachHangRepository;
 import com.example.datn.repository.KhachHangRepository;
 import com.example.datn.repository.LichSuHoaDonRepository;
 import com.example.datn.repository.LichSuSuDungPhieuGiamGiaRepository;
@@ -40,9 +43,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class HoaDonService {
@@ -61,6 +69,7 @@ public class HoaDonService {
     private static final int TEN_TOI_DA = 150;
     private static final int DIA_CHI_TOI_DA = 500;
     private static final int GHI_CHU_TOI_DA = 1000;
+    private static final int SO_LAN_GIAO_THAT_BAI_TU_DONG_HUY = 3;
 
     private static final String[][] TRANG_THAI_MAP = {
         {"CHO_XAC_NHAN", "Chờ xác nhận"},
@@ -68,6 +77,7 @@ public class HoaDonService {
         {"CHO_GIAO_HANG", "Chờ giao hàng"},
         {"DANG_GIAO_HANG", "Đang giao hàng"},
         {"DA_GIAO_HANG", "Đã giao hàng"},
+        {"GIAO_HANG_THAT_BAI", "Giao hàng thất bại"},
         {"DA_HOAN_THANH", "Đã hoàn thành"},
         {"DA_HUY", "Đã hủy"},
         {"DA_HOAN_TIEN", "Đã hoàn tiền"},
@@ -76,11 +86,12 @@ public class HoaDonService {
     private static final Map<String, List<String>> TRANSITION_MAP = new HashMap<>();
     static {
         TRANSITION_MAP.put("CHO_XAC_NHAN", List.of("DA_XAC_NHAN", "DA_HUY"));
-        TRANSITION_MAP.put("DA_XAC_NHAN", List.of("CHO_GIAO_HANG", "DA_HUY"));
-        TRANSITION_MAP.put("CHO_GIAO_HANG", List.of("DANG_GIAO_HANG", "DA_HUY"));
-        TRANSITION_MAP.put("DANG_GIAO_HANG", List.of("DA_GIAO_HANG"));
+        TRANSITION_MAP.put("DA_XAC_NHAN", List.of("CHO_GIAO_HANG"));
+        TRANSITION_MAP.put("CHO_GIAO_HANG", List.of("DANG_GIAO_HANG"));
+        TRANSITION_MAP.put("DANG_GIAO_HANG", List.of("DA_GIAO_HANG", "GIAO_HANG_THAT_BAI"));
         TRANSITION_MAP.put("DA_GIAO_HANG", List.of("DA_HOAN_THANH"));
         TRANSITION_MAP.put("DA_HOAN_THANH", List.of("DA_HOAN_TIEN"));
+        TRANSITION_MAP.put("GIAO_HANG_THAT_BAI", List.of("DANG_GIAO_HANG"));
         TRANSITION_MAP.put("DA_HUY", List.of());
         TRANSITION_MAP.put("DA_HOAN_TIEN", List.of());
     }
@@ -88,7 +99,7 @@ public class HoaDonService {
     private static final Map<String, List<String>> TRANSITION_MAP_POS = new HashMap<>();
     static {
         TRANSITION_MAP_POS.put("CHO_XAC_NHAN", List.of("DA_HOAN_THANH"));
-        TRANSITION_MAP_POS.put("DA_HOAN_THANH", List.of());
+        TRANSITION_MAP_POS.put("DA_HOAN_THANH", List.of("DA_HOAN_TIEN"));
         TRANSITION_MAP_POS.put("DA_HUY", List.of());
         TRANSITION_MAP_POS.put("DA_HOAN_TIEN", List.of());
     }
@@ -104,7 +115,11 @@ public class HoaDonService {
     private final SanPhamChiTietRepository sanPhamChiTietRepository;
     private final LichSuHoaDonRepository lichSuHoaDonRepository;
     private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository;
+    private final DiaChiKhachHangRepository diaChiKhachHangRepository;
     private final GHNService ghnService;
+
+    @Autowired
+    private GiaoCaService giaoCaService;
 
     public HoaDonService(
         HoaDonRepository hoaDonRepository,
@@ -116,6 +131,7 @@ public class HoaDonService {
         SanPhamChiTietRepository sanPhamChiTietRepository,
         LichSuHoaDonRepository lichSuHoaDonRepository,
         LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository,
+        DiaChiKhachHangRepository diaChiKhachHangRepository,
         GHNService ghnService
     ) {
         this.hoaDonRepository = hoaDonRepository;
@@ -127,6 +143,7 @@ public class HoaDonService {
         this.sanPhamChiTietRepository = sanPhamChiTietRepository;
         this.lichSuHoaDonRepository = lichSuHoaDonRepository;
         this.lichSuSuDungRepository = lichSuSuDungRepository;
+        this.diaChiKhachHangRepository = diaChiKhachHangRepository;
         this.ghnService = ghnService;
     }
 
@@ -303,6 +320,7 @@ public class HoaDonService {
     @Transactional
     public HoaDonDTO create(HoaDonRequest req) {
         validateHeader(req, null);
+        CaLamViecDto caDangMo = chuanBiTaoHdTaiQuay(req);
         xacDinhPhiVanChuyenOnline(req);
         PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
         if (phieu != null && req.getIdKhachHang() != null) {
@@ -310,13 +328,41 @@ public class HoaDonService {
         }
         HoaDon hoaDon = new HoaDon();
         fillHeader(hoaDon, req);
+        if (caDangMo != null) {
+            hoaDon.setIdCaLamViec(caDangMo.getId());
+        }
         List<DongTinh> lines = tinhToanVaLuu(hoaDon, req);
         hoaDon = hoaDonRepository.save(hoaDon);
+        luuDiaChiKhachHangVaoSo(hoaDon);
         luuCacDong(hoaDon, lines, req);
         if (phieu != null) {
             ghiLichSuSuDung(hoaDon, phieu);
         }
         return toFullDTO(hoaDon);
+    }
+
+    /**
+     * Mua hàng có địa chỉ nhận mà khách chưa có sổ địa chỉ -> lưu làm địa chỉ mặc định.
+     * Khách đã có địa chỉ thì không đụng vào.
+     */
+    private void luuDiaChiKhachHangVaoSo(HoaDon hoaDon) {
+        KhachHang khachHang = hoaDon.getKhachHang();
+        String diaChi = hoaDon.getDiaChiNhanHang();
+        if (khachHang == null || khachHang.getId() == null || isBlank(diaChi)) {
+            return;
+        }
+        if (diaChiKhachHangRepository.findFirstByKhachHangIdAndMacDinhTrue(khachHang.getId()).isPresent()) {
+            return;
+        }
+        DiaChiKhachHang diaChiMoi = new DiaChiKhachHang();
+        diaChiMoi.setKhachHang(khachHang);
+        diaChiMoi.setMaDiaChi(String.format("DC%03d-%02d", khachHang.getId(),
+            diaChiKhachHangRepository.countByKhachHangId(khachHang.getId()) + 1));
+        diaChiMoi.setTenChiChi(khachHang.getTenKhachHang());
+        diaChiMoi.setDiaChiCuThe(diaChi.trim());
+        diaChiMoi.setMacDinh(true);
+        diaChiMoi.setTrangThai(true);
+        diaChiKhachHangRepository.save(diaChiMoi);
     }
 
     @Transactional
@@ -397,6 +443,9 @@ public class HoaDonService {
         if (maMoi.equals(maHienTai)) {
             throw new IllegalArgumentException("Trạng thái không thay đổi");
         }
+        if ("DA_HUY".equals(maMoi) && !"CHO_XAC_NHAN".equals(maHienTai)) {
+            throw new IllegalArgumentException("Đơn hàng đã được xác nhận, không thể hủy đơn.");
+        }
         List<String> choPhep = chonBangChuyenTrangThai(hoaDon).getOrDefault(maHienTai, List.of());
         if (!choPhep.contains(maMoi)) {
             throw new IllegalArgumentException(
@@ -414,11 +463,26 @@ public class HoaDonService {
                     "Đơn online chưa đủ địa chỉ nhận hàng/phí vận chuyển để xác nhận");
             }
         }
+        boolean laLanThatBaiThuBa = "GIAO_HANG_THAT_BAI".equals(maMoi)
+            && lichSuHoaDonRepository.countByHoaDonIdAndTrangThai(id, "GIAO_HANG_THAT_BAI")
+                >= SO_LAN_GIAO_THAT_BAI_TU_DONG_HUY - 1;
         hoaDon.setTrangThai(maMoi);
         hoaDon.setNguoiCapNhat("admin");
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         HoaDon saved = hoaDonRepository.save(hoaDon);
         ghiLichSuTrangThai(saved, maHienTai, maMoi, ghiChuHopLe);
+        if (laLanThatBaiThuBa) {
+            hoaDon.setTrangThai("DA_HUY");
+            hoaDon.setNguoiCapNhat("admin");
+            hoaDon.setNgayCapNhat(LocalDateTime.now());
+            saved = hoaDonRepository.save(hoaDon);
+            ghiLichSuTrangThai(
+                saved,
+                "GIAO_HANG_THAT_BAI",
+                "DA_HUY",
+                "Tự động hủy sau " + SO_LAN_GIAO_THAT_BAI_TU_DONG_HUY + " lần giao hàng thất bại"
+            );
+        }
         return toFullDTO(saved);
     }
 
@@ -570,7 +634,11 @@ public class HoaDonService {
         if (isBlank(req.getTrangThai())) {
             throw new IllegalArgumentException("Trạng thái không được để trống");
         }
-        toMaTrangThai(req.getTrangThai());
+        String maTrangThaiKhoiTao = toMaTrangThai(req.getTrangThai());
+        if (!"CHO_XAC_NHAN".equals(maTrangThaiKhoiTao) && !"DA_HOAN_THANH".equals(maTrangThaiKhoiTao)) {
+            throw new IllegalArgumentException(
+                "Trạng thái khởi tạo không hợp lệ (Chờ xác nhận / Đã hoàn thành)");
+        }
         if (req.getIdNhanVien() == null) {
             throw new IllegalArgumentException("Vui lòng chọn nhân viên");
         }
@@ -729,6 +797,35 @@ public class HoaDonService {
             throw new IllegalArgumentException("Tài khoản nhân viên đã bị khóa hoặc ngừng hoạt động");
         }
         return nv;
+    }
+
+    private CaLamViecDto chuanBiTaoHdTaiQuay(HoaDonRequest req) {
+        if (!"TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon()))) {
+            return null;
+        }
+        Long idNhanVienSession = idNhanVienSession();
+        if (idNhanVienSession == null) {
+            return null;
+        }
+        req.setIdNhanVien(idNhanVienSession);
+        CaLamViecDto ca = giaoCaService.getDangMoOf(idNhanVienSession);
+        if (ca == null) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "CA_CHUA_MO: Chưa mở ca — vui lòng mở ca để bán tại quầy");
+        }
+        return ca;
+    }
+
+    private static Long idNhanVienSession() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof Long id)) {
+            return null;
+        }
+        boolean laNhanVienOrAdmin = auth.getAuthorities().stream().anyMatch(a ->
+            "ROLE_NHAN_VIEN".equals(a.getAuthority())
+                || "ROLE_ADMIN".equals(a.getAuthority()));
+        return laNhanVienOrAdmin ? id : null;
     }
 
     private KhachHang timKhachHang(Long id) {

@@ -12,6 +12,8 @@ public interface NhanVienRepository extends JpaRepository<NhanVien, Long> {
 
     boolean existsByMaNhanVien(String maNhanVien);
 
+    java.util.Optional<NhanVien> findByMaNhanVien(String maNhanVien);
+
     boolean existsByMaNhanVienAndIdNot(String maNhanVien, Long id);
 
     boolean existsByTenTaiKhoan(String tenTaiKhoan);
@@ -25,7 +27,13 @@ public interface NhanVienRepository extends JpaRepository<NhanVien, Long> {
 
     boolean existsByEmail(String email);
 
+    java.util.Optional<com.example.datn.entity.NhanVien> findByEmail(String email);
+
     boolean existsByEmailAndIdNot(String email, Long id);
+
+    boolean existsBySoDienThoai(String soDienThoai);
+
+    boolean existsBySoDienThoaiAndIdNot(String soDienThoai, Long id);
 
     @Query("SELECT COALESCE(MAX(n.id), 0) FROM NhanVien n")
     Long findMaxId();

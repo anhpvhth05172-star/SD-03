@@ -1,0 +1,11 @@
+package com.example.datn.dto.LichLamViec;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.time.LocalDate;
+
+public record LichLamViecRequest(
+    @NotBlank String maNhanVien,
+    @NotNull Long idCa,
+    @NotNull LocalDate ngay
+) {}

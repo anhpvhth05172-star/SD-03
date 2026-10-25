@@ -1,8 +1,11 @@
 package com.example.datn.service;
 
 import com.example.datn.dto.NhanVien.NhanVienDTO;
+import com.example.datn.dto.NhanVien.NhanVienExcelImportResult;
 import com.example.datn.dto.NhanVien.NhanVienFormDataResponse;
 import com.example.datn.dto.NhanVien.NhanVienRequest;
+import com.example.datn.dto.NhanVien.GuiEmailHangLoatRequest;
+import com.example.datn.dto.NhanVien.GuiEmailHangLoatResponse;
 import com.example.datn.dto.Common.PageResponse;
 import com.example.datn.entity.NhanVien;
 import com.example.datn.entity.VaiTro;
@@ -10,12 +13,33 @@ import com.example.datn.repository.NhanVienRepository;
 import com.example.datn.repository.VaiTroRepository;
 import com.example.datn.util.DoTuoi;
 import com.example.datn.util.MaNhanVien;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.web.multipart.MultipartFile;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
@@ -38,6 +62,9 @@ public class NhanVienService {
     public static final String THONG_BAO_TUOI ="Nhân viên phải đủ 18 tuổi.";
     private static final int SO_LAN_TAO = 5;
     private static final int SO_MA_TOI_DA = 1_000_000;
+    private static final int GUI_EMAIL_TOI_DA = 500;
+    /** Giới hạn kết nối SMTP đồng thời để tránh nhà cung cấp từ chối gửi hàng loạt. */
+    private static final int GUI_EMAIL_SONG_SONG = 2;
     private static final String[][] GIOI_TINH_MAP = {
         {"NAM", "Nam"},
         {"NU", "Nữ"},
@@ -47,6 +74,12 @@ public class NhanVienService {
     private static final Pattern SO_DIEN_THAI_PATTERN = Pattern.compile("^0\\d{9}$");
     private static final Pattern MA_NHAN_VIEN_PATTERN = Pattern.compile("^[A-Za-z][A-Za-z0-9]{0,24}$");
     private static final String[] MA_VAI_TRO_HOP_LE = {"ADMIN", "STAFF"};
+    private static final String[] COT_EXCEL = {
+        "Họ và tên", "Email", "Số điện thoại", "Giới tính", "Ngày sinh",
+        "Vai trò", "Địa chỉ", "Phường/Xã", "Quê quán", "Trạng thái"
+    };
+    private static final DateTimeFormatter NGAY_SINH_FORMAT =
+        DateTimeFormatter.ofPattern("d/M/uuuu").withResolverStyle(ResolverStyle.STRICT);
 
     private final NhanVienRepository nhanVienRepository;
     private final VaiTroRepository vaiTroRepository;
@@ -92,6 +125,14 @@ public class NhanVienService {
     }
 
     public NhanVienDTO create(NhanVienRequest req) {
+        return create(req, true);
+    }
+
+    /**
+     * Tạo nhân viên mới. Tham số {@code emailCapTaiKhoan} cho phép bỏ qua bước gửi email
+     * cấp tài khoản (dùng khi import hàng loạt, không gửi email cho từng dòng).
+     */
+    public NhanVienDTO create(NhanVienRequest req, boolean emailCapTaiKhoan) {
         if (req == null) {
             throw new IllegalArgumentException("Dữ liệu không hợp lệ");
         }
@@ -104,7 +145,7 @@ public class NhanVienService {
                     return toDTO(nhanVienRepository.saveAndFlush(nhanVien));
                 });
                 if (dto != null) {
-                    dto.setEmailGuiThanhCong(guiEmailCapTaiKhoan(dto, req));
+                    dto.setEmailGuiThanhCong(emailCapTaiKhoan && guiEmailCapTaiKhoan(dto, req));
                     return dto;
                 }
             } catch (DataIntegrityViolationException ex) {
@@ -147,6 +188,120 @@ public class NhanVienService {
         return excludeId == null
             ? nhanVienRepository.existsByEmail(cleanEmail)
             : nhanVienRepository.existsByEmailAndIdNot(cleanEmail, excludeId);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean checkTrungSdt(String soDienThoai, Long excludeId) {
+        if (soDienThoai == null || soDienThoai.trim().isEmpty()) {
+            return false;
+        }
+        String cleanSdt = soDienThoai.trim();
+        return excludeId == null
+            ? nhanVienRepository.existsBySoDienThoai(cleanSdt)
+            : nhanVienRepository.existsBySoDienThoaiAndIdNot(cleanSdt, excludeId);
+    }
+
+    /** Kiểm tra dữ liệu nhân viên không thay đổi dữ liệu (dùng cho xem trước import Excel). */
+    @Transactional(readOnly = true)
+    public void kiemTraHopLe(NhanVienRequest req, Long excludeId) {
+        validate(req, excludeId);
+    }
+
+    /**
+     * Gửi cùng một nội dung email (tiêu đề + nội dung) tới nhiều nhân viên.
+     * Nhân viên không có email hợp lệ hoặc gửi lỗi đều được ghi nhận lý do vào danh sách bỏ qua.
+     */
+    @Transactional(readOnly = true)
+    public GuiEmailHangLoatResponse guiEmailHangLoat(GuiEmailHangLoatRequest req) {
+        if (req == null || req.getIds() == null || req.getIds().isEmpty()) {
+            throw new IllegalArgumentException("Danh sách nhân viên nhận email không được để trống");
+        }
+        if (isBlank(req.getTieuDe())) {
+            throw new IllegalArgumentException("Tiêu đề email không được để trống");
+        }
+        checkLength(req.getTieuDe(), 200, "Tiêu đề email");
+        if (isBlank(req.getNoiDung())) {
+            throw new IllegalArgumentException("Nội dung email không được để trống");
+        }
+        checkLength(req.getNoiDung(), 5000, "Nội dung email");
+
+        List<Long> ids = req.getIds().stream()
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .toList();
+        if (ids.isEmpty()) {
+            throw new IllegalArgumentException("Danh sách nhân viên nhận email không hợp lệ");
+        }
+        if (ids.size() > GUI_EMAIL_TOI_DA) {
+            throw new IllegalArgumentException("Mỗi lần gửi tối đa " + GUI_EMAIL_TOI_DA + " nhân viên");
+        }
+
+        GuiEmailHangLoatResponse response = GuiEmailHangLoatResponse.builder()
+            .tongYeuCau(ids.size())
+            .build();
+
+        java.util.Map<Long, NhanVien> nhanVienMap = nhanVienRepository.findAllById(ids).stream()
+            .collect(java.util.stream.Collectors.toMap(NhanVien::getId, nv -> nv, (a, b) -> a));
+        String tieuDe = req.getTieuDe().trim();
+        String noiDung = req.getNoiDung().trim();
+
+        // 1. Kiểm tra dữ liệu trên thread chính (email hợp lệ, nhân viên tồn tại)
+        java.util.List<Long> canGui = new java.util.ArrayList<>();
+        for (Long id : ids) {
+            NhanVien nv = nhanVienMap.get(id);
+            if (nv == null) {
+                response.setThatBai(response.getThatBai() + 1);
+                response.getBoQua().add(
+                    new GuiEmailHangLoatResponse.BoQua(id, null, null, null, "Không tìm thấy nhân viên"));
+                continue;
+            }
+            if (isBlank(nv.getEmail()) || !EMAIL_PATTERN.matcher(nv.getEmail().trim()).matches()) {
+                response.setThatBai(response.getThatBai() + 1);
+                response.getBoQua().add(new GuiEmailHangLoatResponse.BoQua(
+                    id, nv.getMaNhanVien(), nv.getTenTaiKhoan(), nv.getEmail(),
+                    "Nhân viên không có địa chỉ email hợp lệ"));
+                continue;
+            }
+            canGui.add(id);
+        }
+
+        if (canGui.isEmpty()) {
+            return response;
+        }
+
+        // Giữ pool nhỏ để không mở quá nhiều kết nối SMTP cùng lúc.
+        java.util.concurrent.ExecutorService pool =
+            java.util.concurrent.Executors.newFixedThreadPool(Math.min(GUI_EMAIL_SONG_SONG, canGui.size()));
+        try {
+            java.util.List<java.util.concurrent.Future<Boolean>> futures = new java.util.ArrayList<>();
+            for (Long id : canGui) {
+                String email = nhanVienMap.get(id).getEmail().trim();
+                futures.add(pool.submit(() -> emailService.guiMailCustom(email, tieuDe, noiDung)));
+            }
+            for (int i = 0; i < futures.size(); i++) {
+                Long id = canGui.get(i);
+                NhanVien nv = nhanVienMap.get(id);
+                boolean guiOk = false;
+                try {
+                    guiOk = futures.get(i).get();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (java.util.concurrent.ExecutionException e) {
+                    log.error("Gửi email hàng loạt cho nhân viên {} gặp lỗi", id, e.getCause());
+                }
+                if (guiOk) {
+                    response.setGuiThanhCong(response.getGuiThanhCong() + 1);
+                } else {
+                    response.setThatBai(response.getThatBai() + 1);
+                    response.getBoQua().add(new GuiEmailHangLoatResponse.BoQua(
+                        id, nv.getMaNhanVien(), nv.getTenTaiKhoan(), nv.getEmail(),
+                        "Nhà cung cấp email từ chối hoặc có lỗi khi gửi"));
+                }
+            }
+        } finally {
+            pool.shutdown();
+        }
+        return response;
     }
 
     @Transactional
@@ -210,6 +365,190 @@ public class NhanVienService {
         return sinhMaNhanVien(ten);
     }
 
+    public byte[] downloadExcelTemplate() {
+        try (XSSFWorkbook workbook = new XSSFWorkbook();
+            ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("NhanVien");
+
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+            Row header = sheet.createRow(0);
+            for (int i = 0; i < COT_EXCEL.length; i++) {
+                Cell cell = header.createCell(i);
+                cell.setCellValue(COT_EXCEL[i]);
+                cell.setCellStyle(headerStyle);
+            }
+            sheet.createFreezePane(0, 1);
+            int[] rong = {30, 30, 15, 12, 14, 12, 30, 25, 25, 18};
+            for (int i = 0; i < rong.length; i++) {
+                sheet.setColumnWidth(i, rong[i] * 256);
+            }
+
+            Sheet huongDan = workbook.createSheet("Huong dan");
+            String[] noiDung = {
+                "HƯỚNG DẪN IMPORT NHÂN VIÊN",
+                "1. Chỉ điền dữ liệu vào sheet NhanVien, giữ nguyên tên các cột.",
+                "2. Ngày sinh dạng dd/MM/yyyy (ví dụ 15/01/1990), nhân viên phải đủ 18 tuổi.",
+                "3. Vai trò chỉ nhận ADMIN hoặc STAFF.",
+                "4. Trạng thái: 'Đang hoạt động' hoặc 'Đã khóa' (để trống = Đang hoạt động).",
+                "5. Email và số điện thoại phải duy nhất; dòng trùng sẽ bị báo lỗi, các dòng khác vẫn import.",
+                "6. Mã nhân viên tự động tạo, không cần điền.",
+                "7. Mật khẩu mặc định: 123456 (nhân viên tự đổi sau khi đăng nhập).",
+                "8. Nhân viên import không nhận mail cấp tài khoản, hãy gửi mật khẩu trực tiếp."
+            };
+            for (int i = 0; i < noiDung.length; i++) {
+                Row dong = huongDan.createRow(i);
+                dong.createCell(0).setCellValue(noiDung[i]);
+            }
+            huongDan.setColumnWidth(0, 110 * 256);
+
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new IllegalStateException("Không tạo được file mẫu Excel", e);
+        }
+    }
+
+    public NhanVienExcelImportResult importFromExcel(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("File Excel không được để trống");
+        }
+        NhanVienExcelImportResult kq = NhanVienExcelImportResult.builder().build();
+        try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
+            Sheet sheet = workbook.getSheetAt(0);
+            Row header = sheet == null ? null : sheet.getRow(0);
+            if (header == null) {
+                throw new IllegalArgumentException("File Excel thiếu dòng tiêu đề, vui lòng dùng file mẫu");
+            }
+            DataFormatter fmt = new DataFormatter();
+            Map<String, Integer> cot = new HashMap<>();
+            for (int i = 0; i < header.getLastCellNum(); i++) {
+                String ten = fmt.formatCellValue(header.getCell(i)).trim().toLowerCase();
+                if (!ten.isEmpty()) {
+                    cot.putIfAbsent(ten, i);
+                }
+            }
+            for (String tenCan : COT_EXCEL) {
+                if (!cot.containsKey(tenCan.toLowerCase())) {
+                    throw new IllegalArgumentException("File Excel thiếu cột: " + tenCan);
+                }
+            }
+
+            Map<String, Integer> emailDaCo = new HashMap<>();
+            Map<String, Integer> sdtDaCo = new HashMap<>();
+            for (int r = 1; r <= sheet.getLastRowNum(); r++) {
+                Row row = sheet.getRow(r);
+                if (row == null || isBlankRow(row, cot, fmt)) {
+                    continue;
+                }
+                int soDong = r + 1;
+                kq.setTongSoDong(kq.getTongSoDong() + 1);
+                try {
+                    NhanVienRequest req = docDong(row, cot, fmt, soDong, emailDaCo, sdtDaCo);
+                    create(req, false);
+                    kq.setSoDongThanhCong(kq.getSoDongThanhCong() + 1);
+                } catch (IllegalArgumentException e) {
+                    kq.setSoDongThatBai(kq.getSoDongThatBai() + 1);
+                    kq.getDanhSachLoi().add("Dòng " + soDong + ": " + e.getMessage());
+                } catch (RuntimeException e) {
+                    log.warn("Import nhân viên dòng {} thất bại", soDong, e);
+                    kq.setSoDongThatBai(kq.getSoDongThatBai() + 1);
+                    kq.getDanhSachLoi().add("Dòng " + soDong + ": không lưu được dữ liệu");
+                }
+            }
+            return kq;
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException(
+                "Không đọc được file Excel, vui lòng dùng file .xlsx hoặc .xls từ file mẫu", e);
+        }
+    }
+
+    private NhanVienRequest docDong(Row row, Map<String, Integer> cot, DataFormatter fmt, int soDong,
+        Map<String, Integer> emailDaCo, Map<String, Integer> sdtDaCo) {
+        NhanVienRequest req = new NhanVienRequest();
+        req.setTenTaiKhoan(docText(row, cot.get(COT_EXCEL[0].toLowerCase()), fmt));
+        String email = docText(row, cot.get(COT_EXCEL[1].toLowerCase()), fmt);
+        if (!isBlank(email)) {
+            Integer truoc = emailDaCo.putIfAbsent(email.toLowerCase(), soDong);
+            if (truoc != null) {
+                throw new IllegalArgumentException(
+                    "Email '" + email + "' bị trùng với dòng " + truoc + " trong file");
+            }
+        }
+        req.setEmail(email);
+        String sdt = docText(row, cot.get(COT_EXCEL[2].toLowerCase()), fmt);
+        if (!isBlank(sdt)) {
+            Integer truoc = sdtDaCo.putIfAbsent(sdt, soDong);
+            if (truoc != null) {
+                throw new IllegalArgumentException(
+                    "Số điện thoại '" + sdt + "' bị trùng với dòng " + truoc + " trong file");
+            }
+        }
+        req.setSoDienThoai(sdt);
+        req.setGioiTinh(docText(row, cot.get(COT_EXCEL[3].toLowerCase()), fmt));
+        req.setNgaySinh(docNgaySinh(row.getCell(cot.get(COT_EXCEL[4].toLowerCase())), fmt));
+        String maVaiTro = docText(row, cot.get(COT_EXCEL[5].toLowerCase()), fmt);
+        if (!isBlank(maVaiTro)) {
+            VaiTro vaiTro = vaiTroRepository
+                .findByMaVaiTroIn(List.of(maVaiTro.trim().toUpperCase()))
+                .stream().findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                    "Vai trò không hợp lệ: " + maVaiTro + " (chỉ ADMIN hoặc STAFF)"));
+            req.setIdVaiTro(vaiTro.getId());
+        }
+        req.setDiaChiCuThe(docText(row, cot.get(COT_EXCEL[6].toLowerCase()), fmt));
+        req.setPhuong(docText(row, cot.get(COT_EXCEL[7].toLowerCase()), fmt));
+        req.setQueQuan(docText(row, cot.get(COT_EXCEL[8].toLowerCase()), fmt));
+        String trangThai = docText(row, cot.get(COT_EXCEL[9].toLowerCase()), fmt);
+        req.setTrangThai(isBlank(trangThai) ? null : toTrangThai(trangThai));
+        req.setNguoiCapNhat("import-excel");
+        return req;
+    }
+
+    private static String docText(Row row, Integer viTri, DataFormatter fmt) {
+        if (viTri == null) {
+            return null;
+        }
+        Cell cell = row.getCell(viTri);
+        return cell == null ? null : blankToNull(fmt.formatCellValue(cell));
+    }
+
+    private static LocalDate docNgaySinh(Cell cell, DataFormatter fmt) {
+        if (cell == null) {
+            return null;
+        }
+        if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
+            return cell.getDateCellValue().toInstant()
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+        }
+        String text = blankToNull(fmt.formatCellValue(cell));
+        if (text == null) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(text, NGAY_SINH_FORMAT);
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("Ngày sinh không hợp lệ, dùng dd/MM/yyyy (ví dụ 15/01/1990)");
+        }
+    }
+
+    private static boolean isBlankRow(Row row, Map<String, Integer> cot, DataFormatter fmt) {
+        for (Integer viTri : cot.values()) {
+            Cell cell = row.getCell(viTri);
+            if (cell != null && !isBlank(fmt.formatCellValue(cell))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private void validate(NhanVienRequest req, Long excludeId) {
         boolean taoMoi = excludeId == null;
         if (req == null || isBlank(req.getTenTaiKhoan())) {
@@ -271,6 +610,12 @@ public class NhanVienService {
             String sdt = req.getSoDienThoai().trim();
             if (!SO_DIEN_THAI_PATTERN.matcher(sdt).matches()) {
                 throw new IllegalArgumentException("Số điện thoại phải bắt đầu bằng số 0 và gồm đúng 10 chữ số");
+            }
+            boolean trungSdt = taoMoi
+                ? nhanVienRepository.existsBySoDienThoai(sdt)
+                : nhanVienRepository.existsBySoDienThoaiAndIdNot(sdt, excludeId);
+            if (trungSdt) {
+                throw new IllegalArgumentException("Số điện thoại đã được sử dụng");
             }
         }
         if (taoMoi && req.getNgaySinh() == null) {

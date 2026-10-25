@@ -13,6 +13,7 @@ import com.example.datn.dto.HoaDon.HoaDonDTO;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.LichSuHoaDon;
 import com.example.datn.repository.ChiTietHoaDonRepository;
+import com.example.datn.repository.DiaChiKhachHangRepository;
 import com.example.datn.repository.HoaDonRepository;
 import com.example.datn.repository.KhachHangRepository;
 import com.example.datn.repository.LichSuHoaDonRepository;
@@ -41,6 +42,8 @@ class HoaDonTrangThaiTest {
     private final LichSuHoaDonRepository lichSuHoaDonRepository = mock(LichSuHoaDonRepository.class);
     private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository =
         mock(LichSuSuDungPhieuGiamGiaRepository.class);
+    private final DiaChiKhachHangRepository diaChiKhachHangRepository =
+        mock(DiaChiKhachHangRepository.class);
     private final GHNService ghnService = mock(GHNService.class);
 
     private final HoaDonService service = new HoaDonService(
@@ -53,6 +56,7 @@ class HoaDonTrangThaiTest {
         sanPhamChiTietRepository,
         lichSuHoaDonRepository,
         lichSuSuDungRepository,
+        diaChiKhachHangRepository,
         ghnService
     );
 
@@ -335,13 +339,13 @@ class HoaDonTrangThaiTest {
     }
 
     @Test
-    void getTiepTheoPos_DaHoanThanh_Rong() {
+    void getTiepTheoPos_DaHoanThanh_CoHoanTien() {
         when(hoaDonRepository.findById(HD_ID)).thenReturn(Optional.of(pos("DA_HOAN_THANH")));
         when(chiTietHoaDonRepository.findByHoaDonId(anyLong())).thenReturn(List.of());
 
         HoaDonDTO dto = service.get(HD_ID);
 
-        assertThat(dto.getTrangThaiTiepTheo()).isEmpty();
+        assertThat(dto.getTrangThaiTiepTheo()).containsExactly("Đã hoàn tiền");
     }
 
     @Test

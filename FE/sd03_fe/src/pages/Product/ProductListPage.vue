@@ -2,11 +2,19 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import SearchableSelect from '@/components/SearchableSelect.vue'
+<<<<<<< HEAD
 import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 import { formatNumber } from '@/utils/format'
+=======
+import PaginationBar from '@/components/PaginationBar.vue'
+import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
+import { formatNumber, formatVnd } from '@/utils/format'
+import { exportExcel } from '@/utils/export'
+import { API_ORIGIN } from '@/api/http'
+>>>>>>> 0781738bb1a85548501dd480700da28576f66d6c
 
 const router = useRouter()
-const API_BASE = 'http://localhost:8080/api/v1'
+const API_BASE = `${API_ORIGIN}/api/v1`
 
 const navigateToAdd = () => {
   router.push('/san-pham/them')
@@ -20,6 +28,15 @@ const currentPage = ref(0)
 const pageSize = ref(10)
 const pageSizeOptions = [5, 10, 20, 50]
 
+<<<<<<< HEAD
+=======
+const activeTab = ref('ALL')
+const statusTabs = [
+  { value: 'ALL', label: 'Tất cả' },
+  { value: 'ACTIVE', label: 'Đang kinh doanh' },
+  { value: 'INACTIVE', label: 'Ngừng kinh doanh' },
+]
+>>>>>>> 0781738bb1a85548501dd480700da28576f66d6c
 const selectedIds = ref([])
 const posPendingOrders = ref([])
 
@@ -251,6 +268,15 @@ const reloadAllData = () => {
   fetchProducts()
 }
 
+<<<<<<< HEAD
+=======
+const selectTab = (tab) => {
+  activeTab.value = tab || 'ALL'
+  currentPage.value = 0
+  fetchProducts()
+}
+
+>>>>>>> 0781738bb1a85548501dd480700da28576f66d6c
 const onFilterChange = () => {
   currentPage.value = 0
   fetchProducts()
@@ -285,6 +311,12 @@ const changePage = (p) => {
   }
 }
 
+const onSizeChange = (s) => {
+  pageSize.value = s
+  currentPage.value = 0
+  fetchProducts()
+}
+
 const formatPrice = (val) => {
   if (val === null || val === undefined || isNaN(val)) return '0 ₫'
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val)
@@ -314,7 +346,7 @@ const toggleStatus = async (item) => {
   const oldStatus = item.trangThai
   const newStatus = !oldStatus
   item.trangThai = newStatus
-  const statusLabel = newStatus ? 'Kinh doanh' : 'Ngưng kinh doanh'
+  const statusLabel = newStatus ? 'Đang kinh doanh' : 'Ngừng kinh doanh'
   const code = item.maSanPham || `SP0${item.id}`
 
   try {
@@ -336,14 +368,7 @@ const toggleStatus = async (item) => {
 }
 
 const viewProductDetails = (item) => {
-  router.push({
-    path: '/san-pham/bien-the',
-    query: {
-      idSanPham: item.id,
-      maSanPham: item.maSanPham || `SP0${item.id}`,
-      tenSanPham: item.tenSanPham
-    }
-  })
+  router.push('/san-pham/bien-the')
 }
 
 const isExporting = ref(false)
@@ -374,166 +399,27 @@ const exportToExcel = async () => {
       return
     }
 
-    let xml = `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:html="http://www.w3.org/TR/REC-html40">
- <Styles>
-  <Style ss:ID="Default" ss:Name="Normal">
-   <Alignment ss:Vertical="Center"/>
-   <Borders/>
-   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#1E293B"/>
-   <Interior/>
-   <NumberFormat/>
-   <Protection/>
-  </Style>
-  <Style ss:ID="Header">
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-   </Borders>
-   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#FFFFFF" ss:Bold="1"/>
-   <Interior ss:Color="#166534" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="RowEven">
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-   <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="RowOdd">
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-   <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="CenterCell">
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-  </Style>
-  <Style ss:ID="ActiveStatus">
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#059669" ss:Bold="1"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-  </Style>
-  <Style ss:ID="PriceCell">
-    <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
-    <Font ss:FontName="Arial" ss:Size="10" ss:Color="#0F172A" ss:Bold="1"/>
-    <NumberFormat ss:Format="#,##0"/>
-    <Borders>
-     <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-     <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-     <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-     <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    </Borders>
-  </Style>
-  <Style ss:ID="InactiveStatus">
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Font ss:FontName="Arial" ss:Size="11" ss:Color="#DC2626" ss:Bold="1"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-   </Borders>
-  </Style>
- </Styles>
- <Worksheet ss:Name="Danh sách sản phẩm">
-  <Table ss:DefaultRowHeight="24">
-   <Column ss:Width="40"/>
-   <Column ss:Width="110"/>
-   <Column ss:Width="230"/>
-   <Column ss:Width="130"/>
-   <Column ss:Width="130"/>
-   <Column ss:Width="100"/>
-   <Column ss:Width="140"/>
-   <Column ss:Width="90"/>
-   <Column ss:Width="160"/>
-   <Column ss:Width="130"/>
-   <Row ss:Height="28">
-    <Cell ss:StyleID="Header"><Data ss:Type="String">STT</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Mã sản phẩm</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Tên sản phẩm</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Thương hiệu</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Loại giày</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Số lượng</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Giá bán</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Đối tượng</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Tính năng</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Trạng thái</Data></Cell>
-   </Row>`
-
-    const escapeXml = (str) => {
-      if (!str) return ''
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;')
-    }
-
-    itemsToExport.forEach((item, index) => {
-      const styleId = index % 2 === 0 ? 'RowEven' : 'RowOdd'
-      const statusStyle = item.trangThai !== false ? 'ActiveStatus' : 'InactiveStatus'
-      const statusText = item.trangThai !== false ? 'Kinh doanh' : 'Ngưng kinh doanh'
-      const code = item.maSanPham || `SP0${item.id}`
-
-      xml += `
-   <Row ss:Height="22">
-    <Cell ss:StyleID="CenterCell"><Data ss:Type="Number">${index + 1}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(code)}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tenSanPham)}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tenThuongHieu || '---')}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tenLoaiGiay || '---')}</Data></Cell>
-    <Cell ss:StyleID="CenterCell"><Data ss:Type="Number">${item.soLuong !== undefined ? item.soLuong : 0}</Data></Cell>
-    <Cell ss:StyleID="PriceCell"><Data ss:Type="Number">${item.giaBan || 0}</Data></Cell>
-    <Cell ss:StyleID="CenterCell"><Data ss:Type="String">${escapeXml(item.doiTuong || 'Unisex')}</Data></Cell>
-    <Cell ss:StyleID="${styleId}"><Data ss:Type="String">${escapeXml(item.tinhNang || '')}</Data></Cell>
-    <Cell ss:StyleID="${statusStyle}"><Data ss:Type="String">${statusText}</Data></Cell>
-   </Row>`
-    })
-
-    xml += `
-  </Table>
- </Worksheet>
-</Workbook>`
-
-    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
     const now = new Date()
     const pad = (n) => String(n).padStart(2, '0')
     const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-    link.href = url
-    link.download = `Danh_sach_san_pham_${dateStr}.xls`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
 
+    await exportExcel(
+      `Danh_sach_san_pham_${dateStr}.xlsx`,
+      ['STT', 'Mã sản phẩm', 'Tên sản phẩm', 'Thương hiệu', 'Loại giày', 'Số lượng', 'Giá bán', 'Đối tượng', 'Tính năng', 'Trạng thái'],
+      itemsToExport.map((item, index) => [
+        index + 1,
+        item.maSanPham || `SP0${item.id}`,
+        item.tenSanPham || '',
+        item.tenThuongHieu || '',
+        item.tenLoaiGiay || '',
+        item.soLuong !== undefined ? item.soLuong : 0,
+        item.giaBan || 0,
+        item.doiTuong || 'Unisex',
+        item.tinhNang || '',
+        item.trangThai !== false ? 'Đang kinh doanh' : 'Ngừng kinh doanh',
+      ]),
+      { sheetName: 'Danh sách sản phẩm' }
+    )
     showToastNotice('Thành công', `Đã xuất ${itemsToExport.length} sản phẩm ra file Excel!`, 'success')
   } catch (err) {
     console.error('Lỗi xuất Excel:', err)
@@ -702,11 +588,15 @@ onUnmounted(() => {
 
     <div class="filter-box">
       <div class="status-tabs-row">
-        <div class="status-combobox-wrap">
-          <label class="status-combobox-label">Trạng thái:</label>
-          <SearchableSelect v-model="filters.trangThai" :options="statusOptions" label-key="label" value-key="value"
-            placeholder="Tất cả trạng thái" search-placeholder="Tìm trạng thái..." :allow-clear="true"
-            @change="onFilterChange" class="status-combobox-select" />
+        <div class="tabs-group">
+          <SearchableSelect
+            v-model="activeTab"
+            :options="statusTabs"
+            label-key="label"
+            value-key="value"
+            placeholder="Trạng thái"
+            @change="selectTab"
+          />
         </div>
 
         <div class="page-actions">
@@ -794,12 +684,6 @@ onUnmounted(() => {
           <span class="items-count-pill">{{ products.length }}/{{ totalElements }} sản phẩm</span>
           <span v-if="selectedIds.length > 0" class="selected-badge">Đã chọn: {{ selectedIds.length }}</span>
         </div>
-        <div class="head-right">
-          <span class="page-size-label">Hiển thị:</span>
-          <select v-model="pageSize" class="page-size-select" @change="fetchProducts">
-            <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }} bản ghi/trang</option>
-          </select>
-        </div>
       </div>
 
       <div class="table-responsive">
@@ -847,13 +731,12 @@ onUnmounted(() => {
               </td>
               <td class="text-center">
                 <span class="simple-status-badge" :class="item.trangThai ? 'status-active' : 'status-inactive'">
-                  {{ item.trangThai ? 'Kinh doanh' : 'Ngưng kinh doanh' }}
+                  {{ item.trangThai ? 'Đang kinh doanh' : 'Ngừng kinh doanh' }}
                 </span>
               </td>
               <td class="text-center">
                 <div class="action-btns">
-                  <label class="switch-toggle"
-                    :title="item.trangThai ? 'Click để ngưng kinh doanh' : 'Click để bật kinh doanh'">
+                  <label class="switch-toggle" :title="item.trangThai ? 'Click để ngừng kinh doanh' : 'Click để bật kinh doanh'">
                     <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
                     <span class="slider round"></span>
                   </label>
@@ -914,24 +797,141 @@ onUnmounted(() => {
       </div>
 
       <div v-if="totalPages > 1" class="table-card-foot">
-        <span class="foot-info">
-          Hiển thị <strong>{{ products.length ? currentPage * pageSize + 1 : 0 }} - {{ currentPage * pageSize +
-            products.length }}</strong> trong tổng số <strong>{{ totalElements }}</strong> mặt hàng
-        </span>
-        <div class="foot-pager">
-          <button class="pager-btn" :disabled="currentPage === 0" @click="changePage(currentPage - 1)">
-            ‹ Trước
-          </button>
-          <button v-for="p in totalPages" :key="p" class="pager-btn num-btn" :class="{ active: p - 1 === currentPage }"
-            @click="changePage(p - 1)">
-            {{ p }}
-          </button>
-          <button class="pager-btn" :disabled="currentPage >= totalPages - 1" @click="changePage(currentPage + 1)">
-            Sau ›
-          </button>
-        </div>
+        <PaginationBar
+          :page="currentPage"
+          :total-pages="totalPages"
+          :total-elements="totalElements"
+          :page-size="pageSize"
+          :sizes="pageSizeOptions"
+          :from="products.length ? currentPage * pageSize + 1 : 0"
+          :to="currentPage * pageSize + products.length"
+          label="sản phẩm"
+          @change="changePage"
+          @size-change="onSizeChange"
+        />
       </div>
     </div>
+
+    <transition name="modal-fade">
+      <div v-if="isEditModalOpen" class="modal-overlay" @click.self="isEditModalOpen = false">
+        <div class="modal-dialog">
+          <div class="modal-header">
+            <div class="modal-title-group">
+              <h3 class="modal-title">Chỉnh sửa thông tin sản phẩm</h3>
+              <span class="modal-code-tag">{{ editForm.maSanPham }}</span>
+            </div>
+            <button class="modal-close" @click="isEditModalOpen = false">×</button>
+          </div>
+
+          <div class="modal-body">
+            <div class="edit-grid">
+              <div class="form-group span-2">
+                <label class="form-label">Tên sản phẩm <span class="req">*</span></label>
+                <input v-model="editForm.tenSanPham" type="text" class="modal-input"
+                  :class="{ 'has-error': editErrors.tenSanPham }" placeholder="Nhập tên sản phẩm..." />
+                <span v-if="editErrors.tenSanPham" class="err-msg">{{ editErrors.tenSanPham }}</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Thương hiệu <span class="req">*</span></label>
+                <SearchableSelect v-model="editForm.idThuongHieu" :options="brands" label-key="ten" value-key="id"
+                  placeholder="-- Chọn thương hiệu --" search-placeholder="Tìm thương hiệu..."
+                  :has-error="!!editErrors.idThuongHieu" />
+                <span v-if="editErrors.idThuongHieu" class="err-msg">{{ editErrors.idThuongHieu }}</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Loại giày <span class="req">*</span></label>
+                <SearchableSelect v-model="editForm.idLoaiGiay" :options="categories" label-key="ten" value-key="id"
+                  placeholder="-- Chọn loại giày --" search-placeholder="Tìm loại giày..."
+                  :has-error="!!editErrors.idLoaiGiay" />
+                <span v-if="editErrors.idLoaiGiay" class="err-msg">{{ editErrors.idLoaiGiay }}</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Chất liệu <span class="req">*</span></label>
+                <SearchableSelect v-model="editForm.idChatLieu" :options="materials" label-key="ten" value-key="id"
+                  placeholder="-- Chọn chất liệu --" search-placeholder="Tìm chất liệu..."
+                  :has-error="!!editErrors.idChatLieu" />
+                <span v-if="editErrors.idChatLieu" class="err-msg">{{ editErrors.idChatLieu }}</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Kiểu dáng <span class="req">*</span></label>
+                <SearchableSelect v-model="editForm.idKieuDang" :options="styles" label-key="ten" value-key="id"
+                  placeholder="-- Chọn kiểu dáng --" search-placeholder="Tìm kiểu dáng..."
+                  :has-error="!!editErrors.idKieuDang" />
+                <span v-if="editErrors.idKieuDang" class="err-msg">{{ editErrors.idKieuDang }}</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Xuất xứ <span class="req">*</span></label>
+                <SearchableSelect v-model="editForm.idXuatXu" :options="origins" label-key="ten" value-key="id"
+                  placeholder="-- Chọn xuất xứ --" search-placeholder="Tìm xuất xứ..."
+                  :has-error="!!editErrors.idXuatXu" />
+                <span v-if="editErrors.idXuatXu" class="err-msg">{{ editErrors.idXuatXu }}</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Đối tượng sử dụng</label>
+                <SearchableSelect v-model="editForm.doiTuong" :options="[
+                  { value: 'Nam', label: 'Nam' },
+                  { value: 'Nữ', label: 'Nữ' },
+                  { value: 'Unisex', label: 'Tất cả (Unisex)' }
+                ]" label-key="label" value-key="value" placeholder="Chọn đối tượng..." :allow-clear="false" />
+              </div>
+
+              <div class="form-group span-2 ai-magic-card">
+                <div class="ai-magic-content">
+                  <div class="ai-magic-info">
+                    <span class="ai-badge">Gemini AI Copilot</span>
+                    <span class="ai-magic-desc">Tự động sinh tính năng nổi bật và bài viết mô tả sản phẩm chuẩn
+                      SEO</span>
+                  </div>
+                  <button type="button" class="btn-ai-generate" :disabled="isGeneratingAi"
+                    @click="generateAiContent(editForm)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2.2">
+                      <path
+                        d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83">
+                      </path>
+                    </svg>
+                    {{ isGeneratingAi ? 'Đang tạo...' : '✨ Sinh mô tả bằng AI' }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="form-group span-2">
+                <label class="form-label">Tính năng nổi bật</label>
+                <input v-model="editForm.tinhNang" type="text" class="modal-input"
+                  placeholder="Ví dụ: Êm ái, Chống trượt, Thoáng khí..." />
+              </div>
+
+              <div class="form-group span-2">
+                <label class="form-label">Mô tả sản phẩm</label>
+                <textarea v-model="editForm.moTa" class="modal-textarea" rows="3"
+                  placeholder="Nhập mô tả chi tiết sản phẩm..."></textarea>
+              </div>
+
+              <div class="form-group span-2 switch-row">
+                <label class="form-label mb-0">Trạng thái (Bật: Đang kinh doanh / Tắt: Ngừng kinh doanh)</label>
+                <label class="switch-toggle">
+                  <input type="checkbox" v-model="editForm.trangThai" />
+                  <span class="slider round"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="isEditModalOpen = false">Hủy bỏ</button>
+            <button class="btn btn-primary" :disabled="isUpdating" @click="submitQuickEdit">
+              {{ isUpdating ? 'Đang lưu...' : 'Lưu thay đổi' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <transition name="modal-fade">
       <div v-if="isQuickAddModalOpen" class="modal-overlay" @click.self="isQuickAddModalOpen = false">

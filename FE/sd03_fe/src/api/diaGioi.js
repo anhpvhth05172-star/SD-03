@@ -222,47 +222,52 @@ export const layPhuongXa = async (ds, tinh) => {
   const subCodes = tinh.subCodes && tinh.subCodes.length ? tinh.subCodes : [tinh.code]
   const mapTen = new Map()
 
-  try {
-    for (const subCode of subCodes) {
-      if (typeof subCode === 'number' || !isNaN(Number(subCode))) {
-        try {
-          const resV2 = await fetch(`https://provinces.open-api.vn/api/v2/p/${subCode}?depth=2`)
-          if (resV2.ok) {
-            const dataV2 = await resV2.json()
-            if (dataV2 && Array.isArray(dataV2.wards) && dataV2.wards.length > 0) {
-              for (const w of dataV2.wards) {
-                if (w.name && !mapTen.has(w.name)) {
-                  mapTen.set(w.name, { code: w.code, ten: w.name })
-                }
-              }
-              break
-            }
+  const fetchSub = async (subCode) => {
+    if (!(typeof subCode === 'number' || !isNaN(Number(subCode)))) return null
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 10000)
+    try {
+      // Ưu tiên api v2 nếu có
+      try {
+        const resV2 = await fetch(`https://provinces.open-api.vn/api/v2/p/${subCode}?depth=2`, { signal: ctrl.signal })
+        if (resV2.ok) {
+          const dataV2 = await resV2.json()
+          if (dataV2 && Array.isArray(dataV2.wards) && dataV2.wards.length > 0) {
+            return { districts: [{ wards: dataV2.wards }] }
           }
-          const res = await fetch(`https://provinces.open-api.vn/api/v1/p/${subCode}?depth=3`)
-          if (res.ok) {
-            const data = await res.json()
-            if (data.districts && Array.isArray(data.districts)) {
-              for (const d of data.districts) {
-                // 1. Thêm Thành phố trực thuộc tỉnh hoặc Thị xã (nếu có)
-                if (d.name && (d.name.startsWith('Thành phố') || d.name.startsWith('Thị xã'))) {
-                  if (!mapTen.has(d.name)) {
-                    mapTen.set(d.name, { code: d.code, ten: d.name })
-                  }
-                }
+        }
+      } catch {}
 
-                // 2. Thêm tất cả các Xã, Phường, Thị trấn từ wards
-                if (d.wards && Array.isArray(d.wards)) {
-                  for (const w of d.wards) {
-                    if (w.name && !mapTen.has(w.name)) {
-                      mapTen.set(w.name, { code: w.code, ten: w.name })
-                    }
-                  }
-                }
-              }
+      const res = await fetch(`https://provinces.open-api.vn/api/v1/p/${subCode}?depth=3`, { signal: ctrl.signal })
+      if (!res.ok) return null
+      return await res.json()
+    } catch {
+      // Bo qua loi subCode rieng le (timeout/quet mang...)
+      return null
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  try {
+    const results = await Promise.all(subCodes.map(fetchSub))
+    for (const data of results) {
+      if (!data || !Array.isArray(data.districts)) continue
+      for (const d of data.districts) {
+        // 1. Them Thanh pho truc thuoc tinh hoac Thi xa (neu co)
+        if (d.name && (d.name.startsWith('Thành phố') || d.name.startsWith('Thị xã'))) {
+          if (!mapTen.has(d.name)) {
+            mapTen.set(d.name, { code: d.code, ten: d.name })
+          }
+        }
+
+        // 2. Them tat ca cac Xa, Phuong, Thi tran tu wards
+        if (d.wards && Array.isArray(d.wards)) {
+          for (const w of d.wards) {
+            if (w.name && !mapTen.has(w.name)) {
+              mapTen.set(w.name, { code: w.code, ten: w.name })
             }
           }
-        } catch {
-          // Bỏ qua lỗi subCode riêng lẻ
         }
       }
     }
@@ -283,7 +288,10 @@ export const layPhuongXa = async (ds, tinh) => {
   // Sắp xếp theo bảng chữ cái tiếng Việt
   danhSachTong.sort((a, b) => a.ten.localeCompare(b.ten, 'vi'))
 
-  cacheCon.set(cacheKey, danhSachTong)
+  // Chỉ cache kết quả có dữ liệu - tránh cache rỗng khi mạng lỗi khiến dropdown trống vĩnh viễn
+  if (danhSachTong.length > 0) {
+    cacheCon.set(cacheKey, danhSachTong)
+  }
   return danhSachTong
 }
 

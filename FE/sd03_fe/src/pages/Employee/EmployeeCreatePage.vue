@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { DS_34_TINH_THANH, layDiaGioi, layPhuongXa, phanTichChuoiCccd, phanTichDiaChiCccd, timTinh } from '@/api/diaGioi'
 import {
   checkEmployeeEmail,
+  checkEmployeeSdt,
   createEmployee,
   getEmployee,
   getEmployeeFormData,
@@ -14,6 +15,7 @@ import {
 import { setFlash } from '@/utils/flash'
 import { datVaiTro, layNguoiDung, vaiTroHienTai } from '@/utils/session'
 import { notifyConfirm, notifyError, notifySuccess, notifyWarning } from '@/utils/notify'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import {
   batBuoc,
   chonBatBuoc,
@@ -47,6 +49,7 @@ const vaiTros = ref([])
 const daNopForm = ref(false)
 const ngaySinhDaCham = ref(false)
 const emailTrungLoi = ref('')
+const sdtTrungLoi = ref('')
 let yeuCauHienTai = 0
 
 const tinhThanhs = ref([])
@@ -165,7 +168,25 @@ const kiemTraEmailTrung = async () => {
       emailTrungLoi.value = ''
     }
   } catch {
-    emailTrungLoi.value = ''
+    emailTrungLoi.value = 'Không thể kiểm tra email trùng, vui lòng thử lại'
+  }
+}
+
+const kiemTraSdtTrung = async () => {
+  const sdt = (form.value.soDienThoai || '').trim()
+  if (!/^0\d{9}$/.test(sdt)) {
+    sdtTrungLoi.value = ''
+    return
+  }
+  try {
+    const res = await checkEmployeeSdt(sdt, isEdit ? route.params.id : null)
+    if (res && res.exists) {
+      sdtTrungLoi.value = 'Số điện thoại đã được sử dụng'
+    } else {
+      sdtTrungLoi.value = ''
+    }
+  } catch {
+    sdtTrungLoi.value = 'Không thể kiểm tra số điện thoại trùng, vui lòng thử lại'
   }
 }
 
@@ -493,6 +514,7 @@ const validate = () =>
     loiEmail.value,
     emailTrungLoi.value,
     loiSdt.value,
+    sdtTrungLoi.value,
     loiVaiTro.value,
     loiGioiTinh.value,
     loiNgaySinh.value,
@@ -522,6 +544,9 @@ const submit = async () => {
   daNopForm.value = true
   if (form.value.email.trim()) {
     await kiemTraEmailTrung()
+  }
+  if (form.value.soDienThoai.trim()) {
+    await kiemTraSdtTrung()
   }
   const error = validate()
   if (error) {
@@ -712,12 +737,20 @@ onMounted(async () => {
 
           <div class="form-grid-2">
             <div class="form-group">
+              <label class="form-label">Mã nhân viên</label>
+              <input class="form-input" type="text"
+                :value="isEdit ? form.maNhanVien : maPreview"
+                disabled
+                placeholder="Tự động tạo khi nhập họ và tên" />
+              <p class="field-hint" style="font-size: 12px; color: #64748b; margin-top: 4px;">
+                Mã tự động tạo, không thể chỉnh sửa.
+              </p>
+            </div>
+
+            <div class="form-group">
               <label class="form-label">Họ và tên <span class="req">*</span></label>
               <input v-model="form.tenTaiKhoan" type="text" class="form-input" placeholder="Nhập họ và tên"
                 maxlength="100" @input="capNhatMaGoiY" @blur="cham('tenTaiKhoan')" />
-              <p v-if="!isEdit && maPreview" class="field-hint" style="font-size: 12px; color: #64748b; margin-top: 4px;">
-                Mã nhân viên (tự động tạo): <b style="color: #4f46e5;">{{ maPreview }}</b>
-              </p>
               <p v-if="hienLoi('tenTaiKhoan', loiTen)" class="input-error">{{ loiTen }}</p>
             </div>
 
@@ -733,29 +766,33 @@ onMounted(async () => {
             <div class="form-group">
               <label class="form-label">Số điện thoại <span class="req">*</span></label>
               <input v-model="form.soDienThoai" type="tel" class="form-input" placeholder="Nhập số điện thoại"
-                maxlength="10" @blur="cham('soDienThoai')" />
+                :class="{ 'has-error': sdtTrungLoi || hienLoi('soDienThoai', loiSdt) }"
+                maxlength="10" @blur="cham('soDienThoai'); kiemTraSdtTrung()" />
               <p v-if="hienLoi('soDienThoai', loiSdt)" class="input-error">{{ loiSdt }}</p>
+              <p v-else-if="sdtTrungLoi" class="input-error">{{ sdtTrungLoi }}</p>
             </div>
 
             <div class="form-group">
               <label class="form-label">Vai trò <span class="req">*</span></label>
-              <div class="select-wrapper">
-                <select v-model="form.idVaiTro" class="form-select" @change="cham('idVaiTro')">
-                  <option value="" disabled>Chọn vai trò</option>
-                  <option v-for="v in vaiTros" :key="v.id" :value="v.id">{{ v.ten }}</option>
-                </select>
-                <i class="bi bi-chevron-down select-arrow"></i>
-              </div>
+              <SearchableSelect
+                v-model="form.idVaiTro"
+                :options="vaiTros.map((v) => ({ value: v.id, label: v.ten }))"
+                value-key="value"
+                label-key="label"
+                placeholder="Chọn vai trò"
+                search-placeholder="Tìm vai trò..."
+                @change="(v) => { form.idVaiTro = v === null ? '' : v; cham('idVaiTro') }" />
               <p v-if="hienLoi('idVaiTro', loiVaiTro)" class="input-error">{{ loiVaiTro }}</p>
             </div>
 
             <div class="form-group">
               <label class="form-label">Giới tính <span class="req">*</span></label>
-              <div class="select-wrapper">
-                <select v-model="form.gioiTinh" class="form-select" @change="cham('gioiTinh')">
-                  <option v-for="g in gioiTinhOptions" :key="g.value" :value="g.value">{{ g.label }}</option>
-                </select>
-                <i class="bi bi-chevron-down select-arrow"></i>
+              <div class="radio-row" role="radiogroup" aria-label="Giới tính" @change="cham('gioiTinh')">
+                <label v-for="g in gioiTinhOptions" :key="g.value" class="radio-item">
+                  <input v-model="form.gioiTinh" type="radio" name="gioiTinh" :value="g.value" />
+                  <span class="radio-dot"></span>
+                  <span>{{ g.label }}</span>
+                </label>
               </div>
               <p v-if="hienLoi('gioiTinh', loiGioiTinh)" class="input-error">{{ loiGioiTinh }}</p>
             </div>
@@ -796,29 +833,25 @@ onMounted(async () => {
           <div class="form-grid-2">
             <div class="form-group">
               <label class="form-label">Tỉnh/Thành phố <span class="req">*</span></label>
-              <div class="select-wrapper">
-                <select v-model="form.queQuan" class="form-select" :disabled="diaGioiLoading"
-                  @change="cham('queQuan'); chonTinh($event.target.value)">
-                  <option value="">{{ diaGioiLoading ? 'Đang tải tỉnh thành...' : 'Chọn tỉnh thành' }}</option>
-                  <option v-for="t in tinhThanhs" :key="t.code" :value="t.ten">{{ t.ten }}</option>
-                </select>
-                <i class="bi bi-chevron-down select-arrow"></i>
-              </div>
+              <SearchableSelect
+                v-model="form.queQuan"
+                :options="tinhThanhs.map((t) => ({ value: t.ten, label: t.ten }))"
+                :placeholder="diaGioiLoading ? 'Đang tải tỉnh thành...' : 'Chọn tỉnh thành'"
+                :disabled="diaGioiLoading"
+                @update:model-value="(v) => { cham('queQuan'); chonTinh(v) }"
+              />
               <p v-if="hienLoi('queQuan', loiQueQuan)" class="input-error">{{ loiQueQuan }}</p>
             </div>
 
             <div class="form-group">
               <label class="form-label">Xã/Phường/Thị trấn <span class="req">*</span></label>
-              <div class="select-wrapper">
-                <select v-model="form.phuong" class="form-select" :disabled="diaGioiLoading || !form.queQuan"
-                  @change="cham('phuong')">
-                  <option value="">
-                    {{ diaGioiLoading ? 'Đang tải...' : form.queQuan ? 'Chọn xã phường' : 'Chọn xã phường' }}
-                  </option>
-                  <option v-for="p in phuongXas" :key="p.code" :value="p.ten">{{ p.ten }}</option>
-                </select>
-                <i class="bi bi-chevron-down select-arrow"></i>
-              </div>
+              <SearchableSelect
+                v-model="form.phuong"
+                :options="phuongXas.map((p) => ({ value: p.ten, label: p.ten }))"
+                :placeholder="diaGioiLoading ? 'Đang tải...' : 'Chọn xã phường'"
+                :disabled="diaGioiLoading || !form.queQuan"
+                @update:model-value="cham('phuong')"
+              />
               <p v-if="hienLoi('phuong', loiPhuong)" class="input-error">{{ loiPhuong }}</p>
             </div>
           </div>
@@ -1134,9 +1167,8 @@ onMounted(async () => {
   margin-left: 2px;
 }
 
-/* Inputs & Selects */
-.form-input,
-.form-select {
+/* Inputs */
+.form-input {
   height: 42px;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -1154,8 +1186,7 @@ onMounted(async () => {
   color: #94a3b8;
 }
 
-.form-input:focus,
-.form-select:focus {
+.form-input:focus {
   border-color: #f43f5e;
   box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
 }
@@ -1169,28 +1200,6 @@ onMounted(async () => {
   font-size: 11.5px;
   color: #ef4444;
   font-weight: 500;
-}
-
-/* Custom Select Dropdown wrapper */
-.select-wrapper {
-  position: relative;
-  width: 100%;
-}
-
-.form-select {
-  appearance: none;
-  cursor: pointer;
-  padding-right: 36px;
-}
-
-.select-arrow {
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  font-size: 11px;
-  color: #64748b;
 }
 
 /* Cụm nút hành động */
@@ -1580,5 +1589,13 @@ onMounted(async () => {
   font-size: 13.5px;
   font-weight: 600;
   color: #1e293b;
+}
+
+.form-input:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+  -webkit-text-fill-color: #94a3b8;
+  opacity: 1;
 }
 </style>

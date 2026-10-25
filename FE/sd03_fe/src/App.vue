@@ -2,8 +2,9 @@
 import { provide, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import ChatWidget from './components/ChatWidget.vue'
+import { API_ORIGIN } from './api/http'
 
-const baseAPI = 'http://localhost:8080/'
+const baseAPI = `${API_ORIGIN}/`
 provide('baseAPI', baseAPI)
 
 const router = useRouter()

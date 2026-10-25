@@ -1,10 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import SearchableSelect from '@/components/SearchableSelect.vue'
+import PaginationBar from '@/components/PaginationBar.vue'
 import { listInvoices, exportInvoices } from '@/api/invoice'
 import {
   avatarColor,
-  formatDate,
   formatDateTime,
   formatVnd,
   initialsOf,
@@ -24,19 +25,8 @@ const tabs = [
   { key: 'DA_HOAN_THANH', label: 'Đã hoàn thành' },
   { key: 'DA_HUY', label: 'Đã hủy' },
   { key: 'DA_HOAN_TIEN', label: 'Đã hoàn tiền' },
+  { key: 'GIAO_HANG_THAT_BAI', label: 'Giao hàng thất bại' },
 ]
-
-const tabDot = {
-  ALL: '',
-  CHO_XAC_NHAN: 'dot-amber',
-  DA_XAC_NHAN: 'dot-sky',
-  CHO_GIAO_HANG: 'dot-blue',
-  DANG_GIAO_HANG: 'dot-teal',
-  DA_GIAO_HANG: 'dot-green',
-  DA_HOAN_THANH: 'dot-green',
-  DA_HUY: 'dot-gray',
-  DA_HOAN_TIEN: 'dot-rose',
-}
 
 const activeTab = ref('ALL')
 
@@ -54,7 +44,13 @@ const fTuNgay = ref('')
 const fDenNgay = ref('')
 const fLoaiDon = ref('')
 
-const showFilter = ref(true)
+const loaiDonOptions = [
+  { id: '', ten: 'Tất cả' },
+  { id: 'Tại quầy', ten: 'Tại quầy' },
+  { id: 'Online', ten: 'Online' },
+]
+
+const trangThaiOptions = computed(() => tabs.map((t) => ({ id: t.key, ten: t.label })))
 
 const todayLocal = () => {
   const d = new Date()
@@ -96,8 +92,6 @@ const showNotFound = () => {
   totalPages.value = 0
 }
 
-const appliedRange = ref('')
-
 const load = async () => {
   const params = buildParams()
   if (!params) {
@@ -105,10 +99,6 @@ const load = async () => {
     notifyWarning('Khoảng ngày không hợp lệ', 'Vui lòng kiểm tra lại ngày bắt đầu và ngày kết thúc')
     return
   }
-  const parts = []
-  if (params.tuNgay) parts.push(`từ ${formatDate(params.tuNgay)}`)
-  if (params.denNgay) parts.push(`đến ${formatDate(params.denNgay)}`)
-  appliedRange.value = parts.join(' ')
   loading.value = true
   try {
     const data = await listInvoices(params)
@@ -141,7 +131,7 @@ const resetFilter = () => {
 }
 
 const selectTab = (key) => {
-  activeTab.value = key
+  activeTab.value = key || 'ALL'
   page.value = 0
   load()
 }
@@ -152,7 +142,8 @@ const goPage = (p) => {
   load()
 }
 
-const onPageSizeChange = () => {
+const onPageSizeChange = (s) => {
+  pageSize.value = s
   page.value = 0
   load()
 }
@@ -215,7 +206,7 @@ const statusPill = (value) => {
   if (['Đã xác nhận'].includes(value)) return 'inv-pill-sky'
   if (['Chờ giao hàng'].includes(value)) return 'inv-pill-blue'
   if (['Đang giao hàng'].includes(value)) return 'inv-pill-teal'
-  if (['Đã hủy', 'Đã hoàn tiền'].includes(value)) return 'inv-pill-red'
+  if (['Đã hủy', 'Đã hoàn tiền', 'Giao hàng thất bại'].includes(value)) return 'inv-pill-red'
   if (['Chờ xác nhận'].includes(value)) return 'inv-pill-amber'
   return 'inv-pill-gray'
 }
@@ -288,30 +279,7 @@ onMounted(load)
     </div>
 
     <div class="filter-box">
-      <div class="status-tabs-row">
-        <div class="tabs-group">
-          <button
-            v-for="tab in tabs"
-            :key="tab.key"
-            type="button"
-            class="status-tab"
-            :class="{ active: activeTab === tab.key }"
-            @click="selectTab(tab.key)"
-          >
-            <span v-if="tabDot[tab.key]" class="dot" :class="tabDot[tab.key]"></span>
-            <span v-else class="tab-icon">📄</span>
-            {{ tab.label }}
-          </button>
-        </div>
-        <button class="btn-reset-filter" type="button" @click="showFilter = !showFilter">
-          {{ showFilter ? 'Ẩn bộ lọc' : 'Hiện bộ lọc' }}
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path :d="showFilter ? 'M6 14.5l6-6 6 6' : 'M6 9.5l6 6 6-6'" />
-          </svg>
-        </button>
-      </div>
-
-      <div v-show="showFilter">
+      <div>
         <div class="filters-grid">
           <div class="filter-col filter-col-search">
             <label class="filter-lbl">Tìm kiếm hóa đơn</label>
@@ -332,12 +300,29 @@ onMounted(load)
           </div>
 
           <div class="filter-col">
+            <label class="filter-lbl">Trạng thái</label>
+            <SearchableSelect
+              v-model="activeTab"
+              :options="trangThaiOptions"
+              value-key="id"
+              label-key="ten"
+              placeholder="Tất cả trạng thái"
+              search-placeholder="Tìm trạng thái..."
+              @change="selectTab"
+            />
+          </div>
+
+          <div class="filter-col">
             <label class="filter-lbl">Loại đơn</label>
-            <select v-model="fLoaiDon" class="form-select" @change="applyFilter">
-              <option value="">Tất cả</option>
-              <option value="Tại quầy">Tại quầy</option>
-              <option value="Online">Online</option>
-            </select>
+            <SearchableSelect
+              v-model="fLoaiDon"
+              :options="loaiDonOptions"
+              value-key="id"
+              label-key="ten"
+              placeholder="Tất cả loại đơn"
+              search-placeholder="Tìm loại đơn..."
+              @change="applyFilter"
+            />
           </div>
 
           <div class="filter-col">
@@ -345,18 +330,7 @@ onMounted(load)
             <input v-model="fTuNgay" type="date" class="form-control" @change="applyFilter" />
           </div>
 
-          <div class="filter-col">
-            <label class="filter-lbl">Đến ngày</label>
-            <input v-model="fDenNgay" type="date" class="form-control" @change="applyFilter" />
-          </div>
-
           <div class="filter-actions">
-            <button class="btn-apply" type="button" @click="applyFilter">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                <path d="M4 6h16M7 12h10M10 18h4" />
-              </svg>
-              Áp dụng
-            </button>
             <button class="btn-reset-filter" type="button" @click="resetFilter">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 11a8 8 0 1 0-.9 4.5" />
@@ -364,7 +338,6 @@ onMounted(load)
               </svg>
               Đặt lại
             </button>
-            <span v-if="appliedRange" class="foot-info">Khoảng thời gian: {{ appliedRange }}</span>
           </div>
         </div>
       </div>
@@ -375,12 +348,6 @@ onMounted(load)
         <div class="head-left">
           <h2 class="card-title">Danh sách hóa đơn</h2>
           <span class="items-count-pill">{{ invoices.length }}/{{ totalElements }} hóa đơn</span>
-        </div>
-        <div class="head-right">
-          <span class="page-size-label">Hiển thị:</span>
-          <select v-model="pageSize" class="page-size-select" @change="onPageSizeChange">
-            <option v-for="s in pageSizeOptions" :key="s" :value="s">{{ s }} bản ghi/trang</option>
-          </select>
         </div>
       </div>
 
@@ -477,29 +444,19 @@ onMounted(load)
         </table>
       </div>
 
-      <div v-if="totalPages > 1" class="table-card-foot">
-        <span class="foot-info">
-          Hiển thị <strong>{{ footFrom }} - {{ footTo }}</strong> trong tổng số
-          <strong>{{ totalElements }}</strong> hóa đơn
-        </span>
-        <div class="foot-pager">
-          <button class="pager-btn" type="button" :disabled="page === 0" @click="goPage(page - 1)">
-            ‹ Trước
-          </button>
-          <button
-            v-for="p in pageList"
-            :key="p"
-            type="button"
-            class="pager-btn num-btn"
-            :class="{ active: p === page + 1 }"
-            @click="goPage(p - 1)"
-          >
-            {{ p }}
-          </button>
-          <button class="pager-btn" type="button" :disabled="page + 1 >= totalPages" @click="goPage(page + 1)">
-            Sau ›
-          </button>
-        </div>
+      <div class="table-card-foot">
+        <PaginationBar
+          :page="page"
+          :total-pages="totalPages"
+          :total-elements="totalElements"
+          :page-size="pageSize"
+          :from="footFrom"
+          :to="footTo"
+          :sizes="pageSizeOptions"
+          label="hóa đơn"
+          @change="goPage"
+          @size-change="onPageSizeChange"
+        />
       </div>
     </div>
   </div>

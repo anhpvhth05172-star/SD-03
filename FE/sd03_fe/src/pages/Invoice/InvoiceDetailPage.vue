@@ -8,13 +8,18 @@ import { formatDateTime, formatVnd, payStatusOf } from '@/utils/format'
 import {
   TRANG_THAI_ONLINE,
   TRANG_THAI_POS,
+  TRANG_THAI_GIAO_THAT_BAI,
+  TRANG_THAI_KET_THUC,
   isTerminal as isTerminalOf,
   laPos,
+  nhanBuoc,
   pillClass,
   trangThaiTiepTheoOf,
 } from '@/constants/invoiceStatus'
 import { updateInvoiceStatus } from '@/api/invoice'
 import { notifyError, notifyConfirm, notifySuccess } from '@/utils/notify'
+import { taoVaTaiPdf } from '@/utils/pdf'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,10 +33,12 @@ const qrReady = ref(false)
 const updatingStatus = ref(false)
 const showStatusMenu = ref(false)
 const statusMenuRef = ref(null)
+const printSheetRef = ref(null)
 const showHistory = ref(false)
 const historyLoading = ref(false)
 const historyError = ref('')
 const historyList = ref([])
+const lichSuKetThuc = ref([])
 
 const TRANG_THAI_CODE = {
   'Chờ xác nhận': 'CHO_XAC_NHAN',
@@ -42,6 +49,7 @@ const TRANG_THAI_CODE = {
   'Đã hoàn thành': 'DA_HOAN_THANH',
   'Đã hủy': 'DA_HUY',
   'Đã hoàn tiền': 'DA_HOAN_TIEN',
+  'Giao hàng thất bại': 'GIAO_HANG_THAT_BAI',
 }
 
 const qrPayload = computed(() => {
@@ -77,19 +85,56 @@ const genQr = async () => {
 
 const stepsList = computed(() => {
   if (!data.value) return TRANG_THAI_ONLINE
+  if (data.value.trangThai === 'Giao hàng thất bại') return TRANG_THAI_GIAO_THAT_BAI
   return laPos(data.value) ? TRANG_THAI_POS : TRANG_THAI_ONLINE
+})
+
+const trangThaiTruocKetThuc = computed(() => {
+  const ls = lichSuKetThuc.value
+  if (!Array.isArray(ls) || !ls.length || !data.value) return null
+  const cur = data.value
+  const last = [...ls]
+    .reverse()
+    .find(
+      (e) => e.trangThaiSau === cur.trangThai || e.maTrangThaiSau === cur.maTrangThai,
+    )
+  return (last && last.trangThaiTruoc) || null
+})
+
+const visibleSteps = computed(() => {
+  const list = stepsList.value
+  if (!data.value) return list
+  const cur = list.indexOf(data.value.trangThai)
+  if (cur >= 0) return list.slice(0, Math.min(cur + 2, list.length))
+  if (TRANG_THAI_KET_THUC.includes(data.value.trangThai)) {
+    const truoc = trangThaiTruocKetThuc.value
+    let base
+    if (truoc === 'Giao hàng thất bại') base = TRANG_THAI_GIAO_THAT_BAI
+    else if (truoc && list.includes(truoc)) base = list.slice(0, list.indexOf(truoc) + 1)
+    else base = list.slice(0, 1)
+    return [...base, data.value.trangThai]
+  }
+  return list.slice(0, 1)
 })
 
 const isTerminal = computed(() => !!data.value && isTerminalOf(data.value))
 
 const tiepTheoList = computed(() => trangThaiTiepTheoOf(data.value))
 
+const tiepTheoMenuList = computed(() => tiepTheoList.value.filter((tt) => tt !== 'Đã hủy'))
+
+const laChoXacNhan = computed(() => data.value?.maTrangThai === 'CHO_XAC_NHAN')
+
+const coTheHuy = computed(
+  () => laChoXacNhan.value && tiepTheoList.value.includes('Đã hủy'),
+)
+
 const laTrangThaiHienTai = (ten) => data.value?.trangThai === ten
 
 const laTrangThaiTiepTheo = (ten) => tiepTheoList.value.includes(ten)
 
 const laDaQua = (ten) => {
-  const list = stepsList.value
+  const list = visibleSteps.value
   const cur = list.indexOf(data.value?.trangThai)
   const i = list.indexOf(ten)
   return cur > -1 && i > -1 && i < cur
@@ -101,6 +146,8 @@ const chuyenTrangThai = async (ten) => {
   const code = TRANG_THAI_CODE[ten]
   if (!code) return
   showStatusMenu.value = false
+  const trangThaiTruoc =
+    data.value.maTrangThai || TRANG_THAI_CODE[data.value.trangThai] || ''
   const hienTai = data.value.trangThai || '—'
   const ma = data.value.maHoaDon || `#${data.value.id}`
   const ok = await notifyConfirm(
@@ -112,9 +159,16 @@ const chuyenTrangThai = async (ten) => {
   if (!ok) return
   updatingStatus.value = true
   try {
-    await updateInvoiceStatus(data.value.id, code)
-    notifySuccess('Đã cập nhật trạng thái', `${hienTai} → ${ten}`)
+    const ketQua = await updateInvoiceStatus(data.value.id, code)
+    if (code === 'GIAO_HANG_THAT_BAI' && ketQua?.maTrangThai === 'DA_HUY') {
+      notifySuccess('Giao hàng thất bại lần 3 — đơn hàng đã tự động hủy', `${hienTai} → Đã hủy`)
+    } else {
+      notifySuccess('Đã cập nhật trạng thái', `${hienTai} → ${ten}`)
+    }
     await load()
+    if (trangThaiTruoc === 'CHO_XAC_NHAN' && code === 'DA_XAC_NHAN') {
+      await taiPdfHienTai()
+    }
   } catch (e) {
     notifyError('Cập nhật thất bại', e.message || 'Không thể chuyển trạng thái')
   } finally {
@@ -125,6 +179,28 @@ const chuyenTrangThai = async (ten) => {
 const toggleStatusMenu = () => {
   if (updatingStatus.value) return
   showStatusMenu.value = !showStatusMenu.value
+}
+
+const huyDon = async () => {
+  if (!data.value || updatingStatus.value || !coTheHuy.value) return
+  const ma = data.value.maHoaDon || `#${data.value.id}`
+  const ok = await notifyConfirm(
+    'Xác nhận hủy đơn?',
+    `Hóa đơn ${ma}\nHủy khi ở trạng thái Chờ xác nhận. Sau khi hủy, đơn không thể tiếp tục xử lý.`,
+    'Xác nhận hủy',
+    'Giữ đơn',
+  )
+  if (!ok) return
+  updatingStatus.value = true
+  try {
+    await updateInvoiceStatus(data.value.id, 'DA_HUY')
+    notifySuccess('Đã hủy đơn', `Hóa đơn ${ma} → Đã hủy`)
+    await load()
+  } catch (e) {
+    notifyError('Hủy đơn thất bại', e.message || 'Không thể hủy đơn')
+  } finally {
+    updatingStatus.value = false
+  }
 }
 
 const chonMenu = (ten) => {
@@ -224,6 +300,16 @@ const kichCoOptions = computed(() => {
   for (const l of data.value?.chiTiet || []) if (l.tenKichCo) set.add(l.tenKichCo)
   return [...set]
 })
+
+const mauLocOptions = computed(() => [
+  { value: '', label: 'Tất cả màu sắc' },
+  ...mauOptions.value.map((m) => ({ value: m, label: m })),
+])
+
+const kichCoLocOptions = computed(() => [
+  { value: '', label: 'Tất cả kích cỡ' },
+  ...kichCoOptions.value.map((k) => ({ value: k, label: k })),
+])
 
 const chiTietLoc = computed(() => {
   let list = data.value?.chiTiet || []
@@ -420,6 +506,14 @@ const load = async () => {
       khInfo.value = null
     }
   }
+  lichSuKetThuc.value = []
+  if (TRANG_THAI_KET_THUC.includes(data.value?.trangThai)) {
+    try {
+      lichSuKetThuc.value = await getInvoiceHistory(data.value.id)
+    } catch {
+      lichSuKetThuc.value = []
+    }
+  }
   await genQr()
   loading.value = false
 }
@@ -439,6 +533,20 @@ const inHoaDon = async () => {
   }
   await nextTick()
   window.print()
+}
+
+const taiPdfHienTai = async () => {
+  if (!data.value) return
+  const ma = data.value.maHoaDon || `HD${data.value.id}`
+  try {
+    await nextTick()
+    await taoVaTaiPdf(printSheetRef.value, `${ma}.pdf`)
+  } catch (e) {
+    notifyError(
+      'Tải PDF thất bại',
+      `${e?.message || 'Không tạo được file PDF'}. Trạng thái hóa đơn không bị ảnh hưởng; có thể dùng nút "In hóa đơn".`,
+    )
+  }
 }
 
 watch(() => route.params.id, load)
@@ -478,7 +586,7 @@ onBeforeUnmount(() => {
 
     <div v-else-if="data" class="inv-layout">
       <div class="inv-print-area">
-        <article class="invoice-print-sheet print-only" :style="{ '--receipt-zoom': printZoom }">
+        <article ref="printSheetRef" class="invoice-print-sheet print-only" :style="{ '--receipt-zoom': printZoom }">
           <header class="receipt-header">
             <div class="receipt-header-top">
               <div class="receipt-brand-block">
@@ -589,21 +697,40 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <template v-else>
-              <div class="stepper">
+            <div class="stepper">
                 <div
-                  v-for="(s, i) in stepsList"
+                  v-for="(s, i) in visibleSteps"
                   :key="s"
                   class="stepper-step"
                   :class="{
                     'is-done': laDaQua(s),
                     'is-active': laTrangThaiHienTai(s),
-                    'is-next': laTrangThaiTiepTheo(s),
+                    'is-fail':
+                      s === 'Giao hàng thất bại' ||
+                      s === 'Đã hủy' ||
+                      s === 'Đã hoàn tiền',
+                    'is-next': laTrangThaiTiepTheo(s) && !laDaQua(s),
                   }"
                   :title="laTrangThaiHienTai(s) ? 'Trạng thái hiện tại' : (laDaQua(s) ? 'Đã hoàn thành' : undefined)"
                 >
                   <span class="stepper-node">
-                    <svg v-if="i === 0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg
+                      v-if="
+                        s === 'Giao hàng thất bại' ||
+                        s === 'Đã hủy' ||
+                        s === 'Đã hoàn tiền'
+                      "
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M15 9l-6 6M9 9l6 6" />
+                    </svg>
+                    <svg v-else-if="i === 0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <circle cx="12" cy="12" r="9" />
                       <path d="M12 7v5l3 2" />
                     </svg>
@@ -627,7 +754,7 @@ onBeforeUnmount(() => {
                       <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 16.5 7.1 18.2l.9-5.5-4-3.9L9.5 8z" />
                     </svg>
                   </span>
-                  <span class="stepper-label">{{ s }}</span>
+                  <span class="stepper-label">{{ nhanBuoc(s) }}</span>
                   <span v-if="i === 0" class="stepper-time">{{ formatDateTime(data.ngayTao) }}</span>
                   <span v-else-if="laTrangThaiHienTai(s) && i > 0" class="stepper-time">
                     {{ formatDateTime(data.ngayCapNhat) }}
@@ -641,7 +768,6 @@ onBeforeUnmount(() => {
                 Cập nhật lần cuối: {{ formatDateTime(data.ngayCapNhat) }}
                 <template v-if="chot(data.nguoiCapNhat)"> • {{ data.nguoiCapNhat }}</template>
               </p>
-            </template>
           </section>
 
           <div class="info-row">
@@ -726,14 +852,24 @@ onBeforeUnmount(() => {
                 </svg>
                 <input v-model="timKiemSp" type="text" placeholder="Tìm theo tên hoặc SKU..." />
               </div>
-              <select v-model="locMau" class="filter-select">
-                <option value="">Tất cả màu sắc</option>
-                <option v-for="m in mauOptions" :key="m" :value="m">{{ m }}</option>
-              </select>
-              <select v-model="locKichCo" class="filter-select">
-                <option value="">Tất cả kích cỡ</option>
-                <option v-for="k in kichCoOptions" :key="k" :value="k">{{ k }}</option>
-              </select>
+              <SearchableSelect
+                v-model="locMau"
+                :options="mauLocOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="Tất cả màu sắc"
+                search-placeholder="Tìm màu sắc..."
+                style="width: auto; min-width: 160px"
+                @change="(v) => { locMau = v ?? '' }" />
+              <SearchableSelect
+                v-model="locKichCo"
+                :options="kichCoLocOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="Tất cả kích cỡ"
+                search-placeholder="Tìm kích cỡ..."
+                style="width: auto; min-width: 160px"
+                @change="(v) => { locKichCo = v ?? '' }" />
             </div>
 
             <div class="table-wrap">
@@ -874,13 +1010,8 @@ onBeforeUnmount(() => {
               </svg>
               In hóa đơn
             </button>
-            <div v-if="!isTerminal && tiepTheoList.length" ref="statusMenuRef" class="status-menu-wrap">
-              <button
-                class="btn btn-outline"
-                type="button"
-                :disabled="updatingStatus"
-                @click="toggleStatusMenu"
-              >
+            <div v-if="!isTerminal && tiepTheoMenuList.length" ref="statusMenuRef" class="status-menu-wrap">
+              <button class="btn btn-outline" type="button" :disabled="updatingStatus" @click="toggleStatusMenu">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
@@ -891,7 +1022,7 @@ onBeforeUnmount(() => {
               </button>
               <div v-if="showStatusMenu" class="status-menu" role="menu">
                 <button
-                  v-for="tt in tiepTheoList"
+                  v-for="tt in tiepTheoMenuList"
                   :key="tt"
                   class="status-menu-item"
                   type="button"
@@ -902,6 +1033,19 @@ onBeforeUnmount(() => {
                 </button>
               </div>
             </div>
+            <button
+              v-if="coTheHuy"
+              class="btn btn-outline btn-huy-don"
+              type="button"
+              :disabled="updatingStatus"
+              @click="huyDon"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M15 9l-6 6M9 9l6 6" />
+              </svg>
+              {{ updatingStatus ? 'Đang xử lý...' : 'Hủy đơn' }}
+            </button>
             <button class="btn btn-outline" type="button" @click="router.push('/hoa-don')">
               Quay lại danh sách
             </button>
@@ -1178,7 +1322,8 @@ button.stepper-step.is-next:disabled {
 }
 
 .stepper-step.is-done::before,
-.stepper-step.is-active::before {
+.stepper-step.is-active::before,
+.stepper-step.is-fail::before {
   background: #dc2626;
 }
 
@@ -1215,6 +1360,13 @@ button.stepper-step.is-next:disabled {
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
 }
 
+.stepper-step.is-fail .stepper-node {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.16);
+}
+
 .stepper-step.is-next .stepper-node {
   border-color: #e2e8f0;
   background: #f8fafc;
@@ -1229,11 +1381,17 @@ button.stepper-step.is-next:disabled {
 }
 
 .stepper-step.is-done .stepper-label,
-.stepper-step.is-active .stepper-label {
+.stepper-step.is-active .stepper-label,
+.stepper-step.is-fail .stepper-label {
   color: #1e293b;
 }
 
-.stepper-step:not(.is-done):not(.is-active) .stepper-label {
+.stepper-step.is-fail .stepper-label {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.stepper-step:not(.is-done):not(.is-active):not(.is-fail) .stepper-label {
   color: #94a3b8;
   font-weight: 500;
 }
@@ -1312,22 +1470,6 @@ button.stepper-step.is-next:disabled {
   color: #94a3b8;
 }
 
-.filter-select {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 8px 11px;
-  font-size: 12.5px;
-  color: #334155;
-  background: #fff;
-  cursor: pointer;
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.filter-select:focus {
-  border-color: #dc2626;
-}
-
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -1376,6 +1518,22 @@ button.stepper-step.is-next:disabled {
   background: #f8fafc;
   border-color: #cbd5e1;
   color: #1e293b;
+}
+
+.btn-huy-don {
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.btn-huy-don:hover {
+  background: #fef2f2;
+  border-color: #f87171;
+  color: #b91c1c;
+}
+
+.btn-huy-don:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .status-updated {

@@ -26,14 +26,23 @@ public class SanPhamChiTietResponse {
     private Long idKichCo;
     private String size;
     private Integer stock;
-    private BigDecimal price;
+    private BigDecimal price;       // giá gốc (giaBan)
+    private BigDecimal giaSauGiam;  // giá thực hiển thị (đã áp dụng đợt giảm giá nếu có)
+    private BigDecimal phanTramGiam; // % giảm từ đợt giảm giá (null = không có đợt)
     private String discount;
-    private BigDecimal giaSauGiam;
-    private BigDecimal phanTramGiam;
     private Boolean trangThai;
     private String trangThaiTonKho;
     private String img;
     private LocalDateTime ngayTao;
-    private Integer matchScore;
-    private String matchReason;
+
+    // Thuộc tính cấp sản phẩm — dùng để xuất file Excel biến thể
+    // theo đúng cột của tệp import sản phẩm (round-trip: xuất → sửa → nhập lại).
+    private String tenThuongHieu;
+    private String tenLoaiGiay;
+    private String chatLieu;
+    private String kieuDang;
+    private String xuatXu;
+    private String doiTuong;
+    private String tinhNang;
+    private String moTa;
 }

@@ -1,67 +1,80 @@
 <script setup>
-import { formatDateTime } from "@/utils/format";
 import axios from "axios";
-import { inject, onMounted, reactive, ref } from "vue";
+import { inject, onMounted, ref } from "vue";
 import Swal from "sweetalert2";
+import PaginationBar from "@/components/PaginationBar.vue";
+import SearchableSelect from "@/components/SearchableSelect.vue";
 
-const showFilter = ref(true);
 const apiDiscountEvent = inject("baseAPI");
 
 const listEvent = ref([]);
 const page = ref(0);
-const pageSize = 8;
+const pageSize = ref(10);
 const totalPages = ref(0);
 const totalElements = ref(0);
 const togglingId = ref(null); // id đợt đang đổi trạng thái (khóa switch)
+const lastUpdated = ref(null); // thời điểm tải dữ liệu gần nhất
 
-/* ---------------- Bộ lọc ---------------- */
-const filter = reactive({
+// ========== Bộ lọc ==========
+const emptyFilter = () => ({
   ten: "",
-  trangThai: "",
+  trangThai: null,
   tuNgay: "",
   denNgay: "",
 });
+// Giá trị đang nhập trên form
+const filter = ref(emptyFilter());
+// Giá trị đã bấm "Áp dụng" (dùng cho phân trang, đổi trạng thái, v.v.)
+const applied = ref(emptyFilter());
+
+const trangThaiFilterOptions = [
+  { value: null, label: "Tất cả" },
+  { value: 1, label: "Đang hoạt động" },
+  { value: 0, label: "Ngừng hoạt động" },
+];
 
 const getData = async (p = 0) => {
   try {
-    const params = {
-      page: p,
-      size: pageSize,
-    };
-    if (filter.ten && filter.ten.trim()) {
-      params.ten = filter.ten.trim();
-    }
-    if (filter.trangThai !== "") {
-      params.trangThai = filter.trangThai === "1";
-    }
-    if (filter.tuNgay) {
-      params.tuNgay = filter.tuNgay;
-    }
-    if (filter.denNgay) {
-      params.denNgay = filter.denNgay;
-    }
+    const params = { page: p, size: pageSize.value };
+    const f = applied.value;
+    if (f.ten.trim()) params.ten = f.ten.trim();
+    if (f.trangThai !== null) params.trangThai = f.trangThai;
+    if (f.tuNgay) params.tuNgay = f.tuNgay; // yyyy-MM-dd
+    if (f.denNgay) params.denNgay = f.denNgay;
 
-    const res = await axios.get(apiDiscountEvent + "admin/dot-giam-gia", { params });
+    const res = await axios.get(apiDiscountEvent + "admin/dot-giam-gia", {
+      params,
+    });
     if (res.status === 200) {
       listEvent.value = res.data.content;
       page.value = res.data.number;
       totalPages.value = res.data.totalPages;
       totalElements.value = res.data.totalElements;
+      lastUpdated.value = new Date();
     }
   } catch (error) {
     console.error(error);
   }
 };
 
-const handleApplyFilter = () => {
-  getData(0);
+const applyFilter = () => {
+  const { tuNgay, denNgay } = filter.value;
+  if (tuNgay && denNgay && tuNgay > denNgay) {
+    Swal.fire({
+      icon: "warning",
+      title: "Khoảng ngày không hợp lệ",
+      text: "'Từ ngày' không được lớn hơn 'Đến ngày'",
+      confirmButtonColor: "#cc0000",
+    });
+    return;
+  }
+  applied.value = { ...filter.value };
+  getData(0); // luôn về trang đầu khi lọc mới
 };
 
-const handleResetFilter = () => {
-  filter.ten = "";
-  filter.trangThai = "";
-  filter.tuNgay = "";
-  filter.denNgay = "";
+const resetFilter = () => {
+  filter.value = emptyFilter();
+  applied.value = emptyFilter();
   getData(0);
 };
 
@@ -70,7 +83,24 @@ const goToPage = (p) => {
   getData(p);
 };
 
-const formatDate = (s) => (s ? new Date(s).toLocaleDateString("vi-VN") : "");
+const onSizeChange = (s) => {
+  pageSize.value = s;
+  getData(0);
+};
+
+// ========== Hiển thị ==========
+const formatDate = (s) => {
+  if (!s) return "";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return String(s);
+  const p = (x) => String(x).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+const formatUpdated = (d) =>
+  d
+    ? `${d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} ${d.toLocaleDateString("vi-VN")}`
+    : "";
 
 const isEnded = (d) => !!d.ngayKetThuc && new Date() > new Date(d.ngayKetThuc);
 const isOn = (d) => !!d.trangThai && !isEnded(d);
@@ -123,7 +153,7 @@ const toggleStatus = async (item) => {
       item.trangThai = res.data.trangThai;
     }
 
-    // Tải lại trang hiện tại để đồng bộ toàn bộ dữ liệu
+    // Tải lại trang hiện tại (giữ nguyên bộ lọc đã áp dụng)
     await getData(page.value);
 
     await Swal.fire({
@@ -151,14 +181,10 @@ onMounted(() => getData(0));
 
 <template>
   <div class="screen">
-    <div class="screen-head">
-      <div>
-        <h1 class="screen-title">Quản lý đợt giảm giá</h1>
-        <p class="screen-sub">
-          Quản lý các sự kiện giảm giá áp dụng cho tất cả khách hàng trên toàn
-          hệ thống
-        </p>
-      </div>
+      <div class="screen-head">
+        <div>
+          <h1 class="screen-title">Quản lý đợt giảm giá</h1>
+        </div>
       <RouterLink to="/admin/dot-giam-gia/add" class="btn-add" type="button">
         <svg
           viewBox="0 0 24 24"
@@ -173,6 +199,7 @@ onMounted(() => getData(0));
       </RouterLink>
     </div>
 
+    <!-- ===== TÌM KIẾM & BỘ LỌC ===== -->
     <section class="panel">
       <div class="panel-head">
         <span class="panel-icon">
@@ -181,64 +208,60 @@ onMounted(() => getData(0));
           </svg>
         </span>
         <h3 class="panel-title">Tìm kiếm &amp; bộ lọc</h3>
-        <div class="panel-right">
-          <span class="result-count">{{ totalElements }} kết quả</span>
-          <button
-            class="link-red"
-            type="button"
-            @click="showFilter = !showFilter"
-          >
-            {{ showFilter ? "Ẩn bớt" : "Hiện thêm" }}
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path :d="showFilter ? 'M6 14.5l6-6 6 6' : 'M6 9.5l6 6 6-6'" />
-            </svg>
-          </button>
-        </div>
       </div>
 
-      <div v-show="showFilter" class="filter-row">
+      <div class="filter-row">
         <div class="f-item">
           <label>Tên đợt giảm giá</label>
           <input
             v-model="filter.ten"
             type="text"
             placeholder="Nhập tên đợt giảm giá"
-            @keyup.enter="handleApplyFilter"
+            @keyup.enter="applyFilter"
           />
         </div>
 
         <div class="f-item">
           <label>Trạng thái</label>
-          <select v-model="filter.trangThai">
-            <option value="" label="Tất cả"></option>
-            <option value="1" label="Đang hoạt động"></option>
-            <option value="0" label="Ngừng hoạt động"></option>
-          </select>
+          <SearchableSelect
+            v-model="filter.trangThai"
+            :options="trangThaiFilterOptions"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả"
+            search-placeholder="Tìm..."
+          />
         </div>
 
         <div class="f-item">
           <label>Từ ngày</label>
           <div class="date-box">
-            <input v-model="filter.tuNgay" type="date" />
+            <input
+              v-model="filter.tuNgay"
+              type="date"
+              :max="filter.denNgay || undefined"
+            />
           </div>
         </div>
 
         <div class="f-item">
           <label>Đến ngày</label>
           <div class="date-box">
-            <input v-model="filter.denNgay" type="date" />
+            <input
+              v-model="filter.denNgay"
+              type="date"
+              :min="filter.tuNgay || undefined"
+            />
           </div>
         </div>
 
         <div class="filter-actions">
-          <button class="btn-reset" type="button" aria-label="Đặt lại" @click="handleResetFilter" title="Đặt lại bộ lọc">
+          <button
+            class="btn-reset"
+            type="button"
+            aria-label="Đặt lại"
+            @click="resetFilter"
+          >
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -251,7 +274,7 @@ onMounted(() => getData(0));
               <path d="M20 4.5V11h-6.5" />
             </svg>
           </button>
-          <button class="btn-apply" type="button" @click="handleApplyFilter">
+          <button class="btn-apply" type="button" @click="applyFilter">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -267,6 +290,7 @@ onMounted(() => getData(0));
       </div>
     </section>
 
+    <!-- ===== DANH SÁCH ===== -->
     <section class="panel">
       <div class="panel-head">
         <span class="panel-icon is-red">
@@ -279,7 +303,9 @@ onMounted(() => getData(0));
         <h3 class="panel-title">Danh sách đợt giảm giá</h3>
         <span class="count-pill">{{ totalElements }} đợt</span>
         <div class="panel-right">
-          <span class="panel-meta">Cập nhật lúc 08:32 25/05/2026</span>
+          <span v-if="lastUpdated" class="panel-meta"
+            >Cập nhật lúc {{ formatUpdated(lastUpdated) }}</span
+          >
         </div>
       </div>
 
@@ -294,7 +320,7 @@ onMounted(() => getData(0));
               <th>Ngày bắt đầu</th>
               <th>Ngày kết thúc</th>
               <th>Trạng thái</th>
-              <th>Thao tác</th>
+              <th>Hành động</th>
             </tr>
           </thead>
           <tbody>
@@ -365,62 +391,17 @@ onMounted(() => getData(0));
         </table>
       </div>
 
-      <div class="panel-foot">
-        <span class="foot-text">
-          Hiển thị {{ listEvent.length ? page * pageSize + 1 : 0 }}-{{
-            page * pageSize + listEvent.length
-          }}
-          trong {{ totalElements }} đợt giảm giá
-        </span>
-        <div class="pager">
-          <button
-            class="page-btn"
-            type="button"
-            aria-label="Trang trước"
-            :disabled="page === 0"
-            @click="goToPage(page - 1)"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M14.5 6l-6 6 6 6" />
-            </svg>
-          </button>
-          <button
-            v-for="p in totalPages"
-            :key="p"
-            class="page-btn"
-            :class="{ 'is-active': p - 1 === page }"
-            type="button"
-            @click="goToPage(p - 1)"
-          >
-            {{ p }}
-          </button>
-          <button
-            class="page-btn"
-            type="button"
-            aria-label="Trang sau"
-            :disabled="page >= totalPages - 1"
-            @click="goToPage(page + 1)"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M9.5 6l6 6-6 6" />
-            </svg>
-          </button>
-        </div>
-      </div>
+      <PaginationBar
+        :page="page"
+        :total-pages="totalPages"
+        :total-elements="totalElements"
+        :page-size="pageSize"
+        :from="listEvent.length ? page * pageSize + 1 : 0"
+        :to="page * pageSize + listEvent.length"
+        label="đợt giảm giá"
+        @change="goToPage"
+        @size-change="onSizeChange"
+      />
     </section>
   </div>
 </template>
@@ -476,11 +457,6 @@ onMounted(() => getData(0));
 }
 
 /* Khóa switch khi đợt đã kết thúc hoặc đang gọi API */
-.switch.is-disabled .slider {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .switch.is-disabled .slider {
   opacity: 0.5;
   cursor: not-allowed;

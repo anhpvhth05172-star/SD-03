@@ -20,6 +20,7 @@ import com.example.datn.entity.PhuongThucThanhToan;
 import com.example.datn.entity.SanPham;
 import com.example.datn.entity.SanPhamChiTiet;
 import com.example.datn.repository.ChiTietHoaDonRepository;
+import com.example.datn.repository.DiaChiKhachHangRepository;
 import com.example.datn.repository.HoaDonRepository;
 import com.example.datn.repository.KhachHangRepository;
 import com.example.datn.repository.LichSuHoaDonRepository;
@@ -54,6 +55,8 @@ class HoaDonValidationTest {
     private final LichSuHoaDonRepository lichSuHoaDonRepository = mock(LichSuHoaDonRepository.class);
     private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository =
         mock(LichSuSuDungPhieuGiamGiaRepository.class);
+    private final DiaChiKhachHangRepository diaChiKhachHangRepository =
+        mock(DiaChiKhachHangRepository.class);
     private final GHNService ghnService = mock(GHNService.class);
 
     private final HoaDonService service = new HoaDonService(
@@ -66,17 +69,18 @@ class HoaDonValidationTest {
         sanPhamChiTietRepository,
         lichSuHoaDonRepository,
         lichSuSuDungRepository,
+        diaChiKhachHangRepository,
         ghnService
     );
 
-    private PhuongThucThanhToan phuongThucThanhToan() {
-        PhuongThucThanhToan p = new PhuongThucThanhToan();
-        p.setId(PTTT_ID);
-        p.setMaPhuongThuc("TIEN_MAT");
-        p.setTenPhuongThuc("Tiền mặt tại quầy");
-        p.setTrangThai(true);
-        return p;
-    }
+        private PhuongThucThanhToan phuongThucThanhToan() {
+            PhuongThucThanhToan p = new PhuongThucThanhToan();
+            p.setId(PTTT_ID);
+            p.setMaPhuongThuc("TIEN_MAT");
+            p.setTenPhuongThuc("Tiền mặt tại quầy");
+            p.setTrangThai(true);
+            return p;
+        }
 
     @BeforeEach
     void datPhuongThucThanhToan() {
@@ -558,6 +562,41 @@ class HoaDonValidationTest {
         assertThatThrownBy(() -> service.create(req))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Đơn online phải có địa chỉ nhận hàng");
+    }
+
+    @Test
+    void taoDonTrangThaiGiaoHangThatBai_BiTuChoi() {
+        chuanBi(spct(true, true));
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        req.setTrangThai("Giao hàng thất bại");
+
+        assertThatThrownBy(() -> service.create(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Trạng thái khởi tạo không hợp lệ");
+
+        verify(hoaDonRepository, never()).save(any(HoaDon.class));
+    }
+
+    @Test
+    void taoDonTrangThaiDangGiaoHang_BiTuChoi() {
+        chuanBi(spct(true, true));
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        req.setTrangThai("Đang giao hàng");
+
+        assertThatThrownBy(() -> service.create(req))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Trạng thái khởi tạo không hợp lệ");
+    }
+
+    @Test
+    void taoDonTrangThaiDaHoanThanh_VanTaoDuoc() {
+        chuanBi(spct(true, true));
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        req.setTrangThai("Đã hoàn thành");
+
+        HoaDonDTO dto = service.create(req);
+
+        assertThat(dto.getId()).isEqualTo(HD_ID);
     }
 
     @Test

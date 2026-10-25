@@ -264,6 +264,49 @@ textarea {
   font-weight: 700;
 }
 
+/* ===== Select có tìm kiếm (SearchableSelect) — style cấp trang cho ô chọn =====
+ * Đặt tại đây (global, KHÔNG scoped) để mọi class style theo trang
+ * (.form-select, .filter-select, ...) luôn ghi đè được như với <select> cũ. */
+.ss {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 10px 0 12px;
+  background-color: #ffffff;
+  /* trang có thể gắn caret SVG theo nền (background shorthand) ->
+     tắt ảnh nền để chỉ còn caret của component, tránh 2 caret */
+  background-image: none !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #0f172a;
+  cursor: pointer;
+  text-align: left;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.ss:not(.is-disabled):hover {
+  border-color: #cbd5e1;
+}
+
+.ss.is-open,
+.ss:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.ss.is-disabled {
+  background-color: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
 .form-input, .form-select {
   height: 42px;
   padding: 0 14px;

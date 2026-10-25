@@ -19,7 +19,7 @@ const navigateTo = (path) => {
 <template>
   <aside class="sidebar">
     <div class="sidebar-header">
-      <div class="logo-wrapper" @click="navigateTo('/san-pham')">
+      <div class="logo-wrapper" @click="navigateTo('/admin/san-pham')">
         <div class="logo-circle-badge">
           <img src="/logo.png" alt="POLY SHOES Logo" class="logo-img" />
         </div>
@@ -85,8 +85,8 @@ const navigateTo = (path) => {
           <ul class="subnav-list" v-show="isProductMenuOpen">
             <li class="subnav-item">
               <a class="subnav-link"
-                :class="{ 'active': route.path === '/san-pham' || route.path === '/' || route.path === '/san-pham/them' }"
-                @click="navigateTo('/san-pham')">
+                :class="{ 'active': route.path === '/admin/san-pham' || route.path === '/admin' || route.path === '/admin/san-pham/them' }"
+                @click="navigateTo('/admin/san-pham')">
                 <span class="subnav-icon">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
@@ -102,8 +102,8 @@ const navigateTo = (path) => {
             <li class="subnav-item">
               <a
                 class="subnav-link"
-                :class="{ 'active': route.path === '/san-pham/bien-the' }"
-                @click="navigateTo('/san-pham/bien-the')"
+                :class="{ 'active': route.path === '/admin/san-pham/bien-the' || route.path === '/admin/bien-the-san-pham' }"
+                @click="navigateTo('/admin/san-pham/bien-the')"
               >
                 <span class="subnav-icon">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"

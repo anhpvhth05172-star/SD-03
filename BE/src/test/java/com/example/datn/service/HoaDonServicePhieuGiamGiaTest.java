@@ -22,6 +22,7 @@ import com.example.datn.entity.PhieuGiamGia;
 import com.example.datn.entity.PhuongThucThanhToan;
 import com.example.datn.entity.SanPhamChiTiet;
 import com.example.datn.repository.ChiTietHoaDonRepository;
+import com.example.datn.repository.DiaChiKhachHangRepository;
 import com.example.datn.repository.HoaDonRepository;
 import com.example.datn.repository.KhachHangRepository;
 import com.example.datn.repository.LichSuHoaDonRepository;
@@ -58,6 +59,8 @@ class HoaDonServicePhieuGiamGiaTest {
     private final LichSuHoaDonRepository lichSuHoaDonRepository = mock(LichSuHoaDonRepository.class);
     private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository =
         mock(LichSuSuDungPhieuGiamGiaRepository.class);
+    private final DiaChiKhachHangRepository diaChiKhachHangRepository =
+        mock(DiaChiKhachHangRepository.class);
     private final GHNService ghnService = mock(GHNService.class);
 
     private final HoaDonService service = new HoaDonService(
@@ -70,6 +73,7 @@ class HoaDonServicePhieuGiamGiaTest {
         sanPhamChiTietRepository,
         lichSuHoaDonRepository,
         lichSuSuDungRepository,
+        diaChiKhachHangRepository,
         ghnService
     );
 
@@ -250,10 +254,26 @@ class HoaDonServicePhieuGiamGiaTest {
     }
 
     @Test
-    void suDungPhieuKhongChonKhachHang_BiTuChoi() {
+    void suDungPhieuTaiQuayKhongChonKhachHang_DuocPhep() {
         chuanBi(phieu("PERCENT", "20", 1));
 
-        assertThatThrownBy(() -> service.create(yeuCau(PGG_ID, null)))
+        assertThatCode(() -> service.create(yeuCau(PGG_ID, null)))
+            .doesNotThrowAnyException();
+    }
+
+    @Test
+    void suDungPhieuOnlineKhongChonKhachHang_BiTuChoi() {
+        chuanBi(phieu("PERCENT", "20", 1));
+        when(ghnService.tinhPhi(any())).thenReturn(30000);
+
+        HoaDonRequest req = yeuCau(PGG_ID, null);
+        req.setLoaiDon("Online");
+        req.setToProvinceId(1000000);
+        req.setToDistrictId(1442);
+        req.setToWardCode("20107");
+        req.setDiaChiNhanHang("1 Pho Chua Boc, Quan Dong Da, Ha Noi");
+
+        assertThatThrownBy(() -> service.create(req))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("chọn khách hàng");
     }

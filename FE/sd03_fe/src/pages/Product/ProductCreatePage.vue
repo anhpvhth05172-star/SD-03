@@ -5,10 +5,11 @@ import QuickAddModal from '@/components/QuickAddModal.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import CurrencyInput from '@/components/CurrencyInput.vue'
 import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
-import { formatNumber } from '@/utils/format'
+import { formatNumber, formatVnd } from '@/utils/format'
+import { API_ORIGIN } from '@/api/http'
 
 const router = useRouter()
-const API_BASE = 'http://localhost:8080/api/v1'
+const API_BASE = `${API_ORIGIN}/api/v1`
 
 const form = reactive({
   code: '',
@@ -592,7 +593,7 @@ const saveProduct = async (confirmMerge = false) => {
     showToast(data.message || 'Lưu sản phẩm thành công!')
 
     setTimeout(() => {
-      router.push('/san-pham')
+      router.push('/admin/san-pham')
     }, 1000)
   } catch (err) {
     const rawMsg = err.message || ''
@@ -613,7 +614,7 @@ const confirmMergeAction = () => {
 }
 
 const goBack = () => {
-  router.push('/san-pham')
+  router.push('/admin/san-pham')
 }
 
 onMounted(() => {

@@ -1,5 +1,6 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import SearchableSelect from '@/components/SearchableSelect.vue'
 import { createAddress, deleteAddress, listAddresses, setDefaultAddress, updateAddress } from '../api/customer'
 import { layDiaGioi, layPhuongXa, timTinh } from '../api/diaGioi'
 import { batBuoc, isBlank, kiemTra, toiDa } from '../utils/validate'
@@ -68,6 +69,27 @@ const napDiaGioi = async (tenTinh, tenPhuong) => {
     if (myToken === yeuCauHienTai) diaGioiLoading.value = false
   }
 }
+
+// Danh sách lựa chọn cho Select có tìm kiếm (giữ nguyên placeholder động)
+const optsTinh = computed(() => [
+  {
+    value: '',
+    label: diaGioiLoading.value ? 'Đang tải danh sách tỉnh/thành...' : 'Chọn tỉnh/thành phố',
+  },
+  ...tinhThanhs.value.map((t) => ({ value: t.ten, label: t.ten })),
+])
+
+const optsPhuong = computed(() => [
+  {
+    value: '',
+    label: diaGioiLoading.value
+      ? 'Đang tải...'
+      : form.value.tinhThanhPho
+        ? 'Chọn phường/xã'
+        : 'Chọn tỉnh trước',
+  },
+  ...phuongXas.value.map((p) => ({ value: p.ten, label: p.ten })),
+])
 
 const chonTinh = async (tenTinh) => {
   form.value.tinhThanhPho = tenTinh || ''
@@ -206,12 +228,13 @@ onMounted(() => {
         </div>
         <div class="field">
           <label class="field-label">Tỉnh/Thành phố</label>
-          <select v-model="form.tinhThanhPho" :disabled="diaGioiLoading" @change="chonTinh($event.target.value)">
-            <option value="">
-              {{ diaGioiLoading ? 'Đang tải danh sách tỉnh/thành...' : 'Chọn tỉnh/thành phố' }}
-            </option>
-            <option v-for="t in tinhThanhs" :key="t.code" :value="t.ten">{{ t.ten }}</option>
-          </select>
+          <SearchableSelect
+            v-model="form.tinhThanhPho"
+            :options="optsTinh"
+            :disabled="diaGioiLoading"
+            placeholder="Chọn tỉnh/thành phố"
+            @change="chonTinh"
+          />
           <p v-if="diaGioiError" class="field-hint is-error">
             {{ diaGioiError }}
             <button type="button" class="link-retry" @click="napDiaGioi(form.tinhThanhPho, form.phuong)">Thử lại</button>
@@ -219,12 +242,12 @@ onMounted(() => {
         </div>
         <div class="field">
           <label class="field-label">Phường/Xã</label>
-          <select v-model="form.phuong" :disabled="diaGioiLoading || !form.tinhThanhPho">
-            <option value="">
-              {{ diaGioiLoading ? 'Đang tải...' : form.tinhThanhPho ? 'Chọn phường/xã' : 'Chọn tỉnh trước' }}
-            </option>
-            <option v-for="p in phuongXas" :key="p.code" :value="p.ten">{{ p.ten }}</option>
-          </select>
+          <SearchableSelect
+            v-model="form.phuong"
+            :options="optsPhuong"
+            :disabled="diaGioiLoading || !form.tinhThanhPho"
+            placeholder="Chọn phường/xã"
+          />
         </div>
         <div class="field">
           <label class="field-label">Địa chỉ cụ thể <b class="req">*</b></label>
@@ -249,12 +272,11 @@ onMounted(() => {
         <li v-for="d in danhSach" :key="d.id" class="addr-item">
           <div class="addr-main">
             <div class="addr-title">
-              <span>{{ d.tenChiChi || d.maDiaChi }}</span>
+              <span>{{ d.tenChiChi || 'Địa chỉ' }}</span>
               <span v-if="d.macDinh" class="pill pill-green">Mặc định</span>
               <span v-if="d.trangThai === false" class="pill pill-red">Ngừng dùng</span>
             </div>
             <div class="addr-sub">{{ lineOf(d) }}</div>
-            <div class="addr-code">{{ d.maDiaChi }}</div>
           </div>
           <div class="addr-acts">
             <button v-if="!d.macDinh" type="button" class="mini-btn" @click="datMacDinh(d)">Mặc định</button>
@@ -375,6 +397,7 @@ onMounted(() => {
 
 .field input,
 .field select,
+.field .ss,
 .field textarea {
   width: 100%;
   border: 1px solid #e3e3e8;
@@ -393,6 +416,8 @@ onMounted(() => {
 
 .field input:focus,
 .field select:focus,
+.field .ss:focus,
+.field .ss.is-open,
 .field textarea:focus {
   border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
@@ -500,12 +525,6 @@ onMounted(() => {
   font-size: 12.5px;
   color: #4a4a52;
   margin-top: 3px;
-}
-
-.addr-code {
-  font-size: 11.5px;
-  color: #9a9aa3;
-  margin-top: 2px;
 }
 
 .addr-acts {

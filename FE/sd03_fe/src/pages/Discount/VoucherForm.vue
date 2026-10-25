@@ -1,9 +1,19 @@
 <script setup>
-import { reactive, computed, inject, ref, onMounted } from "vue";
+import {
+  reactive,
+  computed,
+  inject,
+  ref,
+  watch,
+  onMounted,
+  onUnmounted,
+} from "vue";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { useRouter } from "vue-router";
 import logo from "@/assets/logo.png";
+import SearchableSelect from "@/components/SearchableSelect.vue";
+import { API_BASE } from "@/api/http";
 
 const router = useRouter();
 const baseAPI = inject("baseAPI");
@@ -31,53 +41,104 @@ const form = reactive({
   productIds: [], // id của san_pham_chi_tiet (biến thể) được chọn
 });
 
+/* ---------------- Thời điểm hiện tại (định dạng giống datetime-local) ---------------- */
+const pad = (n) => String(n).padStart(2, "0");
+const nowLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
+};
+
+// Cập nhật định kỳ để việc kiểm tra "quá khứ" luôn đúng khi form mở lâu
+const nowStr = ref(nowLocal());
+let nowTimer = null;
+onMounted(() => {
+  nowTimer = setInterval(() => (nowStr.value = nowLocal()), 30 * 1000);
+});
+onUnmounted(() => clearInterval(nowTimer));
+
 /* ---------------- Giá ---------------- */
 const validPercent = computed(() => form.percent >= 1 && form.percent <= 100);
 
+// Mức giảm thực tế = max(% đợt mới, % đợt khác đang áp dụng cho biến thể)
+const effectivePercent = (v) =>
+  Math.max(Number(form.percent) || 0, Number(v.phanTramGiamKhac) || 0);
+
 // Phải giống công thức backend: làm tròn về đồng
-const afterDiscount = (giaBan) =>
-  Math.round((Number(giaBan) * (100 - form.percent)) / 100);
+const afterDiscount = (v) =>
+  Math.round((Number(v.giaBan) * (100 - effectivePercent(v))) / 100);
+
+// Giá hiện tại: giá đang áp dụng theo đợt khác (nếu có), tính trên giá gốc
+const currentPrice = (v) =>
+  Math.round(
+    (Number(v.giaBan) * (100 - (Number(v.phanTramGiamKhac) || 0))) / 100,
+  );
 
 const money = (v) => Number(v ?? 0).toLocaleString("vi-VN") + "đ";
 
 /* ---------------- Ảnh biến thể ---------------- */
-// ⚠️ Đổi "uploads/" cho đúng đường dẫn backend phục vụ ảnh
-const IMG_PATH = "assets/logo.png";
-
 const PLACEHOLDER =
   "data:image/svg+xml;utf8," +
   encodeURIComponent(
     `<svg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 24 24' fill='none' stroke='#9ca3af' stroke-width='1.5'><rect width='24' height='24' fill='#f3f4f6' stroke='none'/><rect x='4' y='5' width='16' height='14' rx='2'/><circle cx='9' cy='10' r='1.5'/><path d='M4 17l5-4 4 3 3-2 4 3'/></svg>`,
   );
 
-// ⚠️ Đổi tên field ảnh (hinhAnh) cho khớp backend
-const imgUrl = (v) => {
-  const f = v.hinhAnh;
-  if (!f) return PLACEHOLDER;
-  if (/^(https?:|data:)/.test(f)) return f; // URL đầy đủ (Cloudinary, ...)
-  return IMG_PATH; // chỉ có tên file
-};
 const onImgError = (e) => {
   e.target.onerror = null;
   e.target.src = PLACEHOLDER;
 };
 
-/* ---------------- Validate (hiện lỗi sau khi chạm vào ô hoặc bấm Lưu) ---------------- */
+/* ---------------- Validate (hiện lỗi ngay khi người dùng thao tác) ---------------- */
 const submitted = ref(false);
 const touched = reactive({});
 const touch = (key) => (touched[key] = true);
 
 const selectedProductIds = ref([]); // id sản phẩm (cha) đang tick
 
+// Giá trị thay đổi là hiện lỗi ngay, không cần blur hay submit
+watch(
+  () => form.name,
+  () => touch("name"),
+);
+watch(
+  () => form.percent,
+  () => touch("percent"),
+);
+watch(
+  () => form.startDate,
+  () => touch("startDate"),
+);
+watch(
+  () => form.endDate,
+  () => touch("endDate"),
+);
+watch([selectedProductIds, () => form.productIds], () => touch("productIds"), {
+  deep: true,
+});
+
 const errors = computed(() => {
   const e = {};
+
   if (!form.name) e.name = "Vui lòng nhập tên đợt giảm giá.";
-  if (!validPercent.value)
+
+  if (form.percent === null || form.percent === "")
+    e.percent = "Vui lòng nhập mức giảm (%).";
+  else if (!validPercent.value)
     e.percent = "Mức giảm (%) phải nằm trong khoảng từ 1% đến 100%.";
+
+  // Ngày bắt đầu
   if (!form.startDate) e.startDate = "Vui lòng chọn ngày bắt đầu.";
+  else if (form.startDate < nowStr.value)
+    e.startDate = "Ngày bắt đầu không được ở trong quá khứ.";
+
+  // Ngày kết thúc
   if (!form.endDate) e.endDate = "Vui lòng chọn ngày kết thúc.";
-  else if (form.startDate && form.endDate <= form.startDate)
-    e.endDate = "Ngày kết thúc phải sau ngày bắt đầu.";
+  else if (form.endDate < nowStr.value)
+    e.endDate = "Ngày kết thúc không được ở trong quá khứ.";
+  else if (form.startDate && form.endDate < form.startDate)
+    e.endDate = "Ngày kết thúc không được nhỏ hơn ngày bắt đầu.";
+
   if (selectedProductIds.value.length === 0)
     e.productIds = "Vui lòng chọn ít nhất 1 sản phẩm.";
   else if (form.productIds.length === 0)
@@ -90,14 +151,50 @@ const err = (key) => (submitted.value || touched[key]) && errors.value[key];
 /* ---------------- Dữ liệu sản phẩm ---------------- */
 const products = ref([]); // danh sách biến thể (phẳng) từ server
 const loadingProducts = ref(true);
+const thuongHieuOptions = ref([]);
+const chatLieuOptions = ref([]);
+const filterThuongHieu = ref("");
+const filterChatLieu = ref("");
+
+const loadFilterOptions = async () => {
+  try {
+    const r = await fetch(`${API_BASE}/v1/attributes/all-filter-options`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const norm = (x) => (Array.isArray(x) ? x : Array.isArray(x?.content) ? x.content : Array.isArray(x?.data) ? x.data : []);
+    thuongHieuOptions.value = norm(d?.thuongHieu);
+    chatLieuOptions.value = norm(d?.chatLieu);
+  } catch {
+    /* bỏ qua, không lọc được vẫn chọn bộ lọc khác */
+  }
+};
 
 const loadProducts = async () => {
   try {
-    // ⚠️ Đổi endpoint cho khớp backend
+    loadingProducts.value = true;
+    // Backend trả thêm phanTramGiamKhac + tenDotGiamGiaKhac (mức CAO NHẤT trong
+    // các đợt đang hiệu lực) cho biến thể đang thuộc đợt giảm giá khác
+    const params = {};
+    if (filterThuongHieu.value) params.idThuongHieu = filterThuongHieu.value;
+    if (filterChatLieu.value) params.idChatLieu = filterChatLieu.value;
     const res = await axios.get(
       baseAPI + "admin/dot-giam-gia/san-pham-chi-tiet/for-discount",
+      { params },
     );
-    products.value = res.data?.data ?? res.data ?? [];
+    const raw = res.data?.data ?? res.data ?? [];
+
+    // Gộp theo id biến thể, giữ dòng có % đợt khác cao nhất
+    const byId = new Map();
+    for (const p of raw) {
+      const old = byId.get(p.id);
+      if (
+        !old ||
+        (Number(p.phanTramGiamKhac) || 0) > (Number(old.phanTramGiamKhac) || 0)
+      ) {
+        byId.set(p.id, p);
+      }
+    }
+    products.value = [...byId.values()];
   } catch (e) {
     Swal.fire({
       icon: "error",
@@ -109,7 +206,10 @@ const loadProducts = async () => {
     loadingProducts.value = false;
   }
 };
-onMounted(loadProducts);
+onMounted(() => {
+  loadProducts();
+  loadFilterOptions();
+});
 
 /* ---------------- Bảng "Chọn sản phẩm" (gom biến thể theo sản phẩm) ---------------- */
 const productKeyword = ref("");
@@ -214,6 +314,10 @@ const resetVariantFilters = () => {
   variantKeyword.value = "";
   sizeFilter.value = "";
   colorFilter.value = "";
+  const hadServerFilter = !!(filterThuongHieu.value || filterChatLieu.value);
+  filterThuongHieu.value = "";
+  filterChatLieu.value = "";
+  if (hadServerFilter) loadProducts();
 };
 
 /* ---------------- Submit ---------------- */
@@ -221,6 +325,7 @@ const toLocalDateTime = (v) => (v && v.length === 16 ? v + ":00" : v);
 
 const submit = async () => {
   submitted.value = true;
+  nowStr.value = nowLocal(); // lấy lại thời điểm hiện tại để kiểm tra chính xác
   if (Object.keys(errors.value).length) return;
 
   const data = {
@@ -342,6 +447,7 @@ const submit = async () => {
             <input
               v-model="form.startDate"
               type="datetime-local"
+              :min="nowStr"
               :class="{ 'dg-invalid': err('startDate') }"
               @blur="touch('startDate')"
             />
@@ -355,7 +461,11 @@ const submit = async () => {
             <input
               v-model="form.endDate"
               type="datetime-local"
-              :min="form.startDate"
+              :min="
+                form.startDate && form.startDate > nowStr
+                  ? form.startDate
+                  : nowStr
+              "
               :class="{ 'dg-invalid': err('endDate') }"
               @blur="touch('endDate')"
             />
@@ -486,21 +596,65 @@ const submit = async () => {
           </div>
           <div class="dg-field">
             <label>Kích cỡ</label>
-            <select v-model="sizeFilter" class="dg-round">
-              <option value="">Tất cả</option>
-              <option v-for="s in sizeOptions" :key="s" :value="s">
-                {{ s }}
-              </option>
-            </select>
+            <SearchableSelect
+              v-model="sizeFilter"
+              :options="[
+                { value: '', label: 'Tất cả' },
+                ...sizeOptions.map((s) => ({ value: s, label: s })),
+              ]"
+              label-key="label"
+              value-key="value"
+              placeholder="Tất cả"
+              search-placeholder="Tìm kích cỡ..."
+              @change="
+                (v) => {
+                  sizeFilter = v === null || v === undefined ? '' : v;
+                }
+              "
+            />
           </div>
           <div class="dg-field">
             <label>Màu sắc</label>
-            <select v-model="colorFilter" class="dg-round">
-              <option value="">Tất cả</option>
-              <option v-for="c in colorOptions" :key="c" :value="c">
-                {{ c }}
-              </option>
-            </select>
+            <SearchableSelect
+              v-model="colorFilter"
+              :options="[
+                { value: '', label: 'Tất cả' },
+                ...colorOptions.map((c) => ({ value: c, label: c })),
+              ]"
+              label-key="label"
+              value-key="value"
+              placeholder="Tất cả"
+              search-placeholder="Tìm màu sắc..."
+              @change="
+                (v) => {
+                  colorFilter = v === null || v === undefined ? '' : v;
+                }
+              "
+            />
+          </div>
+          <div class="dg-field">
+            <label>Thương hiệu</label>
+            <SearchableSelect
+              v-model="filterThuongHieu"
+              :options="thuongHieuOptions"
+              label-key="ten"
+              value-key="id"
+              placeholder="Tất cả thương hiệu"
+              search-placeholder="Tìm thương hiệu..."
+              @change="loadProducts"
+            />
+          </div>
+          <div class="dg-field">
+            <label>Chất liệu</label>
+            <SearchableSelect
+              v-model="filterChatLieu"
+              :options="chatLieuOptions"
+              label-key="ten"
+              value-key="id"
+              placeholder="Tất cả chất liệu"
+              search-placeholder="Tìm chất liệu..."
+              @change="loadProducts"
+            />
           </div>
           <button type="button" class="dg-reset" @click="resetVariantFilters">
             <svg
@@ -532,24 +686,25 @@ const submit = async () => {
                   />
                 </th>
                 <th class="dg-center dg-w-stt">STT</th>
-                <th>Sản phẩm</th>
                 <th class="dg-center dg-w-img">Ảnh</th>
+                <th>Sản phẩm</th>
                 <th>Mã chi tiết</th>
                 <th class="dg-center">Kích cỡ</th>
                 <th class="dg-center">Màu sắc</th>
+                <th>Thương hiệu</th>
+                <th>Chất liệu</th>
                 <th class="dg-right">Giá bán</th>
                 <th class="dg-right">Giá sau giảm</th>
-                <th class="dg-right">Tồn</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="!variants.length">
-                <td colspan="10" class="dg-empty">
+                <td colspan="11" class="dg-empty">
                   Chọn sản phẩm ở trên để xem các biến thể.
                 </td>
               </tr>
               <tr v-else-if="!filteredVariants.length">
-                <td colspan="10" class="dg-empty">Không có biến thể phù hợp</td>
+                <td colspan="11" class="dg-empty">Không có biến thể phù hợp</td>
               </tr>
               <tr
                 v-for="(v, i) in filteredVariants"
@@ -565,28 +720,46 @@ const submit = async () => {
                   />
                 </td>
                 <td class="dg-center">{{ i + 1 }}</td>
-
-                <td class="dg-strong">{{ v.tenSanPham }}</td>
                 <td class="dg-center">
-                  <img
-                    :src="logo"
-                    :alt="v.tenSanPham"
-                    class="dg-thumb"
-                    loading="lazy"
-                    @error="onImgError"
-                  />
+                  <div class="dg-img-wrap">
+                    <img
+                      :src="logo"
+                      :alt="v.tenSanPham"
+                      class="dg-thumb"
+                      loading="lazy"
+                      @error="onImgError"
+                    />
+                    <!-- Biến thể đã thuộc đợt giảm giá khác đang hiệu lực -->
+                    <span
+                      v-if="v.phanTramGiamKhac"
+                      class="dg-badge"
+                      :title="`Đang thuộc đợt: ${v.tenDotGiamGiaKhac} (${v.phanTramGiamKhac}%). Khi trùng sẽ lấy mức cao hơn.`"
+                    >
+                      -{{ v.phanTramGiamKhac }}%
+                    </span>
+                  </div>
                 </td>
+                <td class="dg-strong">{{ v.tenSanPham }}</td>
                 <td class="dg-muted">{{ v.maChiTiet }}</td>
                 <td class="dg-center">{{ v.kichCo }}</td>
                 <td class="dg-center">{{ v.mauSac }}</td>
+                <td>{{ v.tenThuongHieu }}</td>
+                <td>{{ v.chatLieu }}</td>
                 <td class="dg-right">{{ money(v.giaBan) }}</td>
                 <td class="dg-right">
-                  <span v-if="validPercent" class="dg-sale">
-                    {{ money(afterDiscount(v.giaBan)) }}
-                  </span>
+                  <template v-if="validPercent">
+                    <span class="dg-sale">{{ money(afterDiscount(v)) }}</span>
+                    <small v-if="v.phanTramGiamKhac" class="dg-note">
+                      Áp dụng {{ effectivePercent(v) }}%
+                      {{
+                        v.phanTramGiamKhac > form.percent
+                          ? "(giữ mức đợt khác)"
+                          : "(cao hơn đợt khác)"
+                      }}
+                    </small>
+                  </template>
                   <span v-else class="dg-muted">—</span>
                 </td>
-                <td class="dg-right">{{ v.soLuong }}</td>
               </tr>
             </tbody>
           </table>
@@ -712,8 +885,7 @@ const submit = async () => {
 .dg-req {
   color: var(--red);
 }
-.dg-field input,
-.dg-field select {
+.dg-field input {
   width: 100%;
   padding: 0.7rem 0.9rem;
   border: 1px solid var(--line);
@@ -726,8 +898,7 @@ const submit = async () => {
     border-color 0.15s,
     box-shadow 0.15s;
 }
-.dg-field input:focus,
-.dg-field select:focus {
+.dg-field input:focus {
   border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
 }
@@ -737,9 +908,6 @@ const submit = async () => {
 .dg-field input.dg-pill {
   border-radius: 999px;
   padding-left: 1.1rem;
-}
-.dg-field select.dg-round {
-  border-radius: 12px;
 }
 
 .dg-affix {
@@ -895,6 +1063,12 @@ const submit = async () => {
   color: var(--red);
   font-weight: 700;
 }
+.dg-note {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
 .dg-empty {
   padding: 2rem 1rem !important;
   text-align: center;
@@ -926,9 +1100,15 @@ const submit = async () => {
   height: 20px;
 }
 
-/* ---- Ảnh biến thể ---- */
+/* ---- Ảnh biến thể + nhãn % đợt giảm giá khác ---- */
 .dg-w-img {
   width: 84px;
+}
+.dg-img-wrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
 }
 .dg-thumb {
   display: block;
@@ -939,6 +1119,21 @@ const submit = async () => {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #f3f4f6;
+}
+.dg-badge {
+  position: absolute;
+  top: -4px;
+  left: -6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--red);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.4;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+  cursor: help;
 }
 
 /* ---- Bộ lọc biến thể ---- */

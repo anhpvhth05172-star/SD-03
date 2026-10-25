@@ -10,4 +10,6 @@ public interface LichSuHoaDonRepository extends JpaRepository<LichSuHoaDon, Long
 
     @Query("select l from LichSuHoaDon l where l.hoaDon.id = :idHoaDon order by l.thoiGian desc, l.id desc")
     List<LichSuHoaDon> findByIdHoaDonOrderByThoiGianDescIdDesc(@Param("idHoaDon") Long idHoaDon);
+
+    long countByHoaDonIdAndTrangThai(@Param("hoaDonId") Long hoaDonId, @Param("trangThai") String trangThai);
 }

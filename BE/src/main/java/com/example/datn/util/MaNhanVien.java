@@ -24,7 +24,7 @@ public final class MaNhanVien {
         String[] parts = ten.trim().replaceAll("\\s+", " ").split(" ");
         String cuoi = vietHoaDau(boDau(parts[parts.length - 1]).toLowerCase());
         if (parts.length == 1) {
-            return cat(cuoi, TOI_DA);
+            return cat(damBaoDauLaChuCai(cuoi), TOI_DA);
         }
         StringBuilder dau = new StringBuilder();
         for (int i = 0; i < parts.length - 1; i++) {
@@ -34,7 +34,23 @@ public final class MaNhanVien {
             }
         }
         String goc = cuoi + dau;
-        return cat(goc, TOI_DA);
+        return cat(damBaoDauLaChuCai(goc), TOI_DA);
+    }
+
+    /**
+     * Mã phải bắt đầu bằng chữ cái theo {@link #hopLe(String)}. Tên gọi cuối cùng
+     * là chuỗi số (vd: "1234567") sẽ sinh ra mã bắt đầu bằng số — khi đó thêm
+     * tiền tố "NV" để mã sinh ra luôn hợp lệ và import lại (cập nhật) không bị từ chối.
+     */
+    private static String damBaoDauLaChuCai(String ma) {
+        if (ma.isEmpty()) {
+            return "NV";
+        }
+        char c = ma.charAt(0);
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+            return ma;
+        }
+        return "NV" + ma;
     }
 
     /**

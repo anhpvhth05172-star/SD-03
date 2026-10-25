@@ -5,7 +5,6 @@ import com.example.datn.dto.SanPham.SanPhamChiTietResponse;
 import org.springframework.data.domain.Page;
 
 import java.util.List;
-import java.util.Map;
 
 public interface SanPhamChiTietService {
     Page<SanPhamChiTietResponse> getAll(int page, int size, String search, Long idSanPham, Long idMauSac, Long idKichCo, Boolean trangThai);
@@ -15,5 +14,4 @@ public interface SanPhamChiTietService {
     SanPhamChiTietResponse update(Long id, SanPhamChiTietRequest request);
     SanPhamChiTietResponse toggleStatus(Long id);
     void delete(Long id);
-    List<SanPhamChiTietResponse> matchVariantsByAI(Map<String, Object> aiResult);
 }
