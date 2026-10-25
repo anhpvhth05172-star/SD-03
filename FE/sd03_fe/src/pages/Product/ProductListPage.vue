@@ -2,16 +2,11 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import SearchableSelect from '@/components/SearchableSelect.vue'
-<<<<<<< HEAD
-import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
-import { formatNumber } from '@/utils/format'
-=======
 import PaginationBar from '@/components/PaginationBar.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
 import { API_ORIGIN } from '@/api/http'
->>>>>>> 0781738bb1a85548501dd480700da28576f66d6c
 
 const router = useRouter()
 const API_BASE = `${API_ORIGIN}/api/v1`
@@ -28,15 +23,12 @@ const currentPage = ref(0)
 const pageSize = ref(10)
 const pageSizeOptions = [5, 10, 20, 50]
 
-<<<<<<< HEAD
-=======
 const activeTab = ref('ALL')
 const statusTabs = [
   { value: 'ALL', label: 'Tất cả' },
   { value: 'ACTIVE', label: 'Đang kinh doanh' },
   { value: 'INACTIVE', label: 'Ngừng kinh doanh' },
 ]
->>>>>>> 0781738bb1a85548501dd480700da28576f66d6c
 const selectedIds = ref([])
 const posPendingOrders = ref([])
 
@@ -268,15 +260,6 @@ const reloadAllData = () => {
   fetchProducts()
 }
 
-<<<<<<< HEAD
-=======
-const selectTab = (tab) => {
-  activeTab.value = tab || 'ALL'
-  currentPage.value = 0
-  fetchProducts()
-}
-
->>>>>>> 0781738bb1a85548501dd480700da28576f66d6c
 const onFilterChange = () => {
   currentPage.value = 0
   fetchProducts()
@@ -589,14 +572,8 @@ onUnmounted(() => {
     <div class="filter-box">
       <div class="status-tabs-row">
         <div class="tabs-group">
-          <SearchableSelect
-            v-model="activeTab"
-            :options="statusTabs"
-            label-key="label"
-            value-key="value"
-            placeholder="Trạng thái"
-            @change="selectTab"
-          />
+          <SearchableSelect v-model="activeTab" :options="statusTabs" label-key="label" value-key="value"
+            placeholder="Trạng thái" @change="selectTab" />
         </div>
 
         <div class="page-actions">
@@ -715,7 +692,8 @@ onUnmounted(() => {
               <td class="text-center attr-plain-text">{{ item.tenLoaiGiay || '---' }}</td>
               <td class="text-center qty-plain-text">
                 <div>{{ formatNumber(getAvailableProductStock(item)) }}</div>
-                <div v-if="getPosReservedForProduct(item) > 0" style="font-size: 11px; color: #d97706; font-weight: 600; margin-top: 2px;">
+                <div v-if="getPosReservedForProduct(item) > 0"
+                  style="font-size: 11px; color: #d97706; font-weight: 600; margin-top: 2px;">
                   Giữ tại quầy: {{ getPosReservedForProduct(item) }} (Kho: {{ formatNumber(item.soLuong || 0) }})
                 </div>
               </td>
@@ -736,7 +714,8 @@ onUnmounted(() => {
               </td>
               <td class="text-center">
                 <div class="action-btns">
-                  <label class="switch-toggle" :title="item.trangThai ? 'Click để ngừng kinh doanh' : 'Click để bật kinh doanh'">
+                  <label class="switch-toggle"
+                    :title="item.trangThai ? 'Click để ngừng kinh doanh' : 'Click để bật kinh doanh'">
                     <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
                     <span class="slider round"></span>
                   </label>
@@ -797,18 +776,10 @@ onUnmounted(() => {
       </div>
 
       <div v-if="totalPages > 1" class="table-card-foot">
-        <PaginationBar
-          :page="currentPage"
-          :total-pages="totalPages"
-          :total-elements="totalElements"
-          :page-size="pageSize"
-          :sizes="pageSizeOptions"
-          :from="products.length ? currentPage * pageSize + 1 : 0"
-          :to="currentPage * pageSize + products.length"
-          label="sản phẩm"
-          @change="changePage"
-          @size-change="onSizeChange"
-        />
+        <PaginationBar :page="currentPage" :total-pages="totalPages" :total-elements="totalElements"
+          :page-size="pageSize" :sizes="pageSizeOptions" :from="products.length ? currentPage * pageSize + 1 : 0"
+          :to="currentPage * pageSize + products.length" label="sản phẩm" @change="changePage"
+          @size-change="onSizeChange" />
       </div>
     </div>
 
