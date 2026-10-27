@@ -5,6 +5,7 @@ import com.example.datn.dto.ThongKe.DoanhThuDTO;
 import com.example.datn.repository.HoaDonRepository;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,8 +33,8 @@ public class ThongKeDoanhThuController {
         var batDau = tu.atStartOfDay();
         var ketThucKhongBaoGom = den.plusDays(1).atTime(LocalTime.MIDNIGHT);
         return new DoanhThuDTO(
-            hoaDonRepository.tongDoanhThuTheoTrangThai("DA_HOAN_THANH", batDau, ketThucKhongBaoGom),
-            hoaDonRepository.tongDoanhThuTheoTrangThai("DA_XAC_NHAN", batDau, ketThucKhongBaoGom)
+            hoaDonRepository.tongDoanhThuTheoTrangThai(List.of("DA_GIAO_HANG", "DA_HOAN_THANH"), batDau, ketThucKhongBaoGom),
+            hoaDonRepository.tongDoanhThuTheoTrangThai(List.of("DA_XAC_NHAN"), batDau, ketThucKhongBaoGom)
         );
     }
 }

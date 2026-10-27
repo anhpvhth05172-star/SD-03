@@ -25,3 +25,9 @@ export const fetchTrangThaiDon = (tu, den, thuongHieu = null) => {
   if (thuongHieu) params.thuongHieu = thuongHieu
   return http.get('/thong-ke/trang-thai-don', { params }).then((r) => r.data)
 }
+
+export const getRevenueSummary = ({ tu, den }) =>
+  http.get('/thong-ke/doanh-thu', { params: { tu, den } }).then((r) => r.data)
+
+export const listStatisticEmployees = (params) =>
+  http.get('/thong-ke/nhan-vien', { params }).then((r) => r.data)

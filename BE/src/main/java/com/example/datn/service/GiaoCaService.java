@@ -64,8 +64,8 @@ public class GiaoCaService {
         LocalDateTime thoiGianMo = LocalDateTime.now();
         List<com.example.datn.entity.LichLamViec> lichDuocXep = lichLamViecRepository
             .findCaDangBatDuocXep(idNhanVien, thoiGianMo.toLocalDate()).stream()
-            .filter(lich -> !thoiGianMo.toLocalTime().isBefore(lich.getCaLamViec().getBatDau())
-                && thoiGianMo.toLocalTime().isBefore(lich.getCaLamViec().getKetThuc()))
+            .filter(lich -> !thoiGianMo.toLocalTime().isBefore(lich.getCaLamViec().getBatDau().toLocalTime())
+                && thoiGianMo.toLocalTime().isBefore(lich.getCaLamViec().getKetThuc().toLocalTime()))
             .toList();
         if (lichDuocXep.isEmpty()) {
             throw bad("CA_CHUA_DUOC_XEP_LICH", "Bạn chưa được xếp ca đang diễn ra hôm nay");

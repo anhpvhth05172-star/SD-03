@@ -6,7 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import java.time.LocalTime;
+import java.sql.Time;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -29,10 +29,10 @@ public class DanhMucCaLamViec {
     private String ten;
 
     @Column(name = "gio_bat_dau", nullable = false)
-    private LocalTime batDau;
+    private Time batDau;
 
     @Column(name = "gio_ket_thuc", nullable = false)
-    private LocalTime ketThuc;
+    private Time ketThuc;
 
     @Column(name = "dang_bat", nullable = false)
     private boolean dangBat = true;

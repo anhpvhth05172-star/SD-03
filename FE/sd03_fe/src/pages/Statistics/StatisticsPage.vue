@@ -199,20 +199,6 @@ const slicesTrangThai = computed(() =>
   trangThai.value.map((x) => ({ label: x.ten, value: x.soLuong, color: x.mau }))
 )
 
-const mauTrangThai = (ten) => {
-  const map = {
-    'Chờ xác nhận': '#f43f5e',
-    'Đã xác nhận': '#f59e0b',
-    'Chờ giao hàng': '#eab308',
-    'Đang giao hàng': '#14b8a6',
-    'Đã giao hàng': '#3b82f6',
-    'Đã hoàn thành': '#22c55e',
-    'Đã hủy': '#ef4444',
-    'Đã hoàn tiền': '#8b5cf6',
-  }
-  return map[ten] || '#94a3b8'
-}
-
 /* ------------------------------- Bảng doanh thu nhân viên ------------------------------- */
 const nhanVienDayDu = computed(() => tinhNhanVien(nhanVienHienTai.value, hoaDons.value, tuDate.value, denDate.value))
 
@@ -778,7 +764,7 @@ onMounted(async () => {
         <PieChart :slices="slicesTrangThai" :size="195" />
         <div class="status-legend">
           <div v-for="s in slicesTrangThai" :key="s.label" class="status-row">
-            <span class="brand-dot" :style="{ background: mauTrangThai(s.label) }"></span>
+            <span class="brand-dot" :style="{ background: s.color }"></span>
             <span class="status-name">{{ s.label }}</span>
             <span class="status-count">{{ new Intl.NumberFormat('vi-VN').format(s.value) }}</span>
           </div>

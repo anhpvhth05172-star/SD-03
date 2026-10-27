@@ -39,12 +39,7 @@ const submit = async () => {
     } else {
       // Gắn cuộc trò chuyện ẩn danh (nếu có) vào tài khoản để không mất hội thoại cũ
       lienKetSauDangNhap(getMaAnDanh()).catch(() => {})
-      const redirect = typeof route.query.redirect === 'string'
-        && route.query.redirect.startsWith('/')
-        && !route.query.redirect.startsWith('//')
-        ? route.query.redirect
-        : '/tai-khoan'
-      router.push(redirect)
+      router.push('/trang-chu')
     }
   } catch (e) {
     error.value = e.message || 'Đăng nhập thất bại'

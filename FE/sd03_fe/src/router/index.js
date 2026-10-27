@@ -10,6 +10,7 @@ import {
 } from '../utils/auth'
 import { refreshSession } from '../api/http'
 import AdminLayout from '../layouts/AdminLayout.vue'
+import ClientLayout from '@/layouts/clients/ClientLayout.vue'
 import ProductListPage from '@/pages/Product/ProductListPage.vue'
 import ProductCreatePage from '@/pages/Product/ProductCreatePage.vue'
 import ProductVariantPage from '@/pages/Product/ProductVariantPage.vue'
@@ -39,6 +40,16 @@ import StatisticsPage from '@/pages/Statistics/StatisticsPage.vue'
 import WorkSchedulePage from '@/pages/Schedule/WorkSchedulePage.vue'
 import ShiftSchedulePage from '@/pages/Schedule/ShiftSchedulePage.vue'
 import GiaoCaListPage from '@/pages/Ca/GiaoCaListPage.vue'
+import Home from '@/pages/clients/views/Home.vue'
+import ProductShop from '@/pages/clients/views/ProductShop.vue'
+import ProductDetail from '@/pages/clients/views/ProductDetail.vue'
+import ProductCart from '@/pages/clients/views/ProductCart.vue'
+import CheckOut from '@/pages/clients/views/CheckOut.vue'
+import OrderLookup from '@/pages/clients/views/OrderLookup.vue'
+import OrderList from '@/pages/clients/views/OrderList.vue'
+import ProductCartDetail from '@/pages/clients/views/ProductCartDetail.vue'
+import About from '@/pages/clients/views/About.vue'
+import Contact from '@/pages/clients/views/Contact.vue'
 
 const metaBo = { requiresAuth: true, canBo: true }
 
@@ -55,6 +66,24 @@ const routes = [
     path: '/tai-khoan',
     component: CustomerAccountPage,
     meta: { title: 'Tài khoản của tôi', canKhach: true },
+  },
+  {
+    path: '/',
+    component: ClientLayout,
+    children: [
+      { path: '', redirect: '/trang-chu' },
+      { path: 'trang-chu', component: Home, meta: { title: 'Trang chủ Poly Shoes' } },
+      { path: 'cua-hang', component: ProductShop, meta: { title: 'Sản phẩm' } },
+      { path: 'cua-hang/:id', component: ProductDetail, meta: { title: 'Chi tiết sản phẩm' } },
+      { path: 'gio-hang', component: ProductCart, meta: { title: 'Giỏ hàng' } },
+      { path: 'thanh-toan', component: CheckOut, meta: { title: 'Thanh toán' } },
+      { path: 'tra-cuu', component: OrderLookup, meta: { title: 'Tra cứu đơn hàng' } },
+      { path: 'don-hang', component: OrderList, meta: { title: 'Đơn hàng của bạn' } },
+      { path: 'don-hang/:id', component: ProductCartDetail, meta: { title: 'Chi tiết đơn hàng' } },
+      { path: 'gioi-thieu', component: About, meta: { title: 'Giới thiệu' } },
+      { path: 'lien-he', component: Contact, meta: { title: 'Liên hệ' } },
+      { path: 'goi-y', redirect: '/cua-hang' },
+    ],
   },
   {
     path: '/',
@@ -89,7 +118,7 @@ const routes = [
       {
         path: '/thong-ke',
         component: StatisticsPage,
-        meta: { ...metaBo, title: 'Thống kê', roles: ['ADMIN', 'STAFF', 'NHAN_VIEN'] },
+        meta: { ...metaBo, title: 'Thống kê', roles: ['ADMIN'] },
       },
       {
         path: '/lich-lam-viec',
@@ -105,8 +134,11 @@ const routes = [
         path: '/ban-hang',
         name: 'PosSales',
         component: PosSalesPage,
-        // Màn hình mua hàng mặc định — công khai (khách ẩn danh cũng thấy)
-        meta: { title: 'Bán hàng tại quầy' },
+        meta: {
+          ...metaBo,
+          title: 'Bán hàng tại quầy',
+          roles: ['ADMIN', 'STAFF', 'NHAN_VIEN'],
+        },
       },
       {
         path: '/khach-hang',
@@ -147,13 +179,13 @@ const routes = [
         path: '/ca',
         name: 'GiaoCaList',
         component: GiaoCaListPage,
-        meta: { ...metaBo, title: 'Lịch sử giao ca', roles: ['NHAN_VIEN', 'ADMIN'] },
+        meta: { ...metaBo, title: 'Lịch sử giao ca', roles: ['ADMIN'] },
       },
       {
         path: '/ca/:id/doi-soat',
         name: 'GiaoCaDoiSoat',
         component: () => import('@/pages/Ca/GiaoCaDoiSoatPage.vue'),
-        meta: { ...metaBo, title: 'Đối soát ca', roles: ['NHAN_VIEN', 'ADMIN'] },
+        meta: { ...metaBo, title: 'Đối soát ca', roles: ['ADMIN'] },
       },
     ],
   },
@@ -180,7 +212,7 @@ router.beforeEach(async (to) => {
   // Trang đăng nhập/đăng ký: đã đăng nhập thì về trang tương ứng vai trò.
   if (to.meta.loginPage || to.path === '/dang-ky') {
     if (isNhanVienDangNhap()) return '/hoa-don'
-    if (isKhachHangDangNhap()) return '/tai-khoan'
+    if (isKhachHangDangNhap()) return '/trang-chu'
     return true
   }
 

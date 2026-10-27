@@ -14,6 +14,7 @@ const menu = [
     label: 'Thống kê',
     path: '/admin/thong-ke',
     iconType: 'chart',
+    adminOnly: true,
   },
   {
     label: 'Bán hàng tại quầy',
@@ -89,6 +90,7 @@ const menu = [
     label: 'Giao ca',
     path: '/ca',
     iconType: 'cashRegister',
+    adminOnly: true,
   },
 ]
 

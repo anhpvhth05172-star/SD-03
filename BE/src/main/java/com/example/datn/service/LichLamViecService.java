@@ -137,8 +137,8 @@ public class LichLamViecService {
     private void capNhat(DanhMucCaLamViec ca, CaLamViecLichRequest request) {
         ca.setMa(request.ma().trim().toLowerCase());
         ca.setTen(request.ten().trim());
-        ca.setBatDau(request.batDau());
-        ca.setKetThuc(request.ketThuc());
+        ca.setBatDau(java.sql.Time.valueOf(request.batDau()));
+        ca.setKetThuc(java.sql.Time.valueOf(request.ketThuc()));
     }
 
     private DanhMucCaLamViec timCa(Long id) {
@@ -147,7 +147,8 @@ public class LichLamViecService {
     }
 
     private CaLamViecLichDto toDto(DanhMucCaLamViec ca) {
-        return new CaLamViecLichDto(ca.getId(), ca.getMa(), ca.getTen(), ca.getBatDau(), ca.getKetThuc(), ca.isDangBat());
+        return new CaLamViecLichDto(ca.getId(), ca.getMa(), ca.getTen(), ca.getBatDau().toLocalTime(),
+            ca.getKetThuc().toLocalTime(), ca.isDangBat());
     }
 
     private LichLamViecDto toDto(LichLamViec lich) {

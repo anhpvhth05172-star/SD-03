@@ -15,12 +15,12 @@ import org.springframework.data.repository.query.Param;
 public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
 
     @Query("""
-        SELECT COALESCE(SUM(h.tienSauGiamGia), 0) FROM HoaDon h
-        WHERE h.daXoa = false AND h.trangThai = :trangThai
+        SELECT COALESCE(SUM(h.tienSauGiamGia - COALESCE(h.phiVanChuyen, 0)), 0) FROM HoaDon h
+        WHERE h.daXoa = false AND h.trangThai IN :trangThais
           AND h.ngayTao >= :tu AND h.ngayTao < :den
         """)
     java.math.BigDecimal tongDoanhThuTheoTrangThai(
-        @Param("trangThai") String trangThai,
+        @Param("trangThais") java.util.Collection<String> trangThais,
         @Param("tu") LocalDateTime tu,
         @Param("den") LocalDateTime den
     );

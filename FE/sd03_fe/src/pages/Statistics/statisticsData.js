@@ -20,7 +20,7 @@ export const cuoiNgay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate
 /** Build daily aggregates from actual invoice records. */
 export const taoBangNgay = (hoaDons = [], sanPhams = [], productIdByVariant = new Map()) => {
   const map = new Map()
-  const validStatus = new Set(['DA_HOAN_THANH'])
+  const validStatus = new Set(['DA_GIAO_HANG', 'DA_HOAN_THANH'])
   const productById = new Map((sanPhams || []).map((sp) => [Number(sp.id), sp]))
   const productByName = new Map((sanPhams || []).map((sp) => [sp.tenSanPham, sp]))
   const firstCustomerOrder = new Map()
@@ -41,7 +41,7 @@ export const taoBangNgay = (hoaDons = [], sanPhams = [], productIdByVariant = ne
     row.trangThais[status] = (row.trangThais[status] || 0) + 1
     if (status === 'DA_HOAN_TIEN') row.soTra++
     if (firstCustomerOrder.get(hd.idKhachHang)?.getTime() === d.getTime()) row.khachMoi++
-    const amount = Number(hd.tienSauGiamGia || 0)
+    const amount = Math.max(0, Number(hd.tienSauGiamGia || 0) - Number(hd.phiVanChuyen || 0))
     if (status === 'DA_XAC_NHAN') {
       row.doanhThuDuKien += amount
       const lines = hd.chiTiet || []
@@ -205,15 +205,15 @@ export const tinhTrangThaiDon = (bang, tu, den) => {
   const counts = {}
   danhSachKhoa(tu, den).forEach((key) => Object.entries(bang.get(key)?.trangThais || {}).forEach(([status, count]) => { counts[status] = (counts[status] || 0) + count }))
   const labels = { CHO_XAC_NHAN: 'Chờ xác nhận', DA_XAC_NHAN: 'Đã xác nhận', CHO_GIAO_HANG: 'Chờ giao hàng', DANG_GIAO_HANG: 'Đang giao hàng', DA_GIAO_HANG: 'Đã giao hàng', DA_HOAN_THANH: 'Đã hoàn thành', DA_HUY: 'Đã hủy', DA_HOAN_TIEN: 'Đã hoàn tiền', GIAO_HANG_THAT_BAI: 'Giao hàng thất bại' }
-  const colors = ['#d92d20', '#dc2626', '#ef4444', '#b91c1c', '#cc0000', '#a30000']
-  return Object.entries(counts).map(([status, soLuong], i) => ({ ten: labels[status] || status, soLuong, mau: colors[i % colors.length] }))
+  const colors = { CHO_XAC_NHAN: '#f43f5e', DA_XAC_NHAN: '#f59e0b', CHO_GIAO_HANG: '#eab308', DANG_GIAO_HANG: '#14b8a6', DA_GIAO_HANG: '#3b82f6', DA_HOAN_THANH: '#22c55e', DA_HUY: '#ef4444', DA_HOAN_TIEN: '#8b5cf6' }
+  return Object.entries(counts).map(([status, soLuong]) => ({ ten: labels[status] || status, soLuong, mau: colors[status] || '#94a3b8' }))
 }
 
 /** Aggregate sold quantities/revenue from real invoice lines. */
 export const tinhSanPham = (sanPhams, hoaDons, tu, den, productIdByVariant = new Map()) => {
   const rows = new Map((sanPhams || []).map((sp) => [Number(sp.id), { id: Number(sp.id), maSanPham: sp.maSanPham || '—', tenSanPham: sp.tenSanPham, tenThuongHieu: sp.tenThuongHieu || 'Thương hiệu khác', daBan: 0, soTra: 0, doanhThu: 0, tonKho: Number(sp.tongTonKho ?? sp.soLuong ?? 0), donIds: new Set() }]))
   const productIdByName = new Map((sanPhams || []).map((sp) => [sp.tenSanPham, Number(sp.id)]))
-  const validStatus = new Set(['DA_HOAN_THANH'])
+  const validStatus = new Set(['DA_GIAO_HANG', 'DA_HOAN_THANH'])
   for (const hd of hoaDons || []) {
     const d = hd.ngayTao ? new Date(hd.ngayTao) : null
     if (!d || d < dauNgay(tu) || d > cuoiNgay(den)) continue
@@ -233,7 +233,8 @@ export const tinhSanPham = (sanPhams, hoaDons, tu, den, productIdByVariant = new
       if (!row) continue
       const lineTotal = Number(line.thanhTien || 0)
       row.daBan += Number(line.soLuong || 0)
-      row.doanhThu += linesTotal > 0 ? Number(hd.tienSauGiamGia || 0) * lineTotal / linesTotal : 0
+      const amount = Math.max(0, Number(hd.tienSauGiamGia || 0) - Number(hd.phiVanChuyen || 0))
+      row.doanhThu += linesTotal > 0 ? amount * lineTotal / linesTotal : 0
       row.donIds.add(hd.id)
     }
   }
@@ -252,7 +253,7 @@ export const tinhBangThuongHieu = (dongSanPham) => {
     sp.donIds?.forEach((id) => g.donIds.add(id))
     tong += sp.doanhThu
   })
-  const colors = ['#d92d20', '#dc2626', '#ef4444', '#b91c1c', '#cc0000', '#94a3b8']
+  const colors = ['#2563eb', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#94a3b8']
   const all = [...nhom.values()].map((row) => ({ ten: row.ten, doanhThu: row.doanhThu, donIds: row.donIds }))
     .sort((a, b) => b.doanhThu - a.doanhThu)
   const top = all.slice(0, 5).map((row, i) => ({ ten: row.ten, doanhThu: row.doanhThu, soDon: row.donIds.size, mau: colors[i] }))
@@ -270,14 +271,14 @@ export const tinhBangThuongHieu = (dongSanPham) => {
 /** Actual sales assigned to each employee on the source invoices. */
 export const tinhNhanVien = (nhanViens, hoaDons, tu, den) => {
   const rows = new Map((nhanViens || []).map((nv) => [nv.id, { id: nv.id, maNhanVien: nv.maNhanVien || '—', ten: nv.tenTaiKhoan || nv.ten || '—', vaiTro: nv.tenVaiTro || nv.vaiTro || '', anh: nv.anhNhanVien || '', don: 0, spBan: 0, doanhThu: 0 }]))
-  const validStatus = new Set(['DA_HOAN_THANH'])
+  const validStatus = new Set(['DA_GIAO_HANG', 'DA_HOAN_THANH'])
   for (const hd of hoaDons || []) {
     const d = hd.ngayTao ? new Date(hd.ngayTao) : null
     if (!d || d < dauNgay(tu) || d > cuoiNgay(den) || !validStatus.has(hd.maTrangThai)) continue
     const row = rows.get(hd.idNhanVien)
     if (!row) continue
     row.don++
-    row.doanhThu += Number(hd.tienSauGiamGia || 0)
+    row.doanhThu += Math.max(0, Number(hd.tienSauGiamGia || 0) - Number(hd.phiVanChuyen || 0))
     for (const line of hd.chiTiet || []) row.spBan += Number(line.soLuong || 0)
   }
   return [...rows.values()].sort((a, b) => b.doanhThu - a.doanhThu)

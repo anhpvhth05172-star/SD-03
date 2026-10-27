@@ -3,7 +3,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from
 import QRCode from 'qrcode'
 import { Html5Qrcode } from 'html5-qrcode'
 import http, { API_ORIGIN } from '@/api/http'
-import { getProvinces, getWards, getServices, tinhPhi } from '@/api/shipping'
+import { getProvinces, getWards, tinhPhi } from '@/api/shipping'
 import { DS_63_TINH_THANH } from '@/api/diaGioi'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import { formatVnd, formatDateTime } from '@/utils/format'
@@ -11,13 +11,14 @@ import { getDangMo, moCa, getTongKet, ketCa } from '@/api/giaoCa'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 
 import { getUser } from '@/utils/auth'
-import { tenVaiTro } from '@/utils/session'
+import { laAdmin, tenVaiTro } from '@/utils/session'
 
 const API_BASE = `${API_ORIGIN}/api/v1`
 
 const staffUser = computed(() => getUser())
 const staffName = computed(() => staffUser.value?.tenKhachHang || staffUser.value?.tenTaiKhoan || 'Nhân viên')
 const staffRole = computed(() => tenVaiTro())
+const isAdmin = computed(() => laAdmin())
 
 const clockTimer = ref(null)
 
@@ -99,9 +100,6 @@ const createNewOrder = () => {
       province: null,
       ward: null,
       wardsLoading: false,
-      services: [],
-      servicesDistrictId: null,
-      serviceTypeId: null,
       shippingFee: 0,
       feeLoading: false,
       feeError: '',
@@ -1317,9 +1315,6 @@ const onProvinceChange = async () => {
   d.shippingFee = 0
   d.legacy = null
   d.feeError = ''
-  d.services = []
-  d.servicesDistrictId = null
-  d.serviceTypeId = null
   if (d.province) {
     d.wardsLoading = true
     try {
@@ -1379,7 +1374,10 @@ const tinhPhiVanChuyen = async () => {
     const res = await tinhPhi({
       toProvinceName: d.province.name,
       toWardName: d.ward.name,
-      serviceTypeId: d.serviceTypeId || undefined
+      items: currentOrder.value.cart.map(item => ({
+        idSanPhamChiTiet: item.idCtsp,
+        soLuong: item.quantity
+      }))
     })
     d.shippingFee = res.shippingFee || 30000
     d.legacy = {
@@ -1387,30 +1385,16 @@ const tinhPhiVanChuyen = async () => {
       toDistrictId: res.toDistrictId || 1,
       toWardCode: String(res.toWardCode || d.ward.id || '001')
     }
-    if (res.toDistrictId && d.servicesDistrictId !== res.toDistrictId) {
-      try {
-        d.services = await getServices(res.toDistrictId)
-        d.servicesDistrictId = res.toDistrictId
-      } catch {
-        d.services = [{ serviceTypeId: 2, shortName: 'Giao hàng tiêu chuẩn' }]
-      }
-    }
   } catch (e) {
-    d.shippingFee = 30000
-    d.legacy = {
-      toProvinceId: d.province.id || 1,
-      toDistrictId: 1,
-      toWardCode: String(d.ward.id || '001')
-    }
-    d.services = [{ serviceTypeId: 2, shortName: 'Giao hàng tiêu chuẩn' }]
-    d.feeError = ''
+    d.shippingFee = 0
+    d.legacy = null
+    d.feeError = e.message || 'Không thể xác định địa chỉ giao hàng với GHN'
   } finally {
     d.feeLoading = false
   }
 }
 
 const onWardChange = () => { tinhPhiVanChuyen() }
-const onServiceChange = () => { tinhPhiVanChuyen() }
 
 const provincesForSelect = computed(() =>
   (provincesList.value || []).map(p => ({ value: p.id, label: p.name, raw: p }))
@@ -1418,13 +1402,6 @@ const provincesForSelect = computed(() =>
 const wardsForSelect = computed(() =>
   (wardsList.value || []).map(w => ({ value: w.id, label: w.name, raw: w }))
 )
-const serviceOptionsForOrder = computed(() => {
-  const d = currentOrder.value?.deliveryInfo
-  return (d?.services || []).map(s => ({
-    value: s.serviceTypeId,
-    label: s.shortName || ('Dịch vụ ' + s.serviceTypeId)
-  }))
-})
 const onProvinceSelectChange = (val, opt) => {
   const d = currentOrder.value?.deliveryInfo
   if (!d) return
@@ -1438,7 +1415,7 @@ const onWardSelectChange = (val, opt) => {
   onWardChange()
 }
 
-watch(() => currentOrder.value?.cart?.length, () => {
+watch(() => currentOrder.value?.cart?.map(item => [item.idCtsp, item.quantity]), () => {
   const d = currentOrder.value?.deliveryInfo
   if (d && d.province && d.ward && !d.feeLoading) {
     tinhPhiVanChuyen()
@@ -1740,6 +1717,11 @@ const chenhLechKetCa = computed(() =>
 )
 
 const loadCaHienTai = async () => {
+  if (isAdmin.value) {
+    caHienTai.value = null
+    isLoadingCa.value = false
+    return
+  }
   isLoadingCa.value = true
   try {
     caHienTai.value = await getDangMo()
@@ -1887,7 +1869,7 @@ const handleCheckout = async () => {
   }
 
   // Đang tải trạng thái ca: chưa biết có ca hay không — không chặn oan, để BE quyết định (CA_CHUA_MO nếu thiếu)
-  if (!isLoadingCa.value && !caHienTai.value && !currentOrder.value.isDelivery) {
+  if (!isAdmin.value && !isLoadingCa.value && !caHienTai.value && !currentOrder.value.isDelivery) {
     notifyWarning('Chưa mở ca', 'Chưa mở ca, vui lòng mở ca để bán tại quầy!')
     openMoCaModal()
     return
@@ -2336,6 +2318,7 @@ onUnmounted(() => {
   <div class="pos-page">
     <!-- Giao ca banner (Mo ca / Ket ca) -->
     <div
+      v-if="!isAdmin"
       class="pos-ca-banner"
       :class="isLoadingCa ? 'loading' : (caHienTai ? 'ca-open' : 'ca-closed')"
     >
@@ -2577,7 +2560,7 @@ onUnmounted(() => {
               <h4 class="panel-title">Thông tin đơn hàng</h4>
             </div>
             <div class="delivery-switch-wrap">
-              <span class="delivery-switch-lbl">Giao hàng</span>
+              <span class="delivery-switch-lbl">{{ currentOrder?.isDelivery ? 'Giao hàng' : 'Bán tại quầy' }}</span>
               <label class="toggle-switch">
                 <input type="checkbox" v-if="currentOrder" v-model="currentOrder.isDelivery" />
                 <span class="toggle-slider"></span>
@@ -2611,17 +2594,6 @@ onUnmounted(() => {
               @change="onWardSelectChange"
             />
             <input type="text" class="del-input" placeholder="Số nhà, tên đường chi tiết..." v-model="currentOrder.deliveryInfo.recipientAddress" />
-            <SearchableSelect
-              v-if="currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length"
-              v-model="currentOrder.deliveryInfo.serviceTypeId"
-              :options="serviceOptionsForOrder"
-              value-key="value"
-              label-key="label"
-              placeholder="Chọn dịch vụ vận chuyển..."
-              search-placeholder="Tìm dịch vụ..."
-              :allow-clear="false"
-              @change="onServiceChange"
-            />
             <div v-if="currentOrder.deliveryInfo.feeLoading" class="fee-info">
               Đang tính phí vận chuyển với GHN...
             </div>
@@ -3850,7 +3822,7 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- Modal Mo ca (khong dong duoc khi click overlay - chua mo ca thi khong ban duoc) -->
+    <!-- Modal Mo ca -->
     <transition name="fade">
       <div v-if="isMoCaModalOpen" class="pos-modal-overlay">
         <div class="pos-modal-dialog modal-sm ca-modal-dialog">
@@ -3869,6 +3841,13 @@ onUnmounted(() => {
                 <span class="modal-badge-count">Bắt buộc trước khi bán</span>
               </div>
             </div>
+            <button
+              type="button"
+              class="pos-modal-close"
+              :disabled="isSavingMoCa"
+              title="Đóng"
+              @click="isMoCaModalOpen = false"
+            >×</button>
           </div>
 
           <div class="pos-modal-body">

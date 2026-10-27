@@ -356,13 +356,13 @@ public class HoaDonService {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         boolean nhanVien = auth != null && auth.getPrincipal() instanceof Long
             && auth.getAuthorities().stream().anyMatch(a -> "ROLE_NHAN_VIEN".equals(a.getAuthority()));
+        boolean admin = auth != null && auth.getPrincipal() instanceof Long
+            && auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
         boolean khachHang = auth != null && auth.getPrincipal() instanceof Long
             && auth.getAuthorities().stream().anyMatch(a -> "ROLE_KHACH_HANG".equals(a.getAuthority()));
 
-        if (nhanVien) {
-            if (!"TAI_QUAY".equals(loaiDon)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Nhân viên chỉ được tạo hóa đơn tại quầy");
-            }
+        if (nhanVien || admin) {
+            req.setIdNhanVien((Long) auth.getPrincipal());
             return;
         }
         if (!"ONLINE".equals(loaiDon)) {
@@ -698,7 +698,7 @@ public class HoaDonService {
             throw new IllegalArgumentException(
                 "Trạng thái khởi tạo không hợp lệ (Chờ xác nhận / Đã hoàn thành)");
         }
-        if (req.getIdNhanVien() == null) {
+        if ("TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon())) && req.getIdNhanVien() == null) {
             throw new IllegalArgumentException("Vui lòng chọn nhân viên");
         }
         if (req.getPhiVanChuyen() == null) {
@@ -859,6 +859,10 @@ public class HoaDonService {
             return null;
         }
         req.setIdNhanVien(idNhanVienSession);
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()))) {
+            return null;
+        }
         CaLamViecDto ca = giaoCaService.getDangMoOf(idNhanVienSession);
         if (ca == null) {
             throw new ResponseStatusException(
