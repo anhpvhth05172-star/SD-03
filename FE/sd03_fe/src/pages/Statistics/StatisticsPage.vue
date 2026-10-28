@@ -7,7 +7,7 @@ import { API_BASE } from '@/api/http'
 import { formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
 import { notifySuccess, notifyError } from '@/utils/notify'
-import { fetchTongQuan, fetchTrangThaiDon } from '@/api/statistics'
+import { fetchTongQuan, fetchTrangThaiDon, fetchEmailMacDinh, guiMailTongKet } from '@/api/statistics'
 import BarLineChart from '@/components/charts/BarLineChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
 import {
@@ -64,6 +64,79 @@ const capNhatLuc = ref(gioHienTai())
 const tongQuanData = ref(null)
 const trangThaiData = ref([])
 const dangTai = ref(false)
+
+/* ---------------------------------- Gửi mail tổng kết + so sánh ---------------------------------- */
+const showEmailModal = ref(false)
+const emailLoai = ref('THANG')
+const emailThang = ref(new Date().getMonth() + 1)
+const emailNam = ref(new Date().getFullYear())
+const emailNhan = ref('')
+const emailDangGui = ref(false)
+const emailErr = ref('')
+const soSanhMode = ref(false)
+
+const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
+
+const cacNamChon = computed(() => {
+  const hienTai = new Date().getFullYear()
+  const ds = []
+  for (let y = 2020; y <= hienTai; y++) ds.push(y)
+  return ds
+})
+
+const chuyenCheDoSoSanh = () => {
+  soSanhMode.value = !soSanhMode.value
+}
+
+const moGuiMail = () => {
+  emailErr.value = ''
+  showEmailModal.value = true
+  if (!emailNhan.value) {
+    fetchEmailMacDinh()
+      .then((r) => {
+        if (!emailNhan.value) emailNhan.value = r?.email || ''
+      })
+      .catch(() => {})
+  }
+}
+
+const dongGuiMail = () => {
+  showEmailModal.value = false
+  emailErr.value = ''
+}
+
+const guiBaoCao = async () => {
+  emailErr.value = ''
+  const email = (emailNhan.value || '').trim()
+  if (!EMAIL_RE.test(email)) {
+    emailErr.value = 'Email người nhận không hợp lệ'
+    return
+  }
+  if (emailLoai.value === 'THANG' && (!emailThang.value || !emailNam.value)) {
+    emailErr.value = 'Vui lòng chọn tháng và năm báo cáo'
+    return
+  }
+  if (emailLoai.value === 'NAM' && !emailNam.value) {
+    emailErr.value = 'Vui lòng chọn năm báo cáo'
+    return
+  }
+  emailDangGui.value = true
+  try {
+    const payload = { loai: emailLoai.value, nam: emailNam.value, emailNhan: email }
+    if (emailLoai.value === 'THANG') payload.thang = emailThang.value
+    const res = await guiMailTongKet(payload)
+    if (res?.thanhCong) {
+      notifySuccess('Đã gửi báo cáo', `Báo cáo đã được gửi tới ${res.emailNhan}`)
+      dongGuiMail()
+    } else {
+      notifyError('Gửi báo cáo thất bại', res?.lyDo || 'Nhà cung cấp email không chấp nhận — báo cáo CHƯA được gửi')
+    }
+  } catch (e) {
+    notifyError('Gửi báo cáo thất bại', e?.message || 'Không kết nối được máy chủ')
+  } finally {
+    emailDangGui.value = false
+  }
+}
 
 const chartMode = ref('cot')
 const thMode = ref('tron')
@@ -480,6 +553,33 @@ onMounted(async () => {
 
 <template>
   <div class="statistics-page-container">
+    <!-- PAGE HEADER -->
+    <div class="page-header">
+      <div class="page-header-text">
+        <h1 class="page-title">Thống kê doanh thu</h1>
+        <p class="page-subtitle">Tổng hợp kinh doanh, phân tích sản phẩm và theo dõi tăng trưởng bán hàng</p>
+      </div>
+      <div class="page-header-actions">
+        <button type="button" class="btn-mail-outline" @click="moGuiMail">
+          <i class="bi bi-envelope"></i>
+          Gửi mail tổng kết
+        </button>
+        <button
+          type="button"
+          class="btn-action-outline"
+          :class="{ 'is-active': soSanhMode }"
+          @click="chuyenCheDoSoSanh"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+          </svg>
+          So sánh doanh thu
+        </button>
+      </div>
+    </div>
+
     <!-- CARD 1: BỘ LỌC TỔNG QUAN -->
     <div class="filter-card">
       <div class="card-title-row space-between">
@@ -492,16 +592,35 @@ onMounted(async () => {
           <span class="card-title-text">Bộ lọc tổng quan</span>
         </div>
 
-        <div class="quick-range-group">
+        <div class="title-actions">
+          <div class="quick-range-group">
+            <button
+              v-for="q in QUICK"
+              :key="q.key"
+              type="button"
+              class="quick-range-btn"
+              :class="{ 'is-active': quickActive === q.key }"
+              @click="CHON_NHANH(q.key)"
+            >
+              {{ q.label }}
+            </button>
+          </div>
+          <button type="button" class="btn-mail-outline btn-mail-sm" @click="moGuiMail">
+            <i class="bi bi-envelope"></i>
+            Gửi mail tổng kết
+          </button>
           <button
-            v-for="q in QUICK"
-            :key="q.key"
             type="button"
-            class="quick-range-btn"
-            :class="{ 'is-active': quickActive === q.key }"
-            @click="CHON_NHANH(q.key)"
+            class="btn-action-outline btn-compare-sm"
+            :class="{ 'is-active': soSanhMode }"
+            @click="chuyenCheDoSoSanh"
           >
-            {{ q.label }}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+            So sánh doanh thu
           </button>
         </div>
       </div>
@@ -1067,6 +1186,88 @@ onMounted(async () => {
         @change="datTrangSp"
         @size-change="(s) => { sizeSp = s; pageSp = 0 }"
       />
+    </div>
+
+    <!-- HỘP THOẠI GỬI MAIL TỔNG KẾT -->
+    <div v-if="showEmailModal" class="mail-modal-overlay" @click.self="dongGuiMail">
+      <div class="mail-modal-dialog" role="dialog" aria-modal="true" aria-label="Gửi Mail Tổng Kết Doanh Thu">
+        <div class="mail-modal-header">
+          <h3 class="mail-modal-title">
+            <span class="mail-title-icon"><i class="bi bi-envelope-paper"></i></span>
+            Gửi Mail Tổng Kết Doanh Thu
+          </h3>
+          <button type="button" class="mail-modal-close" aria-label="Đóng" @click="dongGuiMail">×</button>
+        </div>
+
+        <div class="mail-modal-body">
+          <div class="mail-toggle">
+            <button
+              type="button"
+              class="mail-toggle-btn"
+              :class="{ 'is-active': emailLoai === 'THANG' }"
+              @click="emailLoai = 'THANG'"
+            >
+              Báo cáo tổng kết Tháng
+            </button>
+            <button
+              type="button"
+              class="mail-toggle-btn"
+              :class="{ 'is-active': emailLoai === 'NAM' }"
+              @click="emailLoai = 'NAM'"
+            >
+              Báo cáo tổng kết Năm
+            </button>
+          </div>
+
+          <div class="mail-field-row">
+            <div v-if="emailLoai === 'THANG'" class="mail-field">
+              <label class="mail-field-label">Chọn Tháng</label>
+              <select v-model="emailThang" class="mail-select">
+                <option v-for="m in 12" :key="m" :value="m">Tháng {{ m }}</option>
+              </select>
+            </div>
+            <div class="mail-field">
+              <label class="mail-field-label">Chọn Năm</label>
+              <select v-model="emailNam" class="mail-select">
+                <option v-for="y in cacNamChon" :key="y" :value="y">{{ y }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mail-field">
+            <label class="mail-field-label">Email Admin nhận báo cáo</label>
+            <input
+              v-model="emailNhan"
+              type="email"
+              class="mail-input"
+              placeholder="admin@polyshoes.vn"
+              @input="emailErr = ''"
+            />
+            <span class="mail-field-note">
+              Mặc định lấy địa chỉ email Admin hệ thống. Bạn có thể thay đổi để kiểm thử gửi vào email bất kỳ.
+            </span>
+            <span v-if="emailErr" class="mail-field-err">{{ emailErr }}</span>
+          </div>
+
+          <div class="mail-info-box">
+            <i class="bi bi-clock-history"></i>
+            <span>
+              <strong>Trạng thái tự động của hệ thống (@Scheduled):</strong>
+              Hệ thống tự động gửi báo cáo vào 23:59 ngày cuối mỗi tháng và 31/12 cuối năm về hộp thư Quản trị viên.
+            </span>
+          </div>
+        </div>
+
+        <div class="mail-modal-footer">
+          <button type="button" class="mail-btn-cancel" :disabled="emailDangGui" @click="dongGuiMail">
+            Hủy bỏ
+          </button>
+          <button type="button" class="mail-btn-send" :disabled="emailDangGui" @click="guiBaoCao">
+            <span v-if="emailDangGui" class="mail-spinner" aria-hidden="true"></span>
+            {{ emailDangGui ? 'Đang gửi...' : 'Gửi báo cáo ngay' }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -1828,6 +2029,356 @@ onMounted(async () => {
 
   .field-block.grow {
     min-width: 0;
+  }
+}
+
+/* ---------------------- Page header ---------------------- */
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.page-subtitle {
+  font-size: 13.5px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.page-header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-mail-outline {
+  height: 42px;
+  padding: 0 16px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #16a34a;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.btn-mail-outline i {
+  font-size: 14px;
+}
+
+.btn-mail-outline:hover {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+.btn-mail-outline:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.title-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-mail-sm,
+.btn-compare-sm {
+  height: 36px;
+  padding: 0 12px;
+}
+
+.btn-action-outline.is-active {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: var(--primary-hover);
+}
+
+/* ---------------------- Hộp thoại gửi mail tổng kết ---------------------- */
+.mail-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.mail-modal-dialog {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  width: 100%;
+  max-width: 560px;
+  overflow: hidden;
+  border: 1px solid #f1f5f9;
+  animation: mailModalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes mailModalPop {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.mail-modal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mail-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mail-title-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff1f2;
+  color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.mail-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #94a3b8;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.mail-modal-close:hover {
+  color: #0f172a;
+}
+
+.mail-modal-body {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.mail-toggle {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 10px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.mail-toggle-btn {
+  flex: 1;
+  height: 38px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.mail-toggle-btn.is-active {
+  background: #ffffff;
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.mail-field-row {
+  display: flex;
+  gap: 14px;
+}
+
+.mail-field-row .mail-field {
+  flex: 1;
+}
+
+.mail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mail-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.mail-select,
+.mail-input {
+  height: 40px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13.5px;
+  color: #1e293b;
+  background: #ffffff;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.mail-select:focus,
+.mail-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.1);
+}
+
+.mail-field-note {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.mail-field-err {
+  font-size: 12.5px;
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.mail-info-box {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 12.5px;
+  color: #065f46;
+  line-height: 1.6;
+}
+
+.mail-info-box i {
+  color: #059669;
+  font-size: 15px;
+  margin-top: 2px;
+}
+
+.mail-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.mail-btn-cancel {
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.mail-btn-cancel:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.mail-btn-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mail-btn-send {
+  height: 40px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.mail-btn-send:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.mail-btn-send:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.mail-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: mailSpin 0.7s linear infinite;
+}
+
+@keyframes mailSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1199px) {
+  .title-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .page-header-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 </style>
