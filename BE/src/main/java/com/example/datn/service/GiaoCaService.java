@@ -15,11 +15,14 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -159,13 +162,53 @@ public class GiaoCaService {
     @Transactional(readOnly = true)
     public Page<CaLamViecDto> lichSu(
         int page, int size, LocalDate tuNgay, LocalDate denNgay,
-        String trangThai, Long idNhanVien, Long callerId, boolean callerAdmin
+        String trangThai, Long idNhanVien, String keyword, Long callerId, boolean callerAdmin
     ) {
         Long idLoc = callerAdmin ? idNhanVien : callerId;
         LocalDateTime tu = tuNgay == null ? null : tuNgay.atStartOfDay();
         LocalDateTime den = denNgay == null ? null : denNgay.plusDays(1).atTime(LocalTime.MIDNIGHT);
+        String tuKhoa = keyword == null || keyword.isBlank() ? null : keyword.trim();
         PageRequest pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
-        return caLamViecRepository.lichSu(idLoc, trangThai, tu, den, pageable).map(this::toDto);
+        Page<CaLamViec> trang = caLamViecRepository.lichSu(idLoc, trangThai, tu, den, tuKhoa, pageable);
+
+        // Batch load ten nhan vien cho nguoi ket ca (chuoi ID trong nguoiCapNhat)
+        Set<Long> idNguoi = new HashSet<>();
+        for (CaLamViec ca : trang.getContent()) {
+            if (TRANG_THAI_DA_KET_CA.equals(ca.getTrangThai())) {
+                Long id = parseId(ca.getNguoiCapNhat());
+                if (id != null) {
+                    idNguoi.add(id);
+                }
+            }
+        }
+        Map<Long, String> tenNguoi = idNguoi.isEmpty()
+            ? Map.of()
+            : nhanVienRepository.findAllById(idNguoi).stream()
+                .collect(java.util.stream.Collectors.toMap(NhanVien::getId, NhanVien::getTenTaiKhoan));
+
+        List<CaLamViecDto> noiDung = trang.getContent().stream().map(ca -> {
+            CaLamViecDto dto = toDto(ca);
+            if (TRANG_THAI_DA_KET_CA.equals(ca.getTrangThai())) {
+                Long id = parseId(ca.getNguoiCapNhat());
+                if (id != null) {
+                    // nhan vien khong con -> tenNguoiNhan van null
+                    dto.setTenNguoiNhan(tenNguoi.get(id));
+                }
+            }
+            return dto;
+        }).toList();
+        return new PageImpl<>(noiDung, trang.getPageable(), trang.getTotalElements());
+    }
+
+    private static Long parseId(String giaTri) {
+        if (giaTri == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(giaTri.trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     // ---- helpers ----

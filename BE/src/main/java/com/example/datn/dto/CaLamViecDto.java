@@ -36,4 +36,5 @@ public class CaLamViecDto {
     private String lyDoLech;
     private String ghiChuMo;
     private List<LichSuCaDto> lichSu;
+    private String tenNguoiNhan;
 }
