@@ -3,7 +3,10 @@ package com.example.datn.service;
 import com.example.datn.dto.ThongKe.ChiTietThongKeRow;
 import com.example.datn.dto.ThongKe.HoaDonThongKeRow;
 import com.example.datn.dto.ThongKe.KySoSanhDTO;
+import com.example.datn.dto.ThongKe.SanPhamThongKeRow;
+import com.example.datn.dto.ThongKe.SoSanhDTO;
 import com.example.datn.dto.ThongKe.TongQuanDTO;
+import com.example.datn.dto.ThongKe.TopSanPhamKyDTO;
 import com.example.datn.dto.ThongKe.TrangThaiDonDTO;
 import com.example.datn.repository.ThongKeRepository;
 import java.math.BigDecimal;
@@ -318,5 +321,95 @@ public class ThongKeService {
             throw new IllegalArgumentException("Năm không hợp lệ: " + n);
         }
         return n;
+    }
+
+    /**
+     * So sanh doanh thu: cac ky doi chieu + top 10 san pham ban chay theo ky.
+     * keyword chi loc bang top san pham (khong anh den so lieu ky).
+     */
+    public SoSanhDTO soSanh(
+        String cheDo, Integer nam, LocalDate tu1, LocalDate den1, LocalDate tu2, LocalDate den2,
+        String thuongHieu, String keyword
+    ) {
+        List<KySoSanhDTO> ky = tinhKySoSanh(cheDo, nam, tu1, den1, tu2, den2, thuongHieu);
+        List<RanhKy> ds = danhSachKy(cheDo, nam, tu1, den1, tu2, den2);
+
+        LocalDateTime tuAll = ds.stream().map(RanhKy::tu).min(LocalDate::compareTo).orElseThrow().atStartOfDay();
+        LocalDateTime denAll = ds.stream().map(RanhKy::den).max(LocalDate::compareTo).orElseThrow().plusDays(1).atStartOfDay();
+        List<SanPhamThongKeRow> rows = thongKeRepository.findSanPhamTrongKhoang(tuAll, denAll);
+
+        String kw = keyword == null || keyword.isBlank() ? null : keyword.trim().toLowerCase();
+        String th = thuongHieu == null || thuongHieu.isBlank() ? null : thuongHieu.trim().toLowerCase();
+
+        Map<String, long[]> tongTheoSp = new LinkedHashMap<>();
+        Map<String, long[]> banTheoKy = new LinkedHashMap<>();
+        Map<String, SanPhamThongKeRow> mau = new LinkedHashMap<>();
+
+        for (SanPhamThongKeRow r : rows) {
+            if (r.ngayTao() == null || r.maSanPham() == null) {
+                continue;
+            }
+            if (r.daXoa() || TRANG_THAI_HUY_HOAN_TIEN.contains(r.trangThai())) {
+                continue;
+            }
+            if (th != null && (r.tenThuongHieu() == null || !r.tenThuongHieu().trim().toLowerCase().equals(th))) {
+                continue;
+            }
+            if (kw != null) {
+                String ma = r.maSanPham().toLowerCase();
+                String ten = r.tenSanPham() == null ? "" : r.tenSanPham().toLowerCase();
+                if (!ma.contains(kw) && !ten.contains(kw)) {
+                    continue;
+                }
+            }
+            int idx = -1;
+            for (int i = 0; i < ds.size(); i++) {
+                RanhKy k = ds.get(i);
+                LocalDateTime tuK = k.tu().atStartOfDay();
+                LocalDateTime denK = k.den().plusDays(1).atStartOfDay();
+                if (!r.ngayTao().isBefore(tuK) && r.ngayTao().isBefore(denK)) {
+                    idx = i;
+                    break;
+                }
+            }
+            if (idx < 0) {
+                continue;
+            }
+            int sl = r.soLuong() == null ? 0 : r.soLuong();
+            long tt = r.thanhTien() == null ? 0 : r.thanhTien().longValue();
+            long[] t = tongTheoSp.computeIfAbsent(r.maSanPham(), x -> new long[2]);
+            t[0] += sl;
+            t[1] += tt;
+            long[] b = banTheoKy.computeIfAbsent(r.maSanPham(), x -> new long[ds.size()]);
+            b[idx] += sl;
+            mau.putIfAbsent(r.maSanPham(), r);
+        }
+
+        List<String> maSapXep = new ArrayList<>(tongTheoSp.keySet());
+        maSapXep.sort((a, b) -> {
+            long[] ta = tongTheoSp.get(a);
+            long[] tb = tongTheoSp.get(b);
+            if (ta[0] != tb[0]) {
+                return Long.compare(tb[0], ta[0]);
+            }
+            return Long.compare(tb[1], ta[1]);
+        });
+
+        List<TopSanPhamKyDTO> top = new ArrayList<>();
+        for (String ma : maSapXep) {
+            if (top.size() >= 10) {
+                break;
+            }
+            SanPhamThongKeRow r = mau.get(ma);
+            long[] t = tongTheoSp.get(ma);
+            long[] b = banTheoKy.get(ma);
+            List<Long> theoKy = new ArrayList<>(b.length);
+            for (long v : b) {
+                theoKy.add(v);
+            }
+            top.add(new TopSanPhamKyDTO(r.maSanPham(), r.tenSanPham(), r.tenThuongHieu(), t[0], t[1], theoKy));
+        }
+
+        return new SoSanhDTO(ky, top);
     }
 }

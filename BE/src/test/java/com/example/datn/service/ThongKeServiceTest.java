@@ -11,12 +11,16 @@ import static org.mockito.Mockito.when;
 import com.example.datn.dto.ThongKe.ChiTietThongKeRow;
 import com.example.datn.dto.ThongKe.HoaDonThongKeRow;
 import com.example.datn.dto.ThongKe.KySoSanhDTO;
+import com.example.datn.dto.ThongKe.SanPhamThongKeRow;
+import com.example.datn.dto.ThongKe.SoSanhDTO;
 import com.example.datn.dto.ThongKe.TongQuanDTO;
+import com.example.datn.dto.ThongKe.TopSanPhamKyDTO;
 import com.example.datn.dto.ThongKe.TrangThaiDonDTO;
 import com.example.datn.repository.ThongKeRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -312,5 +316,79 @@ class ThongKeServiceTest {
         assertEquals(tong.tienMat(), ky.get(9).tienMat());
         assertEquals(tong.tienChuyenKhoan(), ky.get(9).tienChuyenKhoan());
         assertEquals(tong.sanPhamBan(), ky.get(9).sanPhamBan());
+    }
+
+    /* ---------------------------------- Top san pham theo ky ---------------------------------- */
+
+    private static SanPhamThongKeRow spr(long idHd, LocalDateTime ngayTao, String ma, String ten, String tenTh, String thanhTien, int sl) {
+        return new SanPhamThongKeRow(idHd, "DA_HOAN_THANH", false, ngayTao, ma, ten, tenTh, new BigDecimal(thanhTien), sl);
+    }
+
+    private static final LocalDateTime THANG10 = LocalDateTime.of(2026, 10, 15, 10, 0);
+
+    @Test
+    void soSanh_topSapXepTheoTongBanGiamDanVaGioiHan10() {
+        mockRows(List.of(), List.of(), 0);
+        List<SanPhamThongKeRow> rows = new ArrayList<>();
+        for (int i = 1; i <= 12; i++) {
+            rows.add(spr(i, THANG10, "SP" + i, "San pham " + i, null, "100000", i));
+        }
+        when(repo.findSanPhamTrongKhoang(any(), any())).thenReturn(rows);
+
+        SoSanhDTO r = service().soSanh("thang", 2026, null, null, null, null, null, null);
+
+        assertEquals(12, r.ky().size());
+        List<TopSanPhamKyDTO> top = r.topSanPham();
+        assertEquals(10, top.size());
+        assertEquals("SP12", top.get(0).maSanPham());
+        assertEquals(12L, top.get(0).tongBan());
+        assertEquals("SP3", top.get(9).maSanPham());
+        assertEquals(12, top.get(0).banTheoKy().size());
+        assertEquals(12L, top.get(0).banTheoKy().get(9));
+    }
+
+    @Test
+    void soSanh_topLocKeywordTheoMaVaTen() {
+        mockRows(List.of(), List.of(), 0);
+        when(repo.findSanPhamTrongKhoang(any(), any())).thenReturn(List.of(
+            spr(1, THANG10, "SP001", "Ao thun co tron", null, "500000", 5),
+            spr(2, THANG10, "SP002", "Ao polo nam", null, "300000", 3),
+            spr(3, THANG10, "SP007", "moi 2", null, "100000", 1)
+        ));
+
+        assertEquals(3, service().soSanh("thang", 2026, null, null, null, null, null, "sp00").topSanPham().size());
+
+        List<TopSanPhamKyDTO> theoTen = service().soSanh("thang", 2026, null, null, null, null, null, "THUN").topSanPham();
+        assertEquals(1, theoTen.size());
+        assertEquals("SP001", theoTen.get(0).maSanPham());
+
+        assertEquals(0, service().soSanh("thang", 2026, null, null, null, null, null, "khong ton tai").topSanPham().size());
+    }
+
+    @Test
+    void soSanh_topLocTheoThuongHieu() {
+        mockRows(List.of(), List.of(), 0);
+        when(repo.findSanPhamTrongKhoang(any(), any())).thenReturn(List.of(
+            spr(1, THANG10, "SP001", "Ao FF", "FF Shirt", "700000", 7),
+            spr(2, THANG10, "SP002", "Ao local", "Local Brand", "900000", 9),
+            spr(3, THANG10, "SP003", "Ao FF 2", "FF Shirt", "100000", 1)
+        ));
+
+        List<TopSanPhamKyDTO> top = service().soSanh("thang", 2026, null, null, null, null, "FF Shirt", null).topSanPham();
+
+        assertEquals(2, top.size());
+        assertEquals("SP001", top.get(0).maSanPham());
+        assertEquals("SP003", top.get(1).maSanPham());
+    }
+
+    @Test
+    void soSanh_topRongKhiKhongCoDuLieu() {
+        mockRows(List.of(), List.of(), 0);
+        when(repo.findSanPhamTrongKhoang(any(), any())).thenReturn(List.of());
+
+        SoSanhDTO r = service().soSanh("thang", 2026, null, null, null, null, null, null);
+
+        assertEquals(12, r.ky().size());
+        assertEquals(0, r.topSanPham().size());
     }
 }
