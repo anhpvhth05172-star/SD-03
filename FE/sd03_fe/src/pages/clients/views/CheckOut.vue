@@ -200,7 +200,69 @@ const VF = {
 const isPercent = (loai) => /PHAN_TRAM|PERCENT|%/.test(loai);
 const isPersonal = (scope) => /CA_NHAN|KHACH_HANG|RIENG|PRIVATE/.test(scope);
 
-// Trả về { ok: true, voucher } hoặc { ok: false, message }
+// Kiểm tra điều kiện của 1 phiếu. Trả về chuỗi lỗi, hoặc "" nếu hợp lệ.
+// ignoreMin = true: bỏ qua điều kiện "đơn tối thiểu" (dùng khi liệt kê phiếu gợi ý)
+function checkVoucher(detail, ignoreMin = false) {
+  const act = VF.active(detail);
+  if (act === false || /NGUNG|TAT|INACTIVE|HET_HAN/i.test(String(act)))
+    return "Mã giảm giá đang bị tắt hoặc đã hết hạn.";
+
+  const now = new Date();
+  const st = VF.start(detail);
+  const en = VF.end(detail);
+  if (st && now < new Date(st))
+    return "Mã giảm giá chưa đến thời gian áp dụng.";
+  if (en && now > new Date(en)) return "Mã giảm giá đã hết hạn.";
+
+  const qty = VF.qty(detail);
+  if (qty !== undefined && qty !== null && Number(qty) <= 0)
+    return "Mã giảm giá đã hết lượt sử dụng.";
+
+  if (isPersonal(VF.scope(detail))) {
+    const cid = customer.value?.id;
+    if (!cid) return "Vui lòng đăng nhập để dùng mã này.";
+    if (!VF.customerIds(detail).includes(cid))
+      return "Mã này không áp dụng cho tài khoản của bạn.";
+  }
+
+  const min = VF.min(detail);
+  if (!ignoreMin && orderTotal.value < min)
+    return `Đơn tối thiểu ${money(min)} để dùng mã này.`;
+
+  return "";
+}
+
+// Chuẩn hóa dữ liệu phiếu thành { id, code, type, value, max, min }
+function toVoucher(detail) {
+  return {
+    id: VF.id(detail),
+    code: String(VF.code(detail)).toUpperCase(),
+    type: isPercent(VF.loai(detail)) ? "percent" : "fixed",
+    value: VF.value(detail),
+    max: VF.max(detail),
+    min: VF.min(detail),
+  };
+}
+
+// Số tiền giảm của 1 phiếu với tổng đơn `total`
+function calcDiscount(v, total) {
+  if (!v) return 0;
+  if (total < (v.min || 0)) return 0;
+  let d = v.type === "percent" ? (total * v.value) / 100 : v.value;
+  if (v.max > 0) d = Math.min(d, v.max);
+  return Math.max(0, Math.min(Math.floor(d), total));
+}
+
+// Lấy chi tiết 1 phiếu (có danh sách khách hàng được gắn)
+async function getVoucherDetail(v) {
+  try {
+    return { ...v, ...(await getJson(`${VOUCHER_API}/detail/${VF.id(v)}`)) };
+  } catch (e) {
+    return v; // dùng dữ liệu từ danh sách
+  }
+}
+
+// Trả về { ok: true, voucher } hoặc { ok: false, message }  (nhập mã tay)
 async function fetchVoucher(code) {
   // Back-end chỉ cho dùng phiếu giảm giá khi có khách hàng
   if (!customer.value?.id)
@@ -219,63 +281,12 @@ async function fetchVoucher(code) {
   }
   if (!found) return { ok: false, message: "Mã giảm giá không tồn tại." };
 
-  // 2) Lấy chi tiết (có danh sách khách hàng được gắn)
-  let detail = found;
-  try {
-    detail = {
-      ...found,
-      ...(await getJson(`${VOUCHER_API}/detail/${VF.id(found)}`)),
-    };
-  } catch (e) {
-    /* dùng dữ liệu từ danh sách */
-  }
+  // 2) Lấy chi tiết + 3) Kiểm tra điều kiện
+  const detail = await getVoucherDetail(found);
+  const msg = checkVoucher(detail);
+  if (msg) return { ok: false, message: msg };
 
-  // 3) Kiểm tra điều kiện
-  const act = VF.active(detail);
-  if (act === false || /NGUNG|TAT|INACTIVE|HET_HAN/i.test(String(act)))
-    return { ok: false, message: "Mã giảm giá đang bị tắt hoặc đã hết hạn." };
-
-  const now = new Date();
-  const st = VF.start(detail);
-  const en = VF.end(detail);
-  if (st && now < new Date(st))
-    return { ok: false, message: "Mã giảm giá chưa đến thời gian áp dụng." };
-  if (en && now > new Date(en))
-    return { ok: false, message: "Mã giảm giá đã hết hạn." };
-
-  const qty = VF.qty(detail);
-  if (qty !== undefined && qty !== null && Number(qty) <= 0)
-    return { ok: false, message: "Mã giảm giá đã hết lượt sử dụng." };
-
-  if (isPersonal(VF.scope(detail))) {
-    const cid = customer.value?.id;
-    if (!cid)
-      return { ok: false, message: "Vui lòng đăng nhập để dùng mã này." };
-    if (!VF.customerIds(detail).includes(cid))
-      return {
-        ok: false,
-        message: "Mã này không áp dụng cho tài khoản của bạn.",
-      };
-  }
-
-  const min = VF.min(detail);
-  if (orderTotal.value < min)
-    return {
-      ok: false,
-      message: `Đơn tối thiểu ${money(min)} để dùng mã này.`,
-    };
-
-  return {
-    ok: true,
-    voucher: {
-      id: VF.id(detail),
-      code,
-      type: isPercent(VF.loai(detail)) ? "percent" : "fixed",
-      value: VF.value(detail),
-      max: VF.max(detail),
-      min,
-    },
-  };
+  return { ok: true, voucher: toVoucher(detail) };
 }
 /* ======================================================= */
 
@@ -337,14 +348,7 @@ const voucherMsg = reactive({ text: "", ok: false });
 // Tổng trước giảm = tiền hàng + phí vận chuyển (khớp cách tính của back-end)
 const orderTotal = computed(() => cartTotal.value + SHIP_FEE);
 
-const discount = computed(() => {
-  const v = voucher.value;
-  if (!v) return 0;
-  if (orderTotal.value < (v.min || 0)) return 0;
-  let d = v.type === "percent" ? (orderTotal.value * v.value) / 100 : v.value;
-  if (v.max > 0) d = Math.min(d, v.max);
-  return Math.max(0, Math.min(Math.floor(d), orderTotal.value));
-});
+const discount = computed(() => calcDiscount(voucher.value, orderTotal.value));
 const finalTotal = computed(() => orderTotal.value - discount.value);
 
 const applying = ref(false);
@@ -381,6 +385,78 @@ watch(orderTotal, () => {
     voucherMsg.ok = false;
   }
 });
+
+/* ---------- Danh sách phiếu gợi ý theo giá trị đơn hàng ---------- */
+const allVouchers = ref([]); // chi tiết các phiếu tải từ API
+const loadingVouchers = ref(false);
+
+async function loadVouchers() {
+  if (!customer.value?.id) {
+    allVouchers.value = [];
+    return;
+  }
+  loadingVouchers.value = true;
+  try {
+    const page = await getJson(`${VOUCHER_API}?size=100`);
+    const list = page.content || page;
+    allVouchers.value = await Promise.all(list.map(getVoucherDetail));
+  } catch (e) {
+    console.warn("[Checkout] Không tải được danh sách phiếu:", e.message);
+    allVouchers.value = [];
+  } finally {
+    loadingVouchers.value = false;
+  }
+}
+// Tải lại khi đã có thông tin khách hàng
+watch(() => customer.value?.id, loadVouchers, { immediate: true });
+
+// Phiếu còn hiệu lực, kèm trạng thái đủ/chưa đủ điều kiện theo tổng đơn hiện tại
+const voucherOptions = computed(() => {
+  const total = orderTotal.value;
+  const list = allVouchers.value
+    .filter((d) => !checkVoucher(d, true))
+    .map((d) => {
+      const v = toVoucher(d);
+      const eligible = total >= (v.min || 0);
+      const end = VF.end(d);
+      return {
+        v,
+        eligible,
+        discount: eligible ? calcDiscount(v, total) : 0,
+        missing: Math.max(0, (v.min || 0) - total),
+        expire: end ? new Date(end).toLocaleDateString("vi-VN") : "",
+        best: false,
+      };
+    });
+  // Đủ điều kiện lên trước, giảm nhiều nhất lên đầu
+  list.sort(
+    (x, y) =>
+      Number(y.eligible) - Number(x.eligible) || y.discount - x.discount,
+  );
+  const best = list.find((o) => o.eligible && o.discount > 0);
+  if (best) best.best = true;
+  return list;
+});
+
+const bestVoucher = computed(() => voucherOptions.value.find((o) => o.best));
+
+const voucherLabel = (v) =>
+  v.type === "percent"
+    ? `Giảm ${v.value}%${v.max > 0 ? ` (tối đa ${money(v.max)})` : ""}`
+    : `Giảm ${money(v.value)}`;
+
+// Bấm vào phiếu: chọn / bỏ chọn
+function toggleVoucher(o) {
+  if (!o.eligible) return;
+  if (voucher.value?.id === o.v.id) {
+    removeVoucher();
+    return;
+  }
+  voucher.value = o.v;
+  voucherCode.value = "";
+  voucherMsg.text = "Áp dụng mã thành công!";
+  voucherMsg.ok = true;
+}
 
 /* ---------- Đặt hàng: lưu vào hóa đơn (POST /api/hoa-don) ---------- */
 const HOA_DON_API = "http://localhost:8080/api/hoa-don";
@@ -494,6 +570,7 @@ async function submit() {
 </script>
 
 <template>
+  <!-- ===== Đặt hàng thành công ===== -->
   <div v-if="done" class="ps-card text-center p-5">
     <div class="fs-1">🎉</div>
     <h3 class="mt-2">Đặt hàng thành công</h3>
@@ -516,6 +593,7 @@ async function submit() {
     </div>
   </div>
 
+  <!-- ===== Giỏ trống ===== -->
   <div v-else-if="!cart.items.length" class="ps-card text-center p-5">
     <h5>Giỏ hàng đang trống</h5>
     <RouterLink to="/cua-hang" class="btn btn-primary mt-2"
@@ -523,176 +601,266 @@ async function submit() {
     >
   </div>
 
-  <div v-else>
-    <h2 class="mb-4">Thanh toán</h2>
+  <!-- ===== Trang thanh toán ===== -->
+  <div v-else class="co-page">
+    <!-- Breadcrumb -->
+    <nav class="small mb-3 text-muted-ps">
+      <RouterLink to="/trang-chu" class="text-muted-ps text-decoration-none"
+        >Trang chủ</RouterLink
+      >
+      /
+      <RouterLink to="/gio-hang" class="text-muted-ps text-decoration-none"
+        >Giỏ hàng</RouterLink
+      >
+      /
+      <span class="text-dark fw-semibold">Thanh toán</span>
+    </nav>
+
     <div class="row g-4">
+      <!-- ================= CỘT TRÁI ================= -->
       <div class="col-lg-7">
-        <div class="ps-card p-4">
-          <h5 class="mb-3">Thông tin nhận hàng</h5>
+        <!-- Gợi ý đăng nhập (chỉ hiện khi chưa đăng nhập) -->
+        <div
+          v-if="!isLoggedIn"
+          class="ps-card co-card co-login d-flex align-items-center gap-2 mb-3"
+        >
+          <span class="small">Đã có tài khoản?</span>
+          <RouterLink
+            to="/dang-nhap"
+            class="small fw-bold text-primary text-decoration-underline"
+            >Đăng nhập</RouterLink
+          >
+        </div>
+
+        <!-- Thông tin giao hàng -->
+        <div class="ps-card co-card mb-3">
+          <h5 class="co-title">Thông tin giao hàng</h5>
 
           <!-- Địa chỉ đã lưu (chỉ hiện khi đã đăng nhập) -->
           <div v-if="isLoggedIn && savedAddresses.length" class="mb-4">
-            <label class="form-label fw-semibold small"
-              >Chọn địa chỉ đã lưu</label
-            >
-            <div
+            <label class="co-label">Chọn địa chỉ đã lưu</label>
+            <label
               v-for="a in savedAddresses"
               :key="a.id"
-              class="form-check border rounded p-2 ps-5 mb-2"
-              :class="{ 'border-primary bg-light': selectedAddr === a.id }"
+              :for="'addr-' + a.id"
+              class="co-option"
+              :class="{ active: selectedAddr === a.id }"
             >
               <input
                 :id="'addr-' + a.id"
-                class="form-check-input"
+                class="form-check-input co-radio"
                 type="radio"
                 :checked="selectedAddr === a.id"
                 @change="chooseAddress(a.id)"
               />
-              <label :for="'addr-' + a.id" class="form-check-label w-100">
-                <div class="fw-semibold small">
+              <span class="flex-grow-1">
+                <span class="d-block fw-semibold small">
                   {{ a.name || userInfo(currentUser).name }} ·
                   {{ a.phone || userInfo(currentUser).phone }}
                   <span v-if="a.isDefault" class="badge bg-primary ms-1"
                     >Mặc định</span
                   >
-                </div>
-                <div class="small text-muted">{{ a.address }}</div>
-              </label>
-            </div>
-            <div
-              class="form-check border rounded p-2 ps-5"
-              :class="{ 'border-primary bg-light': selectedAddr === 'new' }"
+                </span>
+                <span class="d-block small text-muted">{{ a.address }}</span>
+              </span>
+            </label>
+            <label
+              for="addr-new"
+              class="co-option mb-0"
+              :class="{ active: selectedAddr === 'new' }"
             >
               <input
                 id="addr-new"
-                class="form-check-input"
+                class="form-check-input co-radio"
                 type="radio"
                 :checked="selectedAddr === 'new'"
                 @change="chooseAddress('new')"
               />
-              <label
-                for="addr-new"
-                class="form-check-label w-100 small fw-semibold"
+              <span class="small fw-semibold">Nhập địa chỉ mới</span>
+            </label>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="co-label"
+                >Họ và tên <span class="text-danger">*</span></label
               >
-                Nhập địa chỉ mới
-              </label>
+              <input
+                v-model="f.name"
+                class="form-control co-input"
+                :readonly="lockName"
+                :class="{ 'is-invalid': errors.name, 'bg-light': lockName }"
+                placeholder="Nhập họ tên của bạn"
+              />
+              <div class="invalid-feedback">{{ errors.name }}</div>
+            </div>
+            <div class="col-md-6">
+              <label class="co-label"
+                >Số điện thoại <span class="text-danger">*</span></label
+              >
+              <input
+                v-model="f.phone"
+                class="form-control co-input"
+                :readonly="lockPhone"
+                :class="{ 'is-invalid': errors.phone, 'bg-light': lockPhone }"
+                placeholder="Nhập số điện thoại"
+              />
+              <div class="invalid-feedback">{{ errors.phone }}</div>
+            </div>
+            <div class="col-12">
+              <label class="co-label"
+                >Địa chỉ nhận hàng <span class="text-danger">*</span></label
+              >
+              <input
+                v-model="f.address"
+                class="form-control co-input"
+                :readonly="lockAddress"
+                :class="{
+                  'is-invalid': errors.address,
+                  'bg-light': lockAddress,
+                }"
+                placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
+              />
+              <div class="invalid-feedback">{{ errors.address }}</div>
+            </div>
+            <div class="col-12">
+              <label class="co-label">Ghi chú (không bắt buộc)</label>
+              <textarea
+                v-model="f.note"
+                rows="2"
+                class="form-control co-input"
+                placeholder="Ghi chú về đơn hàng, thời gian nhận hàng..."
+              ></textarea>
             </div>
           </div>
 
-          <div class="mb-3">
-            <label class="form-label fw-semibold small">Họ và tên</label>
-            <input
-              v-model="f.name"
-              class="form-control"
-              :readonly="lockName"
-              :class="{ 'is-invalid': errors.name, 'bg-light': lockName }"
-              placeholder="Nguyễn Văn A"
-            />
-            <div class="invalid-feedback">{{ errors.name }}</div>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold small">Số điện thoại</label>
-            <input
-              v-model="f.phone"
-              class="form-control"
-              :readonly="lockPhone"
-              :class="{ 'is-invalid': errors.phone, 'bg-light': lockPhone }"
-              placeholder="0912345678"
-            />
-            <div class="invalid-feedback">{{ errors.phone }}</div>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold small">Địa chỉ</label>
-            <input
-              v-model="f.address"
-              class="form-control"
-              :readonly="lockAddress"
-              :class="{ 'is-invalid': errors.address, 'bg-light': lockAddress }"
-              placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
-            />
-            <div class="invalid-feedback">{{ errors.address }}</div>
-          </div>
-          <div class="mb-4">
-            <label class="form-label fw-semibold small"
-              >Ghi chú (không bắt buộc)</label
+          <div class="co-hint">
+            <i class="bi bi-clock"></i>
+            <span
+              >Đơn hàng được giao trong giờ hành chính (thứ 2 đến thứ 7).</span
             >
-            <textarea
-              v-model="f.note"
-              rows="2"
-              class="form-control"
-              placeholder="Ghi chú về đơn hàng, thời gian nhận hàng..."
-            ></textarea>
           </div>
-          <h5 class="mb-3">Phương thức thanh toán</h5>
-          <div class="form-check mb-2">
+        </div>
+
+        <!-- Hình thức vận chuyển -->
+        <div class="ps-card co-card mb-3">
+          <h5 class="co-title">Hình thức vận chuyển</h5>
+          <label class="co-option active mb-0">
+            <input
+              class="form-check-input co-radio"
+              type="radio"
+              checked
+              disabled
+            />
+            <i class="bi bi-truck co-ico"></i>
+            <span class="flex-grow-1 small fw-semibold"
+              >Giao hàng tiêu chuẩn</span
+            >
+            <span class="small fw-semibold">{{ money(SHIP_FEE) }}</span>
+          </label>
+        </div>
+
+        <!-- Phương thức thanh toán -->
+        <div class="ps-card co-card">
+          <h5 class="co-title">Phương thức thanh toán</h5>
+
+          <label
+            for="cod"
+            class="co-option"
+            :class="{ active: f.pay === 'cod' }"
+          >
             <input
               id="cod"
               v-model="f.pay"
               value="cod"
               type="radio"
-              class="form-check-input"
+              class="form-check-input co-radio"
             />
-            <label for="cod" class="form-check-label"
-              >Thanh toán khi nhận hàng (COD)</label
-            >
-          </div>
-          <div class="form-check">
+            <span class="co-ico-box"><i class="bi bi-cash-coin"></i></span>
+            <span class="flex-grow-1">
+              <span class="d-block fw-semibold"
+                >Thanh toán khi nhận hàng (COD)</span
+              >
+              <span class="d-block small text-muted"
+                >Quý khách thanh toán tiền mặt trực tiếp cho nhân viên giao hàng
+                khi nhận hàng.</span
+              >
+            </span>
+          </label>
+
+          <label
+            for="bank"
+            class="co-option mb-0"
+            :class="{ active: f.pay === 'bank' }"
+          >
             <input
               id="bank"
               v-model="f.pay"
               value="bank"
               type="radio"
-              class="form-check-input"
+              class="form-check-input co-radio"
             />
-            <label for="bank" class="form-check-label"
-              >Chuyển khoản ngân hàng</label
-            >
-          </div>
+            <span class="co-ico-box"><i class="bi bi-bank"></i></span>
+            <span class="flex-grow-1">
+              <span class="d-block fw-semibold">Chuyển khoản ngân hàng</span>
+              <span class="d-block small text-muted"
+                >Chuyển khoản qua ứng dụng Ngân hàng hoặc Internet
+                Banking.</span
+              >
+            </span>
+          </label>
         </div>
       </div>
 
+      <!-- ================= CỘT PHẢI ================= -->
       <div class="col-lg-5">
-        <div class="ps-card p-4">
-          <h5 class="mb-3">Đơn hàng của bạn</h5>
+        <div class="co-sticky">
+          <!-- Sản phẩm -->
+          <div class="ps-card co-card mb-3">
+            <div class="co-cart-head">
+              <i class="bi bi-bag-check text-primary"></i>
+              Sản phẩm trong đơn ({{ cart.items.length }})
+            </div>
 
-          <!-- Sản phẩm có ảnh -->
-          <div
-            v-for="i in cart.items"
-            :key="i.id + '-' + i.size"
-            class="d-flex align-items-center gap-3 mb-3"
-          >
-            <div class="position-relative flex-shrink-0">
-              <img
-                :src="itemImage(i)"
-                :alt="i.name"
-                class="rounded border"
-                style="width: 64px; height: 64px; object-fit: cover"
-              />
-              <span
-                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-secondary"
-              >
-                {{ i.qty }}
-              </span>
+            <div
+              v-for="i in cart.items"
+              :key="i.id + '-' + i.size"
+              class="co-item"
+            >
+              <div class="position-relative flex-shrink-0">
+                <img
+                  :src="itemImage(i)"
+                  :alt="i.name"
+                  class="rounded border"
+                  style="width: 64px; height: 64px; object-fit: cover"
+                />
+                <span
+                  class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-secondary"
+                >
+                  {{ i.qty }}
+                </span>
+              </div>
+              <div class="flex-grow-1 small">
+                <div class="fw-semibold">{{ i.name }}</div>
+                <span class="co-chip">Size {{ i.size }}</span>
+              </div>
+              <div class="small fw-bold">{{ money(i.price * i.qty) }}</div>
             </div>
-            <div class="flex-grow-1 small">
-              <div class="fw-semibold">{{ i.name }}</div>
-              <div class="text-muted">Size {{ i.size }} × {{ i.qty }}</div>
-            </div>
-            <div class="small fw-semibold">{{ money(i.price * i.qty) }}</div>
           </div>
 
-          <!-- Voucher -->
-          <div class="border-top pt-3 mb-3">
-            <label class="form-label fw-semibold small">Mã giảm giá</label>
-            <div v-if="!voucher" class="input-group">
+          <!-- Mã giảm giá -->
+          <div class="ps-card co-card mb-3">
+            <h6 class="co-title mb-3">Mã giảm giá</h6>
+
+            <div v-if="!voucher" class="d-flex gap-2">
               <input
                 v-model="voucherCode"
-                class="form-control text-uppercase"
-                placeholder="Nhập mã voucher"
+                class="form-control co-input text-uppercase"
+                placeholder="Nhập mã giảm giá"
                 @keyup.enter="applyVoucher"
               />
               <button
-                class="btn btn-outline-primary"
+                class="btn btn-primary co-apply"
                 type="button"
                 :disabled="applying"
                 @click="applyVoucher"
@@ -700,58 +868,358 @@ async function submit() {
                 {{ applying ? "Đang kiểm tra..." : "Áp dụng" }}
               </button>
             </div>
-            <div
-              v-else
-              class="d-flex justify-content-between align-items-center border rounded p-2 bg-light"
-            >
-              <span class="small">
-                🏷️ <strong>{{ voucher.code }}</strong>
-              </span>
+
+            <div v-else class="co-voucher-ok">
+              <i class="bi bi-ticket-perforated-fill"></i>
+              <div class="flex-grow-1 small">
+                <div>
+                  Mã: <strong>{{ voucher.code }}</strong>
+                  <span
+                    v-if="bestVoucher && bestVoucher.v.id === voucher.id"
+                    class="badge bg-success ms-1"
+                    >Tốt nhất</span
+                  >
+                </div>
+                <div class="text-success fw-semibold">
+                  Đã giảm -{{ money(discount) }}
+                </div>
+              </div>
               <button
                 class="btn btn-sm btn-link text-danger p-0"
+                type="button"
+                title="Gỡ mã"
                 @click="removeVoucher"
               >
-                Gỡ
+                <i class="bi bi-x-lg"></i>
               </button>
             </div>
+
             <div
               v-if="voucherMsg.text"
-              class="small mt-1"
+              class="small mt-2"
               :class="voucherMsg.ok ? 'text-success' : 'text-danger'"
             >
               {{ voucherMsg.text }}
             </div>
+
+            <!-- Gợi ý nhanh -->
+            <div v-if="bestVoucher && !voucher" class="small mt-3">
+              <span class="text-muted">Gợi ý mã:</span>
+              <button
+                type="button"
+                class="badge bg-primary border-0 ms-2 co-suggest"
+                @click="toggleVoucher(bestVoucher)"
+              >
+                {{ bestVoucher.v.code }}
+              </button>
+            </div>
+
+            <!-- Danh sách phiếu theo giá trị đơn hàng -->
+            <div v-if="!isLoggedIn" class="small text-muted mt-3">
+              Đăng nhập để xem các phiếu giảm giá dành cho bạn.
+            </div>
+            <div v-else-if="loadingVouchers" class="small text-muted mt-3">
+              Đang tải phiếu giảm giá...
+            </div>
+            <div v-else-if="voucherOptions.length" class="mt-3">
+              <div class="co-label">Phiếu phù hợp với đơn hàng</div>
+              <div class="co-voucher-list">
+                <div
+                  v-for="o in voucherOptions"
+                  :key="o.v.id"
+                  class="co-vcard"
+                  :class="{
+                    active: voucher && voucher.id === o.v.id,
+                    disabled: !o.eligible,
+                  }"
+                >
+                  <div class="flex-grow-1">
+                    <div class="fw-bold small">
+                      {{ o.v.code }}
+                      <span v-if="o.best" class="badge bg-success ms-1"
+                        >Tốt nhất</span
+                      >
+                    </div>
+                    <div class="small">
+                      {{ voucherLabel(o.v) }} • Đơn từ {{ money(o.v.min) }}
+                    </div>
+                    <div v-if="o.expire" class="co-vexp">
+                      HSD: {{ o.expire }}
+                    </div>
+                    <div v-if="!o.eligible" class="co-vexp text-danger">
+                      Mua thêm {{ money(o.missing) }} để dùng mã này
+                    </div>
+                    <div v-else class="co-vexp text-success">
+                      Giảm được {{ money(o.discount) }}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-sm co-vbtn"
+                    :class="
+                      voucher && voucher.id === o.v.id
+                        ? 'btn-success'
+                        : 'btn-outline-primary'
+                    "
+                    :disabled="!o.eligible"
+                    @click="toggleVoucher(o)"
+                  >
+                    {{
+                      voucher && voucher.id === o.v.id
+                        ? "✓ Đang dùng"
+                        : "Áp dụng"
+                    }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div v-else class="small text-muted mt-3">
+              Hiện chưa có phiếu giảm giá nào khả dụng.
+            </div>
           </div>
 
-          <!-- Tổng tiền -->
-          <div class="d-flex justify-content-between small mb-2">
-            <span>Tạm tính</span><span>{{ money(cartTotal) }}</span>
+          <!-- Tóm tắt đơn hàng -->
+          <div class="ps-card co-card">
+            <h6 class="co-title mb-3">Tóm tắt đơn hàng</h6>
+
+            <div class="co-row">
+              <span>Tạm tính ({{ cart.items.length }} sản phẩm)</span>
+              <span class="fw-semibold">{{ money(cartTotal) }}</span>
+            </div>
+            <div class="co-row">
+              <span>Phí vận chuyển</span>
+              <span class="fw-semibold">{{ money(SHIP_FEE) }}</span>
+            </div>
+            <div v-if="discount" class="co-row text-success">
+              <span
+                >Giảm giá<span v-if="voucher"> [{{ voucher.code }}]</span
+                >:</span
+              >
+              <span class="fw-semibold">-{{ money(discount) }}</span>
+            </div>
+
+            <div class="co-total">
+              <span class="fw-bold">TỔNG CỘNG:</span>
+              <span class="price fs-4">{{ money(finalTotal) }}</span>
+            </div>
+
+            <div v-if="submitError" class="alert alert-danger small py-2">
+              {{ submitError }}
+            </div>
+
+            <button
+              class="btn btn-primary w-100 co-submit"
+              :disabled="submitting"
+              @click="submit"
+            >
+              {{ submitting ? "Đang xử lý..." : "Đặt hàng" }}
+            </button>
           </div>
-          <div class="d-flex justify-content-between small mb-2">
-            <span>Phí vận chuyển</span><span>{{ money(SHIP_FEE) }}</span>
-          </div>
-          <div
-            v-if="discount"
-            class="d-flex justify-content-between small mb-2 text-success"
-          >
-            <span>Giảm giá</span><span>-{{ money(discount) }}</span>
-          </div>
-          <div class="d-flex justify-content-between border-top pt-3 my-3">
-            <span class="fw-bold">Tổng cộng</span>
-            <span class="price fs-5">{{ money(finalTotal) }}</span>
-          </div>
-          <div v-if="submitError" class="alert alert-danger small py-2">
-            {{ submitError }}
-          </div>
-          <button
-            class="btn btn-primary w-100 py-2"
-            :disabled="submitting"
-            @click="submit"
-          >
-            {{ submitting ? "Đang xử lý..." : "Đặt hàng" }}
-          </button>
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Màu bám theo theme của dự án (trắng - đỏ) thông qua biến Bootstrap */
+.co-card {
+  padding: 1.25rem 1.5rem;
+  border-radius: 14px;
+}
+.co-login {
+  padding-top: 0.9rem;
+  padding-bottom: 0.9rem;
+}
+.co-title {
+  font-weight: 700;
+  margin-bottom: 1.1rem;
+}
+.co-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+.co-input {
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.92rem;
+}
+.co-input:focus {
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.15);
+}
+
+/* Ô chọn (địa chỉ / vận chuyển / thanh toán) */
+.co-option {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.7rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+}
+.co-option:hover {
+  border-color: var(--bs-primary);
+}
+.co-option.active {
+  border-color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), 0.05);
+}
+.co-radio {
+  margin: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.co-ico {
+  font-size: 1.4rem;
+  color: var(--bs-primary);
+}
+.co-ico-box {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  font-size: 1.3rem;
+  color: var(--bs-primary);
+  background: #f8f9fa;
+  border-radius: 10px;
+}
+
+.co-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+/* Cột phải */
+.co-sticky {
+  position: sticky;
+  top: 1rem;
+}
+.co-cart-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.9rem;
+  margin-bottom: 0.9rem;
+  border-bottom: 1px solid #eee;
+  font-weight: 700;
+}
+.co-item {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 0.9rem;
+}
+.co-item:last-child {
+  margin-bottom: 0;
+}
+.co-chip {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.75rem;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 6px;
+}
+
+.co-apply {
+  white-space: nowrap;
+  border-radius: 10px;
+  padding-inline: 1.1rem;
+  font-weight: 700;
+}
+.co-voucher-ok {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+}
+.co-voucher-ok > .bi-ticket-perforated-fill {
+  font-size: 1.3rem;
+  color: #16a34a;
+}
+
+.co-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.6rem;
+  font-size: 0.9rem;
+}
+.co-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 1rem 0;
+  padding-top: 1rem;
+  border-top: 1px dashed #d1d5db;
+}
+.co-submit {
+  padding: 0.8rem;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+/* Danh sách phiếu giảm giá */
+.co-voucher-list {
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.co-vcard {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 0.6rem;
+  border: 1px dashed #e5c7ca;
+  border-radius: 10px;
+  background: #fffafa;
+  transition: border-color 0.15s;
+}
+.co-vcard.active {
+  border: 1px solid var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), 0.06);
+}
+.co-vcard.disabled {
+  opacity: 0.6;
+  background: #f8f9fa;
+  border-color: #dee2e6;
+}
+.co-vexp {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+.co-vbtn {
+  white-space: nowrap;
+  font-weight: 600;
+  border-radius: 8px;
+}
+.co-suggest {
+  cursor: pointer;
+  padding: 0.4rem 0.7rem;
+}
+
+@media (max-width: 991.98px) {
+  .co-sticky {
+    position: static;
+  }
+}
+</style>
