@@ -391,4 +391,15 @@ class ThongKeServiceTest {
         assertEquals(12, r.ky().size());
         assertEquals(0, r.topSanPham().size());
     }
+
+    @Test
+    void demDonHuy_TinhDonHuyVaLoaiDaXoa() {
+        when(repo.findHoaDonTrongKhoang(any(), any())).thenReturn(List.of(
+            hd(1, "DA_HUY", "900000", "TM"),
+            hd(2, "DA_HOAN_TIEN", "500000", "BANK"),
+            new HoaDonThongKeRow(3L, "DA_HUY", BigDecimal.ZERO, true, "TM"),
+            hd(4, "DA_HOAN_THANH", "1000000", "TM")
+        ));
+        assertEquals(2L, service().demDonHuy(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)));
+    }
 }

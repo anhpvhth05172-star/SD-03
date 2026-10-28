@@ -158,6 +158,17 @@ public class ThongKeService {
         return new TongQuanDTO(doanhThu, tienMat, tienChuyenKhoan, soDon, aov, sanPhamBan, khachMoi);
     }
 
+    /**
+     * Dem don da huy/hoan tien trong khoang ngay (loai don da xoa).
+     */
+    public long demDonHuy(LocalDate tu, LocalDate den) {
+        LocalDateTime tuDT = tu.atStartOfDay();
+        LocalDateTime denDT = den.plusDays(1).atStartOfDay();
+        return thongKeRepository.findHoaDonTrongKhoang(tuDT, denDT).stream()
+            .filter(h -> !h.daXoa() && TRANG_THAI_HUY_HOAN_TIEN.contains(h.trangThai()))
+            .count();
+    }
+
     public List<TrangThaiDonDTO> trangThaiDon(LocalDate tu, LocalDate den, String thuongHieu) {
         LocalDateTime tuDT = tu.atStartOfDay();
         LocalDateTime denDT = den.plusDays(1).atStartOfDay();
