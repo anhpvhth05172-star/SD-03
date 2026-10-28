@@ -1,6 +1,7 @@
 package com.example.datn.controller;
 
 import com.example.datn.config.QuyenGuard;
+import com.example.datn.dto.ThongKe.SoSanhDTO;
 import com.example.datn.dto.ThongKe.TongQuanDTO;
 import com.example.datn.dto.ThongKe.TrangThaiDonDTO;
 import com.example.datn.service.ThongKeService;
@@ -39,5 +40,20 @@ public class ThongKeController {
     ) {
         quyenGuard.canQuanLyKhachHang();
         return thongKeService.trangThaiDon(tu, den, thuongHieu);
+    }
+
+    @GetMapping("/so-sanh")
+    public SoSanhDTO soSanh(
+        @RequestParam String cheDo,
+        @RequestParam(required = false) Integer nam,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate tu1,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate den1,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate tu2,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate den2,
+        @RequestParam(required = false) String thuongHieu,
+        @RequestParam(required = false) String keyword
+    ) {
+        quyenGuard.canQuanLyKhachHang();
+        return thongKeService.soSanh(cheDo, nam, tu1, den1, tu2, den2, thuongHieu, keyword);
     }
 }
