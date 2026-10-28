@@ -2,6 +2,7 @@ package com.example.datn.service;
 
 import com.example.datn.dto.ThongKe.ChiTietThongKeRow;
 import com.example.datn.dto.ThongKe.HoaDonThongKeRow;
+import com.example.datn.dto.ThongKe.KySoSanhDTO;
 import com.example.datn.dto.ThongKe.TongQuanDTO;
 import com.example.datn.dto.ThongKe.TrangThaiDonDTO;
 import com.example.datn.repository.ThongKeRepository;
@@ -9,6 +10,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Year;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -199,5 +202,121 @@ public class ThongKeService {
         return THU_TU_TRANG_THAI.stream()
             .map(ma -> new TrangThaiDonDTO(NHAN_TRANG_THAI.get(ma), demTheoTrangThai.get(ma)))
             .toList();
+    }
+
+    /* ---------------------------------- So sanh doanh thu ---------------------------------- */
+
+    private record RanhKy(String maKy, String tenKy, LocalDate tu, LocalDate den) {}
+
+    /**
+     * Tinh cac ky so sanh theo che do thang/quy/nam/2ky.
+     * Cong thuc doanh thu/AOV/tienMat lay dung tu tongQuanKhongLocThuongHieu/tongQuanLocThuongHieu.
+     */
+    public List<KySoSanhDTO> tinhKySoSanh(
+        String cheDo, Integer nam, LocalDate tu1, LocalDate den1, LocalDate tu2, LocalDate den2, String thuongHieu
+    ) {
+        List<RanhKy> ds = danhSachKy(cheDo, nam, tu1, den1, tu2, den2);
+
+        List<TongQuanDTO> ketQua = new ArrayList<>(ds.size());
+        long max = 0;
+        for (RanhKy k : ds) {
+            LocalDateTime tuDT = k.tu().atStartOfDay();
+            LocalDateTime denDT = k.den().plusDays(1).atStartOfDay();
+            List<HoaDonThongKeRow> hoaDons = thongKeRepository.findHoaDonTrongKhoang(tuDT, denDT);
+            List<ChiTietThongKeRow> chiTiets = thongKeRepository.findChiTietTrongKhoang(tuDT, denDT);
+            TongQuanDTO t = (thuongHieu == null || thuongHieu.isBlank())
+                ? tongQuanKhongLocThuongHieu(hoaDons, chiTiets, 0)
+                : tongQuanLocThuongHieu(hoaDons, chiTiets, 0, thuongHieu);
+            ketQua.add(t);
+            max = Math.max(max, t.doanhThu());
+        }
+
+        List<KySoSanhDTO> rs = new ArrayList<>(ds.size());
+        long prev = 0;
+        for (int i = 0; i < ds.size(); i++) {
+            RanhKy k = ds.get(i);
+            TongQuanDTO t = ketQua.get(i);
+            long chenhLech = t.doanhThu() - prev;
+            int tangTruong;
+            if (prev <= 0) {
+                tangTruong = t.doanhThu() > 0 ? 100 : 0;
+            } else {
+                tangTruong = (int) Math.round((t.doanhThu() - prev) * 100.0 / prev);
+            }
+            rs.add(new KySoSanhDTO(
+                k.maKy(), k.tenKy(), k.tu(), k.den(),
+                t.doanhThu(), t.tienMat(), t.tienChuyenKhoan(), t.soDon(), t.aov(), t.sanPhamBan(),
+                chenhLech, tangTruong, t.doanhThu() > 0 && t.doanhThu() == max
+            ));
+            prev = t.doanhThu();
+        }
+        return rs;
+    }
+
+    private List<RanhKy> danhSachKy(String cheDo, Integer nam, LocalDate tu1, LocalDate den1, LocalDate tu2, LocalDate den2) {
+        if (cheDo == null || cheDo.isBlank()) {
+            throw new IllegalArgumentException("Thiếu chế độ đối chiếu (cheDo)");
+        }
+        return switch (cheDo) {
+            case "thang" -> {
+                int n = kiemTraNam(nam);
+                List<RanhKy> ds = new ArrayList<>(12);
+                for (int m = 1; m <= 12; m++) {
+                    LocalDate tu = LocalDate.of(n, m, 1);
+                    LocalDate den = LocalDate.of(n, m, tu.lengthOfMonth());
+                    ds.add(new RanhKy("T" + m, "Tháng " + m, tu, den));
+                }
+                yield ds;
+            }
+            case "quy" -> {
+                int n = kiemTraNam(nam);
+                List<RanhKy> ds = new ArrayList<>(4);
+                for (int q = 1; q <= 4; q++) {
+                    int thangDau = (q - 1) * 3 + 1;
+                    int thangCuoi = thangDau + 2;
+                    LocalDate tu = LocalDate.of(n, thangDau, 1);
+                    LocalDate den = LocalDate.of(n, thangCuoi, LocalDate.of(n, thangCuoi, 1).lengthOfMonth());
+                    ds.add(new RanhKy("Q" + q, "Quý " + q, tu, den));
+                }
+                yield ds;
+            }
+            case "nam" -> {
+                int n = kiemTraNam(nam);
+                List<Integer> namCoDuLieu = thongKeRepository.cacNamCoDuLieu();
+                List<Integer> chon = (namCoDuLieu == null ? List.<Integer>of() : namCoDuLieu.stream()
+                    .filter(y -> y != null && y <= n)
+                    .limit(5)
+                    .toList());
+                if (chon.isEmpty()) {
+                    chon = List.of(n);
+                }
+                List<RanhKy> ds = new ArrayList<>(chon.size());
+                for (int y : chon) {
+                    ds.add(new RanhKy(String.valueOf(y), String.valueOf(y), LocalDate.of(y, 1, 1), LocalDate.of(y, 12, 31)));
+                }
+                yield ds;
+            }
+            case "2ky" -> {
+                if (tu1 == null || den1 == null || tu2 == null || den2 == null) {
+                    throw new IllegalArgumentException("Chế độ 2 kỳ cần đủ 4 ngày từ ngày/đến ngày của cả 2 kỳ");
+                }
+                if (tu1.isAfter(den1)) {
+                    throw new IllegalArgumentException("Kỳ 1: từ ngày phải trước hoặc bằng đến ngày");
+                }
+                if (tu2.isAfter(den2)) {
+                    throw new IllegalArgumentException("Kỳ 2: từ ngày phải trước hoặc bằng đến ngày");
+                }
+                yield List.of(new RanhKy("K1", "Kỳ 1", tu1, den1), new RanhKy("K2", "Kỳ 2", tu2, den2));
+            }
+            default -> throw new IllegalArgumentException("cheDo không hợp lệ: " + cheDo + " (chấp nhận thang|quy|nam|2ky)");
+        };
+    }
+
+    private int kiemTraNam(Integer nam) {
+        int n = nam == null ? Year.now().getValue() : nam;
+        if (n < 2000 || n > 2100) {
+            throw new IllegalArgumentException("Năm không hợp lệ: " + n);
+        }
+        return n;
     }
 }

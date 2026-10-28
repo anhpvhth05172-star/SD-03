@@ -1,17 +1,22 @@
 package com.example.datn.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.example.datn.dto.ThongKe.ChiTietThongKeRow;
 import com.example.datn.dto.ThongKe.HoaDonThongKeRow;
+import com.example.datn.dto.ThongKe.KySoSanhDTO;
 import com.example.datn.dto.ThongKe.TongQuanDTO;
 import com.example.datn.dto.ThongKe.TrangThaiDonDTO;
 import com.example.datn.repository.ThongKeRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -162,5 +167,150 @@ class ThongKeServiceTest {
         );
         List<TrangThaiDonDTO> rows = service().trangThaiDon(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 10, 19), "Nike");
         assertEquals(1L, rows.get(0).soLuong());
+    }
+
+    /* ---------------------------------- So sanh doanh thu ---------------------------------- */
+
+    private void mockRowsTheoKy(
+        java.util.Map<LocalDate, List<HoaDonThongKeRow>> hoaDonsTheoKy,
+        java.util.Map<LocalDate, List<ChiTietThongKeRow>> chiTietsTheoKy
+    ) {
+        when(repo.findHoaDonTrongKhoang(any(), any())).thenAnswer(inv -> {
+            LocalDateTime tu = inv.getArgument(0);
+            return hoaDonsTheoKy.getOrDefault(tu.toLocalDate(), List.of());
+        });
+        when(repo.findChiTietTrongKhoang(any(), any())).thenAnswer(inv -> {
+            LocalDateTime tu = inv.getArgument(0);
+            return chiTietsTheoKy.getOrDefault(tu.toLocalDate(), List.of());
+        });
+    }
+
+    @Test
+    void soSanh_thangTraVe12KyTheoThuTuNam() {
+        mockRows(List.of(), List.of(), 0);
+        List<KySoSanhDTO> ky = service().tinhKySoSanh("thang", 2026, null, null, null, null, null);
+        assertEquals(12, ky.size());
+        assertEquals("T1", ky.get(0).maKy());
+        assertEquals(LocalDate.of(2026, 1, 1), ky.get(0).tu());
+        assertEquals(LocalDate.of(2026, 1, 31), ky.get(0).den());
+        assertEquals("Tháng 12", ky.get(11).tenKy());
+        assertEquals(LocalDate.of(2026, 12, 31), ky.get(11).den());
+    }
+
+    @Test
+    void soSanh_quyTraVe4Ky() {
+        mockRows(List.of(), List.of(), 0);
+        List<KySoSanhDTO> ky = service().tinhKySoSanh("quy", 2026, null, null, null, null, null);
+        assertEquals(4, ky.size());
+        assertEquals("Q1", ky.get(0).maKy());
+        assertEquals(LocalDate.of(2026, 1, 1), ky.get(0).tu());
+        assertEquals(LocalDate.of(2026, 3, 31), ky.get(0).den());
+        assertEquals(LocalDate.of(2026, 12, 31), ky.get(3).den());
+    }
+
+    @Test
+    void soSanh_tinhChenhLechVaTangTruongTheoCongThucChuan() {
+        // Chi ky 10/2026 co doanh thu; T9/T11 khong -> prev = 0 theo cong thuc chuan
+        mockRowsTheoKy(
+            java.util.Map.of(LocalDate.of(2026, 10, 1), List.of(hd(1, "DA_HOAN_THANH", "102352150", "TM"))),
+            java.util.Map.of()
+        );
+        List<KySoSanhDTO> ky = service().tinhKySoSanh("thang", 2026, null, null, null, null, null);
+        assertEquals(102_352_150L, ky.get(9).doanhThu());
+        assertEquals(102_352_150L, ky.get(9).chenhLech());
+        assertEquals(100, ky.get(9).tangTruong());
+        assertTrue(ky.get(9).laCaoNhat());
+        assertEquals(-102_352_150L, ky.get(10).chenhLech());
+        assertEquals(-100, ky.get(10).tangTruong());
+        assertEquals(0L, ky.get(0).chenhLech());
+        assertEquals(0, ky.get(0).tangTruong());
+    }
+
+    @Test
+    void soSanh_khongCoDuLieuTatCaKyBang0() {
+        mockRows(List.of(), List.of(), 0);
+        List<KySoSanhDTO> ky = service().tinhKySoSanh("thang", 2026, null, null, null, null, null);
+        assertEquals(12, ky.size());
+        for (KySoSanhDTO k : ky) {
+            assertEquals(0L, k.doanhThu());
+            assertEquals(0L, k.tienMat());
+            assertEquals(0L, k.tienChuyenKhoan());
+            assertEquals(0L, k.soDon());
+            assertEquals(0L, k.aov());
+            assertEquals(0L, k.sanPhamBan());
+            assertEquals(0L, k.chenhLech());
+            assertEquals(0, k.tangTruong());
+            assertFalse(k.laCaoNhat());
+        }
+    }
+
+    @Test
+    void soSanh_namGioiHan5NamGanNhatCoDuLieu() {
+        when(repo.cacNamCoDuLieu()).thenReturn(List.of(2026, 2025, 2024, 2023, 2022, 2021));
+        mockRows(List.of(), List.of(), 0);
+        List<KySoSanhDTO> ky = service().tinhKySoSanh("nam", 2026, null, null, null, null, null);
+        assertEquals(5, ky.size());
+        assertEquals("2026", ky.get(0).maKy());
+        assertEquals(LocalDate.of(2026, 1, 1), ky.get(0).tu());
+        assertEquals(LocalDate.of(2022, 12, 31), ky.get(4).den());
+    }
+
+    @Test
+    void soSanh_2kyValidateThieuNgayNemIAE() {
+        assertThrows(IllegalArgumentException.class, () ->
+            service().tinhKySoSanh("2ky", null,
+                LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 27),
+                LocalDate.of(2026, 9, 1), null, null));
+    }
+
+    @Test
+    void soSanh_cheDoKhongHopLeNemIAE() {
+        assertThrows(IllegalArgumentException.class, () ->
+            service().tinhKySoSanh("abc", 2026, null, null, null, null, null));
+    }
+
+    @Test
+    void soSanh_locThuongHieuTinhDungTienMatTyTrong() {
+        // Cung fixture voi tongQuan_locThuongHieuTinhTienMatTheoTyTrong nhung nam trong ky 10/2026
+        List<HoaDonThongKeRow> hoaDons = List.of(
+            hd(1, "DA_HOAN_THANH", "1000000", "TM"),
+            hd(2, "DA_HOAN_THANH", "2000000", "BANK")
+        );
+        List<ChiTietThongKeRow> chiTiets = List.of(
+            ct(1, "Nike", "750000", 2),
+            ct(1, "Adidas", "250000", 1),
+            ct(2, "Nike", "2000000", 3)
+        );
+        mockRowsTheoKy(
+            java.util.Map.of(LocalDate.of(2026, 10, 1), hoaDons),
+            java.util.Map.of(LocalDate.of(2026, 10, 1), chiTiets)
+        );
+        List<KySoSanhDTO> ky = service().tinhKySoSanh("thang", 2026, null, null, null, null, "Nike");
+        KySoSanhDTO t10 = ky.get(9);
+        assertEquals(2_750_000L, t10.doanhThu());
+        assertEquals(2L, t10.soDon());
+        assertEquals(5L, t10.sanPhamBan());
+        assertEquals(750_000L, t10.tienMat());
+        assertEquals(2_000_000L, t10.tienChuyenKhoan());
+    }
+
+    @Test
+    void soSanh_kyCungKhoangTraVeDoanhThuGiongTongQuan() {
+        mockRows(
+            List.of(
+                hd(1, "DA_HOAN_THANH", "1000000", "TM"),
+                hd(2, "CHO_XAC_NHAN", "2000000", "BANK"),
+                hd(3, "DA_HUY", "9000000", "TM")
+            ),
+            List.of(ct(1, "Nike", "1000000", 2)),
+            0
+        );
+        TongQuanDTO tong = service().tongQuan(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31), null);
+        List<KySoSanhDTO> ky = service().tinhKySoSanh("thang", 2026, null, null, null, null, null);
+        assertEquals(tong.doanhThu(), ky.get(9).doanhThu());
+        assertEquals(tong.soDon(), ky.get(9).soDon());
+        assertEquals(tong.tienMat(), ky.get(9).tienMat());
+        assertEquals(tong.tienChuyenKhoan(), ky.get(9).tienChuyenKhoan());
+        assertEquals(tong.sanPhamBan(), ky.get(9).sanPhamBan());
     }
 }

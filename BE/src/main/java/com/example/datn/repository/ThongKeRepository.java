@@ -42,4 +42,7 @@ public interface ThongKeRepository extends JpaRepository<com.example.datn.entity
 
     @Query("SELECT COUNT(k) FROM KhachHang k WHERE k.ngayTao >= :tu AND k.ngayTao < :den")
     long countKhachMoi(@Param("tu") LocalDateTime tu, @Param("den") LocalDateTime den);
+
+    @Query("SELECT DISTINCT YEAR(h.ngayTao) FROM HoaDon h ORDER BY YEAR(h.ngayTao) DESC")
+    List<Integer> cacNamCoDuLieu();
 }
