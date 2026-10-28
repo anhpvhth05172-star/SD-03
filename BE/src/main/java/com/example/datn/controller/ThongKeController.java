@@ -1,15 +1,21 @@
 package com.example.datn.controller;
 
 import com.example.datn.config.QuyenGuard;
+import com.example.datn.dto.ThongKe.EmailMacDinhDTO;
+import com.example.datn.dto.ThongKe.GuiMailTongKetRequest;
+import com.example.datn.dto.ThongKe.GuiMailTongKetResponse;
 import com.example.datn.dto.ThongKe.SoSanhDTO;
 import com.example.datn.dto.ThongKe.TongQuanDTO;
 import com.example.datn.dto.ThongKe.TrangThaiDonDTO;
+import com.example.datn.service.BaoCaoTongKetService;
 import com.example.datn.service.ThongKeService;
 import java.time.LocalDate;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,6 +27,7 @@ public class ThongKeController {
 
     private final ThongKeService thongKeService;
     private final QuyenGuard quyenGuard;
+    private final BaoCaoTongKetService baoCaoTongKetService;
 
     @GetMapping("/tong-quan")
     public TongQuanDTO tongQuan(
@@ -55,5 +62,17 @@ public class ThongKeController {
     ) {
         quyenGuard.canQuanLyKhachHang();
         return thongKeService.soSanh(cheDo, nam, tu1, den1, tu2, den2, thuongHieu, keyword);
+    }
+
+    @PostMapping("/gui-mail-tong-ket")
+    public GuiMailTongKetResponse guiMailTongKet(@RequestBody GuiMailTongKetRequest req) {
+        quyenGuard.canQuanLyKhachHang();
+        return baoCaoTongKetService.guiMailTongKet(req);
+    }
+
+    @GetMapping("/email-mac-dinh")
+    public EmailMacDinhDTO emailMacDinh() {
+        quyenGuard.canQuanLyKhachHang();
+        return new EmailMacDinhDTO(baoCaoTongKetService.emailMacDinh());
     }
 }

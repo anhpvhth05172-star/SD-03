@@ -14,6 +14,7 @@ import com.example.datn.config.QuyenGuard;
 import com.example.datn.dto.ThongKe.KySoSanhDTO;
 import com.example.datn.dto.ThongKe.SoSanhDTO;
 import com.example.datn.dto.ThongKe.TopSanPhamKyDTO;
+import com.example.datn.service.BaoCaoTongKetService;
 import com.example.datn.service.ThongKeService;
 import java.time.LocalDate;
 import java.util.List;
@@ -33,7 +34,7 @@ class ThongKeControllerSoSanhTest {
         service = mock(ThongKeService.class);
         quyenGuard = new QuyenGuard();
         mockMvc = MockMvcBuilders
-            .standaloneSetup(new ThongKeController(service, quyenGuard))
+            .standaloneSetup(new ThongKeController(service, quyenGuard, mock(BaoCaoTongKetService.class)))
             .setControllerAdvice(new ApiExceptionHandler())
             .build();
     }
