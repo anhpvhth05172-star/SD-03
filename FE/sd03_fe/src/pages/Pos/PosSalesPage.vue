@@ -1840,6 +1840,7 @@ const confirmKetCa = async () => {
     caHienTai.value = null
     isKetCaModalOpen.value = false
     notifySuccess('Kết ca thành công', 'Ca đã được kết thúc và lưu vào lịch sử')
+    window.dispatchEvent(new Event('polyshoes:shift-changed'))
   } catch (err) {
     const msg = err.message || ''
     if (msg.includes('LY_DO_LECH_THIEU')) {
@@ -1859,6 +1860,11 @@ const confirmKetCa = async () => {
   } finally {
     isSavingKetCa.value = false
   }
+}
+
+const openKetCaFromNotice = async () => {
+  if (!caHienTai.value) await loadCaHienTai()
+  if (caHienTai.value) await openKetCaModal()
 }
 
 const handleCheckout = async () => {
@@ -2304,40 +2310,22 @@ onMounted(() => {
   loadProvinces()
   loadCaHienTai()
   window.addEventListener('click', handleWindowClick)
+  window.addEventListener('polyshoes:open-ket-ca', openKetCaFromNotice)
+  window.addEventListener('polyshoes:shift-changed', loadCaHienTai)
 })
 
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('click', handleWindowClick)
+  window.removeEventListener('polyshoes:open-ket-ca', openKetCaFromNotice)
+  window.removeEventListener('polyshoes:shift-changed', loadCaHienTai)
   stopCameraScanner()
 })
 </script>
 
 <template>
   <div class="pos-page">
-    <!-- Giao ca banner (Mo ca / Ket ca) -->
-    <div
-      v-if="!isAdmin"
-      class="pos-ca-banner"
-      :class="isLoadingCa ? 'loading' : (caHienTai ? 'ca-open' : 'ca-closed')"
-    >
-      <div class="ca-banner-info">
-        <span class="ca-banner-dot"></span>
-        <span v-if="isLoadingCa" class="ca-banner-text">Đang tải trạng thái ca...</span>
-        <span v-else-if="caHienTai" class="ca-banner-text">
-          Ca {{ caHienTai.maCa }} · Mở lúc {{ formatDateTime(caHienTai.thoiGianMo) }}<template v-if="caHienTai.tenQuy"> · {{ caHienTai.tenQuy }}</template>
-        </span>
-        <span v-else class="ca-banner-text">Chưa mở ca — Bán tại quầy bị tạm khóa</span>
-      </div>
-      <button v-if="!isLoadingCa && caHienTai" class="btn-ca-action btn-ca-ket" @click="openKetCaModal">
-        Kết ca
-      </button>
-      <button v-else-if="!isLoadingCa" class="btn-ca-action btn-ca-mo" @click="openMoCaModal">
-        Mở ca
-      </button>
-    </div>
-
     <!-- Main Workspace Grid -->
     <div class="pos-main-grid">
       <div class="pos-col-left">
@@ -4041,92 +4029,6 @@ onUnmounted(() => {
 <style scoped src="@/assets/styles/PosSalesPage.css"></style>
 
 <style scoped>
-/* Giao ca banner */
-.pos-ca-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 18px;
-  border-radius: 14px;
-  border: 1px solid #e2e8f0;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-
-.pos-ca-banner.ca-closed {
-  background: #fef2f2;
-  border-color: #fecaca;
-}
-
-.pos-ca-banner.ca-open {
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-}
-
-.pos-ca-banner.loading {
-  background: #f8fafc;
-  border-color: #e2e8f0;
-}
-
-.ca-banner-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.ca-banner-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.ca-closed .ca-banner-dot { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15); }
-.ca-open .ca-banner-dot { background: #10b981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); }
-.loading .ca-banner-dot { background: #94a3b8; }
-
-.ca-banner-text {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #334155;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ca-closed .ca-banner-text { color: #b91c1c; }
-.ca-open .ca-banner-text { color: #047857; }
-
-.btn-ca-action {
-  height: 34px;
-  padding: 0 18px;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  flex-shrink: 0;
-}
-
-.btn-ca-mo {
-  background: #dc2626;
-  color: #ffffff;
-  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.2);
-}
-
-.btn-ca-mo:hover { background: #b91c1c; }
-
-.btn-ca-ket {
-  background: #ffffff;
-  border: 1px solid #fca5a5;
-  color: #b91c1c;
-}
-
-.btn-ca-ket:hover { background: #fef2f2; }
-
 /* Mo/Ket ca modal */
 .ca-modal-dialog .ca-form-group {
   margin-top: 12px;
