@@ -308,6 +308,7 @@ public class GiaoCaService {
             .id(ca.getId())
             .maCa(ca.getMaCa())
             .idNhanVien(nv.getId())
+            .maNhanVien(nv.getMaNhanVien())
             .tenNhanVien(nv.getTenTaiKhoan())
             .tenQuy(ca.getTenQuy())
             .thoiGianMo(ca.getThoiGianMo())

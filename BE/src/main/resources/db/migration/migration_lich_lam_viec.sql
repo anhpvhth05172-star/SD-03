@@ -33,14 +33,40 @@ BEGIN
         nguoi_cap_nhat NVARCHAR(100) NULL,
         CONSTRAINT UQ_lich UNIQUE(id_nhan_vien, id_ca_lam, ngay_lam)
     );
+END
+ELSE
+BEGIN
+    -- Neu bang da ton tai tu truoc nhung cot id_ca chua doi ten
+    IF COL_LENGTH('dbo.lich_lam_viec', 'id_ca_lam') IS NULL AND COL_LENGTH('dbo.lich_lam_viec', 'id_ca') IS NOT NULL
+    BEGIN
+        DECLARE @fkName NVARCHAR(256);
+        SELECT TOP 1 @fkName = fk.name FROM sys.foreign_keys fk
+        INNER JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
+        WHERE fkc.parent_object_id = OBJECT_ID('dbo.lich_lam_viec')
+          AND COL_NAME(fkc.parent_object_id, fkc.parent_column_id) = 'id_ca';
+        IF @fkName IS NOT NULL
+            EXEC('ALTER TABLE dbo.lich_lam_viec DROP CONSTRAINT ' + @fkName);
+
+        EXEC sp_rename 'dbo.lich_lam_viec.id_ca', 'id_ca_lam', 'COLUMN';
+        ALTER TABLE dbo.lich_lam_viec ADD CONSTRAINT FK_lich_ca FOREIGN KEY (id_ca_lam) REFERENCES dbo.ca_lam(id);
+    END;
+
+    IF COL_LENGTH('dbo.lich_lam_viec', 'ngay_tao') IS NULL
+        ALTER TABLE dbo.lich_lam_viec ADD ngay_tao DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME();
+    IF COL_LENGTH('dbo.lich_lam_viec', 'ngay_cap_nhat') IS NULL
+        ALTER TABLE dbo.lich_lam_viec ADD ngay_cap_nhat DATETIME2 NULL;
+    IF COL_LENGTH('dbo.lich_lam_viec', 'nguoi_tao') IS NULL
+        ALTER TABLE dbo.lich_lam_viec ADD nguoi_tao NVARCHAR(100) NULL;
+    IF COL_LENGTH('dbo.lich_lam_viec', 'nguoi_cap_nhat') IS NULL
+        ALTER TABLE dbo.lich_lam_viec ADD nguoi_cap_nhat NVARCHAR(100) NULL;
 END;
 
--- 3. Seed 3 ca mac dinh
+-- 3. Seed cac ca mac dinh
 IF NOT EXISTS (SELECT 1 FROM dbo.ca_lam WHERE ma_ca = N'sang')
-    INSERT INTO dbo.ca_lam (ma_ca, ten_ca, bat_dau, ket_thuc, dang_bat) VALUES (N'sang', N'Ca sáng', '08:00', '12:00', 1);
+    INSERT INTO dbo.ca_lam (ma_ca, ten_ca, bat_dau, ket_thuc, dang_bat) VALUES (N'sang', N'Ca sáng', '08:00', '15:00', 1);
 
 IF NOT EXISTS (SELECT 1 FROM dbo.ca_lam WHERE ma_ca = N'chieu')
-    INSERT INTO dbo.ca_lam (ma_ca, ten_ca, bat_dau, ket_thuc, dang_bat) VALUES (N'chieu', N'Ca chiều', '13:00', '17:00', 1);
+    INSERT INTO dbo.ca_lam (ma_ca, ten_ca, bat_dau, ket_thuc, dang_bat) VALUES (N'chieu', N'Ca chiều', '15:00', '22:00', 1);
 
-IF NOT EXISTS (SELECT 1 FROM dbo.ca_lam WHERE ma_ca = N'toi')
-    INSERT INTO dbo.ca_lam (ma_ca, ten_ca, bat_dau, ket_thuc, dang_bat) VALUES (N'toi', N'Ca tối', '17:30', '21:30', 1);
+IF NOT EXISTS (SELECT 1 FROM dbo.ca_lam WHERE ma_ca = N'ca-em')
+    INSERT INTO dbo.ca_lam (ma_ca, ten_ca, bat_dau, ket_thuc, dang_bat) VALUES (N'ca-em', N'Ca đêm', '22:00', '23:59', 1);

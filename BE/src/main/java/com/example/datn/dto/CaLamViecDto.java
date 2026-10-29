@@ -19,6 +19,7 @@ public class CaLamViecDto {
     private Long id;
     private String maCa;
     private Long idNhanVien;
+    private String maNhanVien;
     private String tenNhanVien;
     private String tenQuy;
     private LocalDateTime thoiGianMo;

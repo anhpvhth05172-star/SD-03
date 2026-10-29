@@ -96,6 +96,12 @@ const routes = [
         meta: { ...metaBo, title: 'Lịch ca làm' },
       },
       {
+        path: '/lich-su-hoat-dong',
+        name: 'ActivityHistory',
+        component: () => import('@/pages/Schedule/ActivityHistoryPage.vue'),
+        meta: { ...metaBo, title: 'Lịch sử hoạt động' },
+      },
+      {
         path: '/ban-hang',
         name: 'PosSales',
         component: PosSalesPage,
