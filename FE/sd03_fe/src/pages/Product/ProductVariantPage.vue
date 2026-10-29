@@ -5,6 +5,7 @@ import QRCode from 'qrcode'
 import QuickAddModal from '@/components/QuickAddModal.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import CurrencyInput from '@/components/CurrencyInput.vue'
+import PaginationBar from '@/components/PaginationBar.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 
@@ -253,6 +254,12 @@ const changePage = (p) => {
     currentPage.value = p
     fetchVariants(false)
   }
+}
+
+const onSizeChange = (s) => {
+  pageSize.value = s
+  currentPage.value = 0
+  fetchVariants(false)
 }
 
 const formatPrice = (val) => {
@@ -1571,22 +1578,18 @@ const saveAddVariant = async () => {
 
       <!-- Pagination -->
       <div v-if="totalPages > 1" class="table-card-foot">
-        <span class="foot-info">
-          Hiển thị <strong>{{ variants.length ? currentPage * pageSize + 1 : 0 }} - {{ currentPage * pageSize +
-            variants.length }}</strong> trong tổng số <strong>{{ totalElements }}</strong> biến thể
-        </span>
-        <div class="foot-pager">
-          <button class="pager-btn" :disabled="currentPage === 0" @click="changePage(currentPage - 1)">
-            ‹ Trước
-          </button>
-          <button v-for="p in totalPages" :key="p" class="pager-btn num-btn" :class="{ active: p - 1 === currentPage }"
-            @click="changePage(p - 1)">
-            {{ p }}
-          </button>
-          <button class="pager-btn" :disabled="currentPage >= totalPages - 1" @click="changePage(currentPage + 1)">
-            Sau ›
-          </button>
-        </div>
+        <PaginationBar
+          :page="currentPage"
+          :total-pages="totalPages"
+          :total-elements="totalElements"
+          :page-size="pageSize"
+          :sizes="pageSizeOptions"
+          :from="variants.length ? currentPage * pageSize + 1 : 0"
+          :to="currentPage * pageSize + variants.length"
+          label="biến thể"
+          @change="changePage"
+          @size-change="onSizeChange"
+        />
       </div>
     </div>
 

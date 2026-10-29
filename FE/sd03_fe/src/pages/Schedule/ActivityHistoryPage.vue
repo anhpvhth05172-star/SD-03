@@ -374,18 +374,20 @@ onMounted(async () => {
       </div>
 
       <!-- PHÂN TRANG -->
-      <PaginationBar
-        :page="page"
-        :total-pages="totalPages"
-        :total-elements="totalElements"
-        :page-size="pageSize"
-        :from="list.length ? page * pageSize + 1 : 0"
-        :to="page * pageSize + list.length"
-        :sizes="[10, 20, 50]"
-        label="lượt giao ca"
-        @change="datTrang"
-        @size-change="doiSize"
-      />
+      <div v-if="totalPages > 1" class="table-card-foot">
+        <PaginationBar
+          :page="page"
+          :total-pages="totalPages"
+          :total-elements="totalElements"
+          :page-size="pageSize"
+          :from="list.length ? page * pageSize + 1 : 0"
+          :to="page * pageSize + list.length"
+          :sizes="[10, 20, 50]"
+          label="lượt giao ca"
+          @change="datTrang"
+          @size-change="doiSize"
+        />
+      </div>
     </div>
   </div>
 </template>

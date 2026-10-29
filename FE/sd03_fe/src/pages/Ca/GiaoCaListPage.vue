@@ -339,18 +339,20 @@ watch(() => route.fullPath, () => {
       </table>
     </div>
 
+    <div v-if="totalPages > 1" class="table-card-foot">
     <PaginationBar
-      v-if="totalElements > 0"
       :page="page"
       :total-pages="totalPages"
       :total-elements="totalElements"
       :page-size="pageSize"
+      :sizes="[5, 10, 20, 50]"
       :from="list.length ? page * pageSize + 1 : 0"
       :to="page * pageSize + list.length"
       label="ca"
       @change="goPage"
       @size-change="onSizeChange"
     />
+    </div>
   </section>
 </div>
 </template>

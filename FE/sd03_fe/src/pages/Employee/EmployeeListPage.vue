@@ -799,7 +799,7 @@ onMounted(async () => {
       </div>
 
       <!-- Phân trang Footer -->
-      <div v-if="totalElements > 0" class="table-card-foot">
+      <div v-if="totalPages > 1" class="table-card-foot">
         <PaginationBar
           :page="page"
           :total-pages="totalPages"

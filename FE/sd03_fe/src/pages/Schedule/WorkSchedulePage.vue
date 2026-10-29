@@ -897,6 +897,7 @@ onMounted(() => {
           </table>
         </div>
 
+        <div v-if="tongTrang > 1" class="table-card-foot">
         <PaginationBar
           :page="page"
           :total-pages="tongTrang"
@@ -909,6 +910,7 @@ onMounted(() => {
           @change="datTrang"
           @size-change="doiSize"
         />
+        </div>
       </div>
     </template>
 
