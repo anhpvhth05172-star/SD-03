@@ -27,6 +27,7 @@ public class HoaDonRequest {
     private Long idNhanVien;
     private Long idPhuongThucThanhToan;
     private Long idPhieuGiamGia;
+    private Long idCaLamViec;
 
     private Integer toProvinceId;
     private Integer toDistrictId;

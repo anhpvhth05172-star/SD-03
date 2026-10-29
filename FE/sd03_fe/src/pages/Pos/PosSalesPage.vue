@@ -161,7 +161,15 @@ const handleKetCaSubmit = async () => {
     }
     router.push(`/ca/${closedCaId}/doi-soat`)
   } catch (err) {
-    notifyError('Kết ca thất bại', err.message || 'Không thể đóng ca làm việc')
+    const msg = err.message || ''
+    if (msg.includes('CON_HD_DANG_XU_LY')) {
+      notifyWarning(
+        'Còn đơn hàng chưa hoàn tất',
+        'Ca làm việc vẫn còn đơn hàng tại quầy chưa được thanh toán hoặc hủy. Vui lòng kiểm tra lại trước khi đóng ca!'
+      )
+    } else {
+      notifyError('Kết ca thất bại', msg || 'Không thể đóng ca làm việc')
+    }
   } finally {
     ketCaSubmitting.value = false
   }
@@ -3022,6 +3030,7 @@ const handleCheckout = async (options = {}) => {
       idNhanVien: employeeId,
       idPhuongThucThanhToan: paymentMethodId,
       idPhieuGiamGia: currentOrder.value.selectedVoucher ? currentOrder.value.selectedVoucher.id : null,
+      idCaLamViec: activeShift.value?.id || null,
       chiTiet: currentOrder.value.cart.map(item => ({
         idSanPhamChiTiet: item.idCtsp,
         soLuong: item.quantity,
@@ -5691,6 +5700,16 @@ onUnmounted(() => {
           </div>
 
           <div class="pos-modal-body" v-else-if="ketCaSummary">
+                        <!-- CẢNH BÁO NẾU CÒN ĐƠN CHƯA HOÀN TẤT -->
+            <div class="pos-pending-orders-alert" v-if="ketCaSummary.hoaDonDangXuLy && ketCaSummary.hoaDonDangXuLy.length > 0">
+              <div class="pending-alert-icon">⚠️</div>
+              <div class="pending-alert-content">
+                <strong>Ca làm việc còn {{ ketCaSummary.hoaDonDangXuLy.length }} đơn hàng chưa hoàn tất:</strong>
+                <span class="pending-order-codes">{{ ketCaSummary.hoaDonDangXuLy.join(', ') }}</span>
+                <p>Vui lòng xử lý thanh toán hoặc hủy đơn chờ trên quầy trước khi đóng ca để đối soát két tiền chính xác!</p>
+              </div>
+            </div>
+
             <!-- KHỐI 1: TỔNG KẾT DOANH THU & TIỀN DỰ KIẾN KÉT -->
             <div class="shift-summary-grid">
               <div class="shift-sum-card is-start">
@@ -5822,7 +5841,8 @@ onUnmounted(() => {
             <button type="button" class="btn-shift-cancel" @click="isKetCaModalOpen = false" :disabled="ketCaSubmitting">
               Hủy / Quay lại
             </button>
-            <button type="button" class="btn-shift-confirm-close" @click="handleKetCaSubmit" :disabled="ketCaSubmitting || (chenhLechKetCa !== 0 && !ketCaForm.lyDoLech?.trim())">
+            <button type="button" class="btn-shift-confirm-close" @click="handleKetCaSubmit" :disabled="ketCaSubmitting || (chenhLechKetCa !== 0 && !ketCaForm.lyDoLech?.trim()) || (ketCaSummary.hoaDonDangXuLy && ketCaSummary.hoaDonDangXuLy.length > 0)"
+              :title="(ketCaSummary.hoaDonDangXuLy && ketCaSummary.hoaDonDangXuLy.length > 0) ? 'Còn hóa đơn chưa hoàn tất. Vui lòng thanh toán hoặc hủy trước khi đóng ca!' : 'Xác nhận đóng ca'">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>

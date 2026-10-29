@@ -7097,3 +7097,43 @@ input:checked + .toggle-slider:before {
   font-weight: 700;
   color: #16a34a;
 }
+
+/* Cảnh báo đơn chờ trong modal kết ca */
+.pos-pending-orders-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #fef2f2;
+  border: 1.5px solid #fca5a5;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  color: #991b1b;
+}
+
+.pos-pending-orders-alert .pending-alert-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.pos-pending-orders-alert .pending-alert-content {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.pos-pending-orders-alert .pending-order-codes {
+  display: inline-block;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-left: 6px;
+}
+
+.pos-pending-orders-alert p {
+  margin: 4px 0 0 0;
+  color: #b91c1c;
+  font-size: 12.5px;
+}

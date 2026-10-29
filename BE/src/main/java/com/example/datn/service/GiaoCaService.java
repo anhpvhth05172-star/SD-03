@@ -47,6 +47,7 @@ public class GiaoCaService {
     private final LichSuCaRepository lichSuCaRepository;
     private final NhanVienRepository nhanVienRepository;
     private final LichLamViecRepository lichLamViecRepository;
+    private final com.example.datn.repository.CaLamRepository caLamRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
@@ -56,30 +57,51 @@ public class GiaoCaService {
             throw bad("TIEN_DAU_CA", "Tiền đầu ca không được âm");
         }
         if (caLamViecRepository.findFirstByTrangThaiAndDaXoaFalse(TRANG_THAI_DANG_MO).isPresent()) {
-            throw bad("CA_DA_MO", "Nhân viên đã có ca đang mở");
-        }
-        if (caLamViecRepository.findFirstByTrangThaiAndDaXoaFalse(TRANG_THAI_DANG_MO).isPresent()) {
-            throw bad("CA_DA_MO", "Hệ thống đã có ca đang mở");
+            throw bad("CA_DA_MO", "Hệ thống đã có ca làm việc đang mở. Vui lòng kết ca trước đó!");
         }
         NhanVien nhanVien = nhanVienRepository.findById(idNhanVien)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Chưa đăng nhập"));
 
         LocalDateTime thoiGianMo = LocalDateTime.now();
-        List<com.example.datn.entity.LichLamViec> lichDuocXep = lichLamViecRepository
-            .findCaDangBatDuocXep(idNhanVien, thoiGianMo.toLocalDate()).stream()
-            .filter(lich -> !thoiGianMo.toLocalTime().isBefore(lich.getCaLam().getBatDau())
-                && thoiGianMo.toLocalTime().isBefore(lich.getCaLam().getKetThuc()))
+        LocalTime gioHienTai = thoiGianMo.toLocalTime();
+        LocalDate ngayHienTai = thoiGianMo.toLocalDate();
+
+        List<com.example.datn.entity.LichLamViec> lichHomNay = lichLamViecRepository
+            .findCaDangBatDuocXep(idNhanVien, ngayHienTai);
+
+        List<com.example.datn.entity.LichLamViec> lichDuocXep = lichHomNay.stream()
+            .filter(lich -> {
+                com.example.datn.entity.CaLam c = lich.getCaLam();
+                if (c == null || c.getBatDau() == null || c.getKetThuc() == null) return false;
+                LocalTime bd = c.getBatDau().minusMinutes(30);
+                LocalTime kt = c.getKetThuc();
+                if (!kt.isBefore(c.getBatDau())) {
+                    return !gioHienTai.isBefore(bd) && gioHienTai.isBefore(kt);
+                } else {
+                    return !gioHienTai.isBefore(bd) || gioHienTai.isBefore(kt);
+                }
+            })
             .toList();
-        if (lichDuocXep.isEmpty()) {
-            throw bad("CA_CHUA_DUOC_XEP_LICH", "Bạn chưa được xếp ca đang diễn ra hôm nay");
+
+        if (lichDuocXep.isEmpty() && lichHomNay.size() == 1) {
+            lichDuocXep = lichHomNay;
         }
-        if (lichDuocXep.size() > 1) {
-            throw bad("CA_XEP_LICH_TRUNG", "Bạn có nhiều ca được xếp trùng giờ; hãy điều chỉnh lịch trước khi vào ca");
+
+        com.example.datn.entity.CaLam caTheoLich = null;
+        if (!lichDuocXep.isEmpty()) {
+            if (lichDuocXep.size() > 1) {
+                throw bad("CA_XEP_LICH_TRUNG", "Lịch làm việc của bạn hôm nay có nhiều ca bị trùng giờ; hãy báo quản lý điều chỉnh!");
+            }
+            caTheoLich = lichDuocXep.get(0).getCaLam();
+        } else if (laAdmin()) {
+            caTheoLich = timCaTheoGioHienTai(gioHienTai);
+        } else {
+            throw bad("CA_CHUA_DUOC_XEP_LICH", "Bạn chưa được phân công ca làm việc đang diễn ra hôm nay. Vui lòng liên hệ quản lý để được xếp lịch!");
         }
 
         CaLamViec ca = new CaLamViec();
         ca.setNhanVien(nhanVien);
-        ca.setCaTheoLich(lichDuocXep.get(0).getCaLam());
+        ca.setCaTheoLich(caTheoLich);
         ca.setTenQuy("Quầy tổng");
         ca.setThoiGianMo(thoiGianMo);
         ca.setTienDauCa(BigDecimal.valueOf(tienDauCa));
@@ -246,7 +268,7 @@ public class GiaoCaService {
         List<HoaDon> dangXuLy = caLamViecRepository.hoaDonDangXuLy(idCa);
         if (!dangXuLy.isEmpty()) {
             String maCacHd = dangXuLy.stream().map(HoaDon::getMaHoaDon).reduce((a, b) -> a + " " + b).orElse("");
-            throw bad("CON_HD_DANG_XU_LY", "Còn hóa đơn đang xử lý: " + maCacHd);
+            throw bad("CON_HD_DANG_XU_LY", "Còn hóa đơn tại quầy chưa hoàn tất (" + maCacHd + "). Vui lòng thanh toán hoặc hủy đơn chờ trước khi kết ca!");
         }
     }
 
@@ -375,6 +397,28 @@ public class GiaoCaService {
 
     private static ResponseStatusException bad(String ma, String message) {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, ma + ": " + message);
+    }
+
+        private com.example.datn.entity.CaLam timCaTheoGioHienTai(LocalTime gioHienTai) {
+        List<com.example.datn.entity.CaLam> caLamList = caLamRepository.findByDangBatTrueOrderByBatDauAsc();
+        if (caLamList.isEmpty()) {
+            return null;
+        }
+        for (com.example.datn.entity.CaLam c : caLamList) {
+            LocalTime bd = c.getBatDau();
+            LocalTime kt = c.getKetThuc();
+            if (bd == null || kt == null) continue;
+            if (kt.isAfter(bd)) {
+                if (!gioHienTai.isBefore(bd) && !gioHienTai.isAfter(kt)) {
+                    return c;
+                }
+            } else {
+                if (!gioHienTai.isBefore(bd) || !gioHienTai.isAfter(kt)) {
+                    return c;
+                }
+            }
+        }
+        return caLamList.get(0);
     }
 
     private static String chuanHoaGhiChu(String ghiChu) {

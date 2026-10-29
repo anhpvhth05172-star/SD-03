@@ -932,14 +932,23 @@ private NhanVien timNhanVien(Long id) {
         }
         req.setIdNhanVien(idNhanVienSession);
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()))) {
-            return null;
+
+        CaLamViecDto ca = null;
+        if (req.getIdCaLamViec() != null) {
+            ca = caLamViecRepository.findByIdAndDaXoaFalse(req.getIdCaLamViec())
+                .filter(c -> "DANG_MO".equals(c.getTrangThai()))
+                .map(giaoCaService::toDto)
+                .orElse(null);
         }
-        CaLamViecDto ca = giaoCaService.getDangMoOf(idNhanVienSession);
         if (ca == null) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "CA_CHUA_MO: Chưa mở ca — vui lòng mở ca để bán tại quầy");
+            ca = giaoCaService.getDangMoOf(idNhanVienSession);
+        }
+
+        if (auth != null && auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()))) {
+            return ca;
+        }
+        if (ca == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CA_CHUA_MO: Nhân viên chưa mở ca làm việc");
         }
         return ca;
     }
