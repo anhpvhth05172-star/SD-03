@@ -23,8 +23,10 @@ export const deleteLich = (id) => http.delete(`/lich-lam-viec/${id}`).then((r) =
 export const deleteLichTheoNgay = (ngay) =>
   http.delete('/lich-lam-viec', { params: { ngay } }).then((r) => r.data)
 
-export const xepTuDong = (ngay) =>
-  http.post('/lich-lam-viec/xep-tu-dong', { ngay }).then((r) => r.data)
+export const xepTuDong = (payload) => {
+  const data = typeof payload === 'string' ? { ngay: payload } : payload
+  return http.post('/lich-lam-viec/xep-tu-dong', data).then((r) => r.data)
+}
 
 export const importLich = (rows) =>
   http.post('/lich-lam-viec/import', { rows }).then((r) => r.data)

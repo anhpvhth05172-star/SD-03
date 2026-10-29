@@ -215,6 +215,172 @@ watch(fNgay, (v) => {
   }
 })
 
+/* ---------------------------------- Xếp lịch tự động thông minh ---------------------------------- */
+const showAutoScheduleModal = ref(false)
+const isSubmittingAutoSchedule = ref(false)
+const staffSearchKeyword = ref('')
+const autoScheduleResult = ref(null)
+
+const autoForm = reactive({
+  tuNgay: '',
+  denNgay: '',
+  preset: 'week',
+  idCaLams: [],
+  maNhanViens: [],
+  soNhanVienMoiCa: 1,
+  maxCaMoiNgay: 1,
+  ghiDe: false,
+})
+
+const apDungPreset = (type) => {
+  autoForm.preset = type
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+
+  if (type === 'today') {
+    const k = khoaNgay(now)
+    autoForm.tuNgay = k
+    autoForm.denNgay = k
+  } else if (type === 'tomorrow') {
+    const d = new Date(now)
+    d.setDate(d.getDate() + 1)
+    const k = khoaNgay(d)
+    autoForm.tuNgay = k
+    autoForm.denNgay = k
+  } else if (type === 'week') {
+    const day = now.getDay()
+    const diffToMon = day === 0 ? -6 : 1 - day
+    const mon = new Date(now)
+    mon.setDate(now.getDate() + diffToMon)
+    const sun = new Date(mon)
+    sun.setDate(mon.getDate() + 6)
+    autoForm.tuNgay = khoaNgay(mon)
+    autoForm.denNgay = khoaNgay(sun)
+  } else if (type === 'nextWeek') {
+    const day = now.getDay()
+    const diffToMon = day === 0 ? 1 : 8 - day
+    const mon = new Date(now)
+    mon.setDate(now.getDate() + diffToMon)
+    const sun = new Date(mon)
+    sun.setDate(mon.getDate() + 6)
+    autoForm.tuNgay = khoaNgay(mon)
+    autoForm.denNgay = khoaNgay(sun)
+  } else if (type === '14days') {
+    const d2 = new Date(now)
+    d2.setDate(now.getDate() + 13)
+    autoForm.tuNgay = khoaNgay(now)
+    autoForm.denNgay = khoaNgay(d2)
+  } else if (type === 'month') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1)
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    autoForm.tuNgay = khoaNgay(start)
+    autoForm.denNgay = khoaNgay(end)
+  }
+}
+
+const moXepCaTuDong = () => {
+  autoForm.idCaLams = caDangBat.value.map((c) => c.id)
+  autoForm.maNhanViens = dsNhanVien.value.map((n) => n.maNhanVien)
+  autoForm.soNhanVienMoiCa = 1
+  autoForm.maxCaMoiNgay = 1
+  autoForm.ghiDe = false
+  staffSearchKeyword.value = ''
+  autoScheduleResult.value = null
+  apDungPreset('week')
+  showAutoScheduleModal.value = true
+}
+
+const toggleAllCas = () => {
+  if (autoForm.idCaLams.length === caDangBat.value.length) {
+    autoForm.idCaLams = []
+  } else {
+    autoForm.idCaLams = caDangBat.value.map((c) => c.id)
+  }
+}
+
+const toggleAllStaff = () => {
+  if (autoForm.maNhanViens.length === dsNhanVien.value.length) {
+    autoForm.maNhanViens = []
+  } else {
+    autoForm.maNhanViens = dsNhanVien.value.map((n) => n.maNhanVien)
+  }
+}
+
+const filteredStaffForAuto = computed(() => {
+  const kw = staffSearchKeyword.value.trim().toLowerCase()
+  if (!kw) return dsNhanVien.value
+  return dsNhanVien.value.filter(
+    (n) =>
+      String(n.maNhanVien || '').toLowerCase().includes(kw) ||
+      String(n.tenTaiKhoan || '').toLowerCase().includes(kw) ||
+      String(n.ten || '').toLowerCase().includes(kw)
+  )
+})
+
+const thoiGianUocTinh = computed(() => {
+  if (!autoForm.tuNgay || !autoForm.denNgay) return { soNgay: 0, tongCaUocTinh: 0 }
+  const d1 = docNgay(autoForm.tuNgay)
+  const d2 = docNgay(autoForm.denNgay)
+  if (!d1 || !d2 || d1 > d2) return { soNgay: 0, tongCaUocTinh: 0 }
+  const diffTime = Math.abs(d2 - d1)
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+  const tongCa = diffDays * autoForm.idCaLams.length * autoForm.soNhanVienMoiCa
+  return { soNgay: diffDays, tongCaUocTinh: tongCa }
+})
+
+const thucHienXepCaTuDong = async () => {
+  if (!autoForm.tuNgay || !autoForm.denNgay) {
+    notifyWarning('Thiếu khoảng ngày', 'Vui lòng chọn từ ngày và đến ngày')
+    return
+  }
+  if (autoForm.idCaLams.length === 0) {
+    notifyWarning('Chưa chọn ca làm', 'Vui lòng chọn ít nhất 1 ca làm việc')
+    return
+  }
+  if (autoForm.maNhanViens.length === 0) {
+    notifyWarning('Chưa chọn nhân viên', 'Vui lòng chọn ít nhất 1 nhân viên tham gia ca')
+    return
+  }
+
+  isSubmittingAutoSchedule.value = true
+  try {
+    const payload = {
+      tuNgay: autoForm.tuNgay,
+      denNgay: autoForm.denNgay,
+      idCaLams: autoForm.idCaLams,
+      maNhanViens: autoForm.maNhanViens,
+      soNhanVienMoiCa: autoForm.soNhanVienMoiCa,
+      maxCaMoiNgay: autoForm.maxCaMoiNgay,
+      ghiDe: autoForm.ghiDe,
+    }
+    const kq = await xepTuDong(payload)
+    if (kq.lyDo === 'khongCa') {
+      notifyWarning('Chưa có ca làm khả dụng', 'Hãy bật ca làm việc trước khi xếp')
+      return
+    }
+    if (kq.lyDo === 'khongUngVien') {
+      notifyWarning(
+        'Không còn nhân viên trống',
+        'Tất cả nhân viên đã được xếp lịch hoặc các ca đã đủ định mức'
+      )
+      return
+    }
+    await taiDuLieu()
+    notifySuccess(
+      'Xếp ca tự động thành công!',
+      kq.thongBao || `Đã xếp thêm ${kq.themMoi} ca làm việc`
+    )
+    showAutoScheduleModal.value = false
+  } catch (e) {
+    notifyError(
+      'Lỗi xếp ca tự động',
+      e.response?.data?.message || e.message || 'Không thể xếp ca'
+    )
+  } finally {
+    isSubmittingAutoSchedule.value = false
+  }
+}
+
 /* ---------------------------------- Thao tác hàng loạt ---------------------------------- */
 const xepCaTuDongBtn = async () => {
   const khoa = fNgay.value ? khoaNgay(docNgay(fNgay.value)) : ''
@@ -803,18 +969,13 @@ onMounted(() => {
 
         <div class="filter-actions-row is-left">
           <button
-            class="btn-action-outline is-muted"
+            class="btn-action-primary auto-schedule-trigger-btn"
             type="button"
-            :disabled="!fNgay"
-            :title="fNgay ? 'Tự động xếp nhân viên còn trống vào các ca ngày này' : 'Hãy chọn Ngày làm trước'"
-            @click="xepCaTuDongBtn"
+            title="Cấu hình và tự động xếp ca làm việc thông minh"
+            @click="moXepCaTuDong"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="16 3 21 3 21 8"></polyline>
-              <line x1="4" y1="20" x2="21" y2="3"></line>
-              <polyline points="21 16 21 21 16 21"></polyline>
-              <line x1="15" y1="15" x2="21" y2="21"></line>
-              <line x1="4" y1="4" x2="9" y2="9"></line>
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
             </svg>
             Xếp ca tự động
           </button>
@@ -1092,6 +1253,290 @@ onMounted(() => {
             @click="xacNhanNhap"
           >
             Xác nhận nhập ({{ importPreview ? importPreview.rows.length : 0 }})
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL XẾP LỊCH TỰ ĐỘNG THÔNG MINH -->
+    <div v-if="showAutoScheduleModal" class="modal-backdrop" @click.self="showAutoScheduleModal = false">
+      <div class="modal-card modal-card-schedule modal-card-auto-schedule">
+        <div class="modal-banner">
+          <div class="modal-banner-icon auto-banner-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+          </div>
+          <div class="modal-banner-text">
+            <h3>Xếp lịch làm việc tự động</h3>
+            <p>Phân bổ nhân viên vào các ca làm việc một cách thông minh, công bằng và tối ưu</p>
+          </div>
+          <button class="modal-close-btn" type="button" @click="showAutoScheduleModal = false" title="Đóng">✕</button>
+        </div>
+
+        <div class="modal-body auto-modal-body">
+          <!-- 1. KHOẢNG THỜI GIAN -->
+          <div class="auto-section">
+            <div class="auto-section-title">
+              <span class="step-num">1</span>
+              <span>Khoảng thời gian xếp lịch</span>
+            </div>
+
+            <div class="preset-chips">
+              <button
+                type="button"
+                class="chip-btn"
+                :class="{ 'is-active': autoForm.preset === 'today' }"
+                @click="apDungPreset('today')"
+              >
+                Hôm nay
+              </button>
+              <button
+                type="button"
+                class="chip-btn"
+                :class="{ 'is-active': autoForm.preset === 'tomorrow' }"
+                @click="apDungPreset('tomorrow')"
+              >
+                Ngày mai
+              </button>
+              <button
+                type="button"
+                class="chip-btn"
+                :class="{ 'is-active': autoForm.preset === 'week' }"
+                @click="apDungPreset('week')"
+              >
+                Tuần này
+              </button>
+              <button
+                type="button"
+                class="chip-btn"
+                :class="{ 'is-active': autoForm.preset === 'nextWeek' }"
+                @click="apDungPreset('nextWeek')"
+              >
+                Tuần tới
+              </button>
+              <button
+                type="button"
+                class="chip-btn"
+                :class="{ 'is-active': autoForm.preset === '14days' }"
+                @click="apDungPreset('14days')"
+              >
+                14 ngày tới
+              </button>
+              <button
+                type="button"
+                class="chip-btn"
+                :class="{ 'is-active': autoForm.preset === 'month' }"
+                @click="apDungPreset('month')"
+              >
+                Cả tháng này
+              </button>
+            </div>
+
+            <div class="date-range-row">
+              <div class="date-range-field">
+                <label>Từ ngày</label>
+                <input
+                  v-model="autoForm.tuNgay"
+                  type="date"
+                  class="input-date-range"
+                  @change="autoForm.preset = 'custom'"
+                />
+              </div>
+              <div class="date-range-arrow">➔</div>
+              <div class="date-range-field">
+                <label>Đến ngày</label>
+                <input
+                  v-model="autoForm.denNgay"
+                  type="date"
+                  class="input-date-range"
+                  @change="autoForm.preset = 'custom'"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. CHỌN CA LÀM VIỆC -->
+          <div class="auto-section">
+            <div class="auto-section-header">
+              <div class="auto-section-title">
+                <span class="step-num">2</span>
+                <span>Ca làm việc áp dụng ({{ autoForm.idCaLams.length }} ca đã chọn)</span>
+              </div>
+              <button type="button" class="btn-toggle-all" @click="toggleAllCas">
+                {{ autoForm.idCaLams.length === caDangBat.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả' }}
+              </button>
+            </div>
+
+            <div v-if="caDangBat.length === 0" class="empty-warn">
+              Chưa có ca làm việc nào đang bật. Vui lòng bật ca làm việc trước khi xếp lịch.
+            </div>
+            <div v-else class="shifts-selection-grid">
+              <label
+                v-for="c in caDangBat"
+                :key="c.id"
+                class="shift-select-card"
+                :class="{ 'is-selected': autoForm.idCaLams.includes(c.id) }"
+              >
+                <input
+                  type="checkbox"
+                  :value="c.id"
+                  v-model="autoForm.idCaLams"
+                  class="shift-checkbox"
+                />
+                <div class="shift-card-info">
+                  <span class="shift-card-name">{{ c.tenCa || c.ten }}</span>
+                  <span class="shift-card-time">
+                    <i class="bi bi-clock"></i>
+                    {{ formatGioPhut(c.batDau) }} – {{ formatGioPhut(c.ketThuc) }}
+                  </span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- 3. CHỌN NHÂN VIÊN THAM GIA -->
+          <div class="auto-section">
+            <div class="auto-section-header">
+              <div class="auto-section-title">
+                <span class="step-num">3</span>
+                <span>Nhân viên tham gia ({{ autoForm.maNhanViens.length }}/{{ dsNhanVien.length }} đã chọn)</span>
+              </div>
+              <button type="button" class="btn-toggle-all" @click="toggleAllStaff">
+                {{ autoForm.maNhanViens.length === dsNhanVien.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả' }}
+              </button>
+            </div>
+
+            <div class="staff-search-wrapper">
+              <input
+                v-model="staffSearchKeyword"
+                type="text"
+                placeholder="Tìm nhân viên theo tên, mã..."
+                class="staff-search-input"
+              />
+            </div>
+
+            <div class="staff-selection-scroll">
+              <label
+                v-for="nv in filteredStaffForAuto"
+                :key="nv.maNhanVien"
+                class="staff-select-card"
+                :class="{ 'is-selected': autoForm.maNhanViens.includes(nv.maNhanVien) }"
+              >
+                <input
+                  type="checkbox"
+                  :value="nv.maNhanVien"
+                  v-model="autoForm.maNhanViens"
+                  class="staff-checkbox"
+                />
+                <div class="staff-avatar-mini">{{ getAvatarInitial(nv.tenTaiKhoan || nv.ten) }}</div>
+                <div class="staff-info-mini">
+                  <span class="staff-name-mini">{{ nv.tenTaiKhoan || nv.ten }}</span>
+                  <span class="staff-code-mini">{{ nv.maNhanVien }}</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- 4. CẤU HÌNH QUY TẮC PHÂN BỔ -->
+          <div class="auto-section">
+            <div class="auto-section-title">
+              <span class="step-num">4</span>
+              <span>Quy tắc xếp lịch</span>
+            </div>
+
+            <div class="rules-grid">
+              <div class="rule-box">
+                <label class="rule-label">Số nhân viên mỗi ca</label>
+                <div class="counter-input">
+                  <button
+                    type="button"
+                    class="btn-counter"
+                    :disabled="autoForm.soNhanVienMoiCa <= 1"
+                    @click="autoForm.soNhanVienMoiCa--"
+                  >
+                    –
+                  </button>
+                  <span class="counter-val">{{ autoForm.soNhanVienMoiCa }} người / ca</span>
+                  <button
+                    type="button"
+                    class="btn-counter"
+                    :disabled="autoForm.soNhanVienMoiCa >= 10"
+                    @click="autoForm.soNhanVienMoiCa++"
+                  >
+                    +
+                  </button>
+                </div>
+                <span class="rule-hint">Mỗi ca làm việc sẽ được ưu tiên xếp đủ số nhân viên này</span>
+              </div>
+
+              <div class="rule-box">
+                <label class="rule-label">Tối đa ca / ngày / nhân viên</label>
+                <div class="counter-input">
+                  <button
+                    type="button"
+                    class="btn-counter"
+                    :disabled="autoForm.maxCaMoiNgay <= 1"
+                    @click="autoForm.maxCaMoiNgay--"
+                  >
+                    –
+                  </button>
+                  <span class="counter-val">{{ autoForm.maxCaMoiNgay }} ca / ngày</span>
+                  <button
+                    type="button"
+                    class="btn-counter"
+                    :disabled="autoForm.maxCaMoiNgay >= 3"
+                    @click="autoForm.maxCaMoiNgay++"
+                  >
+                    +
+                  </button>
+                </div>
+                <span class="rule-hint">Khuyên dùng 1 ca/ngày để đảm bảo sức khỏe và không bị trùng giờ</span>
+              </div>
+            </div>
+
+            <div class="overwrite-option">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="autoForm.ghiDe" />
+                <span class="checkbox-text">
+                  <strong>Ghi đè lịch cũ:</strong> Xóa các lịch đã có trong khoảng ngày đã chọn và xếp lại từ đầu (Khuyên dùng khi muốn làm mới lịch tuần)
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 5. TÓM TẮT DỰ KIẾN -->
+          <div class="estimate-summary-box">
+            <div class="summary-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <strong>Ước tính kết quả xếp lịch:</strong>
+            </div>
+            <div class="summary-pills">
+              <span class="s-pill">📅 <b>{{ thoiGianUocTinh.soNgay }}</b> ngày</span>
+              <span class="s-pill">⏰ <b>{{ autoForm.idCaLams.length }}</b> ca/ngày</span>
+              <span class="s-pill">👥 <b>{{ autoForm.maNhanViens.length }}</b> nhân viên</span>
+              <span class="s-pill is-highlight">⚡ Dự kiến: ~<b>{{ thoiGianUocTinh.tongCaUocTinh }}</b> lượt phân ca</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-ghost" type="button" :disabled="isSubmittingAutoSchedule" @click="showAutoScheduleModal = false">
+            Hủy bỏ
+          </button>
+          <div class="footer-spacer"></div>
+          <button
+            class="btn-primary btn-run-auto"
+            type="button"
+            :disabled="isSubmittingAutoSchedule || autoForm.idCaLams.length === 0 || autoForm.maNhanViens.length === 0 || !autoForm.tuNgay || !autoForm.denNgay"
+            @click="thucHienXepCaTuDong"
+          >
+            <span v-if="isSubmittingAutoSchedule" class="spinner-inline"></span>
+            <span v-else>⚡ Tiến hành xếp ca tự động</span>
           </button>
         </div>
       </div>
@@ -2472,4 +2917,468 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   MODAL XẾP LỊCH TỰ ĐỘNG THÔNG MINH
+   ========================================================================== */
+.modal-card.modal-card-auto-schedule {
+  max-width: 680px;
+  width: 95%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.auto-banner-icon {
+  background: linear-gradient(135deg, #2563eb, #1e40af) !important;
+  color: #fff !important;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.modal-close-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.auto-modal-body {
+  overflow-y: auto;
+  max-height: calc(90vh - 160px);
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.auto-section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auto-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.auto-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip-btn {
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: 20px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.chip-btn.is-active {
+  background: #1e293b;
+  border-color: #1e293b;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(30, 41, 59, 0.2);
+}
+
+.date-range-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.date-range-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.date-range-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.input-date-range {
+  height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13.5px;
+  color: #0f172a;
+  outline: none;
+  background: #ffffff;
+}
+
+.input-date-range:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.date-range-arrow {
+  color: #94a3b8;
+  font-weight: bold;
+  font-size: 16px;
+  padding-top: 18px;
+}
+
+.btn-toggle-all {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.btn-toggle-all:hover {
+  background: #eff6ff;
+  text-decoration: underline;
+}
+
+.shifts-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.shift-select-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #ffffff;
+  transition: all 0.15s ease;
+}
+
+.shift-select-card:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.shift-select-card.is-selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.shift-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shift-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.shift-card-time {
+  font-size: 11.5px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.staff-search-wrapper {
+  margin-bottom: 6px;
+}
+
+.staff-search-input {
+  width: 100%;
+  height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+  outline: none;
+}
+
+.staff-search-input:focus {
+  border-color: #2563eb;
+}
+
+.staff-selection-scroll {
+  max-height: 160px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.staff-select-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #ffffff;
+  transition: all 0.15s ease;
+}
+
+.staff-select-card:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.staff-select-card.is-selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.staff-avatar-mini {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #1e293b;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.staff-info-mini {
+  display: flex;
+  flex-direction: column;
+}
+
+.staff-name-mini {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 130px;
+}
+
+.staff-code-mini {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.rules-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.rule-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rule-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.counter-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-counter {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  color: #334155;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.btn-counter:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.btn-counter:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.counter-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  min-width: 90px;
+  text-align: center;
+}
+
+.rule-hint {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.overwrite-option {
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #334155;
+  cursor: pointer;
+}
+
+.checkbox-label input[type='checkbox'] {
+  margin-top: 2px;
+}
+
+.estimate-summary-box {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summary-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #166534;
+}
+
+.summary-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.s-pill {
+  background: #ffffff;
+  border: 1px solid #dcfce7;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #15803d;
+}
+
+.s-pill.is-highlight {
+  background: #16a34a;
+  color: #ffffff;
+  border-color: #16a34a;
+  font-weight: 600;
+}
+
+.btn-run-auto {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  padding: 8px 20px !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+  transition: all 0.15s ease;
+}
+
+.btn-run-auto:hover:not(:disabled) {
+  background: #1d4ed8 !important;
+}
+
+.spinner-inline {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.auto-schedule-trigger-btn {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  border: none !important;
+}
+
+.auto-schedule-trigger-btn:hover {
+  background: linear-gradient(135deg, #1d4ed8, #1e40af) !important;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.35);
+}
+
 </style>

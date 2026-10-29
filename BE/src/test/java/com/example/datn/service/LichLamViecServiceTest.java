@@ -15,6 +15,7 @@ import com.example.datn.dto.LichLamViec.ImportLichResponse;
 import com.example.datn.dto.LichLamViec.ImportLichRow;
 import com.example.datn.dto.LichLamViec.LichLamViecDTO;
 import com.example.datn.dto.LichLamViec.LichLamViecRequest;
+import com.example.datn.dto.LichLamViec.XepTuDongRequest;
 import com.example.datn.dto.LichLamViec.XepTuDongResponse;
 import com.example.datn.entity.CaLam;
 import com.example.datn.entity.LichLamViec;
@@ -170,6 +171,54 @@ class LichLamViecServiceTest {
         XepTuDongResponse resp = service().xepTuDong(LocalDate.of(2026, 10, 20));
         assertEquals("khongUngVien", resp.lyDo());
         assertEquals(0, resp.themMoi());
+    }
+
+    @Test
+    void xepTuDong_KhoangNgay_SoNvMoiCa() {
+        when(caRepo.findByDangBatTrueOrderByBatDauAsc()).thenReturn(List.of(
+            ca(1, "sang", "Ca sáng", "08:00", "15:00", true),
+            ca(2, "chieu", "Ca chiều", "15:00", "22:00", true)
+        ));
+        when(nvRepo.findByTrangThaiTrue()).thenReturn(List.of(
+            nv(1, "NV001"), nv(2, "NV002"), nv(3, "NV003"), nv(4, "NV004")
+        ));
+        LocalDate tu = LocalDate.of(2026, 11, 1);
+        LocalDate den = LocalDate.of(2026, 11, 2); // 2 ngày, 2 ca/ngày, 1 nv/ca -> 4 lượt phân ca
+        when(lichRepo.findByNgayLamBetween(tu, den)).thenReturn(List.of());
+
+        XepTuDongRequest req = new XepTuDongRequest(
+            null, tu, den, null, null, 1, 1, false
+        );
+
+        XepTuDongResponse resp = service().xepTuDong(req);
+
+        assertEquals(null, resp.lyDo());
+        assertEquals(4, resp.themMoi());
+        assertEquals(2, resp.soNgay());
+        verify(lichRepo).saveAll(anyList());
+    }
+
+    @Test
+    void xepTuDong_GhiDe() {
+        when(caRepo.findAllById(List.of(1L))).thenReturn(List.of(
+            ca(1, "sang", "Ca sáng", "08:00", "15:00", true)
+        ));
+        when(nvRepo.findByTrangThaiTrue()).thenReturn(List.of(
+            nv(1, "NV001"), nv(2, "NV002")
+        ));
+        LocalDate tu = LocalDate.of(2026, 11, 1);
+        LocalDate den = LocalDate.of(2026, 11, 1);
+
+        XepTuDongRequest req = new XepTuDongRequest(
+            null, tu, den, List.of(1L), List.of("NV001"), 1, 1, true
+        );
+
+        XepTuDongResponse resp = service().xepTuDong(req);
+
+        assertEquals(null, resp.lyDo());
+        assertEquals(1, resp.themMoi());
+        verify(lichRepo).deleteByNgayLamBetweenAndCaLamIdIn(tu, den, List.of(1L));
+        verify(lichRepo).saveAll(anyList());
     }
 
     @Test

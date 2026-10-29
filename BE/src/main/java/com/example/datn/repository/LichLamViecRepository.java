@@ -60,4 +60,27 @@ public interface LichLamViecRepository extends JpaRepository<LichLamViec, Long> 
     @Modifying
     @Query("DELETE FROM LichLamViec l WHERE l.ngayLam = :ngay")
     void deleteByNgayLam(@Param("ngay") LocalDate ngay);
+
+    @Query("""
+        SELECT l FROM LichLamViec l
+        JOIN FETCH l.nhanVien n
+        JOIN FETCH l.caLam c
+        WHERE l.ngayLam >= :tu AND l.ngayLam <= :den
+        """)
+    List<LichLamViec> findByNgayLamBetween(
+        @Param("tu") LocalDate tu,
+        @Param("den") LocalDate den
+    );
+
+    @Modifying
+    @Query("DELETE FROM LichLamViec l WHERE l.ngayLam >= :tu AND l.ngayLam <= :den")
+    void deleteByNgayLamBetween(@Param("tu") LocalDate tu, @Param("den") LocalDate den);
+
+    @Modifying
+    @Query("DELETE FROM LichLamViec l WHERE l.ngayLam >= :tu AND l.ngayLam <= :den AND l.caLam.id IN :caIds")
+    void deleteByNgayLamBetweenAndCaLamIdIn(
+        @Param("tu") LocalDate tu,
+        @Param("den") LocalDate den,
+        @Param("caIds") List<Long> caIds
+    );
 }
