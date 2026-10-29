@@ -1036,18 +1036,20 @@ onMounted(async () => {
         </table>
       </div>
 
-      <PaginationBar
-        :page="pageNv"
-        :total-pages="tongTrangNv"
-        :total-elements="nhanVienLoc.length"
-        :page-size="sizeNv"
-        :from="dongNv.length ? pageNv * sizeNv + 1 : 0"
-        :to="pageNv * sizeNv + dongNv.length"
-        :sizes="[5, 10, 20]"
-        label="nhân viên"
-        @change="datTrangNv"
-        @size-change="(s) => { sizeNv = s; pageNv = 0 }"
-      />
+      <div v-if="tongTrangNv > 1" class="table-card-foot">
+        <PaginationBar
+          :page="pageNv"
+          :total-pages="tongTrangNv"
+          :total-elements="nhanVienLoc.length"
+          :page-size="sizeNv"
+          :from="dongNv.length ? pageNv * sizeNv + 1 : 0"
+          :to="pageNv * sizeNv + dongNv.length"
+          :sizes="[5, 10, 20]"
+          label="nhân viên"
+          @change="datTrangNv"
+          @size-change="(s) => { sizeNv = s; pageNv = 0 }"
+        />
+      </div>
     </div>
 
     <!-- TỔNG QUAN SẢN PHẨM -->
@@ -1174,18 +1176,20 @@ onMounted(async () => {
         </table>
       </div>
 
-      <PaginationBar
-        :page="pageSp"
-        :total-pages="tongTrangSp"
-        :total-elements="sanPhamLoc.length"
-        :page-size="sizeSp"
-        :from="dongSp.length ? pageSp * sizeSp + 1 : 0"
-        :to="pageSp * sizeSp + dongSp.length"
-        :sizes="[5, 10, 20]"
-        label="sản phẩm"
-        @change="datTrangSp"
-        @size-change="(s) => { sizeSp = s; pageSp = 0 }"
-      />
+      <div v-if="tongTrangSp > 1" class="table-card-foot">
+        <PaginationBar
+          :page="pageSp"
+          :total-pages="tongTrangSp"
+          :total-elements="sanPhamLoc.length"
+          :page-size="sizeSp"
+          :from="dongSp.length ? pageSp * sizeSp + 1 : 0"
+          :to="pageSp * sizeSp + dongSp.length"
+          :sizes="[5, 10, 20]"
+          label="sản phẩm"
+          @change="datTrangSp"
+          @size-change="(s) => { sizeSp = s; pageSp = 0 }"
+        />
+      </div>
     </div>
 
     <!-- HỘP THOẠI GỬI MAIL TỔNG KẾT -->

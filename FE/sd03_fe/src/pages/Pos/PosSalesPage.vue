@@ -10,6 +10,7 @@ import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/util
 import { formatVnd, formatDateTime } from '@/utils/format'
 import { getDangMo, moCa, getTongKet, ketCa, getDanhSachCaLam } from '@/api/giaoCa'
 import { inBienLaiDoiSoatK80 } from '@/utils/printShiftReceipt'
+import PaginationBar from '@/components/PaginationBar.vue'
 
 import { getUser, dangXuat } from '@/utils/auth'
 import { datVaiTro, vaiTroHienTai, laAdmin } from '@/utils/session'
@@ -4630,42 +4631,29 @@ onUnmounted(() => {
             </div>
           </div>
 
+          <!-- Phân trang chuẩn giống Quản lý sản phẩm -->
+          <div v-if="modalTotalPages > 1" class="table-card-foot" style="border-top: 1px solid #e2e8f0; background: #ffffff;">
+            <PaginationBar
+              :page="modalCurrentPage"
+              :total-pages="modalTotalPages"
+              :total-elements="modalTotalElements"
+              :page-size="modalPageSize"
+              :sizes="pageSizeOptions"
+              :from="paginatedModalVariants.length ? modalCurrentPage * modalPageSize + 1 : 0"
+              :to="modalCurrentPage * modalPageSize + paginatedModalVariants.length"
+              label="sản phẩm"
+              @change="changeModalPage"
+              @size-change="(sz) => { modalPageSize = sz; modalCurrentPage = 0 }"
+            />
+          </div>
+
           <div class="pos-prod-footer pos-prod-footer-with-action">
             <div class="pos-modal-page-size">
               <span class="page-size-label">Hiển thị:</span>
-              <select v-model.number="modalPageSize" class="page-size-select">
+              <select v-model.number="modalPageSize" class="page-size-select" @change="modalCurrentPage = 0">
                 <option v-for="sz in pageSizeOptions" :key="sz" :value="sz">{{ sz }} / trang</option>
               </select>
               <span class="page-size-total">Tổng <strong>{{ modalTotalElements }}</strong> sản phẩm</span>
-            </div>
-
-            <div class="pager-nav-group">
-              <button class="pager-nav-btn" :disabled="modalCurrentPage === 0" @click="changeModalPage(0)"
-                title="Trang đầu">
-                «
-              </button>
-              <button class="pager-nav-btn" :disabled="modalCurrentPage === 0"
-                @click="changeModalPage(modalCurrentPage - 1)" title="Trang trước">
-                ‹
-              </button>
-              <button v-for="p in Math.min(modalTotalPages, 10)" :key="p" class="pager-nav-btn"
-                :class="{ active: modalCurrentPage === p - 1 }" @click="changeModalPage(p - 1)">
-                {{ p }}
-              </button>
-              <span v-if="modalTotalPages > 10" class="pager-dots">...</span>
-              <button v-if="modalTotalPages > 10" class="pager-nav-btn"
-                :class="{ active: modalCurrentPage === modalTotalPages - 1 }"
-                @click="changeModalPage(modalTotalPages - 1)">
-                {{ modalTotalPages }}
-              </button>
-              <button class="pager-nav-btn" :disabled="modalCurrentPage >= modalTotalPages - 1"
-                @click="changeModalPage(modalCurrentPage + 1)" title="Trang sau">
-                ›
-              </button>
-              <button class="pager-nav-btn" :disabled="modalCurrentPage >= modalTotalPages - 1"
-                @click="changeModalPage(modalTotalPages - 1)" title="Trang cuối">
-                »
-              </button>
             </div>
 
             <div class="pos-prod-action-group">
