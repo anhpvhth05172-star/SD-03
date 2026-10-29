@@ -15,7 +15,7 @@ const dangMo = ref(false)
 const loi = ref('')
 const form = reactive({ tienDauCa: 500000, ghiChu: '' })
 
-const hienThi = computed(() => !laAdmin())
+const hienThi = computed(() => !laAdmin() && route.path !== '/ban-hang' && route.path !== '/admin/ban-hang')
 
 const taiCa = async () => {
   if (!hienThi.value) return

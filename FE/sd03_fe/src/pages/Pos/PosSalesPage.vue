@@ -3700,23 +3700,24 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Cảnh báo khi quầy chưa mở ca làm việc -->
+    <!-- Cảnh báo khi quầy chưa mở ca làm việc / Chế độ xem -->
     <div v-if="!activeShift && !isLoadingShift" class="pos-no-shift-alert-banner" :class="{ 'is-view-mode': !laAdmin() }">
       <div class="alert-banner-left">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
-        <span v-if="!laAdmin()">
-          <strong>Chế độ xem (Chưa mở ca):</strong> Bạn chỉ có thể tra cứu thông tin sản phẩm. Vui lòng bấm <strong>Mở ca ngay</strong> để có thể thêm sản phẩm vào giỏ hàng và bán hàng tại quầy!
-        </span>
-        <span v-else>
-          <strong>Quầy hiện chưa mở ca làm việc.</strong> Vui lòng bấm <strong>Mở ca</strong> để khai báo tiền két và ghi nhận doanh thu phiên bán hàng!
-        </span>
+        <template v-if="!laAdmin()">
+          <span class="badge-view-mode-tag">CHẾ ĐỘ XEM</span>
+          <span class="view-mode-text">Bạn chưa vào ca làm việc nên chỉ có quyền tra cứu thông tin. Các thao tác bán hàng, tạo đơn hàng và chỉnh sửa dữ liệu đang bị khóa.</span>
+        </template>
+        <template v-else>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <span><strong>Quầy hiện chưa mở ca làm việc.</strong> Vui lòng bấm <strong>Mở ca</strong> để khai báo tiền két và ghi nhận doanh thu phiên bán hàng!</span>
+        </template>
       </div>
-      <button type="button" class="btn-banner-open-shift" @click="openMoCaModal">
-        <span>+ Mở ca ngay</span>
+      <button type="button" class="btn-banner-open-shift" :class="{ 'btn-view-mode-red': !laAdmin() }" @click="openMoCaModal">
+        <span>{{ !laAdmin() ? 'Vào ca làm việc ngay' : '+ Mở ca ngay' }}</span>
       </button>
     </div>
 
