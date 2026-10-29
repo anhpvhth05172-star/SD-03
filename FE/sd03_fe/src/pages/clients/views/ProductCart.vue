@@ -94,7 +94,7 @@ const handleClear = async () => {
       <i class="bi bi-info-circle me-2"></i>
       Đăng nhập tài khoản để lưu trữ giỏ hàng an toàn và nhận nhiều ưu đãi hơn.
     </div>
-    <RouterLink to="/dang-nhap?redirect=/gio-hang" class="btn btn-sm btn-primary">
+    <RouterLink to="/login?redirect=/gio-hang" class="btn btn-sm btn-primary">
       Đăng nhập ngay
     </RouterLink>
   </div>

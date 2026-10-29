@@ -55,6 +55,7 @@ export const cartTotal = computed(() => {
 const mapServerItem = (item) => ({
   id: item.idSanPham,
   variantId: item.idSanPhamChiTiet,
+  idSanPhamChiTiet: item.idSanPhamChiTiet,
   idGioHangChiTiet: item.id,
   name: item.tenSanPham,
   brand: item.maCtsp || "",

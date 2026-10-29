@@ -273,7 +273,7 @@ const handleSubscribe = () => {
                 </button>
                 <RouterLink
                   v-else
-                  to="/dang-nhap"
+                  to="/login"
                   class="client-dropdown-item text-primary"
                   @click="closeDropdowns"
                 >

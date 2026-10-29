@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getToken, getRefreshToken, isTokenExpired, luuPhien, dangXuat } from '../utils/auth'
+import { getToken, getRefreshToken, isTokenExpired, luuPhien, dangXuat, getLastLoginPath } from '../utils/auth'
 
 export const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
@@ -46,7 +46,7 @@ export const refreshSession = () => {
 }
 
 const chuyenVeDangNhap = () => {
-  window.location.href = '/dang-nhap'
+  window.location.href = getLastLoginPath()
 }
 
 const ganToken = async (config) => {

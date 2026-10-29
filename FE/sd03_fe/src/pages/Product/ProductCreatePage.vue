@@ -179,6 +179,7 @@ const generateVariants = () => {
 }
 
 const applyBulkValues = () => {
+  // 1. Kiểm tra có biến thể nào được tick chọn hay không
   let selectedCount = 0
   colorGroups.value.forEach(group => {
     group.items.forEach(item => {
@@ -191,6 +192,7 @@ const applyBulkValues = () => {
     return
   }
 
+  // 2. Validate Giá bán mặc định (Bắt buộc)
   if (defaultPrice.value === null || defaultPrice.value === undefined || defaultPrice.value === '') {
     showToast('Giá bán mặc định không được để trống!', 'warning')
     return
@@ -201,6 +203,7 @@ const applyBulkValues = () => {
     return
   }
 
+  // 3. Validate Số lượng mặc định
   let qtyNum = 0
   if (defaultQty.value !== null && defaultQty.value !== undefined && defaultQty.value !== '') {
     qtyNum = Number(defaultQty.value)
@@ -210,6 +213,7 @@ const applyBulkValues = () => {
     }
   }
 
+  // 4. Áp dụng giá trị vào các biến thể đã chọn
   colorGroups.value.forEach(group => {
     group.items.forEach(item => {
       if (item.checked) {
@@ -220,35 +224,6 @@ const applyBulkValues = () => {
   })
 
   showToast(`Đã áp dụng số lượng (${qtyNum}) và giá bán (${priceNum.toLocaleString('vi-VN')} đ) cho ${selectedCount} biến thể đã chọn!`, 'success')
-}
-
-
-const handleQtyFocus = (e) => {
-  if (String(e.target.value) === '0') {
-    e.target.select()
-  }
-}
-
-const preventInvalidQtyKey = (e) => {
-  if (['e', 'E', '+', '-', '.'].includes(e.key)) {
-    e.preventDefault()
-  }
-}
-
-const normalizeQty = (item) => {
-  if (item.qty === '' || item.qty === null || item.qty === undefined || isNaN(item.qty)) {
-    item.qty = 0
-  } else {
-    item.qty = Math.max(0, Math.min(100000, Math.floor(Number(item.qty))))
-  }
-}
-
-const normalizeDefaultQty = () => {
-  if (defaultQty.value === '' || defaultQty.value === null || defaultQty.value === undefined || isNaN(defaultQty.value)) {
-    defaultQty.value = 0
-  } else {
-    defaultQty.value = Math.max(0, Math.min(100000, Math.floor(Number(defaultQty.value))))
-  }
 }
 
 const toggleCheckAll = (e) => {
@@ -266,53 +241,27 @@ const removeItem = (groupIndex, itemIndex) => {
   }
 }
 
+// Kiểm tra Magic Bytes client-side (JPEG: FF D8 FF, PNG: 89 50 4E 47, WEBP: RIFF...WEBP)
 const checkImageMagicBytes = async (file) => {
   return new Promise((resolve) => {
     const reader = new FileReader()
     reader.onloadend = (e) => {
       const arr = new Uint8Array(e.target.result).subarray(0, 12)
       if (arr.length < 4) return resolve(false)
-
+      
+      // JPEG: FF D8 FF
       if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) return resolve(true)
+      // PNG: 89 50 4E 47
       if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) return resolve(true)
+      // WEBP: 52 49 46 46 (RIFF) ... 57 45 42 50 (WEBP)
       if (arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 &&
-        arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50) return resolve(true)
+          arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50) return resolve(true)
+      // GIF: 47 49 46 38
       if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x38) return resolve(true)
-
+      
       resolve(false)
     }
     reader.readAsArrayBuffer(file.slice(0, 12))
-  })
-}
-
-const compressImageFile = async (file, maxWidth = 1200, quality = 0.85) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const img = new Image()
-      img.onload = () => {
-        let width = img.width
-        let height = img.height
-
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width)
-          width = maxWidth
-        }
-
-        const canvas = document.createElement('canvas')
-        canvas.width = width
-        canvas.height = height
-        const ctx = canvas.getContext('2d')
-        ctx.drawImage(img, 0, 0, width, height)
-
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality)
-        resolve(compressedDataUrl)
-      }
-      img.onerror = () => reject(new Error('Không thể tải ảnh để nén'))
-      img.src = e.target.result
-    }
-    reader.onerror = (err) => reject(err)
-    reader.readAsDataURL(file)
   })
 }
 
@@ -335,28 +284,27 @@ const triggerImageUpload = (colorId) => {
         showToast(`Nhóm màu này đã đạt giới hạn tối đa ${MAX_IMAGES_PER_COLOR} ảnh chi tiết!`, 'warning')
         break
       }
+
+      // 1. Kiểm tra dung lượng 5MB
       if (file.size > MAX_SIZE) {
         showToast(`Ảnh "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) vượt quá dung lượng tối đa 5MB!`, 'warning')
         continue
       }
+
+      // 2. Kiểm tra định dạng & Magic Bytes
       const isValidRealImage = await checkImageMagicBytes(file)
       if (!isValidRealImage) {
         showToast(`Tệp "${file.name}" không phải là ảnh hợp lệ (chỉ hỗ trợ JPG, PNG, WEBP)!`, 'error')
         continue
       }
 
-      try {
-        const compressedBase64 = await compressImageFile(file, 1200, 0.85)
-        currentList.push(compressedBase64)
-        addedCount++
-      } catch {
-        const reader = new FileReader()
-        reader.onload = (uploadEvent) => {
-          currentList.push(uploadEvent.target.result)
-        }
-        reader.readAsDataURL(file)
-        addedCount++
+      const reader = new FileReader()
+      reader.onload = (uploadEvent) => {
+        const base64Url = uploadEvent.target.result
+        currentList.push(base64Url)
       }
+      reader.readAsDataURL(file)
+      addedCount++
     }
 
     if (addedCount > 0) {
@@ -580,12 +528,14 @@ const saveProduct = async (confirmMerge = false) => {
 
     const data = await res.json()
 
+    // Case trùng lặp -> Cần người dùng xác nhận
     if (data.status === 'NEED_CONFIRMATION') {
       mergePreviewData.value = data
       showMergeModal.value = true
       return
     }
 
+    // Case thành công
     showMergeModal.value = false
     localStorage.removeItem('product_initial_list_cache')
     localStorage.removeItem('variant_list_cache')
@@ -596,14 +546,7 @@ const saveProduct = async (confirmMerge = false) => {
       router.push('/admin/san-pham')
     }, 1000)
   } catch (err) {
-    const rawMsg = err.message || ''
-    let displayMsg = rawMsg
-    if (rawMsg === 'Failed to fetch' || rawMsg.includes('fetch')) {
-      displayMsg = 'Không thể kết nối đến máy chủ backend (http://localhost:8080). Vui lòng đảm bảo máy chủ backend đang chạy và thử lại!'
-    } else if (!displayMsg) {
-      displayMsg = 'Không thể kết nối đến cơ sở dữ liệu'
-    }
-    showToast(displayMsg, 'error')
+    showToast(err.message || 'Không thể kết nối đến cơ sở dữ liệu', 'error')
   } finally {
     isSubmitting.value = false
   }
@@ -650,61 +593,87 @@ onMounted(() => {
         <div class="form-field">
           <div class="field-label-row">
             <label class="form-label required">Thương hiệu</label>
-            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('brand')"
-              title="Thêm nhanh Thương hiệu">+ Thêm nhanh</button>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('brand')" title="Thêm nhanh Thương hiệu">+ Thêm nhanh</button>
           </div>
-          <SearchableSelect v-model="form.brand" :options="brandOptions" placeholder="Chọn thương hiệu..."
-            search-placeholder="Tìm thương hiệu..." :has-error="!!errors.brand" />
+          <SearchableSelect
+            v-model="form.brand"
+            :options="brandOptions"
+            placeholder="Chọn thương hiệu..."
+            search-placeholder="Tìm thương hiệu..."
+            :has-error="!!errors.brand"
+          />
           <span v-if="errors.brand" class="err-txt">{{ errors.brand }}</span>
         </div>
 
         <div class="form-field">
           <div class="field-label-row">
             <label class="form-label required">Loại giày</label>
-            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('category')"
-              title="Thêm nhanh Loại giày">+ Thêm nhanh</button>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('category')" title="Thêm nhanh Loại giày">+ Thêm nhanh</button>
           </div>
-          <SearchableSelect v-model="form.category" :options="categoryOptions" placeholder="Chọn loại giày..."
-            search-placeholder="Tìm loại giày..." :has-error="!!errors.category" />
+          <SearchableSelect
+            v-model="form.category"
+            :options="categoryOptions"
+            placeholder="Chọn loại giày..."
+            search-placeholder="Tìm loại giày..."
+            :has-error="!!errors.category"
+          />
           <span v-if="errors.category" class="err-txt">{{ errors.category }}</span>
         </div>
 
         <div class="form-field">
           <label class="form-label required">Giới tính / Đối tượng</label>
-          <SearchableSelect v-model="form.gender" :options="genderOptions" value-key="value" label-key="label"
-            placeholder="Chọn đối tượng..." :allow-clear="false" />
+          <SearchableSelect
+            v-model="form.gender"
+            :options="genderOptions"
+            value-key="value"
+            label-key="label"
+            placeholder="Chọn đối tượng..."
+            :allow-clear="false"
+          />
         </div>
 
         <div class="form-field">
           <div class="field-label-row">
             <label class="form-label required">Chất liệu</label>
-            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('material')"
-              title="Thêm nhanh Chất liệu">+ Thêm nhanh</button>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('material')" title="Thêm nhanh Chất liệu">+ Thêm nhanh</button>
           </div>
-          <SearchableSelect v-model="form.material" :options="materialOptions" placeholder="Chọn chất liệu..."
-            search-placeholder="Tìm chất liệu..." :has-error="!!errors.material" />
+          <SearchableSelect
+            v-model="form.material"
+            :options="materialOptions"
+            placeholder="Chọn chất liệu..."
+            search-placeholder="Tìm chất liệu..."
+            :has-error="!!errors.material"
+          />
           <span v-if="errors.material" class="err-txt">{{ errors.material }}</span>
         </div>
 
         <div class="form-field">
           <div class="field-label-row">
             <label class="form-label required">Kiểu dáng</label>
-            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('style')"
-              title="Thêm nhanh Kiểu dáng">+ Thêm nhanh</button>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('style')" title="Thêm nhanh Kiểu dáng">+ Thêm nhanh</button>
           </div>
-          <SearchableSelect v-model="form.style" :options="styleOptions" placeholder="Chọn kiểu dáng..."
-            search-placeholder="Tìm kiểu dáng..." :has-error="!!errors.style" />
+          <SearchableSelect
+            v-model="form.style"
+            :options="styleOptions"
+            placeholder="Chọn kiểu dáng..."
+            search-placeholder="Tìm kiểu dáng..."
+            :has-error="!!errors.style"
+          />
           <span v-if="errors.style" class="err-txt">{{ errors.style }}</span>
         </div>
 
         <div class="form-field">
           <div class="field-label-row">
             <label class="form-label required">Xuất xứ</label>
-            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('origin')"
-              title="Thêm nhanh Xuất xứ">+ Thêm nhanh</button>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('origin')" title="Thêm nhanh Xuất xứ">+ Thêm nhanh</button>
           </div>
-          <SearchableSelect v-model="form.origin" :options="originOptions" placeholder="Chọn xuất xứ..."
-            search-placeholder="Tìm xuất xứ..." :has-error="!!errors.origin" />
+          <SearchableSelect
+            v-model="form.origin"
+            :options="originOptions"
+            placeholder="Chọn xuất xứ..."
+            search-placeholder="Tìm xuất xứ..."
+            :has-error="!!errors.origin"
+          />
           <span v-if="errors.origin" class="err-txt">{{ errors.origin }}</span>
         </div>
 
@@ -721,8 +690,14 @@ onMounted(() => {
         <label class="attr-label required">Màu sắc</label>
         <div class="attr-input-wrap">
           <div style="flex: 1;">
-            <SearchableSelect v-model="tempColorSelect" :options="colorOptions" color-key="ma"
-              placeholder="Chọn màu sắc..." search-placeholder="Tìm kiếm màu..." @change="handleSelectColor" />
+            <SearchableSelect
+              v-model="tempColorSelect"
+              :options="colorOptions"
+              color-key="ma"
+              placeholder="Chọn màu sắc..."
+              search-placeholder="Tìm kiếm màu..."
+              @change="handleSelectColor"
+            />
           </div>
           <button class="btn btn-quick-add" @click="openQuickAdd('color')">+ Thêm nhanh</button>
         </div>
@@ -740,8 +715,14 @@ onMounted(() => {
         <label class="attr-label required">Kích cỡ</label>
         <div class="attr-input-wrap">
           <div style="flex: 1;">
-            <SearchableSelect v-model="tempSizeSelect" :options="sizeOptions" prefix="Size "
-              placeholder="Chọn kích cỡ..." search-placeholder="Tìm size..." @change="handleSelectSize" />
+            <SearchableSelect
+              v-model="tempSizeSelect"
+              :options="sizeOptions"
+              prefix="Size "
+              placeholder="Chọn kích cỡ..."
+              search-placeholder="Tìm size..."
+              @change="handleSelectSize"
+            />
           </div>
           <button class="btn btn-quick-add" @click="openQuickAdd('size')">+ Thêm nhanh</button>
         </div>
@@ -776,7 +757,7 @@ onMounted(() => {
         <div class="bulk-inputs-right">
           <div class="bulk-field">
             <label class="bulk-lbl">Số lượng mặc định</label>
-            <input v-model.number="defaultQty" type="number" class="bulk-num-input" placeholder="0" min="0" max="100000" @keydown="preventInvalidQtyKey" @focus="handleQtyFocus" @blur="normalizeDefaultQty" />
+            <input v-model.number="defaultQty" type="number" class="bulk-num-input" placeholder="0" min="0" />
           </div>
 
           <div class="bulk-field" style="min-width: 200px;">
@@ -800,11 +781,11 @@ onMounted(() => {
         <table class="variant-data-table">
           <thead>
             <tr>
-              <th width="40" class="text-center"></th>
-              <th width="60" class="text-center">STT</th>
-              <th class="text-center">Kích cỡ</th>
-              <th width="200" class="text-center">Số lượng</th>
-              <th width="260" class="text-center">Giá bán</th>
+              <th width="40"></th>
+              <th width="60">STT</th>
+              <th>Kích cỡ</th>
+              <th width="200">Số lượng</th>
+              <th width="260">Giá bán</th>
               <th width="80" class="text-center">Xóa</th>
             </tr>
           </thead>
@@ -813,10 +794,10 @@ onMounted(() => {
               <td>
                 <input type="checkbox" v-model="item.checked" class="custom-checkbox" />
               </td>
-              <td class="text-center">{{ item.stt }}</td>
-              <td class="text-center font-medium">Size {{ item.sizeName }}</td>
+              <td class="text-muted">{{ item.stt }}</td>
+              <td class="font-medium">Size {{ item.sizeName }}</td>
               <td>
-                <input v-model.number="item.qty" type="number" class="table-num-input" min="0" max="100000" @keydown="preventInvalidQtyKey" @focus="handleQtyFocus" @blur="normalizeQty(item)" style="text-align: center;" />
+                <input v-model.number="item.qty" type="number" class="table-num-input" min="0" />
               </td>
               <td>
                 <CurrencyInput v-model="item.price" placeholder="Nhập giá..." />
@@ -848,18 +829,30 @@ onMounted(() => {
                 Đã tải: <strong>{{ colorImages[group.colorId]?.length || 0 }}/4</strong> ảnh chi tiết (tối đa 5MB/ảnh)
               </span>
             </div>
-            <button class="btn btn-red-solid" @click="triggerImageUpload(group.colorId)"
-              :disabled="(colorImages[group.colorId]?.length || 0) >= 4">
+            <button 
+              class="btn btn-red-solid" 
+              @click="triggerImageUpload(group.colorId)"
+              :disabled="(colorImages[group.colorId]?.length || 0) >= 4"
+            >
               + Thêm ảnh
             </button>
           </div>
 
           <div class="img-dropzone" @click="triggerImageUpload(group.colorId)">
             <div v-if="colorImages[group.colorId] && colorImages[group.colorId].length > 0" class="preview-thumbs-grid">
-              <div v-for="(src, idx) in colorImages[group.colorId]" :key="idx" class="thumb-item-wrap" @click.stop>
+              <div 
+                v-for="(src, idx) in colorImages[group.colorId]" 
+                :key="idx" 
+                class="thumb-item-wrap"
+                @click.stop
+              >
                 <img :src="src" class="thumb-preview" />
                 <span v-if="idx === 0" class="badge-main-img">Ảnh chính</span>
-                <button class="btn-remove-thumb" @click="removeImage(group.colorId, idx, $event)" title="Xóa ảnh này">
+                <button 
+                  class="btn-remove-thumb" 
+                  @click="removeImage(group.colorId, idx, $event)" 
+                  title="Xóa ảnh này"
+                >
                   ×
                 </button>
               </div>
@@ -874,6 +867,7 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- Modal Cảnh báo & Xác nhận Cập nhật / Cộng dồn kho khi trùng sản phẩm -->
     <div v-if="showMergeModal" class="modal-overlay">
       <div class="modal-merge-card">
         <div class="merge-modal-header">
@@ -890,13 +884,12 @@ onMounted(() => {
         <div class="merge-modal-body">
           <div class="merge-alert-box">
             <p>
-              Sản phẩm <strong>"{{ mergePreviewData?.tenSanPham }}"</strong>
-              (Mã: <span class="badge-code">{{ mergePreviewData?.maSanPham }}</span>)
+              Sản phẩm <strong>"{{ mergePreviewData?.tenSanPham }}"</strong> 
+              (Mã: <span class="badge-code">{{ mergePreviewData?.maSanPham }}</span>) 
               đã có sẵn trong hệ thống.
             </p>
             <p class="sub-alert-text">
-              Bạn có muốn <strong>cập nhật thông tin</strong> và <strong>cộng dồn số lượng tồn kho</strong> cho các biến
-              thể dưới đây không?
+              Bạn có muốn <strong>cập nhật thông tin</strong> và <strong>cộng dồn số lượng tồn kho</strong> cho các biến thể dưới đây không?
             </p>
           </div>
 

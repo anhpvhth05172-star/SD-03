@@ -18,6 +18,7 @@ public class TongKetDto {
 
     private Long id;
     private String maCa;
+    private String tenCaLich;
     private Long idNhanVien;
     private String tenNhanVien;
     private String tenQuy;

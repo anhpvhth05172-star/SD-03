@@ -1,24 +1,69 @@
 <script setup>
-import { reactive, ref, computed, watch, onMounted, unref } from "vue";
+import { reactive, ref, computed, watch, onMounted } from "vue";
 import * as store from "../store";
+import { getCustomer } from "@/api/customer";
+import { getToken, getUser } from "@/utils/auth";
+import SearchableSelect from "@/components/SearchableSelect.vue";
+import { getProvinces, getWards, tinhPhi } from "@/api/shipping";
 
 const { cart, cartTotal, money } = store;
 
 // Phí vận chuyển đơn online (back-end yêu cầu > 1.000đ). Đổi theo chính sách của shop.
 const SHIP_FEE = 30000;
+const shippingFee = ref(SHIP_FEE);
+
+const provinces = ref([]);
+const wards = ref([]);
+const provincesLoading = ref(false);
+const wardsLoading = ref(false);
+const addressOptionsError = ref("");
+let wardRequestId = 0;
+
+const provinceOptions = computed(() => provinces.value.map((p) => ({ value: p.id, label: p.name })));
+const wardOptions = computed(() => wards.value.map((w) => ({ value: w.id, label: w.name })));
+
+async function loadProvinces() {
+  provincesLoading.value = true;
+  addressOptionsError.value = "";
+  try {
+    const result = await getProvinces();
+    if (!Array.isArray(result) || result.length !== 34) throw new Error("Danh sách tỉnh/thành không đúng hiện trạng");
+    provinces.value = result;
+  } catch {
+    addressOptionsError.value = "Không tải được danh sách tỉnh/thành phố.";
+  } finally {
+    provincesLoading.value = false;
+  }
+}
+
+async function onProvinceChange(id) {
+  provinceId.value = id ?? null;
+  errors.province = "";
+  errors.ward = "";
+  errors.address = "";
+  wardId.value = null;
+  wards.value = [];
+  const requestId = ++wardRequestId;
+  addressOptionsError.value = "";
+  if (id == null || id === "") {
+    wardsLoading.value = false;
+    return;
+  }
+  wardsLoading.value = true;
+  try {
+    const result = await getWards(id);
+    const isPlaceholder = result?.some((w) => ["Phường/Xã trung tâm", "Khu vực nội thành"].includes(w.name));
+    if (!Array.isArray(result) || result.length === 0 || isPlaceholder) throw new Error("Danh sách trống");
+    if (requestId === wardRequestId) wards.value = result;
+  } catch {
+    if (requestId === wardRequestId) addressOptionsError.value = "Không tải được danh sách phường/xã. Vui lòng thử lại.";
+  } finally {
+    if (requestId === wardRequestId) wardsLoading.value = false;
+  }
+}
 
 /* ================= CẤU HÌNH API ================= */
 const API = "http://localhost:8080/api/khach-hang";
-
-const getToken = () => {
-  const a = unref(store.auth);
-  if (a?.token) return a.token;
-  for (const area of [localStorage, sessionStorage]) {
-    const t = area.getItem("token") || area.getItem("accessToken");
-    if (t) return t;
-  }
-  return "";
-};
 
 const authHeaders = () => {
   const t = getToken();
@@ -31,103 +76,21 @@ async function getJson(url) {
   return res.json();
 }
 
-// Giải mã JWT -> lấy username / id
-function decodeJwt(token) {
-  try {
-    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(decodeURIComponent(escape(atob(payload))));
-  } catch (e) {
-    return null;
-  }
-}
-
-function getLoggedInUser() {
-  // 1) store.auth (nếu có)
-  const a = unref(store.auth);
-  if (a) {
-    const u = unref(a.user) || a;
-    if (u && (u.id || u.tenTaiKhoan || u.username || u.email)) return u;
-  }
-
-  // 2) quét toàn bộ localStorage + sessionStorage
-  for (const area of [localStorage, sessionStorage]) {
-    for (let i = 0; i < area.length; i++) {
-      const key = area.key(i);
-      const raw = area.getItem(key);
-      if (!raw) continue;
-
-      // Chuỗi là JWT
-      if (raw.split(".").length === 3) {
-        const p = decodeJwt(raw);
-        if (p)
-          return { tenTaiKhoan: p.sub || p.username, id: p.id || p.userId };
-      }
-      // Chuỗi là JSON
-      try {
-        const obj = JSON.parse(raw);
-        const u = obj.user || obj.khachHang || obj.data || obj;
-        if (
-          u &&
-          typeof u === "object" &&
-          (u.id || u.tenTaiKhoan || u.username || u.email)
-        ) {
-          return u;
-        }
-        if (obj.token) {
-          const p = decodeJwt(obj.token);
-          if (p)
-            return { tenTaiKhoan: p.sub || p.username, id: p.id || p.userId };
-        }
-      } catch (e) {
-        /* không phải JSON */
-      }
-    }
-  }
-  return null;
-}
-
 async function fetchCustomer() {
-  const u = getLoggedInUser();
-  console.log("[Checkout] user đăng nhập:", u);
-  if (!u) {
-    console.warn(
-      "[Checkout] Không tìm thấy user đăng nhập trong store/localStorage",
-    );
-    return null;
-  }
+  const user = getUser();
+  const id = user?.idKhachHang ?? user?.id;
+  if (!id || user?.loaiTaiKhoan === "NHAN_VIEN") return null;
 
-  const username = u.tenTaiKhoan || u.username;
-  const matches = (k) =>
-    (u.id && k.id === u.id) ||
-    (username && k.tenTaiKhoan === username) ||
-    (u.email && k.email === u.email);
-
-  // 1) API chi tiết theo id
-  if (u.id) {
-    try {
-      const c = await getJson(`${API}/${u.id}`);
-      console.log("[Checkout] khách hàng (chi tiết):", c);
-      return c;
-    } catch (e) {
-      console.warn("[Checkout] API chi tiết lỗi:", e.message);
-    }
-  }
-
-  // 2) Tìm trong danh sách
   try {
-    const page = await getJson(`${API}?size=1000`);
-    const list = page.content || page;
-    const c = list.find(matches) || null;
-    console.log("[Checkout] khách hàng (từ danh sách):", c);
-    return c;
-  } catch (e) {
-    console.warn("[Checkout] API danh sách lỗi (401/CORS?):", e.message);
-    return u.tenKhachHang ? u : null;
+    return await getCustomer(id);
+  } catch {
+    return { ...user, id };
   }
 }
 
 const customer = ref(null);
 onMounted(async () => {
+  loadProvinces();
   try {
     customer.value = await fetchCustomer();
   } catch (e) {
@@ -171,7 +134,7 @@ const itemImage = (i) =>
   i.image || i.hinhAnh || i.img || "/placeholder-shoe.png";
 
 /* ================= PHIẾU GIẢM GIÁ (gọi API thật) ================= */
-const VOUCHER_API = "http://localhost:8080/admin/phieu-giam-gia";
+const VOUCHER_API = API.replace(/\/khach-hang$/, "/phieu-giam-gia");
 
 /* >>> ADAPTER: đổi tên field cho khớp entity/DTO PhieuGiamGia của bạn <<< */
 const VF = {
@@ -279,7 +242,9 @@ async function fetchVoucher(code) {
 }
 /* ======================================================= */
 
-const f = reactive({ name: "", phone: "", address: "", note: "", pay: "cod" });
+const f = reactive({ name: "", phone: "", address: "", street: "", note: "", pay: "cod" });
+const provinceId = ref(null);
+const wardId = ref(null);
 const errors = reactive({});
 const done = ref(false);
 const orderId = ref("");
@@ -296,6 +261,10 @@ function chooseAddress(id) {
     f.name = base.name;
     f.phone = base.phone;
     f.address = "";
+    f.street = "";
+    provinceId.value = null;
+    wardId.value = null;
+    wards.value = [];
     return;
   }
   const a = savedAddresses.value.find((x) => x.id === id);
@@ -303,6 +272,10 @@ function chooseAddress(id) {
   f.name = a.name || base.name;
   f.phone = a.phone || base.phone;
   f.address = a.address;
+  f.street = "";
+  provinceId.value = null;
+  wardId.value = null;
+  wards.value = [];
 }
 
 /* ---------- Khóa ô nhập khi đã tự điền ---------- */
@@ -317,6 +290,12 @@ const lockPhone = computed(
 const lockAddress = computed(
   () => isLoggedIn.value && selectedAddr.value !== "new",
 );
+const addressValue = computed(() => {
+  if (lockAddress.value) return f.address;
+  const provinceName = provinces.value.find((p) => String(p.id) === String(provinceId.value))?.name;
+  const wardName = wards.value.find((w) => String(w.id) === String(wardId.value))?.name;
+  return [f.street.trim(), wardName, provinceName].filter(Boolean).join(", ");
+});
 
 // Chạy khi dữ liệu khách hàng tải xong
 watch(
@@ -335,7 +314,7 @@ const voucher = ref(null); // { code, ...rule }
 const voucherMsg = reactive({ text: "", ok: false });
 
 // Tổng trước giảm = tiền hàng + phí vận chuyển (khớp cách tính của back-end)
-const orderTotal = computed(() => cartTotal.value + SHIP_FEE);
+const orderTotal = computed(() => cartTotal.value + shippingFee.value);
 
 const discount = computed(() => {
   const v = voucher.value;
@@ -423,7 +402,7 @@ function buildHoaDonRequest() {
     idKhachHang: customer.value?.id ?? null,
     tenKhachHang: f.name.trim(),
     soDienThoaiKhachHang: f.phone.trim(),
-    diaChiNhanHang: f.address.trim(),
+    diaChiNhanHang: addressValue.value.trim(),
     ghiChu: f.note.trim(),
 
     // Đơn online không có nhân viên (cần back-end cho phép null)
@@ -431,7 +410,7 @@ function buildHoaDonRequest() {
 
     ...phuongThucFields(f.pay),
     idPhieuGiamGia: voucher.value?.id ?? null,
-    phiVanChuyen: SHIP_FEE,
+    phiVanChuyen: shippingFee.value,
 
     chiTiet: cart.items.map((i) => ({
       idSanPhamChiTiet: i.idSanPhamChiTiet ?? i.spctId ?? i.id,
@@ -452,13 +431,35 @@ async function submit() {
   errors.phone = /^0\d{9}$/.test(f.phone)
     ? ""
     : "Số điện thoại gồm 10 số, bắt đầu bằng 0.";
-  errors.address = f.address.trim() ? "" : "Vui lòng nhập địa chỉ nhận hàng.";
-  if (errors.name || errors.phone || errors.address) return;
+  errors.street = lockAddress.value || f.street.trim() ? "" : "Vui lòng nhập địa chỉ cụ thể.";
+  errors.province = lockAddress.value || provinceId.value ? "" : "Vui lòng chọn tỉnh/thành phố.";
+  errors.ward = lockAddress.value || wardId.value ? "" : "Vui lòng chọn phường/xã.";
+  errors.address = addressValue.value.trim() ? "" : "Vui lòng nhập địa chỉ nhận hàng.";
+  if (errors.name || errors.phone || errors.address || errors.street || errors.province || errors.ward) return;
 
   submitting.value = true;
-  const payload = buildHoaDonRequest();
-  console.log("[Checkout] payload gửi hóa đơn:", payload);
   try {
+    const provinceName = provinces.value.find((p) => String(p.id) === String(provinceId.value))?.name;
+    const wardName = wards.value.find((w) => String(w.id) === String(wardId.value))?.name;
+    const shipping = await tinhPhi({
+      toProvinceName: provinceName,
+      toWardName: wardName,
+      items: cart.items.map((i) => ({
+        idSanPhamChiTiet: i.idSanPhamChiTiet ?? i.spctId ?? i.id,
+        soLuong: i.qty,
+      })),
+    });
+    if (!shipping?.toProvinceId || !shipping?.toDistrictId || !shipping?.toWardCode) {
+      throw new Error("Không xác định được địa chỉ giao hàng. Vui lòng chọn lại tỉnh và phường/xã.");
+    }
+    shippingFee.value = Number(shipping.shippingFee) || SHIP_FEE;
+    const payload = {
+      ...buildHoaDonRequest(),
+      toProvinceId: shipping.toProvinceId,
+      toDistrictId: shipping.toDistrictId,
+      toWardCode: shipping.toWardCode,
+      phiVanChuyen: shippingFee.value,
+    };
     const res = await fetch(HOA_DON_API, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -601,16 +602,30 @@ async function submit() {
             />
             <div class="invalid-feedback">{{ errors.phone }}</div>
           </div>
-          <div class="mb-3">
+          <div v-if="lockAddress" class="mb-3">
             <label class="form-label fw-semibold small">Địa chỉ</label>
-            <input
-              v-model="f.address"
-              class="form-control"
-              :readonly="lockAddress"
-              :class="{ 'is-invalid': errors.address, 'bg-light': lockAddress }"
-              placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
-            />
-            <div class="invalid-feedback">{{ errors.address }}</div>
+            <input class="form-control bg-light" :value="f.address" readonly />
+          </div>
+          <div v-else class="row g-3 mb-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold small">Địa chỉ cụ thể</label>
+              <input v-model="f.street" class="form-control" :class="{ 'is-invalid': errors.street }" placeholder="Số nhà, tên đường..." @input="errors.street = ''; errors.address = ''" />
+              <div class="invalid-feedback">{{ errors.street }}</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Tỉnh/Thành phố</label>
+              <SearchableSelect v-model="provinceId" :options="provinceOptions" :disabled="provincesLoading || !provinces.length" :placeholder="provincesLoading ? 'Đang tải danh sách...' : 'Chọn tỉnh/thành phố'" :has-error="!!errors.province" @update:model-value="onProvinceChange" />
+              <div v-if="errors.province" class="text-danger small mt-1">{{ errors.province }}</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Phường/Xã</label>
+              <SearchableSelect v-model="wardId" :options="wardOptions" :disabled="wardsLoading || !provinceId || !wards.length" :placeholder="wardsLoading ? 'Đang tải danh sách...' : provinceId ? 'Chọn phường/xã' : 'Chọn tỉnh trước'" :has-error="!!errors.ward" @update:model-value="() => { errors.ward = ''; errors.address = '' }" />
+              <div v-if="errors.ward" class="text-danger small mt-1">{{ errors.ward }}</div>
+            </div>
+            <div v-if="addressOptionsError" class="col-12">
+              <div class="text-danger small">{{ addressOptionsError }} <button type="button" class="btn btn-link btn-sm p-0 align-baseline" @click="provinceId ? onProvinceChange(provinceId) : loadProvinces()">Thử lại</button></div>
+            </div>
+            <div v-if="errors.address" class="col-12 text-danger small">{{ errors.address }}</div>
           </div>
           <div class="mb-4">
             <label class="form-label fw-semibold small"
@@ -728,7 +743,7 @@ async function submit() {
             <span>Tạm tính</span><span>{{ money(cartTotal) }}</span>
           </div>
           <div class="d-flex justify-content-between small mb-2">
-            <span>Phí vận chuyển</span><span>{{ money(SHIP_FEE) }}</span>
+            <span>Phí vận chuyển</span><span>{{ money(shippingFee) }}</span>
           </div>
           <div
             v-if="discount"
@@ -755,3 +770,5 @@ async function submit() {
     </div>
   </div>
 </template>
+
+

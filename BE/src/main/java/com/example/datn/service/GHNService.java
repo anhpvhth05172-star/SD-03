@@ -137,12 +137,8 @@ public class GHNService {
         if (!cauHinh.daCauHinh()) {
             return new ShippingFeeResponse(30000, "VND", "Phí vận chuyển tiêu chuẩn");
         }
-        try {
-            int phi = tinhPhi(req);
-            return new ShippingFeeResponse(phi, "VND", "Phí vận chuyển được tính bởi GHN");
-        } catch (Exception e) {
-            return new ShippingFeeResponse(30000, "VND", "Phí vận chuyển tiêu chuẩn");
-        }
+        int phi = tinhPhi(req);
+        return new ShippingFeeResponse(phi, "VND", "Phí vận chuyển được tính bởi GHN");
     }
 
     public List<ShippingAddressDTO> getTinhThanhMoi() {
@@ -382,7 +378,7 @@ public class GHNService {
         ObjectNode body = objectMapper.createObjectNode();
         int serviceTypeId = req.getServiceTypeId() != null && req.getServiceTypeId() > 0
             ? req.getServiceTypeId()
-            : cauHinh.getServiceTypeId();
+            : tongTrongLuong >= 20_000 ? 5 : 2;
         body.put("service_type_id", serviceTypeId);
         body.put("to_district_id", req.getToDistrictId());
         body.put("to_ward_code", req.getToWardCode().trim());

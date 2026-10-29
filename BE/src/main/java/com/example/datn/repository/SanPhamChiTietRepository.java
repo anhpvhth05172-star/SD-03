@@ -80,4 +80,8 @@ public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM SanPhamChiTiet s WHERE s.id = :id")
     Optional<SanPhamChiTiet> findByIdForUpdate(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM SanPhamChiTiet s WHERE s.id IN :ids ORDER BY s.id")
+    List<SanPhamChiTiet> findAllByIdForUpdate(@Param("ids") List<Long> ids);
 }
