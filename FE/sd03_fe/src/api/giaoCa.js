@@ -7,6 +7,10 @@ export const getDangMo = () =>
     return d && d.id ? d : null
   })
 
+// GET /api/ca/danh-sach-ca — Lấy danh sách các ca làm việc được chia sẵn (đang bật)
+export const getDanhSachCaLam = () =>
+  http.get('/ca/danh-sach-ca').then((r) => r.data || [])
+
 // POST /api/ca/mo-ca — 201 CaLamViecDto; 400 CA_DA_MO nếu đã có ca đang mở
 export const moCa = (payload) => http.post('/ca/mo-ca', payload).then((r) => r.data)
 

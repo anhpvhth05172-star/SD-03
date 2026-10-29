@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { getUser } from '@/utils/auth'
 import { laAdmin } from '@/utils/session'
 import { formatVnd, formatDateTime } from '@/utils/format'
-import { getDangMo, getLichSu, moCa } from '@/api/giaoCa'
+import { getDangMo, getLichSu, moCa, getDanhSachCaLam } from '@/api/giaoCa'
 import PaginationBar from '@/components/PaginationBar.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { notifyError, notifySuccess } from '@/utils/notify'
@@ -112,7 +112,7 @@ const batDauCa = async () => {
   }
   moCaLoading.value = true
   try {
-    caHienTai.value = await moCa({ tienDauCa, ghiChu: moCaForm.ghiChu.trim() || null })
+    caHienTai.value = await moCa({ idCaLich: moCaForm.idCaLich, tienDauCa, ghiChu: moCaForm.ghiChu.trim() || null })
     notifySuccess('Mở ca thành công', `Ca ${caHienTai.value.maCa} đã được mở`)
     await loadData(0)
   } catch (err) {

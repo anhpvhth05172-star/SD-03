@@ -4,8 +4,11 @@ import com.example.datn.dto.CaLamViecDto;
 import com.example.datn.dto.KetCaRequest;
 import com.example.datn.dto.MoCaRequest;
 import com.example.datn.dto.TongKetDto;
+import com.example.datn.dto.LichLamViec.CaLamDTO;
+import com.example.datn.service.CaLamService;
 import com.example.datn.service.GiaoCaService;
 import java.time.LocalDate;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -27,12 +30,22 @@ import org.springframework.web.server.ResponseStatusException;
 public class GiaoCaController {
 
     private final GiaoCaService giaoCaService;
+    private final CaLamService caLamService;
+
+    @GetMapping("/danh-sach-ca")
+    public ResponseEntity<List<CaLamDTO>> danhSachCa() {
+        return ResponseEntity.ok(
+            caLamService.list().stream()
+                .filter(c -> Boolean.TRUE.equals(c.dangBat()))
+                .toList()
+        );
+    }
 
     @PostMapping("/mo-ca")
     public ResponseEntity<CaLamViecDto> moCa(@RequestBody MoCaRequest request, Authentication auth) {
         idNhanVien(auth);
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(giaoCaService.moCa(request.getTienDauCa(), request.getGhiChu()));
+            .body(giaoCaService.moCa(request));
     }
 
     @GetMapping("/dang-mo")

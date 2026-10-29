@@ -52,7 +52,16 @@ public class GiaoCaService {
 
     @Transactional
     public CaLamViecDto moCa(Long tienDauCa, String ghiChu) {
+        return moCa(new com.example.datn.dto.MoCaRequest(tienDauCa, ghiChu));
+    }
+
+    @Transactional
+    public CaLamViecDto moCa(com.example.datn.dto.MoCaRequest request) {
         Long idNhanVien = idNhanVienHienTai();
+        Long tienDauCa = request != null ? request.getTienDauCa() : null;
+        String ghiChu = request != null ? request.getGhiChu() : null;
+        Long idCaLich = request != null ? request.getIdCaLich() : null;
+
         if (tienDauCa == null || tienDauCa < 0) {
             throw bad("TIEN_DAU_CA", "Tiền đầu ca không được âm");
         }
@@ -66,32 +75,42 @@ public class GiaoCaService {
         LocalTime gioHienTai = thoiGianMo.toLocalTime();
         LocalDate ngayHienTai = thoiGianMo.toLocalDate();
 
-        List<com.example.datn.entity.LichLamViec> lichHomNay = lichLamViecRepository
-            .findCaDangBatDuocXep(idNhanVien, ngayHienTai);
-
-        List<com.example.datn.entity.LichLamViec> lichDuocXep = lichHomNay.stream()
-            .filter(lich -> {
-                com.example.datn.entity.CaLam c = lich.getCaLam();
-                if (c == null || c.getBatDau() == null || c.getKetThuc() == null) return false;
-                LocalTime bd = c.getBatDau().minusMinutes(30);
-                LocalTime kt = c.getKetThuc();
-                if (!kt.isBefore(c.getBatDau())) {
-                    return !gioHienTai.isBefore(bd) && gioHienTai.isBefore(kt);
-                } else {
-                    return !gioHienTai.isBefore(bd) || gioHienTai.isBefore(kt);
-                }
-            })
-            .toList();
-
         com.example.datn.entity.CaLam caTheoLich = null;
-        if (!lichDuocXep.isEmpty()) {
-            caTheoLich = lichDuocXep.get(0).getCaLam();
-        } else if (!lichHomNay.isEmpty()) {
-            caTheoLich = lichHomNay.get(0).getCaLam();
-        } else {
-            // Nhân viên chưa được xếp lịch trước hoặc làm ca linh hoạt/thay ca, hoặc Admin:
-            // Hệ thống tự động gán vào ca làm việc hiện tại của cửa hàng
-            caTheoLich = timCaTheoGioHienTai(gioHienTai);
+
+        // 1. Nếu nhân viên chủ động chọn ca được chia sẵn (Ca sáng, Ca chiều...):
+        if (idCaLich != null) {
+            caTheoLich = caLamRepository.findById(idCaLich)
+                .filter(c -> Boolean.TRUE.equals(c.getDangBat()))
+                .orElse(null);
+        }
+
+        // 2. Nếu không chọn cụ thể, tìm theo lịch phân công hôm nay hoặc ca theo giờ
+        if (caTheoLich == null) {
+            List<com.example.datn.entity.LichLamViec> lichHomNay = lichLamViecRepository
+                .findCaDangBatDuocXep(idNhanVien, ngayHienTai);
+
+            List<com.example.datn.entity.LichLamViec> lichDuocXep = lichHomNay.stream()
+                .filter(lich -> {
+                    com.example.datn.entity.CaLam c = lich.getCaLam();
+                    if (c == null || c.getBatDau() == null || c.getKetThuc() == null) return false;
+                    LocalTime bd = c.getBatDau().minusMinutes(30);
+                    LocalTime kt = c.getKetThuc();
+                    if (!kt.isBefore(c.getBatDau())) {
+                        return !gioHienTai.isBefore(bd) && gioHienTai.isBefore(kt);
+                    } else {
+                        return !gioHienTai.isBefore(bd) || gioHienTai.isBefore(kt);
+                    }
+                })
+                .toList();
+
+            if (!lichDuocXep.isEmpty()) {
+                caTheoLich = lichDuocXep.get(0).getCaLam();
+            } else if (!lichHomNay.isEmpty()) {
+                caTheoLich = lichHomNay.get(0).getCaLam();
+            } else {
+                // Tự động gán vào ca làm việc hiện tại của cửa hàng
+                caTheoLich = timCaTheoGioHienTai(gioHienTai);
+            }
         }
 
         CaLamViec ca = new CaLamViec();
