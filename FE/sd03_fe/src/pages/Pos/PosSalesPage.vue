@@ -38,11 +38,18 @@ const kiemTraQuyenBanHang = (actionName = 'thêm sản phẩm vào giỏ hàng')
 }
 
 const isMoCaModalOpen = ref(false)
+const dsCaChiaSan = ref([])
+const isLoadingCaChiaSan = ref(false)
 const moCaForm = reactive({
+  idCaLich: null,
   tienDauCa: 300000,
   ghiChu: ''
 })
 const moCaSubmitting = ref(false)
+
+const selectedCa = computed(() => {
+  return dsCaChiaSan.value.find((c) => c.id === moCaForm.idCaLich) || null
+})
 
 const isKetCaModalOpen = ref(false)
 const ketCaSummary = ref(null)
@@ -71,10 +78,24 @@ const fetchActiveShift = async () => {
   }
 }
 
-const openMoCaModal = () => {
+const openMoCaModal = async () => {
   moCaForm.tienDauCa = 300000
   moCaForm.ghiChu = ''
+  isLoadingCaChiaSan.value = true
   isMoCaModalOpen.value = true
+  try {
+    const list = await getDanhSachCaLam()
+    dsCaChiaSan.value = list || []
+    if (list && list.length > 0) {
+      if (!moCaForm.idCaLich || !list.some((c) => c.id === moCaForm.idCaLich)) {
+        moCaForm.idCaLich = list[0].id
+      }
+    }
+  } catch (err) {
+    console.warn('Lỗi tải danh sách ca làm:', err)
+  } finally {
+    isLoadingCaChiaSan.value = false
+  }
 }
 
 const handleMoCaSubmit = async () => {
@@ -83,15 +104,21 @@ const handleMoCaSubmit = async () => {
     notifyWarning('Số tiền không hợp lệ', 'Tiền mặt đầu ca không được âm')
     return
   }
+  if (!moCaForm.idCaLich && dsCaChiaSan.value.length > 0) {
+    notifyWarning('Chưa chọn ca làm việc', 'Vui lòng chọn một ca được chia sẵn để bắt đầu ca làm!')
+    return
+  }
   moCaSubmitting.value = true
   try {
     const res = await moCa({
+      idCaLich: moCaForm.idCaLich,
       tienDauCa: amount,
       ghiChu: moCaForm.ghiChu?.trim() || null
     })
     activeShift.value = res
     isMoCaModalOpen.value = false
-    notifySuccess('Mở ca thành công', `Đã mở ca ${res.maCa}. Bắt đầu phiên bán hàng!`)
+    const tenCa = res.tenCaLich || selectedCa.value?.ten || 'ca làm việc'
+    notifySuccess('Mở ca thành công', `Đã mở ${tenCa} (${res.maCa}). Bắt đầu phiên bán hàng!`)
     window.dispatchEvent(new Event('polyshoes:shift-changed'))
   } catch (err) {
     notifyError('Mở ca thất bại', err.message || 'Không thể mở ca làm việc')
@@ -3673,9 +3700,10 @@ onUnmounted(() => {
       <div class="pos-header-actions">
         <!-- Nút Mở / Đóng ca làm việc trên quầy POS -->
         <div v-if="activeShift" class="pos-shift-group">
-          <span class="pos-shift-badge" :title="`Ca làm việc ${activeShift.maCa} đang hoạt động`">
+          <span class="pos-shift-badge" :title="`Ca làm việc ${activeShift.tenCaLich || activeShift.maCa} đang hoạt động`">
             <span class="pulse-dot"></span>
-            Ca: <strong>{{ activeShift.maCa }}</strong>
+            Ca: <strong>{{ activeShift.tenCaLich || activeShift.maCa }}</strong>
+            <small v-if="activeShift.tenCaLich" class="pos-shift-code-tag">({{ activeShift.maCa }})</small>
           </span>
           <button type="button" class="btn-pos-close-shift" @click="openKetCaModal" title="Đóng và kết ca làm việc này">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -5607,12 +5635,57 @@ onUnmounted(() => {
                 <strong class="shift-info-val">{{ staffName }} ({{ staffRoleLabel }})</strong>
               </div>
               <div class="shift-info-item">
-                <span class="shift-info-label">Thời gian mở:</span>
-                <strong class="shift-info-val">{{ formatDateTime(new Date()) }}</strong>
+                <span class="shift-info-label">Ca được chia sẵn:</span>
+                <strong class="shift-info-val text-brand">{{ selectedCa?.ten || 'Chưa chọn ca' }}</strong>
+              </div>
+              <div class="shift-info-item">
+                <span class="shift-info-label">Khung giờ ca:</span>
+                <span class="shift-info-val font-weight-bold">{{ selectedCa ? (selectedCa.batDau?.substring(0, 5) + ' — ' + selectedCa.ketThuc?.substring(0, 5)) : '--:--' }}</span>
               </div>
               <div class="shift-info-item">
                 <span class="shift-info-label">Điểm bán hàng:</span>
                 <span class="shift-info-val text-brand">Quầy POS #01</span>
+              </div>
+            </div>
+
+            <!-- CHỌN CA LÀM VIỆC ĐƯỢC CHIA SẴN (CA SÁNG, CA CHIỀU...) -->
+            <div class="pos-shift-field-group">
+              <label class="pos-shift-label">
+                <span>Chọn ca làm việc (ca được chia sẵn)</span>
+                <span class="pos-shift-required">*</span>
+              </label>
+
+              <div v-if="isLoadingCaChiaSan" class="shift-cards-loading">
+                <span class="loading-spinner"></span> Đang tải danh sách ca làm...
+              </div>
+
+              <div v-else-if="dsCaChiaSan.length === 0" class="shift-cards-empty">
+                Chưa có ca làm việc nào được cấu hình
+              </div>
+
+              <div v-else class="pos-predefined-shifts-grid">
+                <div
+                  v-for="ca in dsCaChiaSan"
+                  :key="ca.id"
+                  class="shift-card-option"
+                  :class="{ active: moCaForm.idCaLich === ca.id }"
+                  @click="moCaForm.idCaLich = ca.id"
+                >
+                  <div class="shift-card-indicator">
+                    <span class="shift-radio-circle">
+                      <span v-if="moCaForm.idCaLich === ca.id" class="shift-radio-dot"></span>
+                    </span>
+                  </div>
+                  <div class="shift-card-details">
+                    <div class="shift-card-title-row">
+                      <span class="shift-badge-icon">{{ ca.ten?.toLowerCase().includes('sáng') ? '☀️' : ca.ten?.toLowerCase().includes('chiều') ? '🌤️' : '🌙' }}</span>
+                      <strong class="shift-name">{{ ca.ten }}</strong>
+                    </div>
+                    <div class="shift-time-range">
+                      {{ ca.batDau?.substring(0, 5) }} — {{ ca.ketThuc?.substring(0, 5) }}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -5665,7 +5738,7 @@ onUnmounted(() => {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
-              <span>{{ moCaSubmitting ? 'Đang mở ca...' : 'Xác nhận mở ca' }}</span>
+              <span>{{ moCaSubmitting ? 'Đang mở ca...' : ('Xác nhận mở ' + (selectedCa?.ten || 'ca làm việc')) }}</span>
             </button>
           </div>
         </div>
