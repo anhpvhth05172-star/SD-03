@@ -83,20 +83,15 @@ public class GiaoCaService {
             })
             .toList();
 
-        if (lichDuocXep.isEmpty() && lichHomNay.size() == 1) {
-            lichDuocXep = lichHomNay;
-        }
-
         com.example.datn.entity.CaLam caTheoLich = null;
         if (!lichDuocXep.isEmpty()) {
-            if (lichDuocXep.size() > 1) {
-                throw bad("CA_XEP_LICH_TRUNG", "Lịch làm việc của bạn hôm nay có nhiều ca bị trùng giờ; hãy báo quản lý điều chỉnh!");
-            }
             caTheoLich = lichDuocXep.get(0).getCaLam();
-        } else if (laAdmin()) {
-            caTheoLich = timCaTheoGioHienTai(gioHienTai);
+        } else if (!lichHomNay.isEmpty()) {
+            caTheoLich = lichHomNay.get(0).getCaLam();
         } else {
-            throw bad("CA_CHUA_DUOC_XEP_LICH", "Bạn chưa được phân công ca làm việc đang diễn ra hôm nay. Vui lòng liên hệ quản lý để được xếp lịch!");
+            // Nhân viên chưa được xếp lịch trước hoặc làm ca linh hoạt/thay ca, hoặc Admin:
+            // Hệ thống tự động gán vào ca làm việc hiện tại của cửa hàng
+            caTheoLich = timCaTheoGioHienTai(gioHienTai);
         }
 
         CaLamViec ca = new CaLamViec();
@@ -341,7 +336,7 @@ public class GiaoCaService {
         return objectMapper.writeValueAsString(obj);
     }
 
-    private CaLamViecDto toDto(CaLamViec ca) {
+    public CaLamViecDto toDto(CaLamViec ca) {
         NhanVien nv = ca.getNhanVien();
         return CaLamViecDto.builder()
             .id(ca.getId())

@@ -123,6 +123,8 @@ public class HoaDonService {
     @Autowired
     private GiaoCaService giaoCaService;
     @Autowired
+    private com.example.datn.repository.CaLamViecRepository caLamViecRepository;
+    @Autowired
     private EmailService emailService;
 
     @Autowired
