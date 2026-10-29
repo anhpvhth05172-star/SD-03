@@ -1,32 +1,46 @@
-/*
- * Lưu danh mục ca làm và lịch làm việc lên SQL Server.
- * Chạy một lần trên PolyShoesDB; chỉ tạo thêm bảng, không xóa hoặc sửa dữ liệu hiện có.
- */
-IF OBJECT_ID('dbo.danh_muc_ca_lam_viec', 'U') IS NULL
+-- Migration lich lam viec (P2) — Tao bang ca_lam, lich_lam_viec; seed 3 ca mac dinh
+SET QUOTED_IDENTIFIER ON;
+-- NOTE: chay bang sqlcmd -f 65001 (file UTF-8, chu Viet co dau)
+
+-- 1. Bang ca_lam
+IF OBJECT_ID('dbo.ca_lam', 'U') IS NULL
 BEGIN
-    CREATE TABLE dbo.danh_muc_ca_lam_viec (
-        id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-        ma_ca NVARCHAR(50) NOT NULL,
+    CREATE TABLE dbo.ca_lam (
+        id BIGINT IDENTITY(1,1) PRIMARY KEY,
+        ma_ca NVARCHAR(50) NOT NULL UNIQUE,
         ten_ca NVARCHAR(100) NOT NULL,
-        gio_bat_dau TIME(0) NOT NULL,
-        gio_ket_thuc TIME(0) NOT NULL,
-        dang_bat BIT NOT NULL CONSTRAINT df_danh_muc_ca_dang_bat DEFAULT 1,
-        CONSTRAINT uq_danh_muc_ca_ma UNIQUE (ma_ca),
-        CONSTRAINT uq_danh_muc_ca_ten UNIQUE (ten_ca),
-        CONSTRAINT ck_danh_muc_ca_gio CHECK (gio_ket_thuc > gio_bat_dau)
+        bat_dau TIME NOT NULL,
+        ket_thuc TIME NOT NULL,
+        dang_bat BIT NOT NULL DEFAULT 1,
+        ngay_tao DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        ngay_cap_nhat DATETIME2 NULL,
+        nguoi_tao NVARCHAR(100) NULL,
+        nguoi_cap_nhat NVARCHAR(100) NULL
     );
 END;
 
+-- 2. Bang lich_lam_viec
 IF OBJECT_ID('dbo.lich_lam_viec', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.lich_lam_viec (
-        id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-        id_nhan_vien BIGINT NOT NULL,
-        id_ca BIGINT NOT NULL,
+        id BIGINT IDENTITY(1,1) PRIMARY KEY,
+        id_nhan_vien BIGINT NOT NULL REFERENCES dbo.nhan_vien(id),
+        id_ca_lam BIGINT NOT NULL REFERENCES dbo.ca_lam(id),
         ngay_lam DATE NOT NULL,
-        CONSTRAINT fk_lich_lam_viec_nhan_vien FOREIGN KEY (id_nhan_vien) REFERENCES dbo.nhan_vien(id),
-        CONSTRAINT fk_lich_lam_viec_ca FOREIGN KEY (id_ca) REFERENCES dbo.danh_muc_ca_lam_viec(id),
-        CONSTRAINT uq_lich_lam_viec_nhan_vien_ca_ngay UNIQUE (id_nhan_vien, id_ca, ngay_lam)
+        ngay_tao DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+        ngay_cap_nhat DATETIME2 NULL,
+        nguoi_tao NVARCHAR(100) NULL,
+        nguoi_cap_nhat NVARCHAR(100) NULL,
+        CONSTRAINT UQ_lich UNIQUE(id_nhan_vien, id_ca_lam, ngay_lam)
     );
-    CREATE INDEX ix_lich_lam_viec_ngay ON dbo.lich_lam_viec(ngay_lam);
 END;
+
+-- 3. Seed 3 ca mac dinh
+IF NOT EXISTS (SELECT 1 FROM dbo.ca_lam WHERE ma_ca = N'sang')
+    INSERT INTO dbo.ca_lam (ma_ca, ten_ca, bat_dau, ket_thuc, dang_bat) VALUES (N'sang', N'Ca sáng', '08:00', '12:00', 1);
+
+IF NOT EXISTS (SELECT 1 FROM dbo.ca_lam WHERE ma_ca = N'chieu')
+    INSERT INTO dbo.ca_lam (ma_ca, ten_ca, bat_dau, ket_thuc, dang_bat) VALUES (N'chieu', N'Ca chiều', '13:00', '17:00', 1);
+
+IF NOT EXISTS (SELECT 1 FROM dbo.ca_lam WHERE ma_ca = N'toi')
+    INSERT INTO dbo.ca_lam (ma_ca, ten_ca, bat_dau, ket_thuc, dang_bat) VALUES (N'toi', N'Ca tối', '17:30', '21:30', 1);

@@ -1,26 +1,15 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyDeleteConfirm } from '@/utils/notify'
 import SearchableSelect from '@/components/SearchableSelect.vue'
-import {
-  danhSachCa,
-  themCa,
-  capNhatCa,
-  doiTrangThaiCa,
-  caTrungTen,
-  xoaCa,
-  soLichCuaCa,
-  slugMaCa,
-  napDuLieuLich,
-} from './scheduleData'
+import { listCaLam, createCaLam, updateCaLam, toggleCaLam, deleteCaLam } from '@/api/schedule'
+import { slugMaCa } from './scheduleData'
 
-/* ---------------------------------- Bộ lọc + bảng ---------------------------------- */
-const fKeyword = ref('')
-const fTrangThai = ref('')
-
+/* ---------------------------------- Dữ liệu ca làm ---------------------------------- */
+const cas = ref([])
 const caLoc = computed(() => {
   const kw = fKeyword.value.trim().toLowerCase()
-  let rows = [...danhSachCa]
+  let rows = [...cas.value]
   if (kw) {
     rows = rows.filter(
       (c) =>
@@ -31,9 +20,22 @@ const caLoc = computed(() => {
   if (fTrangThai.value === 'tat') rows = rows.filter((c) => !c.dangBat)
   return rows
 })
+const tongCa = computed(() => cas.value.length)
+const soDangBat = computed(() => cas.value.filter((c) => c.dangBat).length)
+const soLichCuaCa = () => 0
 
-const tongCa = computed(() => danhSachCa.length)
-const soDangBat = computed(() => danhSachCa.filter((c) => c.dangBat).length)
+const taiCa = async () => {
+  try {
+    cas.value = await listCaLam()
+  } catch {
+    cas.value = []
+  }
+}
+onMounted(taiCa)
+
+/* ---------------------------------- Bộ lọc + bảng ---------------------------------- */
+const fKeyword = ref('')
+const fTrangThai = ref('')
 
 const datLaiBoLoc = () => {
   fKeyword.value = ''
@@ -43,32 +45,26 @@ const datLaiBoLoc = () => {
 /* ---------------------------------- Thao tác ---------------------------------- */
 const doiTrangThaiBtn = async (ca) => {
   try {
-    const updated = await doiTrangThaiCa(ca.id)
+    await toggleCaLam(ca.id)
+    await taiCa()
     notifySuccess(
-      updated.dangBat ? 'Đã bật ca làm' : 'Đã tắt ca làm',
-      `${updated.ten} (${updated.batDau} - ${updated.ketThuc})`
+      ca.dangBat ? 'Đã tắt ca làm' : 'Đã bật ca làm',
+      `${ca.ten} (${ca.batDau} - ${ca.ketThuc})`
     )
-  } catch (error) {
-    notifyError('Không đổi được trạng thái ca', error.message || '')
+  } catch (e) {
+    notifyWarning('Không đổi được trạng thái', e.response?.data?.message || e.message || '')
   }
 }
 
 const xoaCaBtn = async (ca) => {
-  const n = soLichCuaCa(ca.id)
-  if (n > 0) {
-    notifyWarning(
-      'Không thể xóa ca làm',
-      `Còn ${n} lịch làm việc đang gắn với ca "${ca.ten}" — hãy xóa hoặc đổi các lịch đó trước`
-    )
-    return
-  }
   const ok = await notifyDeleteConfirm(`ca làm "${ca.ten}"`)
   if (!ok) return
   try {
-    await xoaCa(ca.id)
+    await deleteCaLam(ca.id)
+    await taiCa()
     notifySuccess('Đã xóa ca làm', ca.ten)
-  } catch (error) {
-    notifyError('Không xóa được ca làm', error.message || '')
+  } catch (e) {
+    notifyWarning('Không thể xóa ca làm', e.response?.data?.message || e.message || '')
   }
 }
 
@@ -100,10 +96,6 @@ const luuForm = async () => {
     formError.value = 'Vui lòng nhập tên ca làm'
     return
   }
-  if (caTrungTen(ten, formMode.value === 'sua' ? f.id : null)) {
-    formError.value = 'Tên ca làm đã tồn tại — vui lòng chọn tên khác'
-    return
-  }
   if (!f.batDau || !f.ketThuc) {
     formError.value = 'Vui lòng chọn giờ bắt đầu và giờ kết thúc'
     return
@@ -112,28 +104,21 @@ const luuForm = async () => {
     formError.value = 'Giờ kết thúc phải sau giờ bắt đầu'
     return
   }
-  const payload = { ten, batDau: f.batDau, ketThuc: f.ketThuc, ma: slugMaCa(ten) }
+  const payload = { ten, batDau: f.batDau, ketThuc: f.ketThuc }
   try {
     if (formMode.value === 'sua') {
-      await capNhatCa(f.id, payload)
+      await updateCaLam(f.id, payload)
       notifySuccess('Đã cập nhật ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
     } else {
-      await themCa(payload)
+      await createCaLam(payload)
       notifySuccess('Đã thêm ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
     }
+    await taiCa()
     showForm.value = false
-  } catch (error) {
-    formError.value = error.message || 'Không lưu được ca làm'
+  } catch (e) {
+    formError.value = e.response?.data?.message || e.message || 'Lỗi khi lưu ca làm'
   }
 }
-
-onMounted(async () => {
-  try {
-    await napDuLieuLich()
-  } catch (error) {
-    notifyError('Không tải được danh sách ca làm', error.message || '')
-  }
-})
 </script>
 
 <template>
@@ -562,13 +547,13 @@ onMounted(async () => {
 }
 
 .stat-pill.is-on {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
 }
 
 .stat-pill.is-on b {
-  color: #b91c1c;
+  color: #047857;
 }
 
 .stat-pill.is-off {
@@ -663,9 +648,9 @@ onMounted(async () => {
 }
 
 .status-chip.is-on {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
 }
 
 .status-chip.is-off {
@@ -717,13 +702,13 @@ onMounted(async () => {
 }
 
 .btn-action-circle.is-toggle-on {
-  background: #fef2f2;
-  color: #dc2626;
-  border-color: #fecaca;
+  background: #ecfdf5;
+  color: #059669;
+  border-color: #a7f3d0;
 }
 
 .btn-action-circle.is-toggle-on:hover {
-  background: #fee2e2;
+  background: #d1fae5;
   transform: scale(1.08);
 }
 

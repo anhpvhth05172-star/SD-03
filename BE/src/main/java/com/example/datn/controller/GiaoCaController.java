@@ -69,12 +69,13 @@ public class GiaoCaController {
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate denNgay,
         @RequestParam(required = false) String trangThai,
         @RequestParam(required = false) Long idNhanVien,
+        @RequestParam(required = false) String keyword,
         Authentication auth
     ) {
         Long callerId = idUser(auth);
         boolean callerAdmin = auth.getAuthorities().stream()
             .anyMatch(a -> new SimpleGrantedAuthority("ROLE_ADMIN").equals(a));
-        return giaoCaService.lichSu(page, size, tuNgay, denNgay, trangThai, idNhanVien, callerId, callerAdmin);
+        return giaoCaService.lichSu(page, size, tuNgay, denNgay, trangThai, idNhanVien, keyword, callerId, callerAdmin);
     }
 
     private static Long idNhanVien(Authentication auth) {

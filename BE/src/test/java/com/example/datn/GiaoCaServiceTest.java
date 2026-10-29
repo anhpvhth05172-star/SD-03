@@ -272,17 +272,63 @@ class GiaoCaServiceTest {
         jdbcTemplate.update(
             "UPDATE ca_lam_viec SET trang_thai = 'DA_KET_CA' WHERE id = ?", ca2.getId());
 
-        var trangQuanTri = giaoCaService.lichSu(0, 10, null, null, null, null, nv1.getId(), true);
+        var trangQuanTri = giaoCaService.lichSu(0, 10, null, null, null, null, null, nv1.getId(), true);
         assertThat(trangQuanTri.getTotalElements()).isGreaterThanOrEqualTo(2);
         assertThat(trangQuanTri.getContent())
             .extracting(CaLamViecDto::getId)
             .contains(ca1.getId(), ca2.getId());
 
-        var trangNv1 = giaoCaService.lichSu(0, 10, null, null, null, null, nv1.getId(), false);
+        var trangNv1 = giaoCaService.lichSu(0, 10, null, null, null, null, null, nv1.getId(), false);
         assertThat(trangNv1.getContent())
             .extracting(CaLamViecDto::getId)
             .contains(ca1.getId())
             .doesNotContain(ca2.getId());
+    }
+
+    @Test
+    void lichSu_locKeywordTheoMaHoaDonVaTenTaiKhoan() {
+        CaLamViecDto ca = giaoCaService.moCa(10000L, null);
+        idCaTao.add(ca.getId());
+        HoaDon hd = taoHoaDon("TAI_QUAY", "DA_HOAN_THANH", ptMat, new BigDecimal("50000"), ca.getId());
+        jdbcTemplate.update(
+            "UPDATE ca_lam_viec SET trang_thai = 'DA_KET_CA' WHERE id = ?", ca.getId());
+
+        var theoMaHd = giaoCaService.lichSu(0, 50, null, null, null, null, hd.getMaHoaDon(), null, true);
+        assertThat(theoMaHd.getContent())
+            .extracting(CaLamViecDto::getId)
+            .contains(ca.getId());
+
+        var theoTenDangNhap = giaoCaService.lichSu(
+            0, 50, null, null, null, null, nv1.getTenTaiKhoan(), null, true);
+        assertThat(theoTenDangNhap.getContent())
+            .extracting(CaLamViecDto::getId)
+            .contains(ca.getId())
+            .doesNotHaveDuplicates();
+
+        String tuKhoaLa = "kwt" + System.nanoTime();
+        var khongKhop = giaoCaService.lichSu(0, 50, null, null, null, null, tuKhoaLa, null, true);
+        assertThat(khongKhop.getTotalElements()).isZero();
+    }
+
+    @Test
+    void lichSu_tenNguoiNhanSauKhiKetCa() {
+        CaLamViecDto ca = giaoCaService.moCa(0L, null);
+        idCaTao.add(ca.getId());
+
+        var truoc = giaoCaService.lichSu(0, 50, null, null, null, null, ca.getMaCa(), null, true);
+        assertThat(dongCua(truoc, ca.getId()).getTenNguoiNhan()).isNull();
+
+        giaoCaService.ketCa(ca.getId(), 0L, null, null);
+
+        var sau = giaoCaService.lichSu(0, 50, null, null, null, null, ca.getMaCa(), null, true);
+        assertThat(dongCua(sau, ca.getId()).getTenNguoiNhan()).isEqualTo(nv1.getTenTaiKhoan());
+    }
+
+    private static CaLamViecDto dongCua(org.springframework.data.domain.Page<CaLamViecDto> trang, Long id) {
+        return trang.getContent().stream()
+            .filter(d -> id.equals(d.getId()))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("Khong tim thay ca " + id + " trong ket qua"));
     }
 
     // ---- helpers ----

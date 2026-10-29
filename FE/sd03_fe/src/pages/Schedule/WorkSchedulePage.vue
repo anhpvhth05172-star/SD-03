@@ -3,40 +3,57 @@ import { computed, onMounted, ref, watch } from 'vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { listEmployees } from '@/api/employee'
-import { fetchAllPages } from '@/utils/export'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import {
-  caDangBat,
-  danhSachLich,
+  listLich,
+  createLich,
+  updateLich,
+  deleteLich,
+  deleteLichTheoNgay,
+  xepTuDong,
+  importLich,
+  listCaLam,
+} from '@/api/schedule'
+import {
   hienThiNgay,
-  kiemTraTrung,
   khoaNgay,
-  lichCuaCaNgay,
-  lichCuaNgay,
-  nhapRowsVaoStore,
   docNgay,
-  capNhatLich,
-  themLich,
-  xoaLich,
-  xoaLichTheoNgay,
-  xepCaTuDong,
   xuatMauLichLamViec,
   phanTichCsvLich,
   phanTichDongLich,
-  timCa,
-  napDuLieuLich,
 } from './scheduleData'
 
 const pad2 = (x) => String(x).padStart(2, '0')
 
-/* ---------------------------------- Dữ liệu nhân viên ---------------------------------- */
+/* ---------------------------------- Dữ liệu nhân viên + ca + lịch ---------------------------------- */
 const nhanViens = ref([])
+const cas = ref([])
+const lichs = ref([])
 const dsNhanVien = computed(() => nhanViens.value)
+const caDangBat = computed(() => cas.value.filter((c) => c.dangBat))
 
 const tenCua = (ma) => {
   const nv = dsNhanVien.value.find((x) => String(x.maNhanVien) === String(ma))
-  if (nv) return nv.tenTaiKhoan || nv.ten || ma
-  return ma
+  return nv ? nv.tenTaiKhoan || nv.ten || ma : ma
+}
+
+const timCa = (id) => cas.value.find((c) => c.id === Number(id))
+
+const taiDuLieu = async () => {
+  try {
+    const [nvRes, caRes, lichRes] = await Promise.all([
+      listEmployees({ page: 0, size: 1000 }),
+      listCaLam(),
+      listLich({}),
+    ])
+    nhanViens.value = nvRes.content || []
+    cas.value = caRes || []
+    lichs.value = lichRes || []
+  } catch {
+    nhanViens.value = []
+    cas.value = []
+    lichs.value = []
+  }
 }
 
 /* ---------------------------------- Bộ lọc + bảng ---------------------------------- */
@@ -63,7 +80,7 @@ const size = ref(10)
 
 const lichLoc = computed(() => {
   const kw = fKeyword.value.trim().toLowerCase()
-  let rows = [...danhSachLich]
+  let rows = [...lichs.value]
   if (kw) {
     rows = rows.filter(
       (l) =>
@@ -126,7 +143,7 @@ const xepCaTuDongBtn = async () => {
   const khoa = fNgay.value ? khoaNgay(docNgay(fNgay.value)) : ''
   if (!khoa) return
   try {
-    const kq = await xepCaTuDong(khoa, dsNhanVien.value)
+    const kq = await xepTuDong(khoa)
     if (kq.lyDo === 'khongCa') {
       notifyWarning('Chưa có ca đang bật', 'Hãy bật ca làm ở trang Lịch ca làm trước')
       return
@@ -135,9 +152,10 @@ const xepCaTuDongBtn = async () => {
       notifyWarning('Không còn nhân viên trống', 'Mọi nhân viên đã có lịch trong ngày này')
       return
     }
+    await taiDuLieu()
     notifySuccess('Đã xếp ca tự động', `Thêm ${kq.themMoi} lịch làm việc ngày ${hienThiNgay(khoa)}`)
-  } catch (error) {
-    notifyError('Không xếp được lịch làm việc', error.message || '')
+  } catch (e) {
+    notifyWarning('Lỗi xếp ca tự động', e.response?.data?.message || e.message || '')
   }
 }
 
@@ -150,10 +168,11 @@ const datLaiLich = async () => {
   const ok = await notifyDeleteConfirm(`tất cả lịch làm việc ngày ${hienThiNgay(khoa)}`)
   if (!ok) return
   try {
-    await xoaLichTheoNgay(khoa)
+    await deleteLichTheoNgay(khoa)
+    await taiDuLieu()
     notifySuccess('Đã đặt lại lịch', `Đã xóa lịch ngày ${hienThiNgay(khoa)}`)
-  } catch (error) {
-    notifyError('Không đặt lại được lịch', error.message || '')
+  } catch (e) {
+    notifyWarning('Lỗi xóa lịch', e.response?.data?.message || e.message || '')
   }
 }
 
@@ -218,9 +237,9 @@ const docTrenFile = async (e) => {
   importLoading.value = true
   try {
     if (/\.csv$/i.test(file.name)) {
-      importPreview.value = phanTichCsvLich(await file.text(), dsNhanVien.value)
+      importPreview.value = phanTichCsvLich(await file.text(), dsNhanVien.value, cas.value)
     } else if (/\.xlsx?$/i.test(file.name)) {
-      importPreview.value = phanTichDongLich(await docExcelTrenFile(file), dsNhanVien.value)
+      importPreview.value = phanTichDongLich(await docExcelTrenFile(file), dsNhanVien.value, cas.value)
     } else {
       notifyWarning('Sai định dạng tệp', 'Chỉ hỗ trợ tệp Excel (.xlsx, .xls) hoặc CSV (.csv)')
       importFileName.value = ''
@@ -242,15 +261,21 @@ const xacNhanNhap = async () => {
   const p = importPreview.value
   if (!p || !p.rows.length) return
   try {
-    const n = await nhapRowsVaoStore(p.rows)
+    const rows = p.rows.map((r) => ({
+      maNhanVien: r.maNhanVien,
+      maCa: cas.value.find((c) => c.id === r.idCa)?.ma || String(r.idCa),
+      ngay: r.ngay,
+    }))
+    const kq = await importLich(rows)
+    await taiDuLieu()
     showImport.value = false
     view.value = 'bang'
     notifySuccess(
       'Hoàn tất nhập lịch làm việc',
-      `Đã thêm ${n} lịch; bỏ qua ${p.loi.length} dòng lỗi`
+      `Đã thêm ${kq.themMoi} lịch; bỏ qua ${kq.loi?.length || 0} dòng lỗi`
     )
-  } catch (error) {
-    notifyError('Không nhập được lịch làm việc', error.message || '')
+  } catch (e) {
+    notifyWarning('Lỗi nhập lịch', e.response?.data?.message || e.message || '')
   }
 }
 
@@ -326,26 +351,22 @@ const luuForm = async () => {
     return
   }
   const khoa = khoaNgay(d)
-  if (kiemTraTrung(f.maNhanVien, khoa, f.idCa, formMode.value === 'sua' ? f.id : null)) {
-    formError.value = 'Nhân viên đã có lịch ca này trong ngày — vui lòng chọn ca hoặc ngày khác'
-    return
-  }
   const payload = {
     maNhanVien: f.maNhanVien,
-    tenNhanVien: tenCua(f.maNhanVien),
     idCa: Number(f.idCa),
     ngay: khoa,
   }
   try {
-    if (formMode.value === 'sua') await capNhatLich(f.id, payload)
-    else await themLich(payload)
+    if (formMode.value === 'sua') await updateLich(f.id, payload)
+    else await createLich(payload)
+    await taiDuLieu()
     showForm.value = false
     notifySuccess(
       formMode.value === 'sua' ? 'Đã cập nhật lịch làm việc' : 'Đã thêm lịch làm việc',
       `${payload.maNhanVien} · ${tenCaCua(payload.idCa)} · ${hienThiNgay(khoa)}`
     )
-  } catch (error) {
-    formError.value = error.message || 'Không lưu được lịch làm việc'
+  } catch (e) {
+    formError.value = e.response?.data?.message || e.message || 'Lỗi khi lưu lịch'
   }
 }
 
@@ -366,16 +387,21 @@ const xoaChiTiet = async () => {
   )
   if (!ok) return
   try {
-    await xoaLich(row.id)
+    await deleteLich(row.id)
+    await taiDuLieu()
     showDetail.value = false
     notifySuccess('Đã xóa lịch làm việc')
-  } catch (error) {
-    notifyError('Không xóa được lịch làm việc', error.message || '')
+  } catch (e) {
+    notifyWarning('Lỗi xóa lịch', e.response?.data?.message || e.message || '')
   }
 }
 
 const showXemThem = ref(false)
 const xemThemData = ref({ ca: null, ngay: '', list: [] })
+
+const lichCuaNgay = (ngay) => lichs.value.filter((l) => l.ngay === ngay)
+const lichCuaCaNgay = (idCa, ngay) =>
+  lichs.value.filter((l) => l.idCa === Number(idCa) && l.ngay === ngay)
 
 const moXemThem = (ca, khoa) => {
   const list = lichCuaCaNgay(ca.id, khoa)
@@ -467,13 +493,8 @@ const datKieuXem = (kieu) => {
   calMode.value = kieu
 }
 
-onMounted(async () => {
-  const results = await Promise.allSettled([
-    napDuLieuLich(),
-    fetchAllPages(listEmployees, {}, 20).then((rows) => { nhanViens.value = rows }),
-  ])
-  if (results[0].status === 'rejected') notifyError('Không tải được lịch làm việc', results[0].reason?.message || '')
-  if (results[1].status === 'rejected') notifyError('Không tải được danh sách nhân viên', results[1].reason?.message || '')
+onMounted(() => {
+  taiDuLieu()
 })
 </script>
 
@@ -1196,10 +1217,10 @@ onMounted(async () => {
 .btn-action-dark {
   height: 38px;
   padding: 0 18px;
-  background: #0f172a;
-  border: none;
+  background: #ffffff;
+  border: 1px solid #e11d48;
   border-radius: 8px;
-  color: #ffffff;
+  color: #e11d48;
   font-size: 13px;
   font-weight: 600;
   display: inline-flex;
@@ -1216,7 +1237,7 @@ onMounted(async () => {
 }
 
 .btn-action-dark:hover {
-  background: #1e293b;
+  background: #fff1f2;
 }
 
 /* Toggle */
@@ -1511,7 +1532,7 @@ onMounted(async () => {
 }
 
 .cal-day-so.is-hot {
-  background: #d92d20;
+  background: #2563eb;
   color: #ffffff;
 }
 
@@ -1525,9 +1546,9 @@ onMounted(async () => {
 .cal-chip {
   font-size: 11px;
   font-weight: 600;
-  color: #b91c1c;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
   border-radius: 6px;
   padding: 2px 6px;
   white-space: nowrap;
@@ -1579,18 +1600,18 @@ onMounted(async () => {
 .cal-corner.ca {
   flex-direction: column;
   gap: 4px;
-  background: #fffafa;
+  background: #fffdf7;
 }
 
 .ca-name {
   font-size: 14px;
   font-weight: 700;
-  color: #b91c1c;
+  color: #b45309;
 }
 
 .ca-time {
   font-size: 11.5px;
-  color: #b91c1c;
+  color: #d97706;
   font-weight: 600;
 }
 
@@ -1608,7 +1629,7 @@ onMounted(async () => {
 }
 
 .cal-week-day.is-today {
-  background: #fff1f2;
+  background: #eff6ff;
 }
 
 .cal-week-thu {
@@ -1641,12 +1662,12 @@ onMounted(async () => {
 }
 
 .cal-week-cell.is-today {
-  background: #fffafa;
+  background: #f8fbff;
 }
 
 .shift-card {
-  border: 1px solid #fecaca;
-  background: #fef2f2;
+  border: 1px solid #fde68a;
+  background: #fffbeb;
   border-radius: 10px;
   padding: 12px 10px;
   display: flex;
@@ -1664,7 +1685,7 @@ onMounted(async () => {
 .shift-card-title {
   font-size: 13.5px;
   font-weight: 700;
-  color: #b91c1c;
+  color: #b45309;
 }
 
 .shift-card.is-empty .shift-card-title {
@@ -1673,7 +1694,7 @@ onMounted(async () => {
 
 .shift-card-time {
   font-size: 12px;
-  color: #b91c1c;
+  color: #d97706;
   font-weight: 600;
 }
 
@@ -1689,9 +1710,9 @@ onMounted(async () => {
 
 .shift-card-more {
   margin-top: 4px;
-  border: 1px solid #dc2626;
+  border: 1px solid #f59e0b;
   background: transparent;
-  color: #b91c1c;
+  color: #b45309;
   font-size: 12px;
   font-weight: 600;
   border-radius: 20px;
@@ -1702,7 +1723,7 @@ onMounted(async () => {
 }
 
 .shift-card-more:hover {
-  background: #fee2e2;
+  background: #fef3c7;
 }
 
 /* Modal */
@@ -1982,9 +2003,9 @@ onMounted(async () => {
 }
 
 .preview-pill.is-ok {
-  background: #fef2f2;
-  color: #dc2626;
-  border-color: #fee2e2;
+  background: #ecfdf5;
+  color: #059669;
+  border-color: #d1fae5;
 }
 
 .preview-pill.is-bad {

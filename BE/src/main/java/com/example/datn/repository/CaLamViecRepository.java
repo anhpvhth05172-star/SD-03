@@ -23,11 +23,22 @@ public interface CaLamViecRepository extends JpaRepository<CaLamViec, Long> {
 
     @Query("""
         SELECT c FROM CaLamViec c
+        LEFT JOIN c.nhanVien nv
         WHERE c.daXoa = false
           AND (:idNhanVien IS NULL OR c.nhanVien.id = :idNhanVien)
           AND (:trangThai IS NULL OR c.trangThai = :trangThai)
           AND (:tu IS NULL OR c.thoiGianMo >= :tu)
           AND (:den IS NULL OR c.thoiGianMo < :den)
+          AND (:keyword IS NULL
+               OR LOWER(c.maCa) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(nv.tenTaiKhoan) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(nv.maNhanVien) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(nv.email) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR EXISTS (
+                   SELECT 1 FROM HoaDon h
+                   WHERE h.idCaLamViec = c.id
+                     AND LOWER(h.maHoaDon) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               ))
         ORDER BY c.thoiGianMo DESC
         """)
     Page<CaLamViec> lichSu(
@@ -35,6 +46,7 @@ public interface CaLamViecRepository extends JpaRepository<CaLamViec, Long> {
         @Param("trangThai") String trangThai,
         @Param("tu") LocalDateTime tu,
         @Param("den") LocalDateTime den,
+        @Param("keyword") String keyword,
         Pageable pageable
     );
 
