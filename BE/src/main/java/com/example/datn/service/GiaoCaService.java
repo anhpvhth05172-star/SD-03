@@ -50,7 +50,7 @@ public class GiaoCaService {
         if (tienDauCa == null || tienDauCa < 0) {
             throw bad("TIEN_DAU_CA", "Tiền đầu ca không được âm");
         }
-        if (caLamViecRepository.findFirstByNhanVienIdAndTrangThaiAndDaXoaFalse(idNhanVien, TRANG_THAI_DANG_MO).isPresent()) {
+        if (caLamViecRepository.findFirstByTrangThaiAndDaXoaFalse(TRANG_THAI_DANG_MO).isPresent()) {
             throw bad("CA_DA_MO", "Nhân viên đã có ca đang mở");
         }
         if (caLamViecRepository.findFirstByTrangThaiAndDaXoaFalse(TRANG_THAI_DANG_MO).isPresent()) {
@@ -81,7 +81,7 @@ public class GiaoCaService {
     @Transactional(readOnly = true)
     public CaLamViecDto getDangMoOf(Long idNhanVien) {
         return caLamViecRepository
-            .findFirstByNhanVienIdAndTrangThaiAndDaXoaFalse(idNhanVien, TRANG_THAI_DANG_MO)
+            .findFirstByTrangThaiAndDaXoaFalse(TRANG_THAI_DANG_MO)
             .map(this::toDto)
             .orElse(null);
     }
@@ -176,7 +176,9 @@ public class GiaoCaService {
         Long idNguoiGoi = idNhanVienHienTai();
         boolean admin = laAdmin();
         if (!admin && !ca.getNhanVien().getId().equals(idNguoiGoi)) {
-            throw new KhongCoQuyenException("Không có quyền thao tác ca này");
+            if (!TRANG_THAI_DANG_MO.equals(ca.getTrangThai())) {
+                throw new KhongCoQuyenException("Không có quyền thao tác ca này");
+            }
         }
         return ca;
     }

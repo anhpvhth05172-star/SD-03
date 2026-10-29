@@ -25,14 +25,17 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
     @Query(
         value = """
             SELECT * FROM hoa_don h
-            WHERE (:ma IS NULL OR h.ma_hoa_don LIKE CONCAT('%', :ma, '%') COLLATE Latin1_General_CS_AS)
+            WHERE (:ma IS NULL OR h.ma_hoa_don LIKE CONCAT('%', :ma, '%') OR h.ten_khach_hang LIKE CONCAT('%', :ma, '%') OR h.so_dien_thoai_khach_hang LIKE CONCAT('%', :ma, '%'))
               AND (:tuNgay IS NULL OR h.ngay_tao >= :tuNgay)
               AND (:denNgay IS NULL OR h.ngay_tao <= :denNgay)
-              AND (:loaiDon IS NULL OR h.loai_don = :loaiDon)
+              AND (:loaiDon IS NULL OR
+          (:loaiDon = 'ONLINE' AND (h.loai_don = 'ONLINE' OR h.loai_don = N'Online')) OR
+          (:loaiDon = 'TAI_QUAY_GIAO_HANG' AND (h.loai_don = 'TAI_QUAY_GIAO_HANG' OR (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND h.dia_chi_nhan_hang IS NOT NULL AND TRIM(h.dia_chi_nhan_hang) <> ''))) OR
+          (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))))
               AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
               AND h.da_xoa = :daXoa
             ORDER BY CASE WHEN h.trang_thai IN ('DA_HOAN_THANH', 'DA_HOAN_TIEN') THEN 1 ELSE 0 END ASC,
-                     h.ngay_tao ASC, h.id ASC
+                     h.ngay_tao DESC, h.id DESC
             """,
         nativeQuery = true
     )
@@ -48,21 +51,27 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
     @Query(
         value = """
             SELECT * FROM hoa_don h
-            WHERE (:ma IS NULL OR h.ma_hoa_don LIKE CONCAT('%', :ma, '%') COLLATE Latin1_General_CS_AS)
+            WHERE (:ma IS NULL OR h.ma_hoa_don LIKE CONCAT('%', :ma, '%') OR h.ten_khach_hang LIKE CONCAT('%', :ma, '%') OR h.so_dien_thoai_khach_hang LIKE CONCAT('%', :ma, '%'))
               AND (:tuNgay IS NULL OR h.ngay_tao >= :tuNgay)
               AND (:denNgay IS NULL OR h.ngay_tao <= :denNgay)
-              AND (:loaiDon IS NULL OR h.loai_don = :loaiDon)
+              AND (:loaiDon IS NULL OR
+          (:loaiDon = 'ONLINE' AND (h.loai_don = 'ONLINE' OR h.loai_don = N'Online')) OR
+          (:loaiDon = 'TAI_QUAY_GIAO_HANG' AND (h.loai_don = 'TAI_QUAY_GIAO_HANG' OR (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND h.dia_chi_nhan_hang IS NOT NULL AND TRIM(h.dia_chi_nhan_hang) <> ''))) OR
+          (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))))
               AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
               AND h.da_xoa = :daXoa
             ORDER BY CASE WHEN h.trang_thai IN ('DA_HOAN_THANH', 'DA_HOAN_TIEN') THEN 1 ELSE 0 END ASC,
-                     h.ngay_tao ASC, h.id ASC
+                     h.ngay_tao DESC, h.id DESC
             """,
         countQuery = """
             SELECT COUNT(*) FROM hoa_don h
-            WHERE (:ma IS NULL OR h.ma_hoa_don LIKE CONCAT('%', :ma, '%') COLLATE Latin1_General_CS_AS)
+            WHERE (:ma IS NULL OR h.ma_hoa_don LIKE CONCAT('%', :ma, '%') OR h.ten_khach_hang LIKE CONCAT('%', :ma, '%') OR h.so_dien_thoai_khach_hang LIKE CONCAT('%', :ma, '%'))
               AND (:tuNgay IS NULL OR h.ngay_tao >= :tuNgay)
               AND (:denNgay IS NULL OR h.ngay_tao <= :denNgay)
-              AND (:loaiDon IS NULL OR h.loai_don = :loaiDon)
+              AND (:loaiDon IS NULL OR
+          (:loaiDon = 'ONLINE' AND (h.loai_don = 'ONLINE' OR h.loai_don = N'Online')) OR
+          (:loaiDon = 'TAI_QUAY_GIAO_HANG' AND (h.loai_don = 'TAI_QUAY_GIAO_HANG' OR (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND h.dia_chi_nhan_hang IS NOT NULL AND TRIM(h.dia_chi_nhan_hang) <> ''))) OR
+          (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))))
               AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
               AND h.da_xoa = :daXoa
             """,

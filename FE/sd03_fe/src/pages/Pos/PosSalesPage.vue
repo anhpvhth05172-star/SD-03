@@ -1,18 +1,155 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import QRCode from 'qrcode'
 import { Html5Qrcode } from 'html5-qrcode'
 import http from '@/api/http'
 import { getProvinces, getWards, getServices, tinhPhi } from '@/api/shipping'
 import { DS_63_TINH_THANH } from '@/api/diaGioi'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
-import { formatVnd } from '@/utils/format'
-import CurrencyInput from '@/components/CurrencyInput.vue'
+import { formatVnd, formatDateTime } from '@/utils/format'
+import { getDangMo, moCa, getTongKet, ketCa } from '@/api/giaoCa'
+import { inBienLaiDoiSoatK80 } from '@/utils/printShiftReceipt'
 
 import { getUser, dangXuat } from '@/utils/auth'
 import { datVaiTro, vaiTroHienTai } from '@/utils/session'
 
-const API_BASE = 'http://localhost:8080/api/v1'
+const API_BASE = '/api/v1'
+
+
+const router = useRouter()
+
+// --- QUẢN LÝ CA LÀM VIỆC (MỞ CA / ĐÓNG CA TRÊN POS) ---
+const activeShift = ref(null)
+const isLoadingShift = ref(false)
+
+const isMoCaModalOpen = ref(false)
+const moCaForm = reactive({
+  tienDauCa: 300000,
+  ghiChu: ''
+})
+const moCaSubmitting = ref(false)
+
+const isKetCaModalOpen = ref(false)
+const ketCaSummary = ref(null)
+const ketCaLoading = ref(false)
+const ketCaSubmitting = ref(false)
+const ketCaForm = reactive({
+  tienThucTe: 0,
+  lyDoLech: '',
+  ghiChu: ''
+})
+
+const chenhLechKetCa = computed(() => {
+  const tienDuKien = Number(ketCaSummary.value?.tienDuKien || 0)
+  const tienThucTe = Number(ketCaForm.tienThucTe || 0)
+  return tienThucTe - tienDuKien
+})
+
+const fetchActiveShift = async () => {
+  isLoadingShift.value = true
+  try {
+    activeShift.value = await getDangMo()
+  } catch (err) {
+    console.warn('Lỗi lấy thông tin ca đang mở:', err)
+  } finally {
+    isLoadingShift.value = false
+  }
+}
+
+const openMoCaModal = () => {
+  moCaForm.tienDauCa = 300000
+  moCaForm.ghiChu = ''
+  isMoCaModalOpen.value = true
+}
+
+const handleMoCaSubmit = async () => {
+  const amount = Number(moCaForm.tienDauCa || 0)
+  if (amount < 0) {
+    notifyWarning('Số tiền không hợp lệ', 'Tiền mặt đầu ca không được âm')
+    return
+  }
+  moCaSubmitting.value = true
+  try {
+    const res = await moCa({
+      tienDauCa: amount,
+      ghiChu: moCaForm.ghiChu?.trim() || null
+    })
+    activeShift.value = res
+    isMoCaModalOpen.value = false
+    notifySuccess('Mở ca thành công', `Đã mở ca ${res.maCa}. Bắt đầu phiên bán hàng!`)
+  } catch (err) {
+    notifyError('Mở ca thất bại', err.message || 'Không thể mở ca làm việc')
+  } finally {
+    moCaSubmitting.value = false
+  }
+}
+
+const openKetCaModal = async () => {
+  if (!activeShift.value?.id) {
+    notifyWarning('Chưa có ca mở', 'Không có ca làm việc nào đang mở để kết ca')
+    return
+  }
+  isKetCaModalOpen.value = true
+  ketCaLoading.value = true
+  try {
+    ketCaSummary.value = await getTongKet(activeShift.value.id)
+    ketCaForm.tienThucTe = Number(ketCaSummary.value?.tienDuKien || 0)
+    ketCaForm.lyDoLech = ''
+    ketCaForm.ghiChu = ''
+  } catch (err) {
+    notifyError('Lỗi tải tổng kết ca', err.message || 'Không thể lấy dữ liệu tổng kết ca')
+    isKetCaModalOpen.value = false
+  } finally {
+    ketCaLoading.value = false
+  }
+}
+
+const handleKetCaSubmit = async () => {
+  if (!activeShift.value?.id) return
+  const diff = chenhLechKetCa.value
+  if (diff !== 0 && !ketCaForm.lyDoLech?.trim()) {
+    notifyWarning('Thiếu lý do giải trình', `Phát hiện chênh lệch tiền mặt (${formatVnd(diff)}). Vui lòng nhập lý do giải trình trước khi đóng ca!`)
+    return
+  }
+  ketCaSubmitting.value = true
+  try {
+    const closedCa = { ...activeShift.value }
+    const closedSummary = { ...ketCaSummary.value }
+    const closedForm = { ...ketCaForm }
+    const closedCaId = activeShift.value.id
+
+    await ketCa(closedCaId, {
+      tienThucTe: Number(ketCaForm.tienThucTe || 0),
+      lyDoLech: ketCaForm.lyDoLech?.trim() || null,
+      ghiChu: ketCaForm.ghiChu?.trim() || null
+    })
+    isKetCaModalOpen.value = false
+    activeShift.value = null
+    notifySuccess('Đóng ca thành công', 'Ca làm việc đã được kết thúc và khóa sổ đối soát.')
+
+    const wantPrint = await notifyConfirm(
+      'In biên lai đối soát ca?',
+      'Đã đóng ca thành công! Bạn có muốn in ngay Biên lai đối soát (khổ nhiệt K80) để kẹp két tiền không?',
+      'In biên lai ngay',
+      'Xem chi tiết ca'
+    )
+    if (wantPrint) {
+      inBienLaiDoiSoatK80({
+        ...closedCa,
+        tienThucTe: Number(closedForm.tienThucTe || 0),
+        lyDoLech: closedForm.lyDoLech,
+        chenhLech: diff,
+        thoiGianKet: new Date()
+      }, closedSummary)
+    }
+    router.push(`/ca/${closedCaId}/doi-soat`)
+  } catch (err) {
+    notifyError('Kết ca thất bại', err.message || 'Không thể đóng ca làm việc')
+  } finally {
+    ketCaSubmitting.value = false
+  }
+}
 
 const staffUserRef = ref(getUser())
 const selectedStaffId = ref(staffUserRef.value?.idNhanVien || null)
@@ -498,6 +635,8 @@ const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
       price: effectivePrice,
       originalPrice: Number(productVariant.price || productVariant.giaBan || 0),
       discount: productVariant.discount || null,
+      phanTramGiam: productVariant.phanTramGiam || null,
+      giaSauGiam: productVariant.giaSauGiam || null,
       quantity: qtyToAdd,
       maxStock: getServerBaseStock(targetProd || productVariant),
       img: productVariant.img || ''
@@ -543,8 +682,29 @@ const updateCartItemQty = async (item, rawNewQty, event = null) => {
   const raw = event?.target ? event.target.value.trim() : String(rawNewQty).trim()
   let newQty = parseInt(raw, 10)
 
-  // Nếu để trống hoặc <= 0, khôi phục về 1 (không tự ý xóa sản phẩm của người dùng khi đang sửa số)
-  if (isNaN(newQty) || newQty <= 0) {
+  // Nếu người dùng nhập 0 hoặc giảm về 0: Xác nhận xóa sản phẩm khỏi giỏ hàng
+  if (raw === '0' || newQty === 0) {
+    const ok = await notifyConfirm(
+      'Xóa sản phẩm khỏi giỏ?',
+      `Số lượng sản phẩm bằng 0. Bạn có muốn xóa "${item.name || 'sản phẩm này'}" khỏi giỏ hàng không?`,
+      'Xóa ngay',
+      'Giữ lại (số lượng 1)'
+    )
+    if (ok) {
+      await removeCartItem(item, true)
+      return
+    } else {
+      newQty = 1
+      if (event?.target) event.target.value = 1
+      item.quantity = 1
+      recalculateAvailableStocks()
+      savePendingOrdersToStorage()
+      return
+    }
+  }
+
+  // Nếu ô trống (vừa xóa trắng để gõ số mới rồi click ra ngoài) hoặc không hợp lệ: khôi phục về 1
+  if (isNaN(newQty) || newQty < 1) {
     newQty = 1
     if (event?.target) event.target.value = 1
     item.quantity = 1
@@ -573,18 +733,18 @@ const updateCartItemQty = async (item, rawNewQty, event = null) => {
   savePendingOrdersToStorage()
 }
 
-
-
-const removeCartItem = async (item) => {
+const removeCartItem = async (item, skipConfirm = false) => {
   if (!currentOrder.value) return
   const prodName = item.name || 'sản phẩm này'
-  const ok = await notifyConfirm(
-    'Xác nhận xóa sản phẩm?',
-    `Bạn có chắc chắn muốn xóa "${prodName}" khỏi giỏ hàng không?`,
-    'Xóa ngay',
-    'Giữ lại'
-  )
-  if (!ok) return
+  if (!skipConfirm) {
+    const ok = await notifyConfirm(
+      'Xác nhận xóa sản phẩm?',
+      `Bạn có chắc chắn muốn xóa "${prodName}" khỏi giỏ hàng không?`,
+      'Xóa ngay',
+      'Giữ lại'
+    )
+    if (!ok) return
+  }
 
   const idx = currentOrder.value.cart.findIndex(i => Number(i.idCtsp) === Number(item.idCtsp))
   if (idx !== -1) {
@@ -661,6 +821,28 @@ const setQuickCash = (amount) => {
     currentOrder.value.cashGiven = Number(amount)
   }
 }
+const smartQuickCashOptions = computed(() => {
+  const total = finalTotal.value || 0
+  if (total <= 0) return [50000, 100000, 200000, 500000]
+  const options = []
+  if (total >= 500000) {
+    const round100k = Math.ceil(total / 100000) * 100000
+    if (round100k > total) options.push(round100k)
+    const round500k = Math.ceil(total / 500000) * 500000
+    if (round500k > total && !options.includes(round500k)) options.push(round500k)
+    const round1m = Math.ceil(total / 1000000) * 1000000
+    if (round1m > total && !options.includes(round1m)) options.push(round1m)
+    const nextStep = (round1m > 0 ? round1m : total) + 1000000
+    if (!options.includes(nextStep) && options.length < 4) options.push(nextStep)
+  } else {
+    if (total < 100000) options.push(100000)
+    if (total < 200000) options.push(200000)
+    if (total < 500000) options.push(500000)
+    if (total < 1000000) options.push(1000000)
+  }
+  return options.slice(0, 4)
+})
+
 
 const customerSearchQuery = ref('')
 const showCustomerDropdown = ref(false)
@@ -1087,7 +1269,13 @@ const resetModalFilters = () => {
 }
 
 const filteredModalVariants = computed(() => {
-  let list = allProducts.value || []
+  // Lắng nghe pendingOrders để kích hoạt lại computed ngay khi thêm/sửa/xóa sản phẩm trong giỏ
+  const _cartTrigger = pendingOrders.value.map(o => (o.cart || []).map(i => `${i.idCtsp}:${i.quantity}`).join(',')).join(';')
+
+  // Tự động ẩn những sản phẩm có số lượng tồn kho khả dụng = 0 (khi đã thêm hết vào giỏ hàng)
+  let list = (allProducts.value || []).filter(p => {
+    return getRemainingStock(p.id) > 0
+  })
   const term = modalFilters.search.trim().toLowerCase()
   if (term) {
     list = list.filter(p =>
@@ -1258,6 +1446,33 @@ const confirmModalSelection = () => {
 const getShoeImage = (p) => {
   if (p.img) return p.img
   return 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=120&auto=format&fit=crop&q=60'
+}
+
+const getDiscountPercentBadge = (item) => {
+  if (!item) return ''
+  // 1. Kiểm tra trường phanTramGiam dạng số > 0 (từ dot_giam_gia)
+  if (item.phanTramGiam !== null && item.phanTramGiam !== undefined && item.phanTramGiam !== '') {
+    const p = parseFloat(String(item.phanTramGiam).replace(/[^0-9.-]+/g, ''))
+    if (!isNaN(p) && p > 0) {
+      return `-${Math.round(p)}%`
+    }
+  }
+  // 2. Kiểm tra trường discount dạng chuỗi vd: "-20%" hoặc "20%"
+  if (item.discount && item.discount !== '-') {
+    const s = String(item.discount).trim()
+    const num = parseFloat(s.replace(/[^0-9.-]+/g, ''))
+    if (!isNaN(num) && num > 0) {
+      return `-${Math.round(Math.abs(num))}%`
+    }
+  }
+  // 3. So sánh giá bán gốc (price / originalPrice) và giá sau giảm (giaSauGiam / price)
+  const base = Number(item.originalPrice || item.price || item.giaBan || 0)
+  const after = Number(item.giaSauGiam || (item.originalPrice && item.price ? item.price : 0))
+  if (base > 0 && after > 0 && after < base) {
+    const pct = Math.round(((base - after) / base) * 100)
+    if (pct > 0) return `-${pct}%`
+  }
+  return ''
 }
 
 const isQrModalOpen = ref(false)
@@ -2065,6 +2280,16 @@ const getPaymentMethodId = (methodType) => {
     const found = allPaymentMethods.value.find(p => p.ten && p.ten.toLowerCase().includes('chuyển khoản'))
     return found ? found.id : (allPaymentMethods.value[1]?.id || 2)
   }
+  if (methodType === 'KET_HOP') {
+    const cash = Number(currentOrder.value?.cashGiven || 0)
+    const transfer = Number(currentOrder.value?.transferGiven || 0)
+    if (transfer > cash) {
+      const found = allPaymentMethods.value.find(p => p.ten && p.ten.toLowerCase().includes('chuyển khoản'))
+      return found ? found.id : (allPaymentMethods.value[1]?.id || 2)
+    }
+    const found = allPaymentMethods.value.find(p => p.ten && p.ten.toLowerCase().includes('tiền mặt'))
+    return found ? found.id : (allPaymentMethods.value[0]?.id || 1)
+  }
   return allPaymentMethods.value[0]?.id || 1
 }
 
@@ -2640,6 +2865,12 @@ const handleCheckout = async (options = {}) => {
     return
   }
 
+  if (!activeShift.value) {
+    notifyWarning('Chưa mở ca làm việc', 'Vui lòng mở ca làm việc trước khi thực hiện thanh toán tại quầy!')
+    openMoCaModal()
+    return
+  }
+
   // Bắt buộc kiểm tra & đồng bộ 4 Case khó (Đổi giá, Sửa voucher, Chuyển quyền NV, Đợt giảm giá) ngay trước khi thanh toán
   const syncRes = await validateAndSyncHardCases({ isBeforeCheckout: true, silentToast: true })
   if (syncRes.abortedByStaffLock) return
@@ -2656,7 +2887,7 @@ const handleCheckout = async (options = {}) => {
     notifyWarning('Dữ liệu đơn hàng vừa thay đổi!', combinedAlerts.join(' • '), 6500)
     const okAfterChange = await notifyConfirm(
       'Cảnh báo dữ liệu vừa thay đổi!',
-      `${combinedAlerts.join(' | ')} — Tổng khách phải trả hiện tại là ${formatVnd(finalTotal.value)}. Bạn có xác nhận tiếp tục thanh toán theo dữ liệu mới không?`,
+      `${combinedAlerts.join(' | ')} — Bạn có xác nhận tiếp tục thanh toán không?`,
       'Tiếp tục thanh toán',
       'Kiểm tra lại đơn'
     )
@@ -2664,8 +2895,10 @@ const handleCheckout = async (options = {}) => {
   }
 
   if (currentOrder.value.paymentMethod === 'TIEN_MAT') {
-    if ((currentOrder.value.cashGiven || 0) < finalTotal.value) {
-      notifyWarning('Chưa đủ tiền', `Số tiền khách đưa chưa đủ theo tổng tiền mới (${formatVnd(finalTotal.value)})! Cần thêm ${formatVnd(finalTotal.value - (currentOrder.value.cashGiven || 0))}`)
+    if (!currentOrder.value.cashGiven || currentOrder.value.cashGiven === 0) {
+      currentOrder.value.cashGiven = finalTotal.value
+    } else if (currentOrder.value.cashGiven < finalTotal.value) {
+      notifyWarning('Chưa đủ tiền', `Số tiền khách đưa chưa đủ! Cần thêm ${formatVnd(finalTotal.value - currentOrder.value.cashGiven)}`)
       return
     }
   }
@@ -2673,7 +2906,7 @@ const handleCheckout = async (options = {}) => {
   if (currentOrder.value.paymentMethod === 'KET_HOP') {
     const totalPaid = Number(currentOrder.value.cashGiven || 0) + Number(currentOrder.value.transferGiven || 0)
     if (totalPaid < finalTotal.value) {
-      notifyWarning('Chưa đủ tiền', `Tổng tiền thanh toán kết hợp chưa đủ theo tổng tiền mới (${formatVnd(finalTotal.value)})! Cần thêm ${formatVnd(finalTotal.value - totalPaid)}`)
+      notifyWarning('Chưa đủ tiền', `Tổng tiền thanh toán kết hợp chưa đủ! Cần thêm ${formatVnd(finalTotal.value - totalPaid)}`)
       return
     }
   }
@@ -2702,12 +2935,15 @@ const handleCheckout = async (options = {}) => {
     }
   }
 
+  const isDeliveryOrder = Boolean(currentOrder.value.isDelivery)
+  const targetStatus = isDeliveryOrder ? 'Đã xác nhận' : 'Đã hoàn thành'
+
   if (!skipConfirm && combinedAlerts.length === 0) {
     const ok = await notifyConfirm(
       'Xác nhận thanh toán',
-      `Thanh toán hóa đơn "${currentOrder.value.code}" với tổng số tiền ${formatVnd(finalTotal.value)}?`,
-      'Xác nhận thanh toán',
-      'Kiểm tra lại'
+      'Bạn có chắc chắn muốn xác nhận thanh toán đơn hàng này không?',
+      'Xác nhận',
+      'Hủy'
     )
     if (!ok) return
   }
@@ -2749,7 +2985,7 @@ const handleCheckout = async (options = {}) => {
         : 'Khách lẻ')
     const payload = {
       maHoaDon: currentOrder.value.code,
-      loaiDon: currentOrder.value.isDelivery ? 'Online' : 'Tại quầy',
+      loaiDon: currentOrder.value.isDelivery ? 'Tại quầy (Giao hàng)' : 'Tại quầy',
       phiVanChuyen: currentOrder.value.isDelivery ? Number(delivery.shippingFee || 0) : 0,
       tenKhachHang: customerName,
       soDienThoaiKhachHang: customerPhone,
@@ -2759,8 +2995,8 @@ const handleCheckout = async (options = {}) => {
       toProvinceId: delivery?.legacy?.toProvinceId ?? null,
       toDistrictId: delivery?.legacy?.toDistrictId ?? null,
       toWardCode: delivery?.legacy?.toWardCode ?? null,
-      trangThai: 'Đã hoàn thành',
-      ghiChu: currentOrder.value.note || 'Bán hàng tại quầy POS',
+      trangThai: targetStatus,
+      ghiChu: currentOrder.value.note || (isDeliveryOrder ? 'Đơn giao hàng tạo tại quầy POS' : 'Bán hàng tại quầy POS'),
       idKhachHang: currentOrder.value.customer ? currentOrder.value.customer.id : null,
       idNhanVien: employeeId,
       idPhuongThucThanhToan: paymentMethodId,
@@ -2788,8 +3024,12 @@ const handleCheckout = async (options = {}) => {
     }
 
     const completedRecord = {
+      id: savedDto?.id,
       code: currentOrder.value.code,
       title: currentOrder.value.title,
+      isDelivery: isDeliveryOrder,
+      trangThai: targetStatus,
+      deliveryAddress: payload.diaChiNhanHang,
       customerName: payload.tenKhachHang,
       customerPhone: payload.soDienThoaiKhachHang,
       cart: soldCartSnapshot,
@@ -2815,7 +3055,11 @@ const handleCheckout = async (options = {}) => {
       }
     })
 
-    notifySuccess('Thanh toán thành công!', `Đã hoàn tất hóa đơn ${currentOrder.value.code}`)
+    if (isDeliveryOrder) {
+      notifySuccess('Tạo đơn giao hàng thành công!', `Đơn hàng ${currentOrder.value.code} đã được tạo với trạng thái Đã xác nhận`)
+    } else {
+      notifySuccess('Thanh toán thành công!', `Đã hoàn tất hóa đơn ${currentOrder.value.code}`)
+    }
 
     pendingOrders.value.splice(activeOrderIndex.value, 1)
     if (pendingOrders.value.length === 0) {
@@ -2830,6 +3074,12 @@ const handleCheckout = async (options = {}) => {
     savePendingOrdersToStorage()
 
     validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: true })
+
+    if (savedDto?.id) {
+      // Khi click vào thanh toán lập tức chuyển sang trang hóa đơn chi tiết của hóa đơn vừa thanh toán
+      router.push(`/hoa-don/${savedDto.id}`)
+      return
+    }
 
     isReceiptModalOpen.value = true
 
@@ -3092,7 +3342,28 @@ const printReceipt = () => {
         margin: 0;
         line-height: 1.35;
       }
-    </style>
+    
+.btn-receipt-view-invoice {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d4ed8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-receipt-view-invoice:hover {
+  background: #dbeafe;
+  border-color: #60a5fa;
+  color: #1e40af;
+}
+
+</style>
   </head>
   <body>
     <div class="thermal-print-wrap">
@@ -3142,6 +3413,8 @@ const handleKeyDown = (e) => {
     isVoucherModalOpen.value = false
     isReceiptModalOpen.value = false
     isRecentInvoicesModalOpen.value = false
+    isMoCaModalOpen.value = false
+    isKetCaModalOpen.value = false
     stopCameraScanner()
   }
 }
@@ -3304,6 +3577,7 @@ const handleCrossTabStorageSync = (e) => {
 }
 
 onMounted(() => {
+  fetchActiveShift()
   loadRecentInvoicesFromStorage()
   loadInitialData()
   loadProvinces()
@@ -3335,6 +3609,78 @@ onUnmounted(() => {
 
 <template>
   <div class="pos-page">
+    <!-- CỤC RIÊNG BIỆT: THANH ĐIỀU HÀNH CA LÀM VIỆC & NHÂN VIÊN POS -->
+    <div class="pos-top-bar">
+      <div class="pos-station-info">
+        <div class="pos-brand-pill">
+          <span class="station-brand">POLYSHOES</span>
+          <span class="station-divider">•</span>
+          <span class="station-num">BÁN HÀNG TẠI QUẦY</span>
+        </div>
+        <div class="pos-status-indicator" v-if="activeShift">
+          <span class="pulse-dot"></span>
+          <span>Ca đang mở</span>
+        </div>
+        <div class="pos-status-indicator shift-closed" v-else>
+          <span class="pulse-dot closed"></span>
+          <span>Chưa mở ca</span>
+        </div>
+      </div>
+
+      <div class="pos-header-actions">
+        <!-- Nút Mở / Đóng ca làm việc trên quầy POS -->
+        <div v-if="activeShift" class="pos-shift-group">
+          <span class="pos-shift-badge" :title="`Ca làm việc ${activeShift.maCa} đang hoạt động`">
+            <span class="pulse-dot"></span>
+            Ca: <strong>{{ activeShift.maCa }}</strong>
+          </span>
+          <button type="button" class="btn-pos-close-shift" @click="openKetCaModal" title="Đóng và kết ca làm việc này">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <span>Đóng ca</span>
+          </button>
+        </div>
+
+        <button v-else type="button" class="btn-pos-open-shift" @click="openMoCaModal" title="Mở ca làm việc mới để bắt đầu bán hàng">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="16"></line>
+            <line x1="8" y1="12" x2="16" y2="12"></line>
+          </svg>
+          <span>Mở ca</span>
+        </button>
+
+        <div class="pos-orders-counter-pill" :title="`Nhân viên phụ trách: ${staffName} (${staffRoleLabel})`">
+          <span class="counter-lbl">NV:</span>
+          <span class="counter-num">{{ staffName }}</span>
+          <span class="counter-lbl">({{ staffRoleLabel }})</span>
+        </div>
+
+        <button type="button" class="btn-recent-pos-invoices" @click="openRecentInvoicesModal"
+          title="Xem lịch sử đơn vừa bán trong ca và in lại hóa đơn">
+          <span>Đơn vừa bán</span>
+          <span class="recent-count-badge" v-if="recentPosInvoices.length > 0">{{ recentPosInvoices.length }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Cảnh báo khi quầy chưa mở ca làm việc -->
+    <div v-if="!activeShift && !isLoadingShift" class="pos-no-shift-alert-banner">
+      <div class="alert-banner-left">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span><strong>Quầy hiện chưa mở ca làm việc.</strong> Vui lòng bấm <strong>Mở ca</strong> để khai báo tiền két và ghi nhận doanh thu phiên bán hàng!</span>
+      </div>
+      <button type="button" class="btn-banner-open-shift" @click="openMoCaModal">
+        <span>+ Mở ca ngay</span>
+      </button>
+    </div>
+
     <div class="pos-main-grid">
       <div class="pos-col-left">
         <div class="pos-workspace-panel">
@@ -3357,23 +3703,9 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div class="pos-tabs-right-group">
-              <div class="pos-orders-counter-pill" :title="`Nhân viên phụ trách: ${staffName} (${staffRoleLabel})`">
-                <span class="counter-lbl">NV:</span>
-                <span class="counter-num">{{ staffName }}</span>
-                <span class="counter-lbl">({{ staffRoleLabel }})</span>
-              </div>
-
-              <button type="button" class="btn-recent-pos-invoices" @click="openRecentInvoicesModal"
-                title="Xem lịch sử đơn vừa bán trong ca và in lại hóa đơn">
-                <span>Đơn vừa bán</span>
-                <span class="recent-count-badge" v-if="recentPosInvoices.length > 0">{{ recentPosInvoices.length }}</span>
-              </button>
-
-              <div class="pos-orders-counter-pill">
-                <span class="counter-num">{{ pendingOrders.length }}/{{ MAX_ORDERS }}</span>
-                <span class="counter-lbl">hóa đơn</span>
-              </div>
+            <div class="pos-orders-counter-pill" title="Số lượng hóa đơn chờ">
+              <span class="counter-num">{{ pendingOrders.length }}/{{ MAX_ORDERS }}</span>
+              <span class="counter-lbl">hóa đơn</span>
             </div>
           </div>
 
@@ -3429,7 +3761,12 @@ onUnmounted(() => {
                       <td class="text-center cell-stt">{{ idx + 1 }}</td>
                       <td>
                         <div class="product-item-wrap">
-                          <img v-if="item.img" :src="item.img" alt="Ảnh SP" class="prod-thumb-mini" />
+                          <div class="prod-thumb-container">
+                            <img v-if="item.img" :src="item.img" alt="Ảnh SP" class="prod-thumb-mini" />
+                            <span v-if="getDiscountPercentBadge(item)" class="prod-img-discount-badge mini">
+                              {{ getDiscountPercentBadge(item) }}
+                            </span>
+                          </div>
                           <div class="prod-details">
                             <span class="prod-name-title" :title="item.name">{{ item.name }}</span>
                             <span class="prod-code-sub">Mã: {{ item.maCtsp || item.maSp }}</span>
@@ -3453,8 +3790,7 @@ onUnmounted(() => {
                       </td>
                       <td class="text-center">
                         <div class="qty-stepper-modern">
-                          <button class="step-btn" @click="updateCartItemQty(item, item.quantity - 1)"
-                            :disabled="item.quantity <= 1">−</button>
+                          <button class="step-btn" @click="updateCartItemQty(item, item.quantity - 1)" title="Giảm số lượng (về 0 để xóa)">−</button>
                           <input type="number" class="step-input" :value="item.quantity"
                             min="1" :max="getMaxAllowedForCartItem(item)"
                             @input="handleCartItemQtyInput(item, $event)"
@@ -3934,8 +4270,25 @@ onUnmounted(() => {
 
           <div class="cash-settlement-box" v-if="currentOrder && currentOrder.paymentMethod !== 'CHUYEN_KHOAN'">
             <div class="cash-input-field">
-              <span class="cash-label">Khách thanh toán tiền mặt</span>
-              <CurrencyInput v-model="currentOrder.cashGiven" placeholder="Nhập số tiền khách đưa..." />
+              <div class="cash-label-row">
+                <span class="cash-label">Khách thanh toán tiền mặt</span>
+                <span v-if="currentOrder.cashGiven > 0" class="cash-hint-preview">
+                  ({{ formatVnd(currentOrder.cashGiven) }})
+                </span>
+              </div>
+              <div class="cash-input-wrap">
+                <input
+                  type="number"
+                  class="cash-amount-inp"
+                  :value="currentOrder.cashGiven === 0 ? '' : currentOrder.cashGiven"
+                  @input="currentOrder.cashGiven = $event.target.value === '' ? 0 : Math.max(0, Number($event.target.value))"
+                  placeholder="Nhập số tiền khách đưa..."
+                  min="0"
+                  step="1000"
+                  @focus="$event.target.select()"
+                />
+                <span class="cash-currency-badge">₫</span>
+              </div>
             </div>
             <div class="quick-cash-row">
               <button class="quick-chip chip-exact" @click="setQuickCash('EXACT')">Đủ tiền</button>
@@ -3948,8 +4301,25 @@ onUnmounted(() => {
 
           <div class="cash-settlement-box" v-if="currentOrder && currentOrder.paymentMethod === 'KET_HOP'">
             <div class="cash-input-field">
-              <span class="cash-label">Số tiền chuyển khoản</span>
-              <CurrencyInput v-model="currentOrder.transferGiven" placeholder="Nhập số tiền chuyển khoản..." />
+              <div class="cash-label-row">
+                <span class="cash-label">Số tiền chuyển khoản</span>
+                <span v-if="currentOrder.transferGiven > 0" class="cash-hint-preview">
+                  ({{ formatVnd(currentOrder.transferGiven) }})
+                </span>
+              </div>
+              <div class="cash-input-wrap">
+                <input
+                  type="number"
+                  class="cash-amount-inp"
+                  :value="currentOrder.transferGiven === 0 ? '' : currentOrder.transferGiven"
+                  @input="currentOrder.transferGiven = $event.target.value === '' ? 0 : Math.max(0, Number($event.target.value))"
+                  placeholder="Nhập số tiền chuyển khoản..."
+                  min="0"
+                  step="1000"
+                  @focus="$event.target.select()"
+                />
+                <span class="cash-currency-badge">₫</span>
+              </div>
             </div>
           </div>
 
@@ -3983,10 +4353,7 @@ onUnmounted(() => {
               @click="handleCheckout"
               :disabled="!currentOrder || currentOrder.cart.length === 0 || isProcessingCheckout">
               <span v-if="isProcessingCheckout">Đang xử lý...</span>
-              <template v-else>
-                <span>THANH TOÁN</span>
-                <span class="btn-checkout-amount">{{ formatVnd(finalTotal) }}</span>
-              </template>
+              <span v-else>THANH TOÁN</span>
             </button>
           </div>
         </div>
@@ -4120,6 +4487,9 @@ onUnmounted(() => {
                     <td class="text-center">
                       <div class="modal-thumb-box">
                         <img :src="getShoeImage(item)" class="modal-thumb-img" alt="shoe" />
+                        <span v-if="getDiscountPercentBadge(item)" class="prod-img-discount-badge">
+                          {{ getDiscountPercentBadge(item) }}
+                        </span>
                       </div>
                     </td>
                     <td class="text-center">
@@ -4911,7 +5281,7 @@ onUnmounted(() => {
 
               <!-- Tiêu đề & Thông tin đơn -->
               <div class="receipt-bill-heading">
-                <div class="receipt-bill-title">HÓA ĐƠN BÁN LẺ (POS)</div>
+                <div class="receipt-bill-title">{{ completedInvoiceData.isDelivery ? 'PHIẾU GIAO HÀNG (POS)' : 'HÓA ĐƠN BÁN LẺ (POS)' }}</div>
                 <div class="receipt-barcode-code">*{{ completedInvoiceData.code }}*</div>
               </div>
 
@@ -4921,8 +5291,20 @@ onUnmounted(() => {
                   <span class="meta-v"><strong>{{ completedInvoiceData.code }}</strong></span>
                 </div>
                 <div class="meta-row">
+                  <span class="meta-k">Trạng thái:</span>
+                  <span class="meta-v"><strong style="color: #2563eb;">{{ completedInvoiceData.trangThai || (completedInvoiceData.isDelivery ? 'Chờ xác nhận' : 'Đã hoàn thành') }}</strong></span>
+                </div>
+                <div class="meta-row">
                   <span class="meta-k">Thời gian:</span>
                   <span class="meta-v">{{ completedInvoiceData.date }}</span>
+                </div>
+                <div class="meta-row" v-if="completedInvoiceData.isDelivery">
+                  <span class="meta-k">Hình thức:</span>
+                  <span class="meta-v">Giao hàng tận nơi</span>
+                </div>
+                <div class="meta-row" v-if="completedInvoiceData.deliveryAddress">
+                  <span class="meta-k">Địa chỉ nhận:</span>
+                  <span class="meta-v">{{ completedInvoiceData.deliveryAddress }}</span>
                 </div>
                 <div class="meta-row">
                   <span class="meta-k">Khách hàng:</span>
@@ -5003,6 +5385,19 @@ onUnmounted(() => {
           <div class="pos-modal-foot receipt-modal-foot">
             <button class="btn-receipt-close" @click="isReceiptModalOpen = false">
               Đóng
+            </button>
+            <button
+              v-if="completedInvoiceData?.id"
+              class="btn-receipt-view-invoice"
+              type="button"
+              @click="router.push(`/hoa-don/${completedInvoiceData.id}`)"
+              title="Xem chi tiết đơn này trong Quản lý hóa đơn"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <span>Xem chi tiết hóa đơn</span>
             </button>
             <button class="btn-receipt-print" @click="printReceipt">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -5131,6 +5526,268 @@ onUnmounted(() => {
           <div class="pos-modal-foot">
             <button class="btn-receipt-close" @click="isRecentInvoicesModalOpen = false">
               Đóng
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- MODAL MỞ CA LÀM VIỆC -->
+    <transition name="modal-fade">
+      <div v-if="isMoCaModalOpen" class="pos-modal-overlay" @click.self="isMoCaModalOpen = false">
+        <div class="pos-modal-dialog pos-shift-dialog">
+          <div class="pos-modal-head">
+            <div class="modal-head-title">
+              <div class="modal-title-icon is-shift-open">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
+                </svg>
+              </div>
+              <div class="modal-title-text-group">
+                <h3>Mở ca làm việc mới</h3>
+                <span class="modal-badge-count">Khai báo quỹ tiền mặt đầu ca tại quầy POS</span>
+              </div>
+            </div>
+            <button class="pos-modal-close" @click="isMoCaModalOpen = false" title="Đóng (Esc)">×</button>
+          </div>
+
+          <div class="pos-modal-body">
+            <div class="pos-shift-info-card">
+              <div class="shift-info-item">
+                <span class="shift-info-label">Thu ngân phụ trách:</span>
+                <strong class="shift-info-val">{{ staffName }} ({{ staffRoleLabel }})</strong>
+              </div>
+              <div class="shift-info-item">
+                <span class="shift-info-label">Thời gian mở:</span>
+                <strong class="shift-info-val">{{ formatDateTime(new Date()) }}</strong>
+              </div>
+              <div class="shift-info-item">
+                <span class="shift-info-label">Điểm bán hàng:</span>
+                <span class="shift-info-val text-brand">Quầy POS #01</span>
+              </div>
+            </div>
+
+            <div class="pos-shift-field-group">
+              <label class="pos-shift-label">
+                <span>Tiền mặt ban đầu trong két (Tiền thối)</span>
+                <span class="pos-shift-required">*</span>
+                <strong class="pos-shift-preview-val">{{ formatVnd(moCaForm.tienDauCa || 0) }}</strong>
+              </label>
+              <div class="pos-shift-input-wrap">
+                <input
+                  v-model.number="moCaForm.tienDauCa"
+                  type="number"
+                  min="0"
+                  step="10000"
+                  class="pos-shift-input"
+                  placeholder="Nhập số tiền mặt có sẵn trong két..."
+                  @keydown.enter="handleMoCaSubmit"
+                  autofocus
+                />
+                <span class="pos-shift-currency-unit">VNĐ</span>
+              </div>
+
+              <!-- Nút chọn nhanh mệnh giá phổ biến -->
+              <div class="pos-shift-quick-chips">
+                <button type="button" class="btn-quick-chip" @click="moCaForm.tienDauCa = 0">0 ₫</button>
+                <button type="button" class="btn-quick-chip" @click="moCaForm.tienDauCa = 200000">200.000 ₫</button>
+                <button type="button" class="btn-quick-chip" :class="{ active: moCaForm.tienDauCa === 300000 }" @click="moCaForm.tienDauCa = 300000">300.000 ₫ (Gợi ý)</button>
+                <button type="button" class="btn-quick-chip" @click="moCaForm.tienDauCa = 500000">500.000 ₫</button>
+                <button type="button" class="btn-quick-chip" @click="moCaForm.tienDauCa = 1000000">1.000.000 ₫</button>
+              </div>
+            </div>
+
+            <div class="pos-shift-field-group">
+              <label class="pos-shift-label">Ghi chú mở ca (Tùy chọn):</label>
+              <textarea
+                v-model="moCaForm.ghiChu"
+                class="pos-shift-textarea"
+                rows="2"
+                placeholder="Ví dụ: Nhận bàn giao két tiền từ ca trước, tiền mệnh giá lẻ 10k, 20k, 50k đầy đủ..."
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="pos-modal-footer">
+            <button type="button" class="btn-shift-cancel" @click="isMoCaModalOpen = false" :disabled="moCaSubmitting">
+              Hủy bỏ
+            </button>
+            <button type="button" class="btn-shift-confirm-open" @click="handleMoCaSubmit" :disabled="moCaSubmitting">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>{{ moCaSubmitting ? 'Đang mở ca...' : 'Xác nhận mở ca' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- MODAL ĐÓNG CA & ĐỐI SOÁT TIỀN MẶT -->
+    <transition name="modal-fade">
+      <div v-if="isKetCaModalOpen" class="pos-modal-overlay" @click.self="isKetCaModalOpen = false">
+        <div class="pos-modal-dialog pos-shift-dialog pos-close-shift-dialog">
+          <div class="pos-modal-head">
+            <div class="modal-head-title">
+              <div class="modal-title-icon is-shift-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+              </div>
+              <div class="modal-title-text-group">
+                <h3>Kết thúc ca làm việc & Đối soát</h3>
+                <span class="modal-badge-count">Ca: {{ activeShift?.maCa }} • Mở lúc: {{ formatDateTime(activeShift?.thoiGianMo) }}</span>
+              </div>
+            </div>
+            <button class="pos-modal-close" @click="isKetCaModalOpen = false" title="Đóng (Esc)">×</button>
+          </div>
+
+          <div class="pos-modal-body" v-if="ketCaLoading">
+            <div class="shift-loading-box">
+              <span class="shift-spinner"></span>
+              <p>Đang tổng hợp số liệu doanh thu và hóa đơn trong ca...</p>
+            </div>
+          </div>
+
+          <div class="pos-modal-body" v-else-if="ketCaSummary">
+            <!-- KHỐI 1: TỔNG KẾT DOANH THU & TIỀN DỰ KIẾN KÉT -->
+            <div class="shift-summary-grid">
+              <div class="shift-sum-card is-start">
+                <span class="sum-card-lbl">Tiền đầu ca (A)</span>
+                <strong class="sum-card-val">{{ formatVnd(ketCaSummary.tienDauCa || 0) }}</strong>
+                <span class="sum-card-sub">Khai báo lúc mở ca</span>
+              </div>
+
+              <div class="shift-sum-card is-cash">
+                <span class="sum-card-lbl">Tiền mặt bán (B)</span>
+                <strong class="sum-card-val text-success">+{{ formatVnd(ketCaSummary.tienMatThu || 0) }}</strong>
+                <span class="sum-card-sub">Thu tiền mặt tại quầy</span>
+              </div>
+
+              <div class="shift-sum-card is-transfer">
+                <span class="sum-card-lbl">Chuyển khoản / Khác</span>
+                <strong class="sum-card-val text-primary">{{ formatVnd(ketCaSummary.tienKhongMat || 0) }}</strong>
+                <span class="sum-card-sub">Đã vào tài khoản NH</span>
+              </div>
+
+              <div class="shift-sum-card is-expected">
+                <span class="sum-card-lbl">TIỀN MẶT DỰ KIẾN KÉT (A + B)</span>
+                <strong class="sum-card-val text-brand">{{ formatVnd(ketCaSummary.tienDuKien || 0) }}</strong>
+                <span class="sum-card-sub">{{ ketCaSummary.tongHoaDon || 0 }} hóa đơn hoàn tất</span>
+              </div>
+            </div>
+
+            <!-- KHỐI 2: KIỂM ĐẾM TIỀN MẶT THỰC TẾ & CHÊNH LỆCH -->
+            <div class="pos-shift-count-box">
+              <div class="count-box-head">
+                <label class="pos-shift-label mb-0">
+                  <span>Kiểm đếm tiền mặt thực tế trong két</span>
+                  <span class="pos-shift-required">*</span>
+                  <strong class="pos-shift-preview-val">{{ formatVnd(ketCaForm.tienThucTe || 0) }}</strong>
+                </label>
+                <button type="button" class="btn-match-du-kien" @click="ketCaForm.tienThucTe = Number(ketCaSummary.tienDuKien || 0)">
+                  <span>Khớp dự kiến ({{ formatVnd(ketCaSummary.tienDuKien || 0) }})</span>
+                </button>
+              </div>
+
+              <div class="pos-shift-input-wrap">
+                <input
+                  v-model.number="ketCaForm.tienThucTe"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  class="pos-shift-input is-lg"
+                  placeholder="Nhập tổng số tiền mặt kiểm đếm được..."
+                />
+                <span class="pos-shift-currency-unit">VNĐ</span>
+              </div>
+
+              <!-- THANH HIỂN THỊ CHÊNH LỆCH TÀI CHÍNH -->
+              <div class="shift-diff-banner" :class="{
+                'is-match': chenhLechKetCa === 0,
+                'is-over': chenhLechKetCa > 0,
+                'is-short': chenhLechKetCa < 0
+              }">
+                <div class="diff-banner-icon">
+                  <svg v-if="chenhLechKetCa === 0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <svg v-else-if="chenhLechKetCa > 0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                  <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </div>
+                <div class="diff-banner-text">
+                  <span class="diff-label" v-if="chenhLechKetCa === 0">Két tiền khớp hoàn hảo:</span>
+                  <span class="diff-label" v-else-if="chenhLechKetCa > 0">Phát hiện thừa tiền két:</span>
+                  <span class="diff-label" v-else>Phát hiện thiếu hụt tiền két:</span>
+                  <strong class="diff-amount">{{ formatVnd(Math.abs(chenhLechKetCa)) }}</strong>
+                  <span class="diff-note" v-if="chenhLechKetCa === 0">Số tiền mặt thực tế kiểm đếm khớp 100% với số liệu phần mềm.</span>
+                  <span class="diff-note text-warning" v-else>Bắt buộc phải nhập lý do giải trình bên dưới để hoàn tất đóng ca.</span>
+                </div>
+              </div>
+
+              <!-- BẮT BUỘC GIẢI TRÌNH KHI CHÊNH LỆCH KHÁC 0 -->
+              <div class="pos-shift-field-group mt-3" v-if="chenhLechKetCa !== 0">
+                <label class="pos-shift-label">
+                  <span class="text-danger">Lý do giải trình chênh lệch tiền mặt</span>
+                  <span class="pos-shift-required">*</span>
+                </label>
+                <input
+                  v-model="ketCaForm.lyDoLech"
+                  type="text"
+                  class="pos-shift-input is-warning-border"
+                  placeholder="Nhập chi tiết lý do thừa / thiếu tiền (VD: Khách không lấy 10k tiền lẻ, nhầm lẫn tiền thối...)"
+                  required
+                />
+              </div>
+
+              <div class="pos-shift-field-group mt-3">
+                <label class="pos-shift-label">Ghi chú bàn giao ca (Tùy chọn):</label>
+                <textarea
+                  v-model="ketCaForm.ghiChu"
+                  class="pos-shift-textarea"
+                  rows="2"
+                  placeholder="Ghi chú thêm thông tin bàn giao cho thu ngân ca sau..."
+                ></textarea>
+              </div>
+            </div>
+
+            <!-- KHỐI 3: DANH SÁCH ĐƠN HÀNG TRONG CA -->
+            <div class="shift-bills-accordion mt-3" v-if="ketCaSummary.hoaDonGanDay && ketCaSummary.hoaDonGanDay.length > 0">
+              <div class="bills-accordion-title">
+                <span>Hóa đơn vừa tạo trong ca ({{ ketCaSummary.hoaDonGanDay.length }})</span>
+              </div>
+              <div class="bills-mini-table-wrap">
+                <table class="bills-mini-table">
+                  <thead>
+                    <tr>
+                      <th>Mã HĐ</th>
+                      <th>Thời gian</th>
+                      <th>Phương thức</th>
+                      <th class="text-right">Tổng tiền</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="hd in ketCaSummary.hoaDonGanDay" :key="hd.maHoaDon">
+                      <td><strong class="code-link">{{ hd.maHoaDon }}</strong></td>
+                      <td>{{ formatDateTime(hd.ngayTao) }}</td>
+                      <td>{{ hd.tenPhuongThuc || 'Tiền mặt' }}</td>
+                      <td class="text-right font-weight-bold">{{ formatVnd(hd.tienSauGiamGia) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="pos-modal-footer">
+            <button type="button" class="btn-shift-cancel" @click="isKetCaModalOpen = false" :disabled="ketCaSubmitting">
+              Hủy / Quay lại
+            </button>
+            <button type="button" class="btn-shift-confirm-close" @click="handleKetCaSubmit" :disabled="ketCaSubmitting || (chenhLechKetCa !== 0 && !ketCaForm.lyDoLech?.trim())">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+              <span>{{ ketCaSubmitting ? 'Đang đóng ca...' : 'Xác nhận đóng ca' }}</span>
             </button>
           </div>
         </div>

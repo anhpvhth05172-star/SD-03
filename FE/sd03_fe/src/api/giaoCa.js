@@ -16,5 +16,8 @@ export const getTongKet = (id) => http.get(`/ca/${id}/tong-ket`).then((r) => r.d
 // POST /api/ca/{id}/ket-ca — lỗi: 400 LY_DO_LECH_THIEU / CON_HD_DANG_XU_LY, 409 CA_DANG_KET
 export const ketCa = (id, payload) => http.post(`/ca/${id}/ket-ca`, payload).then((r) => r.data)
 
+// GET /api/ca/{id}/doi-soat — CaLamViecDto (chi tiết đối soát ca)
+export const getDoiSoat = (id) => http.get(`/ca/${id}/doi-soat`).then((r) => r.data)
+
 // GET /api/ca/lich-su — Page<CaLamViecDto>
 export const getLichSu = (params) => http.get('/ca/lich-su', { params }).then((r) => r.data)

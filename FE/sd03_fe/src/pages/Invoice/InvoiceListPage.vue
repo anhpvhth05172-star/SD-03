@@ -11,6 +11,7 @@ import {
   initialsOf,
   payStatusOf,
 } from '@/utils/format'
+import { loaiDonMeta } from '@/constants/invoiceStatus'
 import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 
 const router = useRouter()
@@ -45,9 +46,10 @@ const fDenNgay = ref('')
 const fLoaiDon = ref('')
 
 const loaiDonOptions = [
-  { id: '', ten: 'Tất cả' },
-  { id: 'Tại quầy', ten: 'Tại quầy' },
-  { id: 'Online', ten: 'Online' },
+  { id: '', ten: 'Tất cả loại đơn' },
+  { id: 'TAI_QUAY', ten: 'Tại quầy (Nhận ngay)' },
+  { id: 'TAI_QUAY_GIAO_HANG', ten: 'Tại quầy (Giao hàng)' },
+  { id: 'ONLINE', ten: 'Online' },
 ]
 
 const trangThaiOptions = computed(() => tabs.map((t) => ({ id: t.key, ten: t.label })))
@@ -58,8 +60,8 @@ const todayLocal = () => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-fTuNgay.value = todayLocal()
-fDenNgay.value = todayLocal()
+fTuNgay.value = ''
+fDenNgay.value = ''
 
 const parseDate = (value) => {
   const v = (value || '').trim()
@@ -115,6 +117,31 @@ const load = async () => {
   }
 }
 
+const setDateRange = (preset) => {
+  const d = new Date()
+  const p = (x) => String(x).padStart(2, '0')
+  const fmt = (dt) => `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`
+  
+  if (preset === 'TODAY') {
+    fTuNgay.value = fmt(d)
+    fDenNgay.value = fmt(d)
+  } else if (preset === '7DAYS') {
+    const past = new Date()
+    past.setDate(past.getDate() - 7)
+    fTuNgay.value = fmt(past)
+    fDenNgay.value = fmt(d)
+  } else if (preset === '30DAYS') {
+    const past = new Date()
+    past.setDate(past.getDate() - 30)
+    fTuNgay.value = fmt(past)
+    fDenNgay.value = fmt(d)
+  } else {
+    fTuNgay.value = ''
+    fDenNgay.value = ''
+  }
+  applyFilter()
+}
+
 const applyFilter = () => {
   page.value = 0
   load()
@@ -122,8 +149,8 @@ const applyFilter = () => {
 
 const resetFilter = () => {
   fMa.value = ''
-  fTuNgay.value = todayLocal()
-  fDenNgay.value = todayLocal()
+  fTuNgay.value = ''
+  fDenNgay.value = ''
   fLoaiDon.value = ''
   activeTab.value = 'ALL'
   page.value = 0
@@ -292,7 +319,7 @@ onMounted(load)
                 v-model="fMa"
                 type="text"
                 class="form-control"
-                placeholder="Nhập mã hóa đơn (vd: HD000013)"
+                placeholder="Tìm mã hóa đơn, tên khách hàng hoặc SĐT..."
                 @keyup.enter="applyFilter"
               />
               <button v-if="fMa" class="clear-search-btn" type="button" @click="fMa = ''; applyFilter()">×</button>
@@ -414,7 +441,26 @@ onMounted(load)
                   </div>
                 </td>
                 <td class="attr-plain-text">{{ row.tenNhanVien || '—' }}</td>
-                <td class="attr-plain-text">{{ row.loaiDon }}</td>
+                <td>
+                  <span class="inv-type-pill" :class="loaiDonMeta(row).badgeClass" :title="loaiDonMeta(row).label">
+                    <svg v-if="loaiDonMeta(row).icon === 'store'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                      <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <svg v-else-if="loaiDonMeta(row).icon === 'truck'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="1" y="3" width="15" height="13"></rect>
+                      <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+                      <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                      <circle cx="18.5" cy="18.5" r="2.5"></circle>
+                    </svg>
+                    <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="2" y1="12" x2="22" y2="12"></line>
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                    </svg>
+                    <span>{{ loaiDonMeta(row).label }}</span>
+                  </span>
+                </td>
                 <td class="text-end price-plain-text">{{ tongTienText(row.tongTien) }}</td>
                 <td class="date-plain-text">{{ fmtNgayTao(row.ngayTao) }}</td>
                 <td class="text-center">
@@ -462,4 +508,61 @@ onMounted(load)
   </div>
 </template>
 
-<style scoped src="@/assets/styles/InvoiceListPage.css"></style>
+<style scoped src="@/assets/styles/InvoiceListPage.css">
+.date-preset-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+}
+.preset-chip {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.preset-chip:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+.preset-chip.is-active {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+
+
+.inv-type-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  letter-spacing: 0.1px;
+}
+.inv-type-pill.inv-type-pos {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.inv-type-pill.inv-type-pos-delivery {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+.inv-type-pill.inv-type-online {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+</style>

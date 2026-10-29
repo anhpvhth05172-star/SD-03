@@ -1,0 +1,310 @@
+<mxfile host="app.diagrams.net" modified="2026-10-28T16:55:00.000Z" agent="Antigravity POS SD-03" version="21.6.8" type="device">
+  <diagram id="sd03-pos-2lane-detailed" name="Quy trình Bán hàng tại Quầy SD-03 Chi tiết">
+    <mxGraphModel dx="1800" dy="1050" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2300" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- POOL CHÍNH: 2 LÀN (KHÁCH HÀNG & HỆ THỐNG) -->
+        <mxCell id="pool_main" value="QUY TRÌNH NGHIỆP VỤ BÁN HÀNG TẠI QUẦY (POS) &amp; HỆ THỐNG - DỰ ÁN SD-03" style="swimlane;html=1;childLayout=stackLayout;resizeParent=1;resizeParentMax=0;startSize=34;horizontal=0;horizontalFlip=1;fillColor=#0f172a;strokeColor=#1e293b;strokeWidth=2;fontFamily=Helvetica;fontStyle=1;fontSize=15;fontColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="2200" height="740" as="geometry" />
+        </mxCell>
+
+        <!-- LÀN 1: KHÁCH HÀNG -->
+        <mxCell id="lane_khach_hang" value="Khách hàng" style="swimlane;html=1;startSize=36;horizontal=0;fillColor=#ffffff;strokeColor=#94a3b8;strokeWidth=1.5;fontFamily=Helvetica;fontStyle=1;fontSize=14;fontColor=#1e293b;" vertex="1" parent="pool_main">
+          <mxGeometry x="34" y="0" width="2166" height="300" as="geometry" />
+        </mxCell>
+
+        <!-- LÀN 2: HỆ THỐNG -->
+        <mxCell id="lane_he_thong" value="Hệ thống" style="swimlane;html=1;startSize=36;horizontal=0;fillColor=#fafafa;strokeColor=#94a3b8;strokeWidth=1.5;fontFamily=Helvetica;fontStyle=1;fontSize=14;fontColor=#1e293b;" vertex="1" parent="pool_main">
+          <mxGeometry x="34" y="300" width="2166" height="440" as="geometry" />
+        </mxCell>
+
+        <!-- ======================================================== -->
+        <!-- LÀN KHÁCH HÀNG (TOP LANE) -->
+        <!-- ======================================================== -->
+
+        <!-- Bắt đầu -->
+        <mxCell id="kh_start" value="Bắt đầu" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=2;fontSize=12;fontFamily=Helvetica;fontStyle=1;fontColor=#0f172a;" vertex="1" parent="lane_khach_hang">
+          <mxGeometry x="30" y="115" width="60" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Chọn giày -->
+        <mxCell id="kh_chon_giay" value="Chọn giày:&#xa;Xem mẫu, màu sắc &amp; size" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;fontSize=12;fontFamily=Helvetica;fontColor=#0f172a;" vertex="1" parent="lane_khach_hang">
+          <mxGeometry x="130" y="110" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Thêm vào giỏ hàng -->
+        <mxCell id="kh_them_gio" value="Thêm vào giỏ hàng:&#xa;Hiển thị giá sau giảm (% Sale)" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;fontSize=12;fontFamily=Helvetica;fontColor=#0f172a;" vertex="1" parent="lane_khach_hang">
+          <mxGeometry x="470" y="110" width="165" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Cung cấp thông tin & Chọn nhận hàng -->
+        <mxCell id="kh_check_tt" value="Cung cấp thông tin (SĐT)&#xa;&amp; Chọn nhận tại quầy / Giao hàng" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;fontSize=12;fontFamily=Helvetica;fontColor=#0f172a;" vertex="1" parent="lane_khach_hang">
+          <mxGeometry x="680" y="110" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Thanh toán (Khách thực hiện) -->
+        <mxCell id="kh_thanh_toan" value="Thực hiện thanh toán:&#xa;Đưa tiền mặt / Quét mã VietQR" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;fontSize=12;fontFamily=Helvetica;fontColor=#0f172a;" vertex="1" parent="lane_khach_hang">
+          <mxGeometry x="1170" y="110" width="170" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Khách hàng nhận hàng & Hóa đơn -->
+        <mxCell id="kh_nhan_hang" value="Khách hàng nhận hàng:&#xa;Nhận giày + Hóa đơn K80&#xa;(hoặc mã vận đơn GHN theo dõi)" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;fontSize=12;fontFamily=Helvetica;fontColor=#0f172a;" vertex="1" parent="lane_khach_hang">
+          <mxGeometry x="1750" y="110" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Decision: Hài lòng / Đúng hàng? -->
+        <mxCell id="kh_dec_nhan" value="" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;" vertex="1" parent="lane_khach_hang">
+          <mxGeometry x="1980" y="118" width="65" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Hoàn thành -->
+        <mxCell id="kh_hoan_thanh" value="Hoàn&#xa;thành" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#f0fdf4;strokeColor=#16a34a;strokeWidth=2.2;fontSize=12;fontFamily=Helvetica;fontStyle=1;fontColor=#15803d;" vertex="1" parent="lane_khach_hang">
+          <mxGeometry x="2080" y="115" width="60" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Trả hàng, hoàn tiền (nếu có) -->
+        <mxCell id="kh_tra_hang" value="Đổi trả hàng /&#xa;Hoàn tiền&#xa;(Chính sách 7 ngày)" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#fef2f2;strokeColor=#dc2626;strokeWidth=1.8;fontSize=11;fontFamily=Helvetica;fontColor=#b91c1c;" vertex="1" parent="lane_khach_hang">
+          <mxGeometry x="1970" y="215" width="85" height="85" as="geometry" />
+        </mxCell>
+
+
+        <!-- ======================================================== -->
+        <!-- LÀN HỆ THỐNG (BOTTOM LANE) -->
+        <!-- ======================================================== -->
+
+        <!-- Kiểm tra tồn kho -->
+        <mxCell id="ht_check_kho" value="Kiểm tra tồn kho:&#xa;Quét Barcode / Tra cứu&#xa;số lượng khả dụng theo SKU" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;fontSize=12;fontFamily=Helvetica;fontColor=#0f172a;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="125" y="50" width="160" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- Decision tồn kho -->
+        <mxCell id="ht_dec_kho" value="" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="330" y="55" width="60" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Báo hết hàng -->
+        <mxCell id="ht_bao_het" value="Báo hết hàng /&#xa;Gợi ý size hoặc màu khác" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#fee2e2;strokeColor=#ef4444;strokeWidth=1.5;fontSize=11;fontFamily=Helvetica;fontColor=#991b1b;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="200" y="175" width="150" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Kết thúc 1 (Hết hàng) -->
+        <mxCell id="ht_end_hethang" value="Kết thúc" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.8;fontSize=11;fontFamily=Helvetica;fontColor=#0f172a;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="100" y="177" width="50" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Áp dụng Đợt giảm giá (Campaign Promotion) -->
+        <mxCell id="ht_tinh_gia" value="Áp dụng Đợt giảm giá (%):&#xa;Tính đơn giá sau khuyến mãi&#xa;và cập nhật vào giỏ hàng" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;fontSize=11;fontFamily=Helvetica;fontColor=#0f172a;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="465" y="50" width="175" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- Tạo đơn hàng & Áp Voucher -->
+        <mxCell id="ht_tao_don" value="Tạo đơn hàng chờ &amp;&#xa;Áp dụng Phiếu giảm giá (Voucher)&#xa;nếu đạt giá trị đơn tối thiểu" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;fontSize=11;fontFamily=Helvetica;fontColor=#0f172a;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="680" y="50" width="180" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- Decision: Hình thức nhận hàng -->
+        <mxCell id="ht_dec_nhan_hang" value="" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="895" y="55" width="60" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Phí ship GHN -->
+        <mxCell id="ht_ghn" value="Giao tận nơi:&#xa;Gọi API GHN tính cước ship&#xa;theo Tỉnh / Quận / Phường" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#ffffff;strokeColor=#ea580c;strokeWidth=1.5;fontSize=11;fontFamily=Helvetica;fontColor=#9a3412;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="840" y="165" width="170" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Decision: Hình thức thanh toán -->
+        <mxCell id="ht_dec_pttt" value="" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="1055" y="55" width="60" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Thu tiền mặt -->
+        <mxCell id="ht_tien_mat" value="Thu tiền mặt:&#xa;Nhập tiền khách đưa &amp;&#xa;Hệ thống tự tính tiền thừa" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;fontSize=11;fontFamily=Helvetica;fontColor=#0f172a;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="1010" y="165" width="150" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Kiểm tra giao dịch VietQR / VNPay -->
+        <mxCell id="ht_check_vnpay" value="Kiểm tra giao dịch&#xa;VietQR / VNPay:&#xa;Sinh QR động &amp; xác nhận" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;fontSize=11;fontFamily=Helvetica;fontColor=#0f172a;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="1185" y="165" width="150" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Decision VNPay hợp lệ? -->
+        <mxCell id="ht_dec_vnpay" value="" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="1370" y="168" width="55" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Kết thúc 2 (Lỗi thanh toán) -->
+        <mxCell id="ht_end_vnpay" value="" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#fee2e2;strokeColor=#ef4444;strokeWidth=1.8;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="1380" y="260" width="35" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="ht_end_vnpay_lbl" value="Lỗi / Thử lại" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontColor=#ef4444;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="1362" y="295" width="70" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Xác nhận đơn hàng & Chạy DB Transaction -->
+        <mxCell id="ht_xac_nhan" value="Xác nhận &amp; Transaction DB:&#xa;1. INSERT hóa đơn &amp; chi tiết đơn&#xa;2. Trừ tồn kho (san_pham_chi_tiet)&#xa;3. Cập nhật lượt dùng Voucher&#xa;4. Ghi nhận doanh thu vào ca trực" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;fillColor=#f8fafc;strokeColor=#0f172a;strokeWidth=2;fontSize=11;fontFamily=Helvetica;align=left;fontColor=#0f172a;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="1465" y="35" width="195" height="95" as="geometry" />
+        </mxCell>
+
+        <!-- In hóa đơn & Vận chuyển -->
+        <mxCell id="ht_van_chuyen" value="In hóa đơn &amp; Bàn giao:&#xa;- Xuất hóa đơn nhiệt K80&#xa;- Giao ngay (hoặc đẩy đơn GHN)" style="rounded=1;whiteSpace=wrap;html=1;arcSize=16;fillColor=#ffffff;strokeColor=#1e293b;strokeWidth=1.5;fontSize=11;fontFamily=Helvetica;fontColor=#0f172a;" vertex="1" parent="lane_he_thong">
+          <mxGeometry x="1750" y="52" width="180" height="60" as="geometry" />
+        </mxCell>
+
+
+        <!-- ======================================================== -->
+        <!-- ĐƯỜNG KẾT NỐI (EDGES / FLOWS) -->
+        <!-- ======================================================== -->
+
+        <!-- Bắt đầu -> Chọn giày -->
+        <mxCell id="e_kh1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1e293b;strokeWidth=1.5;" edge="1" parent="lane_khach_hang" source="kh_start" target="kh_chon_giay">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Chọn giày -> Kiểm tra tồn kho (Nét đứt xuyên làn) -->
+        <mxCell id="e_cross_check_kho" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#1e293b;strokeWidth=1.5;" edge="1" parent="pool_main" source="kh_chon_giay" target="ht_check_kho">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Kiểm tra kho -> Decision kho -->
+        <mxCell id="e_ht1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1e293b;strokeWidth=1.5;" edge="1" parent="lane_he_thong" source="ht_check_kho" target="ht_dec_kho">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Decision kho -> Hết hàng -> Báo hết -->
+        <mxCell id="e_ht2" value="Hết hàng" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#ef4444;strokeWidth=1.5;labelBackgroundColor=#ffffff;fontColor=#ef4444;fontSize=10;" edge="1" parent="lane_he_thong" source="ht_dec_kho" target="ht_bao_het">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="360" y="202" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Báo hết -> Kết thúc -->
+        <mxCell id="e_ht3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1e293b;strokeWidth=1.5;" edge="1" parent="lane_he_thong" source="ht_bao_het" target="ht_end_hethang">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Decision kho -> Còn hàng -> Tính giá sau đợt giảm -->
+        <mxCell id="e_ht4" value="Còn hàng" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#16a34a;strokeWidth=1.5;labelBackgroundColor=#ffffff;fontColor=#15803d;fontSize=10;" edge="1" parent="lane_he_thong" source="ht_dec_kho" target="ht_tinh_gia">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Tính giá đợt giảm -> Thêm vào giỏ hàng (Nét đứt lên làn khách hàng) -->
+        <mxCell id="e_cross_them_gio" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#16a34a;strokeWidth=1.5;" edge="1" parent="pool_main" source="ht_tinh_gia" target="kh_them_gio">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Thêm giỏ hàng -> Cung cấp thông tin SĐT & chọn nhận hàng -->
+        <mxCell id="e_kh2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1e293b;strokeWidth=1.5;" edge="1" parent="lane_khach_hang" source="kh_them_gio" target="kh_check_tt">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Cung cấp thông tin -> Tạo đơn & Áp voucher (Nét liền xuống hệ thống) -->
+        <mxCell id="e_cross_tao_don" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1e293b;strokeWidth=1.5;" edge="1" parent="pool_main" source="kh_check_tt" target="ht_tao_don">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Tạo đơn -> Decision nhận hàng -->
+        <mxCell id="e_ht5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1e293b;strokeWidth=1.5;" edge="1" parent="lane_he_thong" source="ht_tao_don" target="ht_dec_nhan_hang">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Decision nhận hàng -> Giao tận nơi -> GHN -->
+        <mxCell id="e_ht_ghn" value="Giao tận nơi" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#ea580c;strokeWidth=1.5;labelBackgroundColor=#ffffff;fontColor=#9a3412;fontSize=10;" edge="1" parent="lane_he_thong" source="ht_dec_nhan_hang" target="ht_ghn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- GHN -> Decision thanh toán -->
+        <mxCell id="e_ht_ghn_pttt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#ea580c;strokeWidth=1.5;" edge="1" parent="lane_he_thong" source="ht_ghn" target="ht_dec_pttt">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1085" y="195" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Decision nhận hàng -> Tại quầy -> Decision thanh toán -->
+        <mxCell id="e_ht_tai_quay" value="Tại quầy" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1e293b;strokeWidth=1.5;labelBackgroundColor=#ffffff;fontColor=#0f172a;fontSize=10;" edge="1" parent="lane_he_thong" source="ht_dec_nhan_hang" target="ht_dec_pttt">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Decision thanh toán -> Tiền mặt -->
+        <mxCell id="e_ht_pttt_tm" value="Tiền mặt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#16a34a;strokeWidth=1.5;labelBackgroundColor=#ffffff;fontColor=#15803d;fontSize=10;" edge="1" parent="lane_he_thong" source="ht_dec_pttt" target="ht_tien_mat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Tiền mặt -> Xác nhận & Transaction DB -->
+        <mxCell id="e_ht_tm_xacnhan" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#16a34a;strokeWidth=1.5;" edge="1" parent="lane_he_thong" source="ht_tien_mat" target="ht_xac_nhan">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1085" y="240" />
+              <mxPoint x="1510" y="240" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Decision thanh toán -> Chuyển khoản (Nét đứt ngược lên khách hàng thanh toán) -->
+        <mxCell id="e_cross_ck_kh" value="Chuyển khoản (VietQR)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#0284c7;strokeWidth=1.5;labelBackgroundColor=#ffffff;fontColor=#0369a1;fontSize=10;" edge="1" parent="pool_main" source="ht_dec_pttt" target="kh_thanh_toan">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1119" y="240" />
+              <mxPoint x="1285" y="240" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Khách quét QR -> Kiểm tra giao dịch VietQR/VNPay (Nét đứt xuống) -->
+        <mxCell id="e_cross_qr_done" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#0284c7;strokeWidth=1.5;" edge="1" parent="pool_main" source="kh_thanh_toan" target="ht_check_vnpay">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Kiểm tra VietQR -> Decision VNPay -->
+        <mxCell id="e_ht6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1e293b;strokeWidth=1.5;" edge="1" parent="lane_he_thong" source="ht_check_vnpay" target="ht_dec_vnpay">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Decision VNPay -> Lỗi -->
+        <mxCell id="e_ht7" value="Lỗi" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#ef4444;strokeWidth=1.5;labelBackgroundColor=#ffffff;fontColor=#ef4444;fontSize=10;" edge="1" parent="lane_he_thong" source="ht_dec_vnpay" target="ht_end_vnpay">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Decision VNPay -> Hợp lệ -> Xác nhận & Transaction DB -->
+        <mxCell id="e_ht8" value="Hợp lệ" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#16a34a;strokeWidth=1.5;labelBackgroundColor=#ffffff;fontColor=#15803d;fontSize=10;" edge="1" parent="lane_he_thong" source="ht_dec_vnpay" target="ht_xac_nhan">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1398" y="82" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Xác nhận & Transaction DB -> In hóa đơn & Vận chuyển -->
+        <mxCell id="e_ht9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1e293b;strokeWidth=1.5;" edge="1" parent="lane_he_thong" source="ht_xac_nhan" target="ht_van_chuyen">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- In hóa đơn & Vận chuyển -> Khách nhận hàng (Nét đứt ngược lên khách hàng) -->
+        <mxCell id="e_cross_nhan_hang" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#16a34a;strokeWidth=1.5;" edge="1" parent="pool_main" source="ht_van_chuyen" target="kh_nhan_hang">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Khách nhận hàng -> Decision nhận hàng -->
+        <mxCell id="e_kh3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1e293b;strokeWidth=1.5;" edge="1" parent="lane_khach_hang" source="kh_nhan_hang" target="kh_dec_nhan">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Decision nhận hàng -> Có -> Hoàn thành -->
+        <mxCell id="e_kh4" value="Có" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#16a34a;strokeWidth=1.5;labelBackgroundColor=#ffffff;fontColor=#15803d;fontSize=10;" edge="1" parent="lane_khach_hang" source="kh_dec_nhan" target="kh_hoan_thanh">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Decision nhận hàng -> Không -> Đổi trả hoàn tiền -->
+        <mxCell id="e_kh5" value="Không" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#dc2626;strokeWidth=1.5;labelBackgroundColor=#ffffff;fontColor=#b91c1c;fontSize=10;" edge="1" parent="lane_khach_hang" source="kh_dec_nhan" target="kh_tra_hang">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

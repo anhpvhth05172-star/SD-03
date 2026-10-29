@@ -31,10 +31,9 @@ export const cleanupSwalResidualDom = () => {
  */
 const formatHighlight = (text) => {
   if (!text) return ''
-  return String(text).replace(
-    /["“]([^"”]+)["”]/g,
-    '<strong>"$1"</strong>'
-  )
+  return String(text)
+    .replace(/["“]([^"”]+)["”]/g, '<strong>"$1"</strong>')
+    .replace(/\n/g, '<br/>')
 }
 
 /**
