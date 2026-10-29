@@ -12,7 +12,7 @@ import { getDangMo, moCa, getTongKet, ketCa } from '@/api/giaoCa'
 import { inBienLaiDoiSoatK80 } from '@/utils/printShiftReceipt'
 
 import { getUser, dangXuat } from '@/utils/auth'
-import { datVaiTro, vaiTroHienTai } from '@/utils/session'
+import { datVaiTro, vaiTroHienTai, laAdmin } from '@/utils/session'
 
 const API_BASE = '/api/v1'
 
@@ -22,6 +22,20 @@ const router = useRouter()
 // --- QUẢN LÝ CA LÀM VIỆC (MỞ CA / ĐÓNG CA TRÊN POS) ---
 const activeShift = ref(null)
 const isLoadingShift = ref(false)
+const isCheDoXem = computed(() => !laAdmin() && !activeShift.value?.id)
+
+const kiemTraQuyenBanHang = (actionName = 'thêm sản phẩm vào giỏ hàng') => {
+  if (laAdmin()) return true
+  if (!activeShift.value?.id) {
+    notifyWarning(
+      'Chưa mở ca làm việc',
+      `Bạn đang ở Chế độ xem. Vui lòng mở ca làm việc để ${actionName} và bán hàng tại quầy!`
+    )
+    openMoCaModal()
+    return false
+  }
+  return true
+}
 
 const isMoCaModalOpen = ref(false)
 const moCaForm = reactive({
@@ -78,6 +92,7 @@ const handleMoCaSubmit = async () => {
     activeShift.value = res
     isMoCaModalOpen.value = false
     notifySuccess('Mở ca thành công', `Đã mở ca ${res.maCa}. Bắt đầu phiên bán hàng!`)
+    window.dispatchEvent(new Event('polyshoes:shift-changed'))
   } catch (err) {
     notifyError('Mở ca thất bại', err.message || 'Không thể mở ca làm việc')
   } finally {
@@ -127,6 +142,7 @@ const handleKetCaSubmit = async () => {
     isKetCaModalOpen.value = false
     activeShift.value = null
     notifySuccess('Đóng ca thành công', 'Ca làm việc đã được kết thúc và khóa sổ đối soát.')
+    window.dispatchEvent(new Event('polyshoes:shift-changed'))
 
     const wantPrint = await notifyConfirm(
       'In biên lai đối soát ca?',
@@ -455,6 +471,8 @@ const generateOrderCode = () => {
 }
 
 const createNewOrder = (silent = false) => {
+  const isSilentBool = typeof silent === 'boolean' && silent
+  if (!isSilentBool && !kiemTraQuyenBanHang('tạo hóa đơn mới')) return
   if (pendingOrders.value.length >= MAX_ORDERS) {
     notifyWarning('Đã đạt giới hạn!', `Chỉ được tạo tối đa ${MAX_ORDERS} hóa đơn chờ cùng lúc.`)
     return
@@ -596,6 +614,7 @@ const getEffectivePrice = (item) => {
 }
 
 const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
+  if (!kiemTraQuyenBanHang('thêm sản phẩm vào giỏ hàng')) return
   if (!currentOrder.value) {
     createNewOrder(true)
   }
@@ -1394,6 +1413,7 @@ const handleSelectProductFromModal = (product) => {
 }
 
 const quickAddSingleProductFromModal = (product) => {
+  if (!kiemTraQuyenBanHang('thêm sản phẩm vào giỏ')) return
   const stock = product.stock !== undefined ? product.stock : (product.soLuong || 0)
   if (stock <= 0) {
     notifyWarning('Hết hàng', 'Sản phẩm này hiện đã hết tồn kho!')
@@ -1408,6 +1428,7 @@ const closeProductPicker = () => {
 }
 
 const confirmModalSelection = () => {
+  if (!kiemTraQuyenBanHang('thêm sản phẩm vào giỏ')) return
   const products = modalSelectedIds.value
     .map(id => allProducts.value.find(p => p.id === id))
     .filter(Boolean)
@@ -3576,8 +3597,11 @@ const handleCrossTabStorageSync = (e) => {
   }
 }
 
-onMounted(() => {
-  fetchActiveShift()
+onMounted(async () => {
+  await fetchActiveShift()
+  if (!laAdmin() && !activeShift.value?.id) {
+    openMoCaModal()
+  }
   loadRecentInvoicesFromStorage()
   loadInitialData()
   loadProvinces()
@@ -3586,6 +3610,9 @@ onMounted(() => {
   window.addEventListener('focus', handleWindowFocusOrVisible)
   document.addEventListener('visibilitychange', handleWindowFocusOrVisible)
   window.addEventListener('storage', handleCrossTabStorageSync)
+  window.addEventListener('polyshoes:shift-changed', fetchActiveShift)
+  window.addEventListener('polyshoes:open-ket-ca', openKetCaModal)
+  window.addEventListener('polyshoes:open-mo-ca', openMoCaModal)
   realtimePollTimer = setInterval(() => {
     if (document.visibilityState === 'visible') {
       validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: false })
@@ -3599,6 +3626,9 @@ onUnmounted(() => {
   window.removeEventListener('focus', handleWindowFocusOrVisible)
   document.removeEventListener('visibilitychange', handleWindowFocusOrVisible)
   window.removeEventListener('storage', handleCrossTabStorageSync)
+  window.removeEventListener('polyshoes:shift-changed', fetchActiveShift)
+  window.removeEventListener('polyshoes:open-ket-ca', openKetCaModal)
+  window.removeEventListener('polyshoes:open-mo-ca', openMoCaModal)
   if (realtimePollTimer) {
     clearInterval(realtimePollTimer)
     realtimePollTimer = null
@@ -3620,6 +3650,10 @@ onUnmounted(() => {
         <div class="pos-status-indicator" v-if="activeShift">
           <span class="pulse-dot"></span>
           <span>Ca đang mở</span>
+        </div>
+        <div class="pos-status-indicator view-mode-indicator" v-else-if="!laAdmin()">
+          <span class="pulse-dot view-mode"></span>
+          <span>Chế độ xem (Chưa mở ca)</span>
         </div>
         <div class="pos-status-indicator shift-closed" v-else>
           <span class="pulse-dot closed"></span>
@@ -3667,14 +3701,19 @@ onUnmounted(() => {
     </div>
 
     <!-- Cảnh báo khi quầy chưa mở ca làm việc -->
-    <div v-if="!activeShift && !isLoadingShift" class="pos-no-shift-alert-banner">
+    <div v-if="!activeShift && !isLoadingShift" class="pos-no-shift-alert-banner" :class="{ 'is-view-mode': !laAdmin() }">
       <div class="alert-banner-left">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"></circle>
           <line x1="12" y1="8" x2="12" y2="12"></line>
           <line x1="12" y1="16" x2="12.01" y2="16"></line>
         </svg>
-        <span><strong>Quầy hiện chưa mở ca làm việc.</strong> Vui lòng bấm <strong>Mở ca</strong> để khai báo tiền két và ghi nhận doanh thu phiên bán hàng!</span>
+        <span v-if="!laAdmin()">
+          <strong>Chế độ xem (Chưa mở ca):</strong> Bạn chỉ có thể tra cứu thông tin sản phẩm. Vui lòng bấm <strong>Mở ca ngay</strong> để có thể thêm sản phẩm vào giỏ hàng và bán hàng tại quầy!
+        </span>
+        <span v-else>
+          <strong>Quầy hiện chưa mở ca làm việc.</strong> Vui lòng bấm <strong>Mở ca</strong> để khai báo tiền két và ghi nhận doanh thu phiên bán hàng!
+        </span>
       </div>
       <button type="button" class="btn-banner-open-shift" @click="openMoCaModal">
         <span>+ Mở ca ngay</span>

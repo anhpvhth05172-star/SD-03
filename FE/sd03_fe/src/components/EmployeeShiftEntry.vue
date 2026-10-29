@@ -89,7 +89,7 @@ watch(() => route.fullPath, taiCa)
       <span v-else-if="caHienTai">
         Đang trong ca {{ caHienTai.tenCaLich || caHienTai.maCa }}<template v-if="caHienTai.tenCaLich"> · Mã {{ caHienTai.maCa }}</template> · Mở lúc {{ formatDateTime(caHienTai.thoiGianMo) }}
       </span>
-      <span v-else>Chưa mở ca làm việc</span>
+      <span v-else>Chế độ xem · Chưa mở ca làm việc</span>
     </div>
     <button v-if="!dangTai && !caHienTai" type="button" class="shift-entry-button" @click="batDauMoCa">
       Mở ca

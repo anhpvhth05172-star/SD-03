@@ -35,7 +35,11 @@ const submit = async () => {
     datNguoiDung(resp.tenTaiKhoan)
     const laTaiKhoanNhanVien = resp.loaiTaiKhoan === 'NHAN_VIEN' || resp.idNhanVien != null
     if (laTaiKhoanNhanVien) {
-      router.push('/hoa-don')
+      if (String(resp.vaiTro || '').toUpperCase() === 'ADMIN') {
+        router.push('/thong-ke')
+      } else {
+        router.push('/ban-hang')
+      }
     } else {
       // Gắn cuộc trò chuyện ẩn danh (nếu có) vào tài khoản để không mất hội thoại cũ
       lienKetSauDangNhap(getMaAnDanh()).catch(() => {})

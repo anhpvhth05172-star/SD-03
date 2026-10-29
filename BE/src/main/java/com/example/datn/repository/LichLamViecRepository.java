@@ -9,6 +9,19 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface LichLamViecRepository extends JpaRepository<LichLamViec, Long> {
+    @Query("""
+        SELECT l FROM LichLamViec l
+        JOIN FETCH l.caLam c
+        WHERE l.nhanVien.id = :idNhanVien
+          AND l.ngayLam = :ngayLam
+          AND c.dangBat = true
+        ORDER BY c.batDau ASC
+        """)
+    List<LichLamViec> findCaDangBatDuocXep(
+        @Param("idNhanVien") Long idNhanVien,
+        @Param("ngayLam") LocalDate ngayLam
+    );
+
 
     boolean existsByNhanVienIdAndNgayLamAndCaLamId(
         @Param("idNhanVien") Long idNhanVien,

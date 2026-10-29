@@ -36,8 +36,8 @@ public class CaLamViec {
     private NhanVien nhanVien;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_ca_danh_muc")
-    private DanhMucCaLamViec caTheoLich;
+    @JoinColumn(name = "id_ca_lam")
+    private CaLam caTheoLich;
 
     @Column(name = "ten_quy", length = 50)
     private String tenQuy = "Quầy tổng";

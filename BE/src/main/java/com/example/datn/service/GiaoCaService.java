@@ -67,8 +67,8 @@ public class GiaoCaService {
         LocalDateTime thoiGianMo = LocalDateTime.now();
         List<com.example.datn.entity.LichLamViec> lichDuocXep = lichLamViecRepository
             .findCaDangBatDuocXep(idNhanVien, thoiGianMo.toLocalDate()).stream()
-            .filter(lich -> !thoiGianMo.toLocalTime().isBefore(lich.getCaLamViec().getBatDau().toLocalTime())
-                && thoiGianMo.toLocalTime().isBefore(lich.getCaLamViec().getKetThuc().toLocalTime()))
+            .filter(lich -> !thoiGianMo.toLocalTime().isBefore(lich.getCaLam().getBatDau())
+                && thoiGianMo.toLocalTime().isBefore(lich.getCaLam().getKetThuc()))
             .toList();
         if (lichDuocXep.isEmpty()) {
             throw bad("CA_CHUA_DUOC_XEP_LICH", "Bạn chưa được xếp ca đang diễn ra hôm nay");
@@ -79,7 +79,7 @@ public class GiaoCaService {
 
         CaLamViec ca = new CaLamViec();
         ca.setNhanVien(nhanVien);
-        ca.setCaTheoLich(lichDuocXep.get(0).getCaLamViec());
+        ca.setCaTheoLich(lichDuocXep.get(0).getCaLam());
         ca.setTenQuy("Quầy tổng");
         ca.setThoiGianMo(thoiGianMo);
         ca.setTienDauCa(BigDecimal.valueOf(tienDauCa));
@@ -277,7 +277,7 @@ public class GiaoCaService {
         return TongKetDto.builder()
             .id(ca.getId())
             .maCa(ca.getMaCa())
-            .tenCaLich(ca.getCaTheoLich() != null ? ca.getCaTheoLich().getTen() : null)
+            .tenCaLich(ca.getCaTheoLich() != null ? ca.getCaTheoLich().getTenCa() : null)
             .idNhanVien(nv.getId())
             .tenNhanVien(nv.getTenTaiKhoan())
             .tenQuy(ca.getTenQuy())
@@ -325,7 +325,7 @@ public class GiaoCaService {
             .id(ca.getId())
             .maCa(ca.getMaCa())
             .idCaLich(ca.getCaTheoLich() != null ? ca.getCaTheoLich().getId() : null)
-            .tenCaLich(ca.getCaTheoLich() != null ? ca.getCaTheoLich().getTen() : null)
+            .tenCaLich(ca.getCaTheoLich() != null ? ca.getCaTheoLich().getTenCa() : null)
             .idNhanVien(nv.getId())
             .maNhanVien(nv.getMaNhanVien())
             .tenNhanVien(nv.getTenTaiKhoan())

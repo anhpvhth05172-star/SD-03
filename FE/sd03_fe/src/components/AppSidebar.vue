@@ -39,6 +39,7 @@ const menu = [
     label: 'Danh mục thuộc tính',
     path: '/admin/thuoc-tinh',
     iconType: 'attributes',
+    adminOnly: true,
     children: [
       { label: 'Thương hiệu', path: '/admin/thuoc-tinh/thuong-hieu' },
       { label: 'Xuất xứ', path: '/admin/thuoc-tinh/xuat-xu' },
@@ -69,6 +70,7 @@ const menu = [
     adminOnly: true,
     children: [
       { label: 'Lịch làm việc', path: '/lich-lam-viec' },
+      { label: 'Lịch ca làm', path: '/lich-ca-lam' },
       { label: 'Lịch sử hoạt động', path: '/lich-su-hoat-dong' },
     ],
   },
@@ -76,6 +78,7 @@ const menu = [
     label: 'Quản lý giảm giá',
     path: '/admin/phieu-giam-gia',
     iconType: 'discounts',
+    adminOnly: true,
     children: [
       { label: 'Phiếu giảm giá', path: '/admin/phieu-giam-gia' },
       { label: 'Đợt giảm giá', path: '/admin/dot-giam-gia' },
