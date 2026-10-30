@@ -70,7 +70,6 @@ const menu = [
     adminOnly: true,
     children: [
       { label: 'Lịch làm việc', path: '/lich-lam-viec' },
-      { label: 'Lịch ca làm', path: '/lich-ca-lam' },
       { label: 'Lịch sử hoạt động', path: '/lich-su-hoat-dong' },
     ],
   },
