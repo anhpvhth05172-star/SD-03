@@ -1,7 +1,4 @@
-/**
- * Helpers thuần cho màn Quản lý lịch làm việc & Lịch ca làm.
- * Dữ liệu ca/lịch lấy từ API (src/api/schedule.js) — không còn store mock.
- */
+
 import { exportExcel } from '@/utils/export'
 
 const pad2 = (x) => String(x).padStart(2, '0')
@@ -33,7 +30,6 @@ export const slugMaCa = (ten) =>
     .replace(/^ca\s*/, '')
     .replace(/[^a-z0-9]/g, '')
 
-/* ---------------------------------- Nhập / xuất Excel ---------------------------------- */
 export const xuatMauLichLamViec = async () => {
   const d = new Date()
   const ngay = `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}${d.getFullYear()}`
@@ -61,10 +57,6 @@ const tachCot = (dong) => {
   return dong.split(',').map((c) => c.trim().replace(/^"|"$/g, ''))
 }
 
-/**
- * Phân tích + kiểm tra dữ liệu nhập lịch làm việc từ các DÒNG ĐÃ TÁCH CỘT.
- * Trả về { tongDong, hopLe, loi: [{ dong, lyDo }], rows: [...] }
- */
 export const phanTichDongLich = (dongGoc, danhSachNhanVien, danhSachCa) => {
   const cacDong = (dongGoc || []).filter((d) =>
     Array.isArray(d)
@@ -134,6 +126,5 @@ export const phanTichDongLich = (dongGoc, danhSachNhanVien, danhSachCa) => {
   return ketQua
 }
 
-/** Nhận tệp CSV (chuỗi) → tách dòng/cột rồi phân tích. */
 export const phanTichCsvLich = (text, danhSachNhanVien, danhSachCa) =>
   phanTichDongLich(docFileDong(text).map(tachCot), danhSachNhanVien, danhSachCa)

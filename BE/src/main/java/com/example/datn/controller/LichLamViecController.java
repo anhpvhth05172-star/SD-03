@@ -67,7 +67,7 @@ public class LichLamViecController {
 
     @PostMapping("/xep-tu-dong")
     public ResponseEntity<XepTuDongResponse> xepTuDong(@RequestBody XepTuDongRequest req) {
-        return ResponseEntity.ok(service.xepTuDong(req.ngay()));
+        return ResponseEntity.ok(service.xepTuDong(req));
     }
 
     @PostMapping("/import")

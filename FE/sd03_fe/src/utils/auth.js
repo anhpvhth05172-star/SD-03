@@ -1,6 +1,7 @@
 const TOKEN_KEY = 'polyshoes_token'
 const REFRESH_KEY = 'polyshoes_refresh'
 const USER_KEY = 'polyshoes_user'
+const LOGIN_KIND_KEY = 'polyshoes_last_login_kind'
 const MA_AN_DANH_KEY = 'polyshoes_ma_an_danh'
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY)
@@ -34,7 +35,13 @@ export const luuPhien = (resp) => {
       vaiTro: resp.vaiTro,
     }),
   )
+  if (resp.loaiTaiKhoan) {
+    localStorage.setItem(LOGIN_KIND_KEY, resp.loaiTaiKhoan === 'NHAN_VIEN' ? 'nhan-vien' : 'khach')
+  }
 }
+
+export const getLastLoginPath = () =>
+  localStorage.getItem(LOGIN_KIND_KEY) === 'nhan-vien' ? '/login-nhan-vien' : '/login'
 
 export const dangXuat = () => {
   localStorage.removeItem(TOKEN_KEY)

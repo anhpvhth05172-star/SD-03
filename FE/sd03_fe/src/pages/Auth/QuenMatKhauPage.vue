@@ -1,11 +1,12 @@
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { datLaiMatKhau, guiMaQuenMatKhau } from '@/api/auth'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { datLaiMatKhau, datLaiMatKhauNhanVien, guiMaQuenMatKhau, guiMaQuenMatKhauNhanVien } from '@/api/auth'
 import { kiemTra, matKhauHopLe } from '@/utils/validate'
 import { notifySuccess, notifyError } from '@/utils/notify'
 
 const router = useRouter()
+const route = useRoute()
 
 const buoc = ref(1) // 1: nhập email, 2: nhập mã + mật khẩu mới
 const email = ref('')
@@ -15,6 +16,7 @@ const xacNhan = ref('')
 const error = ref('')
 const loading = ref(false)
 const thongBao = ref('')
+const laNhanVien = computed(() => route.query.cheDo === 'nhan-vien')
 
 const guiMa = async () => {
   error.value = ''
@@ -24,7 +26,7 @@ const guiMa = async () => {
   }
   loading.value = true
   try {
-    const resp = await guiMaQuenMatKhau(email.value.trim())
+    const resp = await (laNhanVien.value ? guiMaQuenMatKhauNhanVien : guiMaQuenMatKhau)(email.value.trim())
     thongBao.value = resp?.message || 'Đã gửi mã xác nhận đến email của bạn'
     buoc.value = 2
   } catch (e) {
@@ -38,7 +40,7 @@ const guiLaiMa = async () => {
   error.value = ''
   loading.value = true
   try {
-    const resp = await guiMaQuenMatKhau(email.value.trim())
+    const resp = await (laNhanVien.value ? guiMaQuenMatKhauNhanVien : guiMaQuenMatKhau)(email.value.trim())
     thongBao.value = resp?.message || 'Đã gửi lại mã xác nhận'
     notifySuccess('Đã gửi lại mã', 'Kiểm tra hộp thư email của bạn')
   } catch (e) {
@@ -63,14 +65,15 @@ const datLai = async () => {
   }
   loading.value = true
   try {
-    const resp = await datLaiMatKhau({
+    const payload = {
       email: email.value.trim(),
       maOTP: maOTP.value.trim(),
       matKhauMoi: matKhauMoi.value,
       xacNhan: xacNhan.value,
-    })
+    }
+    const resp = await (laNhanVien.value ? datLaiMatKhauNhanVien : datLaiMatKhau)(payload)
     notifySuccess('Đặt lại mật khẩu thành công', resp?.message || '')
-    router.push('/dang-nhap')
+    router.push(route.query.cheDo === 'nhan-vien' ? '/login-nhan-vien' : '/login')
   } catch (e) {
     error.value = e.message || 'Đặt lại mật khẩu thất bại'
   } finally {
@@ -149,7 +152,7 @@ const datLai = async () => {
       </form>
 
       <p class="auth-switch">
-        <router-link to="/dang-nhap">Quay lại đăng nhập</router-link>
+        <router-link :to="route.query.cheDo === 'nhan-vien' ? '/login-nhan-vien' : '/login'">Quay lại đăng nhập</router-link>
       </p>
     </div>
   </div>

@@ -9,6 +9,19 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface LichLamViecRepository extends JpaRepository<LichLamViec, Long> {
+    @Query("""
+        SELECT l FROM LichLamViec l
+        JOIN FETCH l.caLam c
+        WHERE l.nhanVien.id = :idNhanVien
+          AND l.ngayLam = :ngayLam
+          AND c.dangBat = true
+        ORDER BY c.batDau ASC
+        """)
+    List<LichLamViec> findCaDangBatDuocXep(
+        @Param("idNhanVien") Long idNhanVien,
+        @Param("ngayLam") LocalDate ngayLam
+    );
+
 
     boolean existsByNhanVienIdAndNgayLamAndCaLamId(
         @Param("idNhanVien") Long idNhanVien,
@@ -47,4 +60,27 @@ public interface LichLamViecRepository extends JpaRepository<LichLamViec, Long> 
     @Modifying
     @Query("DELETE FROM LichLamViec l WHERE l.ngayLam = :ngay")
     void deleteByNgayLam(@Param("ngay") LocalDate ngay);
+
+    @Query("""
+        SELECT l FROM LichLamViec l
+        JOIN FETCH l.nhanVien n
+        JOIN FETCH l.caLam c
+        WHERE l.ngayLam >= :tu AND l.ngayLam <= :den
+        """)
+    List<LichLamViec> findByNgayLamBetween(
+        @Param("tu") LocalDate tu,
+        @Param("den") LocalDate den
+    );
+
+    @Modifying
+    @Query("DELETE FROM LichLamViec l WHERE l.ngayLam >= :tu AND l.ngayLam <= :den")
+    void deleteByNgayLamBetween(@Param("tu") LocalDate tu, @Param("den") LocalDate den);
+
+    @Modifying
+    @Query("DELETE FROM LichLamViec l WHERE l.ngayLam >= :tu AND l.ngayLam <= :den AND l.caLam.id IN :caIds")
+    void deleteByNgayLamBetweenAndCaLamIdIn(
+        @Param("tu") LocalDate tu,
+        @Param("den") LocalDate den,
+        @Param("caIds") List<Long> caIds
+    );
 }

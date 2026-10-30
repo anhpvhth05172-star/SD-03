@@ -35,60 +35,40 @@ public class SecurityConfig {
         this.thoiGianPhienGhiNhoMs = thoiGianPhienGhiNhoMs;
     }
 
-    /**
-     * Dang public permitAll (ma tran quyen van comment duoi day).
-     * JwtAuthFilter duoc bat lai de xac dinh danh tinh cho chat nhan-vien:
-     * filter dung cua so lon nhat (ghi nho); /api/auth/refresh van chot han dung.
-     */
+    /** JWT xác thực danh tính; quyền truy cập được giới hạn theo nhóm endpoint và vai trò. */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .cors(org.springframework.security.config.Customizer.withDefaults())
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            // Ma tran quyen truoc do (da comment khi tat JWT):
-            // .authorizeHttpRequests(auth -> auth
-            //     .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-            //     .requestMatchers(
-            //         HttpMethod.POST,
-            //         "/api/auth/dang-ky",
-            //         "/api/auth/dang-nhap",
-            //         "/api/auth/nhan-vien/dang-nhap",
-            //         "/api/auth/refresh",
-            //         "/api/auth/dang-xuat"
-            //     )
-            //         .permitAll()
-            //     .requestMatchers("/api/test").permitAll()
-            //     .requestMatchers("/api/chat/khach/**", "/api/chat/ai/**").permitAll()
-            //     .requestMatchers("/api/auth/thong-tin", "/api/phieu-giam-gia/cua-toi").authenticated()
-            //     .requestMatchers(
-            //         "/api/hoa-don/**",
-            //         "/api/v1/san-pham/**",
-            //         "/api/v1/san-pham-chi-tiet/**",
-            //         "/api/v1/thuong-hieu/**",
-            //         "/api/v1/xuat-xu/**",
-            //         "/api/v1/chat-lieu/**",
-            //         "/api/v1/kieu-dang/**",
-            //         "/api/v1/loai-giay/**",
-            //         "/api/v1/kich-co/**",
-            //         "/api/v1/mau-sac/**",
-            //         "/api/v1/than-giay/**",
-            //         "/api/v1/de-giay/**",
-            //         "/api/v1/attributes/**",
-            //         "/api/phieu-giam-gia/**",
-            //         "/api/dot-giam-gia/**",
-            //         "/admin/phieu-giam-gia/**",
-            //         "/admin/dot-giam-gia/**",
-            //         "/api/voucher-email/**",
-            //         "/api/shipping/**",
-            //         "/api/khach-hang/**",
-            //         "/api/chat/nhan-vien/**"
-            //     )
-            //         .hasRole("NHAN_VIEN")
-            //     .requestMatchers("/api/nhan-vien/**").hasRole("ADMIN")
-            //     .anyRequest().authenticated()
-            // )
-            .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers(
+                    HttpMethod.POST,
+                    "/api/auth/dang-ky", "/api/auth/dang-nhap",
+                    "/api/auth/nhan-vien/dang-nhap", "/api/auth/refresh", "/api/auth/dang-xuat",
+                    "/api/auth/quen-mat-khau/**", "/api/auth/nhan-vien/gui-ma-quen-mat-khau",
+                    "/api/auth/nhan-vien/dat-lai-mat-khau"
+                ).permitAll()
+                .requestMatchers("/api/test", "/api/chat/khach/**", "/api/chat/ai/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/**", "/api/phieu-giam-gia").permitAll()
+                .requestMatchers("/api/shipping/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/hoa-don").permitAll()
+                .requestMatchers("/api/auth/thong-tin").authenticated()
+                .requestMatchers("/api/phieu-giam-gia/cua-toi", "/api/gio-hang/**").hasRole("KHACH_HANG")
+                .requestMatchers(HttpMethod.GET, "/api/ca-lam/**").hasAnyRole("NHAN_VIEN", "ADMIN")
+                .requestMatchers("/api/nhan-vien/**", "/admin/**", "/api/lich-lam-viec/**",
+                    "/api/ca-lam/**", "/api/ca-lam-viec-dinh-nghia/**").hasRole("ADMIN")
+                .requestMatchers("/api/thong-ke/**").hasRole("ADMIN")
+                .requestMatchers("/api/ca/lich-su", "/api/ca/*/doi-soat").hasRole("ADMIN")
+                .requestMatchers("/api/hoa-don/**",
+                    "/api/khach-hang/**", "/api/khach-hang/{idKhachHang}/dia-chi/**",
+                    "/api/chat/nhan-vien/**", "/api/voucher-email/**").hasAnyRole("NHAN_VIEN", "ADMIN")
+                .requestMatchers("/api/ca/**").hasAnyRole("NHAN_VIEN", "ADMIN")
+                .requestMatchers("/api/**").hasAnyRole("NHAN_VIEN", "ADMIN")
+                .anyRequest().authenticated()
+            )
             .exceptionHandling(eh -> eh
                 .authenticationEntryPoint((request, response, ex) -> chuaDangNhap(response))
                 .accessDeniedHandler((request, response, ex) -> thieuQuyen(response))

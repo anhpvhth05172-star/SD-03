@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dangNhap, dangNhapNhanVien } from '@/api/auth'
 import { lienKetSauDangNhap } from '@/api/chat'
@@ -9,7 +9,7 @@ import { datVaiTro, datNguoiDung } from '@/utils/session'
 const router = useRouter()
 const route = useRoute()
 
-const cheDo = ref(route.query.cheDo === 'khach' ? 'khach' : 'nhan-vien') // 'nhan-vien' | 'khach'
+const cheDo = computed(() => route.meta.loginMode || 'nhan-vien')
 const form = ref({ taiKhoan: '', matKhau: '', ghiNhoDangNhap: false })
 const error = ref('')
 const loading = ref(false)
@@ -35,11 +35,15 @@ const submit = async () => {
     datNguoiDung(resp.tenTaiKhoan)
     const laTaiKhoanNhanVien = resp.loaiTaiKhoan === 'NHAN_VIEN' || resp.idNhanVien != null
     if (laTaiKhoanNhanVien) {
-      router.push('/hoa-don')
+      if (String(resp.vaiTro || '').toUpperCase() === 'ADMIN') {
+        router.push('/thong-ke')
+      } else {
+        router.push('/ban-hang')
+      }
     } else {
       // Gắn cuộc trò chuyện ẩn danh (nếu có) vào tài khoản để không mất hội thoại cũ
       lienKetSauDangNhap(getMaAnDanh()).catch(() => {})
-      router.push('/tai-khoan')
+      router.push('/trang-chu')
     }
   } catch (e) {
     error.value = e.message || 'Đăng nhập thất bại'
@@ -55,7 +59,7 @@ const submit = async () => {
       <div class="auth-brand">
         <img src="/images/logo_polyshoes_final.png" alt="PolyShoes" />
       </div>
-      <h1 class="auth-title">HỆ THỐNG QUẢN LÝ BÁN HÀNG</h1>
+      <h1 class="auth-title">{{ cheDo === 'khach' ? 'ĐĂNG NHẬP KHÁCH HÀNG' : 'ĐĂNG NHẬP NHÂN VIÊN' }}</h1>
 
       <form class="auth-form" @submit.prevent="submit">
         <div class="field">
@@ -70,7 +74,7 @@ const submit = async () => {
         <div class="field">
           <div class="field-heading">
             <label for="login-password">Mật khẩu</label>
-            <router-link to="/quen-mat-khau" class="auth-forgot">
+            <router-link :to="{ path: '/quen-mat-khau', query: { cheDo } }" class="auth-forgot">
               Quên mật khẩu?
             </router-link>
           </div>
@@ -88,13 +92,19 @@ const submit = async () => {
         <p v-if="error" class="auth-error">{{ error }}</p>
 
         <button class="auth-btn" type="submit" :disabled="loading">
-          {{ loading ? 'Đang đăng nhập...' : 'Đăng nhập vào hệ thống' }}
+      {{ loading ? 'Đang đăng nhập...' : cheDo === 'khach' ? 'Đăng nhập khách hàng' : 'Đăng nhập nhân viên' }}
         </button>
       </form>
 
       <p class="auth-footer">© 2026 FF T-Shirt Fashion Store. Hệ thống quản lý bán hàng.</p>
       <p v-if="cheDo === 'khach'" class="auth-customer-links">
         Chưa có tài khoản? <router-link to="/dang-ky">Đăng ký</router-link>
+      </p>
+      <p class="auth-customer-links">
+        {{ cheDo === 'khach' ? 'Bạn là nhân viên?' : 'Bạn là khách hàng?' }}
+        <router-link :to="cheDo === 'khach' ? '/login-nhan-vien' : '/login'">
+          {{ cheDo === 'khach' ? 'Đăng nhập nhân viên' : 'Đăng nhập khách hàng' }}
+        </router-link>
       </p>
     </div>
   </div>
@@ -107,18 +117,18 @@ const submit = async () => {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  background: #faf9f5;
+  background: #f5f5f5;
   padding: 20px;
 }
 .auth-card {
   width: 100%;
   max-width: 440px;
   box-sizing: border-box;
-  background: #fffefa;
-  border: 1px solid #eee9df;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
   border-radius: 16px;
   padding: 34px 40px 30px;
-  box-shadow: 0 8px 28px rgba(66, 54, 35, 0.1);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
 }
 .auth-brand {
   text-align: center;
@@ -136,7 +146,7 @@ const submit = async () => {
   line-height: 1.4;
   font-weight: 800;
   letter-spacing: 0.5px;
-  color: #293c49;
+  color: #141416;
 }
 .field {
   margin-bottom: 18px;
@@ -145,7 +155,7 @@ const submit = async () => {
   display: block;
   font-size: 14px;
   font-weight: 700;
-  color: #4c5b62;
+  color: #333333;
   margin-bottom: 6px;
 }
 .field-heading {
@@ -160,14 +170,14 @@ const submit = async () => {
   height: 46px;
   box-sizing: border-box;
   padding: 0 14px;
-  border: 1px solid #e5e4df;
+  border: 1px solid #d9d9d9;
   border-radius: 8px;
   background: #fff;
-  color: #87939a;
+  color: #666666;
 }
 .input-wrap:focus-within {
-  border-color: #66849a;
-  box-shadow: 0 0 0 3px rgba(71, 104, 126, 0.12);
+  border-color: #cc0000;
+  box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
 }
 .input-wrap > i { font-size: 17px; }
 .input-wrap input {
@@ -178,19 +188,19 @@ const submit = async () => {
   border: 0;
   outline: 0;
   background: transparent;
-  color: #334155;
+  color: #24242a;
   font: inherit;
   font-size: 15px;
   box-sizing: border-box;
 }
-.input-wrap input::placeholder { color: #9aa3a8; }
+.input-wrap input::placeholder { color: #888888; }
 .password-toggle {
   display: grid;
   place-items: center;
   border: 0;
   padding: 4px;
   background: transparent;
-  color: #8a969c;
+  color: #666666;
   cursor: pointer;
 }
 .password-toggle i { font-size: 17px; }
@@ -198,7 +208,7 @@ const submit = async () => {
   margin: 0 0 6px;
   font-size: 13px;
   font-weight: 600;
-  color: #58768a;
+  color: #cc0000;
   text-decoration: none;
 }
 .auth-forgot:hover { text-decoration: underline; }
@@ -214,14 +224,14 @@ const submit = async () => {
   padding: 12px 16px;
   border: none;
   border-radius: 8px;
-  background: #45677f;
+  background: #cc0000;
   color: #fff;
   font-weight: 700;
   font-size: 16px;
   cursor: pointer;
-  box-shadow: 0 3px 8px rgba(46, 71, 88, 0.2);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
 }
-.auth-btn:hover:not(:disabled) { background: #38586f; }
+.auth-btn:hover:not(:disabled) { background: #a30000; }
 .auth-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -229,7 +239,7 @@ const submit = async () => {
 .auth-footer {
   text-align: center;
   font-size: 12px;
-  color: #92989a;
+  color: #777777;
   line-height: 1.5;
   margin: 20px 0 0;
 }
@@ -239,6 +249,6 @@ const submit = async () => {
   color: #64748b;
   margin: 16px 0 0;
 }
-.auth-customer-links a { color: #45677f; font-weight: 700; }
+.auth-customer-links a { color: #cc0000; font-weight: 700; }
 @media (max-width: 480px) { .auth-card { max-width: 100%; padding: 24px 20px 20px; } }
 </style>

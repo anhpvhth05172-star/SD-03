@@ -51,7 +51,7 @@ const submit = async () => {
       matKhau: f.matKhau,
       xacNhanMatKhau: f.xacNhanMatKhau,
     })
-    router.push('/dang-nhap')
+    router.push('/login')
   } catch (e) {
     error.value = e.message || 'Đăng ký thất bại'
   } finally {
@@ -100,7 +100,7 @@ const submit = async () => {
 
       <p class="auth-switch">
         Đã có tài khoản?
-        <router-link to="/dang-nhap">Đăng nhập</router-link>
+        <router-link to="/login">Đăng nhập</router-link>
       </p>
     </div>
   </div>

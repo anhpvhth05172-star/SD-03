@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { getUser } from '@/utils/auth'
 import { laAdmin } from '@/utils/session'
 import { formatVnd, formatDateTime } from '@/utils/format'
-import { getDangMo, getLichSu, moCa } from '@/api/giaoCa'
+import { getDangMo, getLichSu, moCa, getDanhSachCaLam } from '@/api/giaoCa'
 import PaginationBar from '@/components/PaginationBar.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { notifyError, notifySuccess } from '@/utils/notify'
@@ -112,11 +112,16 @@ const batDauCa = async () => {
   }
   moCaLoading.value = true
   try {
-    caHienTai.value = await moCa({ tienDauCa, ghiChu: moCaForm.ghiChu.trim() || null })
+    caHienTai.value = await moCa({ idCaLich: moCaForm.idCaLich, tienDauCa, ghiChu: moCaForm.ghiChu.trim() || null })
     notifySuccess('Mở ca thành công', `Ca ${caHienTai.value.maCa} đã được mở`)
     await loadData(0)
   } catch (err) {
-    moCaError.value = err.message || 'Không thể mở ca làm việc'
+    const message = err.message || ''
+    moCaError.value = message.includes('CA_CHUA_DUOC_XEP_LICH')
+      ? 'Bạn chưa được phân công ca đang diễn ra hôm nay. Nhờ Admin xếp lịch trước khi vào ca.'
+      : message.includes('CA_XEP_LICH_TRUNG')
+        ? 'Lịch của bạn có ca bị trùng giờ. Nhờ Admin điều chỉnh lịch trước khi vào ca.'
+        : message || 'Không thể mở ca làm việc'
   } finally {
     moCaLoading.value = false
   }
@@ -198,7 +203,7 @@ watch(() => route.fullPath, () => {
     </div>
 
     <div v-if="caHienTai" class="open-shift-info">
-      <span>Ca {{ caHienTai.maCa }} đang mở từ {{ formatDateTime(caHienTai.thoiGianMo) }}.</span>
+      <span>Ca {{ caHienTai.maCa }} · {{ caHienTai.tenCaLich || 'Ca chưa gắn lịch' }} đang mở từ {{ formatDateTime(caHienTai.thoiGianMo) }}.</span>
       <button type="button" class="btn-shift-action" @click="router.push('/ban-hang')">Đi tới bán hàng</button>
     </div>
     <form v-else class="open-shift-form" @submit.prevent="batDauCa">
@@ -314,12 +319,13 @@ watch(() => route.fullPath, () => {
 
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Mã ca</th><th>Người giao</th><th>Quầy</th><th>Thời gian mở</th><th>Thời gian đóng</th><th style="text-align:right">Tiền cuối ca</th><th style="text-align:right">Chênh lệch</th><th>Trạng thái</th><th style="text-align:center">Biên bản</th></tr></thead>
+        <thead><tr><th>Mã giao ca</th><th>Ca được xếp</th><th>Người giao</th><th>Quầy</th><th>Thời gian mở</th><th>Thời gian đóng</th><th style="text-align:right">Tiền cuối ca</th><th style="text-align:right">Chênh lệch</th><th>Trạng thái</th><th style="text-align:center">Biên bản</th></tr></thead>
         <tbody>
-          <tr v-if="loading"><td colspan="9" class="text-center py-4">Đang tải dữ liệu...</td></tr>
-          <tr v-else-if="list.length === 0"><td colspan="9" class="text-center py-4">Chưa có ca làm việc nào</td></tr>
+          <tr v-if="loading"><td colspan="10" class="text-center py-4">Đang tải dữ liệu...</td></tr>
+          <tr v-else-if="list.length === 0"><td colspan="10" class="text-center py-4">Chưa có ca làm việc nào</td></tr>
           <tr v-for="(row, idx) in list" v-else :key="row.id || idx">
             <td class="cell-code">{{ row.maCa }}</td>
+            <td>{{ row.tenCaLich || '—' }}</td>
             <td>{{ row.tenNhanVien || row.maNhanVien || '—' }}</td>
             <td>{{ row.tenQuay || row.maQuay || row.tenQuy || '—' }}</td>
             <td>{{ formatDateTime(row.thoiGianMo) }}</td>
@@ -333,18 +339,20 @@ watch(() => route.fullPath, () => {
       </table>
     </div>
 
+    <div v-if="totalPages > 1" class="table-card-foot">
     <PaginationBar
-      v-if="totalElements > 0"
       :page="page"
       :total-pages="totalPages"
       :total-elements="totalElements"
       :page-size="pageSize"
+      :sizes="[5, 10, 20, 50]"
       :from="list.length ? page * pageSize + 1 : 0"
       :to="page * pageSize + list.length"
       label="ca"
       @change="goPage"
       @size-change="onSizeChange"
     />
+    </div>
   </section>
 </div>
 </template>

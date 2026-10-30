@@ -7,7 +7,7 @@ import { layDiaGioi, layPhuongXa, phanTichDiaChiCccd, timTinh } from '@/api/diaG
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { setFlash } from '@/utils/flash'
 import { hopLeMa, maDeXuat } from '@/utils/maNhanVien'
-import { datVaiTro, layNguoiDung, vaiTroHienTai } from '@/utils/session'
+import { layNguoiDung } from '@/utils/session'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import {
   duTuoiToiThieu,
@@ -37,11 +37,6 @@ const gioiTinhOptions = [
 const trangThais = [
   { value: 'true', label: 'Đang hoạt động' },
   { value: 'false', label: 'Đã khóa' },
-]
-
-const vaiTroOptions = [
-  { value: 'ADMIN', label: 'Admin' },
-  { value: 'STAFF', label: 'Nhân viên' },
 ]
 
 const tinhThanhs = ref([])
@@ -151,10 +146,6 @@ const loiMaKhachHang = computed(() =>
 const loiTinhThanhPho = computed(() => toiDa(form.value.tinhThanhPho, 100, 'Tỉnh/Thành phố'))
 const loiPhuong = computed(() => toiDa(form.value.phuong, 100, 'Phường/Xã'))
 const loiDiaChiCuThe = computed(() => toiDa(form.value.diaChiCuThe, 255, 'Địa chỉ cụ thể'))
-
-const chonVaiTro = (v) => {
-  if (v) datVaiTro(v)
-}
 
 const validate = () =>
   kiemTra([
@@ -515,20 +506,6 @@ onMounted(async () => {
 <template>
   <div class="create-wrap">
     <h2 class="create-title">{{ isEdit ? 'Cập nhật Tài Khoản Khách Hàng' : 'Tạo Tài Khoản Khách Hàng' }}</h2>
-
-    <div class="role-bar">
-      <span>Đang thao tác với vai trò: <b>{{ vaiTroHienTai === 'ADMIN' ? 'Admin' : 'Nhân viên' }}</b></span>
-      <SearchableSelect
-        :model-value="vaiTroHienTai"
-        :options="vaiTroOptions"
-        label-key="label"
-        value-key="value"
-        placeholder="Chọn vai trò"
-        search-placeholder="Tìm..."
-        :allow-clear="false"
-        @change="chonVaiTro"
-      />
-    </div>
 
     <p v-if="errorMsg" class="form-error">{{ errorMsg }}</p>
     <p v-if="loading" class="form-error">Đang tải dữ liệu...</p>

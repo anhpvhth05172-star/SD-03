@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getToken, getRefreshToken, isTokenExpired, luuPhien, dangXuat } from '../utils/auth'
+import { getToken, getRefreshToken, isTokenExpired, luuPhien, dangXuat, getLastLoginPath } from '../utils/auth'
 
 export const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
@@ -15,6 +15,11 @@ export const API_ORIGIN = new URL(
 
 /** URL có trỏ tới API không (tương đối /api/... hoặc tuyệt đối cùng origin). */
 export const laUrlAPI = (url) => url.startsWith(API_BASE) || url.startsWith(API_ORIGIN)
+
+// Các endpoint này phải gọi được độc lập với phiên hiện tại. Nếu token cũ hết hạn,
+// không refresh/điều hướng trước khi request đăng nhập được gửi lên máy chủ.
+const laAuthCongKhai = (url = '') =>
+  /^\/auth\/(dang-nhap|nhan-vien\/dang-nhap|dang-ky|quen-mat-khau\/gui-ma|quen-mat-khau\/dat-lai|nhan-vien\/gui-ma-quen-mat-khau|nhan-vien\/dat-lai-mat-khau)(?:\?|$)/.test(url)
 
 const http = axios.create({
   baseURL: API_BASE,
@@ -41,7 +46,7 @@ export const refreshSession = () => {
 }
 
 const chuyenVeDangNhap = () => {
-  window.location.href = '/dang-nhap'
+  window.location.href = getLastLoginPath()
 }
 
 const ganToken = async (config) => {
@@ -72,7 +77,7 @@ const ganToken = async (config) => {
 }
 
 http.interceptors.request.use(async (config) => {
-  if (String(config.url || '').includes('/auth/refresh')) {
+  if (String(config.url || '').includes('/auth/refresh') || laAuthCongKhai(config.url)) {
     return config
   }
   return ganToken(config)
@@ -83,12 +88,20 @@ http.interceptors.request.use(async (config) => {
 axios.interceptors.request.use(async (config) => {
   const url = String(config.url || '')
   if (!laUrlAPI(url)) return config
-  if (url.includes('/auth/refresh')) return config
+  if (url.includes('/auth/refresh') || laAuthCongKhai(url)) return config
   return ganToken(config)
 })
 
 http.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    const method = String(res?.config?.method || '').toLowerCase()
+    if (['post', 'put', 'patch', 'delete'].includes(method)) {
+      try {
+        localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()))
+      } catch {}
+    }
+    return res
+  },
   async (err) => {
     const config = err.config
     const status = err.response?.status
@@ -145,5 +158,15 @@ http.interceptors.response.use(
     return Promise.reject(e)
   },
 )
+
+axios.interceptors.response.use((res) => {
+  const method = String(res?.config?.method || '').toLowerCase()
+  if (['post', 'put', 'patch', 'delete'].includes(method)) {
+    try {
+      localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()))
+    } catch {}
+  }
+  return res
+})
 
 export default http

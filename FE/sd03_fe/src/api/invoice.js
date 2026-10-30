@@ -19,3 +19,6 @@ export const updateInvoiceStatus = (id, trangThai, ghiChu = '') =>
 
 export const getInvoiceHistory = (id) =>
   http.get(`/hoa-don/${id}/lich-su`).then((r) => r.data)
+
+export const resendInvoiceEmail = (id, email) =>
+  http.post(`/hoa-don/${id}/gui-email`, null, { params: { email } }).then((r) => r.data)

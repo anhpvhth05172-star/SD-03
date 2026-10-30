@@ -1,5 +1,6 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import PaginationBar from '@/components/PaginationBar.vue'
 import { notifySuccess, notifyWarning, notifyDeleteConfirm } from '@/utils/notify'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { listCaLam, createCaLam, updateCaLam, toggleCaLam, deleteCaLam } from '@/api/schedule'
@@ -36,10 +37,39 @@ onMounted(taiCa)
 /* ---------------------------------- Bộ lọc + bảng ---------------------------------- */
 const fKeyword = ref('')
 const fTrangThai = ref('')
+/* ---------------------------------- Phân trang ---------------------------------- */
+const currentPage = ref(0)
+const pageSize = ref(10)
+const pageSizeOptions = [5, 10, 20, 50]
+
+const totalElements = computed(() => caLoc.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalElements.value / pageSize.value)))
+
+const caHienThi = computed(() => {
+  const start = currentPage.value * pageSize.value
+  return caLoc.value.slice(start, start + pageSize.value)
+})
+
+const changePage = (p) => {
+  if (p >= 0 && p < totalPages.value && p !== currentPage.value) {
+    currentPage.value = p
+  }
+}
+
+const onSizeChange = (s) => {
+  pageSize.value = s
+  currentPage.value = 0
+}
+
+watch([fKeyword, fTrangThai], () => {
+  currentPage.value = 0
+})
+
 
 const datLaiBoLoc = () => {
   fKeyword.value = ''
   fTrangThai.value = ''
+  currentPage.value = 0
 }
 
 /* ---------------------------------- Thao tác ---------------------------------- */
@@ -216,11 +246,11 @@ const luuForm = async () => {
             </tr>
           </thead>
           <tbody>
-            <tr v-if="caLoc.length === 0">
+            <tr v-if="caHienThi.length === 0">
               <td colspan="7" class="text-center empty-row">Không có ca làm nào phù hợp</td>
             </tr>
-            <tr v-for="(ca, i) in caLoc" :key="ca.id" class="row-alt">
-              <td class="cell-stt">{{ i + 1 }}</td>
+            <tr v-for="(ca, i) in caHienThi" :key="ca.id" class="row-alt">
+              <td class="cell-stt">{{ currentPage * pageSize + i + 1 }}</td>
               <td class="cell-code"><span class="code-chip">{{ ca.ma }}</span></td>
               <td class="cell-name">{{ ca.ten }}</td>
               <td>{{ ca.batDau }} - {{ ca.ketThuc }}</td>
@@ -252,6 +282,21 @@ const luuForm = async () => {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div v-if="totalPages > 1" class="table-card-foot">
+        <PaginationBar
+          :page="currentPage"
+          :total-pages="totalPages"
+          :total-elements="totalElements"
+          :page-size="pageSize"
+          :sizes="pageSizeOptions"
+          :from="caHienThi.length ? currentPage * pageSize + 1 : 0"
+          :to="currentPage * pageSize + caHienThi.length"
+          label="ca làm"
+          @change="changePage"
+          @size-change="onSizeChange"
+        />
       </div>
     </div>
 

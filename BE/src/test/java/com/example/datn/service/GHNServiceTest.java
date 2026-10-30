@@ -43,7 +43,6 @@ class GHNServiceTest {
         cauHinh.setApiUrl("https://dev-online-gateway.ghn.vn");
         cauHinh.setToken("token-test");
         cauHinh.setShopId("885");
-        cauHinh.setServiceTypeId(2);
         cauHinh.setPackageLengthCm(30);
         cauHinh.setPackageWidthCm(20);
         cauHinh.setPackageHeightCm(15);

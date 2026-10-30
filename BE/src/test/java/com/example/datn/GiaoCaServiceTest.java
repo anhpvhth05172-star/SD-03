@@ -6,17 +6,24 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.example.datn.dto.CaLamViecDto;
 import com.example.datn.dto.TongKetDto;
 import com.example.datn.entity.HoaDon;
+import com.example.datn.entity.CaLam;
+import com.example.datn.repository.CaLamRepository;
+import com.example.datn.entity.LichLamViec;
 import com.example.datn.entity.NhanVien;
 import com.example.datn.entity.PhuongThucThanhToan;
 import com.example.datn.entity.VaiTro;
 import com.example.datn.repository.HoaDonRepository;
 import com.example.datn.repository.LichSuCaRepository;
+import com.example.datn.repository.LichLamViecRepository;
+import com.example.datn.repository.DanhMucCaLamViecRepository;
 import com.example.datn.repository.NhanVienRepository;
 import com.example.datn.repository.PhuongThucThanhToanRepository;
 import com.example.datn.repository.VaiTroRepository;
 import com.example.datn.service.GiaoCaService;
 import com.example.datn.service.HoaDonService;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -44,6 +51,12 @@ class GiaoCaServiceTest {
     private LichSuCaRepository lichSuCaRepository;
 
     @Autowired
+    private LichLamViecRepository lichLamViecRepository;
+
+    @Autowired
+    private CaLamRepository caLamRepository;
+
+    @Autowired
     private HoaDonRepository hoaDonRepository;
 
     @Autowired
@@ -67,6 +80,7 @@ class GiaoCaServiceTest {
     private NhanVien nv2;
     private PhuongThucThanhToan ptMat;
     private PhuongThucThanhToan ptKhongMat;
+    private CaLam caDuocXep;
 
     @BeforeEach
     void setUp() {
@@ -74,6 +88,15 @@ class GiaoCaServiceTest {
         VaiTro vaiTro = taoHayTimVaiTro();
         nv1 = taoNhanVien("testgc", vaiTro);
         nv2 = taoNhanVien("testgc", vaiTro);
+        caDuocXep = new CaLam();
+        caDuocXep.setMaCa("TGC-" + java.util.UUID.randomUUID().toString().substring(0, 8));
+        caDuocXep.setTenCa("Ca test " + java.util.UUID.randomUUID().toString().substring(0, 8));
+        caDuocXep.setBatDau(LocalTime.MIDNIGHT);
+        caDuocXep.setKetThuc(LocalTime.of(23, 59, 59));
+        caDuocXep.setDangBat(true);
+        caDuocXep = caLamRepository.save(caDuocXep);
+        xepLichTest(nv1);
+        xepLichTest(nv2);
         ptMat = timPhuongThuc("Tiền mặt");
         ptKhongMat = timPhuongThuc("Chuyển khoản");
         dangNhap(nv1.getId(), false);
@@ -92,6 +115,8 @@ class GiaoCaServiceTest {
             jdbcTemplate.update("DELETE FROM ca_lam_viec WHERE id = ?", idCa);
         }
         idCaTao.clear();
+        jdbcTemplate.update("DELETE FROM lich_lam_viec WHERE id_ca_lam = ?", caDuocXep.getId());
+        caLamRepository.deleteById(caDuocXep.getId());
         for (Long idNv : idNVTao) {
             jdbcTemplate.update("DELETE FROM nhan_vien WHERE id = ?", idNv);
         }
@@ -100,6 +125,14 @@ class GiaoCaServiceTest {
             jdbcTemplate.update("DELETE FROM vai_tro WHERE id = ?", idVaiTroTao);
             idVaiTroTao = null;
         }
+    }
+
+    private void xepLichTest(NhanVien nhanVien) {
+        LichLamViec lich = new LichLamViec();
+        lich.setNhanVien(nhanVien);
+        lich.setCaLam(caDuocXep);
+        lich.setNgayLam(LocalDate.now());
+        lichLamViecRepository.save(lich);
     }
 
     private VaiTro taoHayTimVaiTro() {

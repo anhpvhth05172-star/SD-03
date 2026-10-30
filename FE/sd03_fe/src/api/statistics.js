@@ -26,6 +26,7 @@ export const fetchTrangThaiDon = (tu, den, thuongHieu = null) => {
   return http.get('/thong-ke/trang-thai-don', { params }).then((r) => r.data)
 }
 
+
 /**
  * Lấy email mặc định nhận báo cáo (Admin hoạt động, fallback mail username).
  * @returns {Promise<{email:string}>}
@@ -48,3 +49,11 @@ export const guiMailTongKet = (payload) =>
  */
 export const fetchSoSanh = (params) =>
   http.get('/thong-ke/so-sanh', { params }).then((r) => r.data)
+
+
+export const getRevenueSummary = ({ tu, den }) =>
+  http.get('/thong-ke/doanh-thu', { params: { tu, den } }).then((r) => r.data)
+
+export const listStatisticEmployees = (params) =>
+  http.get('/thong-ke/nhan-vien', { params }).then((r) => r.data)
+

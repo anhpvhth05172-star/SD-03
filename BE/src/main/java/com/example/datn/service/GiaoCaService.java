@@ -10,6 +10,7 @@ import com.example.datn.entity.NhanVien;
 import com.example.datn.exception.KhongCoQuyenException;
 import com.example.datn.repository.CaLamViecRepository;
 import com.example.datn.repository.LichSuCaRepository;
+import com.example.datn.repository.LichLamViecRepository;
 import com.example.datn.repository.NhanVienRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -45,27 +46,78 @@ public class GiaoCaService {
     private final CaLamViecRepository caLamViecRepository;
     private final LichSuCaRepository lichSuCaRepository;
     private final NhanVienRepository nhanVienRepository;
+    private final LichLamViecRepository lichLamViecRepository;
+    private final com.example.datn.repository.CaLamRepository caLamRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
     public CaLamViecDto moCa(Long tienDauCa, String ghiChu) {
+        return moCa(new com.example.datn.dto.MoCaRequest(tienDauCa, ghiChu));
+    }
+
+    @Transactional
+    public CaLamViecDto moCa(com.example.datn.dto.MoCaRequest request) {
         Long idNhanVien = idNhanVienHienTai();
+        Long tienDauCa = request != null ? request.getTienDauCa() : null;
+        String ghiChu = request != null ? request.getGhiChu() : null;
+        Long idCaLich = request != null ? request.getIdCaLich() : null;
+
         if (tienDauCa == null || tienDauCa < 0) {
             throw bad("TIEN_DAU_CA", "Tiền đầu ca không được âm");
         }
-        if (caLamViecRepository.findFirstByNhanVienIdAndTrangThaiAndDaXoaFalse(idNhanVien, TRANG_THAI_DANG_MO).isPresent()) {
-            throw bad("CA_DA_MO", "Nhân viên đã có ca đang mở");
-        }
         if (caLamViecRepository.findFirstByTrangThaiAndDaXoaFalse(TRANG_THAI_DANG_MO).isPresent()) {
-            throw bad("CA_DA_MO", "Hệ thống đã có ca đang mở");
+            throw bad("CA_DA_MO", "Hệ thống đã có ca làm việc đang mở. Vui lòng kết ca trước đó!");
         }
         NhanVien nhanVien = nhanVienRepository.findById(idNhanVien)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Chưa đăng nhập"));
 
+        LocalDateTime thoiGianMo = LocalDateTime.now();
+        LocalTime gioHienTai = thoiGianMo.toLocalTime();
+        LocalDate ngayHienTai = thoiGianMo.toLocalDate();
+
+        com.example.datn.entity.CaLam caTheoLich = null;
+
+        // 1. Nếu nhân viên chủ động chọn ca được chia sẵn (Ca sáng, Ca chiều...):
+        if (idCaLich != null) {
+            caTheoLich = caLamRepository.findById(idCaLich)
+                .filter(c -> Boolean.TRUE.equals(c.getDangBat()))
+                .orElse(null);
+        }
+
+        // 2. Nếu không chọn cụ thể, tìm theo lịch phân công hôm nay hoặc ca theo giờ
+        if (caTheoLich == null) {
+            List<com.example.datn.entity.LichLamViec> lichHomNay = lichLamViecRepository
+                .findCaDangBatDuocXep(idNhanVien, ngayHienTai);
+
+            List<com.example.datn.entity.LichLamViec> lichDuocXep = lichHomNay.stream()
+                .filter(lich -> {
+                    com.example.datn.entity.CaLam c = lich.getCaLam();
+                    if (c == null || c.getBatDau() == null || c.getKetThuc() == null) return false;
+                    LocalTime bd = c.getBatDau().minusMinutes(30);
+                    LocalTime kt = c.getKetThuc();
+                    if (!kt.isBefore(c.getBatDau())) {
+                        return !gioHienTai.isBefore(bd) && gioHienTai.isBefore(kt);
+                    } else {
+                        return !gioHienTai.isBefore(bd) || gioHienTai.isBefore(kt);
+                    }
+                })
+                .toList();
+
+            if (!lichDuocXep.isEmpty()) {
+                caTheoLich = lichDuocXep.get(0).getCaLam();
+            } else if (!lichHomNay.isEmpty()) {
+                caTheoLich = lichHomNay.get(0).getCaLam();
+            } else {
+                // Tự động gán vào ca làm việc hiện tại của cửa hàng
+                caTheoLich = timCaTheoGioHienTai(gioHienTai);
+            }
+        }
+
         CaLamViec ca = new CaLamViec();
         ca.setNhanVien(nhanVien);
+        ca.setCaTheoLich(caTheoLich);
         ca.setTenQuy("Quầy tổng");
-        ca.setThoiGianMo(LocalDateTime.now());
+        ca.setThoiGianMo(thoiGianMo);
         ca.setTienDauCa(BigDecimal.valueOf(tienDauCa));
         ca.setTrangThai(TRANG_THAI_DANG_MO);
         ca.setDaXoa(false);
@@ -84,7 +136,7 @@ public class GiaoCaService {
     @Transactional(readOnly = true)
     public CaLamViecDto getDangMoOf(Long idNhanVien) {
         return caLamViecRepository
-            .findFirstByNhanVienIdAndTrangThaiAndDaXoaFalse(idNhanVien, TRANG_THAI_DANG_MO)
+            .findFirstByTrangThaiAndDaXoaFalse(TRANG_THAI_DANG_MO)
             .map(this::toDto)
             .orElse(null);
     }
@@ -219,7 +271,9 @@ public class GiaoCaService {
         Long idNguoiGoi = idNhanVienHienTai();
         boolean admin = laAdmin();
         if (!admin && !ca.getNhanVien().getId().equals(idNguoiGoi)) {
-            throw new KhongCoQuyenException("Không có quyền thao tác ca này");
+            if (!TRANG_THAI_DANG_MO.equals(ca.getTrangThai())) {
+                throw new KhongCoQuyenException("Không có quyền thao tác ca này");
+            }
         }
         return ca;
     }
@@ -228,7 +282,7 @@ public class GiaoCaService {
         List<HoaDon> dangXuLy = caLamViecRepository.hoaDonDangXuLy(idCa);
         if (!dangXuLy.isEmpty()) {
             String maCacHd = dangXuLy.stream().map(HoaDon::getMaHoaDon).reduce((a, b) -> a + " " + b).orElse("");
-            throw bad("CON_HD_DANG_XU_LY", "Còn hóa đơn đang xử lý: " + maCacHd);
+            throw bad("CON_HD_DANG_XU_LY", "Còn hóa đơn tại quầy chưa hoàn tất (" + maCacHd + "). Vui lòng thanh toán hoặc hủy đơn chờ trước khi kết ca!");
         }
     }
 
@@ -259,6 +313,7 @@ public class GiaoCaService {
         return TongKetDto.builder()
             .id(ca.getId())
             .maCa(ca.getMaCa())
+            .tenCaLich(ca.getCaTheoLich() != null ? ca.getCaTheoLich().getTenCa() : null)
             .idNhanVien(nv.getId())
             .tenNhanVien(nv.getTenTaiKhoan())
             .tenQuy(ca.getTenQuy())
@@ -300,12 +355,15 @@ public class GiaoCaService {
         return objectMapper.writeValueAsString(obj);
     }
 
-    private CaLamViecDto toDto(CaLamViec ca) {
+    public CaLamViecDto toDto(CaLamViec ca) {
         NhanVien nv = ca.getNhanVien();
         return CaLamViecDto.builder()
             .id(ca.getId())
             .maCa(ca.getMaCa())
+            .idCaLich(ca.getCaTheoLich() != null ? ca.getCaTheoLich().getId() : null)
+            .tenCaLich(ca.getCaTheoLich() != null ? ca.getCaTheoLich().getTenCa() : null)
             .idNhanVien(nv.getId())
+            .maNhanVien(nv.getMaNhanVien())
             .tenNhanVien(nv.getTenTaiKhoan())
             .tenQuy(ca.getTenQuy())
             .thoiGianMo(ca.getThoiGianMo())
@@ -353,6 +411,28 @@ public class GiaoCaService {
 
     private static ResponseStatusException bad(String ma, String message) {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, ma + ": " + message);
+    }
+
+        private com.example.datn.entity.CaLam timCaTheoGioHienTai(LocalTime gioHienTai) {
+        List<com.example.datn.entity.CaLam> caLamList = caLamRepository.findByDangBatTrueOrderByBatDauAsc();
+        if (caLamList.isEmpty()) {
+            return null;
+        }
+        for (com.example.datn.entity.CaLam c : caLamList) {
+            LocalTime bd = c.getBatDau();
+            LocalTime kt = c.getKetThuc();
+            if (bd == null || kt == null) continue;
+            if (kt.isAfter(bd)) {
+                if (!gioHienTai.isBefore(bd) && !gioHienTai.isAfter(kt)) {
+                    return c;
+                }
+            } else {
+                if (!gioHienTai.isBefore(bd) || !gioHienTai.isAfter(kt)) {
+                    return c;
+                }
+            }
+        }
+        return caLamList.get(0);
     }
 
     private static String chuanHoaGhiChu(String ghiChu) {

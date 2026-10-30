@@ -1,15 +1,18 @@
 package com.example.datn.repository;
 
 import com.example.datn.entity.SanPhamChiTiet;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, Long> {
@@ -73,4 +76,12 @@ public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, 
         order by sp.tenSanPham asc, s.maChiTietSanPham asc
         """)
     List<SanPhamChiTiet> findAllActiveForDiscount();
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM SanPhamChiTiet s WHERE s.id = :id")
+    Optional<SanPhamChiTiet> findByIdForUpdate(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM SanPhamChiTiet s WHERE s.id IN :ids ORDER BY s.id")
+    List<SanPhamChiTiet> findAllByIdForUpdate(@Param("ids") List<Long> ids);
 }

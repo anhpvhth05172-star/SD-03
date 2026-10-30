@@ -101,4 +101,15 @@ public class HoaDonController {
     public List<LichSuHoaDonDTO> lichSu(@PathVariable Long id) {
         return hoaDonService.lichSuHoaDon(id);
     }
+
+    @PostMapping("/{id}/gui-email")
+    public org.springframework.http.ResponseEntity<?> guiLaiEmail(
+        @PathVariable Long id,
+        @RequestParam(required = false) String email
+    ) {
+        hoaDonService.guiLaiEmailHoaDon(id, email);
+        return org.springframework.http.ResponseEntity.ok(
+            java.util.Map.of("message", "Đã gửi lại email thông tin đơn hàng thành công")
+        );
+    }
 }

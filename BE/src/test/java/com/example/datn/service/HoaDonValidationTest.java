@@ -73,14 +73,14 @@ class HoaDonValidationTest {
         ghnService
     );
 
-    private PhuongThucThanhToan phuongThucThanhToan() {
-        PhuongThucThanhToan p = new PhuongThucThanhToan();
-        p.setId(PTTT_ID);
-        p.setMaPhuongThuc("TIEN_MAT");
-        p.setTenPhuongThuc("Tiền mặt tại quầy");
-        p.setTrangThai(true);
-        return p;
-    }
+        private PhuongThucThanhToan phuongThucThanhToan() {
+            PhuongThucThanhToan p = new PhuongThucThanhToan();
+            p.setId(PTTT_ID);
+            p.setMaPhuongThuc("TIEN_MAT");
+            p.setTenPhuongThuc("Tiền mặt tại quầy");
+            p.setTrangThai(true);
+            return p;
+        }
 
     @BeforeEach
     void datPhuongThucThanhToan() {

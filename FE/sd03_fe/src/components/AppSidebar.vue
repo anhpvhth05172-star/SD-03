@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { laAdmin } from '@/utils/session'
 
 defineProps({
   collapsed: { type: Boolean, default: false },
@@ -11,70 +12,76 @@ const route = useRoute()
 const menu = [
   {
     label: 'Thống kê',
-    path: '/thong-ke',
+    path: '/admin/thong-ke',
     iconType: 'chart',
+    adminOnly: true,
   },
   {
     label: 'Bán hàng tại quầy',
-    path: '/ban-hang',
+    path: '/admin/ban-hang',
     iconType: 'pos',
   },
   {
     label: 'Quản lý hóa đơn',
-    path: '/hoa-don',
+    path: '/admin/hoa-don',
     iconType: 'invoice',
   },
   {
     label: 'Quản lý sản phẩm',
-    path: '/san-pham',
+    path: '/admin/san-pham',
     iconType: 'product',
     children: [
-      { label: 'Sản phẩm', path: '/san-pham' },
-      { label: 'Biến thể sản phẩm', path: '/bien-the-san-pham' },
+      { label: 'Sản phẩm', path: '/admin/san-pham' },
+      { label: 'Biến thể sản phẩm', path: '/admin/bien-the-san-pham' },
     ],
   },
   {
     label: 'Danh mục thuộc tính',
-    path: '/thuoc-tinh',
+    path: '/admin/thuoc-tinh',
     iconType: 'attributes',
+    adminOnly: true,
     children: [
-      { label: 'Thương hiệu', path: '/thuoc-tinh/thuong-hieu' },
-      { label: 'Xuất xứ', path: '/thuoc-tinh/xuat-xu' },
-      { label: 'Chất liệu', path: '/thuoc-tinh/chat-lieu' },
-      { label: 'Kiểu dáng', path: '/thuoc-tinh/kieu-dang' },
-      { label: 'Loại giày', path: '/thuoc-tinh/loai-giay' },
-      { label: 'Kích cỡ', path: '/thuoc-tinh/kich-co' },
-      { label: 'Màu sắc', path: '/thuoc-tinh/mau-sac' },
-      { label: 'Thân giày', path: '/thuoc-tinh/than-giay' },
-      { label: 'Đế giày', path: '/thuoc-tinh/de-giay' },
+      { label: 'Thương hiệu', path: '/admin/thuoc-tinh/thuong-hieu' },
+      { label: 'Xuất xứ', path: '/admin/thuoc-tinh/xuat-xu' },
+      { label: 'Chất liệu', path: '/admin/thuoc-tinh/chat-lieu' },
+      { label: 'Kiểu dáng', path: '/admin/thuoc-tinh/kieu-dang' },
+      { label: 'Loại giày', path: '/admin/thuoc-tinh/loai-giay' },
+      { label: 'Kích cỡ', path: '/admin/thuoc-tinh/kich-co' },
+      { label: 'Màu sắc', path: '/admin/thuoc-tinh/mau-sac' },
+      { label: 'Thân giày', path: '/admin/thuoc-tinh/than-giay' },
+      { label: 'Đế giày', path: '/admin/thuoc-tinh/de-giay' },
     ],
   },
   {
     label: 'Quản lý khách hàng',
-    path: '/khach-hang',
+    path: '/admin/khach-hang',
     iconType: 'customers',
   },
   {
     label: 'Quản lý nhân viên',
-    path: '/nhan-vien',
+    path: '/admin/nhan-vien',
     iconType: 'employees',
+    adminOnly: true,
   },
   {
     label: 'Quản lý lịch làm việc',
     path: '/lich-lam-viec',
     iconType: 'schedule',
+    adminOnly: true,
     children: [
       { label: 'Lịch làm việc', path: '/lich-lam-viec' },
       { label: 'Lịch ca làm', path: '/lich-ca-lam' },
+      { label: 'Lịch sử hoạt động', path: '/lich-su-hoat-dong' },
     ],
   },
   {
     label: 'Quản lý giảm giá',
-    path: '/phieu-giam-gia',
+    path: '/admin/phieu-giam-gia',
     iconType: 'discounts',
+    adminOnly: true,
     children: [
-      { label: 'Phiếu giảm giá', path: '/phieu-giam-gia' },
-      { label: 'Đợt giảm giá', path: '/dot-giam-gia' },
+      { label: 'Phiếu giảm giá', path: '/admin/phieu-giam-gia' },
+      { label: 'Đợt giảm giá', path: '/admin/dot-giam-gia' },
     ],
   },
   {
@@ -86,6 +93,7 @@ const menu = [
     label: 'Giao ca',
     path: '/ca',
     iconType: 'cashRegister',
+    adminOnly: true,
   },
 ]
 
@@ -100,11 +108,11 @@ const isOpen = (item) => {
 }
 
 const isChildActive = (child) => {
-  if (child.path === '/san-pham') {
-    return route.path === '/san-pham' || route.path === '/san-pham/them'
+  if (child.path === '/admin/san-pham') {
+    return route.path === '/admin/san-pham' || route.path === '/admin/san-pham/them'
   }
-  if (child.path === '/bien-the-san-pham') {
-    return route.path === '/bien-the-san-pham' || route.path.startsWith('/san-pham/bien-the')
+  if (child.path === '/admin/bien-the-san-pham') {
+    return route.path === '/admin/bien-the-san-pham' || route.path.startsWith('/admin/san-pham/bien-the')
   }
   return route.path === child.path || route.path.startsWith(child.path + '/')
 }
@@ -122,13 +130,13 @@ const toggle = (item) => {
   openState.value = { ...openState.value, [item.path]: !(openState.value[item.path] ?? auto) }
 }
 
-const visibleMenu = computed(() => menu)
+const visibleMenu = computed(() => menu.filter((item) => !item.adminOnly || laAdmin()))
 </script>
 
 <template>
   <aside class="sidebar-container" :class="{ 'is-collapsed': collapsed }">
     <div class="brand-wrapper">
-      <router-link to="/san-pham" class="brand-link">
+      <router-link to="/admin/san-pham" class="brand-link">
         <div class="brand-logo-card">
           <img src="/images/logo_polyshoes_final.png" alt="PolyShoes Logo" class="brand-img" />
         </div>
