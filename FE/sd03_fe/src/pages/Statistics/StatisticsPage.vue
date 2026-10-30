@@ -7,7 +7,7 @@ import { API_BASE } from '@/api/http'
 import { formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
 import { notifySuccess, notifyError } from '@/utils/notify'
-import { fetchTongQuan, fetchTrangThaiDon, fetchEmailMacDinh, guiMailTongKet } from '@/api/statistics'
+import { fetchTongQuan, fetchTrangThaiDon, fetchEmailMacDinh, guiMailTongKet, fetchSoSanh } from '@/api/statistics'
 import BarLineChart from '@/components/charts/BarLineChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
 import {
@@ -86,6 +86,159 @@ const cacNamChon = computed(() => {
 
 const chuyenCheDoSoSanh = () => {
   soSanhMode.value = !soSanhMode.value
+  if (soSanhMode.value) taiSoSanh()
+}
+
+/* ---------------------------------- So sánh & tăng trưởng ---------------------------------- */
+const ssCheDo = ref('thang')
+const ssNam = ref(new Date().getFullYear())
+const ssTu1 = ref('')
+const ssDen1 = ref('')
+const ssTu2 = ref('')
+const ssDen2 = ref('')
+const ssKeyword = ref('')
+const ssData = ref(null)
+const ssDangTai = ref(false)
+const ssErr = ref('')
+
+const SS_CHE_DO = [
+  { key: 'thang', label: 'Theo Tháng (12 tháng)' },
+  { key: 'quy', label: 'Theo Quý (4 quý)' },
+  { key: 'nam', label: 'Theo Năm (Đối chiếu nhiều năm)' },
+  { key: '2ky', label: 'Tùy chọn 2 kỳ' },
+]
+
+const ssDu4Ngay = computed(() =>
+  Boolean(ssTu1.value && ssDen1.value && ssTu2.value && ssDen2.value)
+)
+
+const ssCoTheTai = computed(() => ssCheDo.value !== '2ky' || ssDu4Ngay.value)
+
+const taiSoSanh = async () => {
+  if (!ssCoTheTai.value) return
+  ssDangTai.value = true
+  ssErr.value = ''
+  try {
+    const params = { cheDo: ssCheDo.value }
+    if (ssCheDo.value !== '2ky') params.nam = ssNam.value
+    if (ssCheDo.value === '2ky') {
+      params.tu1 = ssTu1.value
+      params.den1 = ssDen1.value
+      params.tu2 = ssTu2.value
+      params.den2 = ssDen2.value
+    }
+    if (thuongHieuChon.value) params.thuongHieu = thuongHieuChon.value
+    const kw = ssKeyword.value.trim()
+    if (kw) params.keyword = kw
+    ssData.value = await fetchSoSanh(params)
+  } catch (e) {
+    ssData.value = null
+    ssErr.value = e?.response?.data?.message || e?.message || 'Không tải được dữ liệu so sánh'
+    notifyError('Không tải được dữ liệu so sánh', ssErr.value)
+  } finally {
+    ssDangTai.value = false
+  }
+}
+
+const datLaiSoSanh = () => {
+  ssCheDo.value = 'thang'
+  ssNam.value = new Date().getFullYear()
+  ssTu1.value = ''
+  ssDen1.value = ''
+  ssTu2.value = ''
+  ssDen2.value = ''
+  ssKeyword.value = ''
+}
+
+let ssTimer = null
+watch([ssCheDo, ssNam, thuongHieuChon], () => {
+  taiSoSanh()
+})
+watch(ssKeyword, () => {
+  clearTimeout(ssTimer)
+  ssTimer = setTimeout(() => taiSoSanh(), 400)
+})
+watch([ssTu1, ssDen1, ssTu2, ssDen2], () => {
+  if (ssCheDo.value !== '2ky') return
+  clearTimeout(ssTimer)
+  ssTimer = setTimeout(() => taiSoSanh(), 400)
+})
+
+const ssKy = computed(() => ssData.value?.ky || [])
+const ssTop = computed(() => ssData.value?.topSanPham || [])
+const ssTenKy = computed(() => ssKy.value.map((k) => k.tenKy))
+
+const ssTong = computed(() => {
+  let dt = 0
+  let tm = 0
+  let ck = 0
+  let don = 0
+  for (const k of ssKy.value) {
+    dt += k.doanhThu || 0
+    tm += k.tienMat || 0
+    ck += k.tienChuyenKhoan || 0
+    don += k.soDon || 0
+  }
+  const ttBq =
+    ssKy.value.length > 0
+      ? Math.round(ssKy.value.reduce((s, k) => s + (k.tangTruong || 0), 0) / ssKy.value.length)
+      : 0
+  return {
+    tongDt: dt,
+    tongTm: tm,
+    tongCk: ck,
+    tongDon: don,
+    aovTrungBinh: don > 0 ? Math.round(dt / don) : 0,
+    tangTruongBinhQuan: ttBq,
+  }
+})
+
+const ssBarSeries = computed(() => [
+  { label: 'Tiền mặt', color: '#16a34a', values: ssKy.value.map((k) => k.tienMat || 0) },
+  { label: 'Chuyển khoản', color: '#3b82f6', values: ssKy.value.map((k) => k.tienChuyenKhoan || 0) },
+])
+
+const ssLineSeries = computed(() => [
+  { label: 'Tốc độ tăng trưởng (%)', color: '#d92d20', values: ssKy.value.map((k) => k.tangTruong || 0) },
+])
+
+const ssTopCotKy = computed(() => ssTenKy.value)
+
+const xuatSoSanh = async () => {
+  if (!ssKy.value.length) {
+    notifyError('Không có dữ liệu để xuất')
+    return
+  }
+  const rows = ssKy.value.map((k, i) => [
+    i + 1,
+    k.tenKy,
+    k.doanhThu || 0,
+    k.tienMat || 0,
+    k.tienChuyenKhoan || 0,
+    k.soDon || 0,
+    k.aov || 0,
+    k.sanPhamBan || 0,
+    k.chenhLech || 0,
+    k.tangTruong || 0,
+  ])
+  await exportExcel(
+    'so-sanh-tang-truong-doanh-thu.xlsx',
+    [
+      'STT',
+      'Kỳ so sánh',
+      'Tổng doanh thu',
+      'Tiền mặt',
+      'Chuyển khoản',
+      'Số đơn',
+      'AOV',
+      'Đã bán',
+      'Chênh lệch',
+      'Tăng trưởng (%)',
+    ],
+    rows,
+    { sheetName: 'So sánh doanh thu' }
+  )
+  notifySuccess('Đã xuất Excel', 'Tệp Excel (.xlsx) đã được tải xuống')
 }
 
 const moGuiMail = () => {
@@ -556,18 +709,41 @@ onMounted(async () => {
     <!-- PAGE HEADER -->
     <div class="page-header">
       <div class="page-header-text">
-        <h1 class="page-title">Thống kê doanh thu</h1>
-        <p class="page-subtitle">Tổng hợp kinh doanh, phân tích sản phẩm và theo dõi tăng trưởng bán hàng</p>
+        <template v-if="soSanhMode">
+          <button type="button" class="btn-back" @click="chuyenCheDoSoSanh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            Quay lại
+          </button>
+          <div>
+            <h1 class="page-title">So sánh &amp; Tăng trưởng doanh thu</h1>
+            <p class="page-subtitle">Đối chiếu doanh thu, đo lường tốc độ tăng trưởng và theo dõi biến động sức mua sản phẩm</p>
+          </div>
+        </template>
+        <template v-else>
+          <h1 class="page-title">Thống kê doanh thu</h1>
+          <p class="page-subtitle">Tổng hợp kinh doanh, phân tích sản phẩm và theo dõi tăng trưởng bán hàng</p>
+        </template>
       </div>
       <div class="page-header-actions">
         <button type="button" class="btn-mail-outline" @click="moGuiMail">
           <i class="bi bi-envelope"></i>
           Gửi mail tổng kết
         </button>
+        <button v-if="soSanhMode" type="button" class="btn-action-outline" @click="xuatSoSanh">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Xuất Excel So sánh
+        </button>
         <button
+          v-if="!soSanhMode"
           type="button"
           class="btn-action-outline"
-          :class="{ 'is-active': soSanhMode }"
           @click="chuyenCheDoSoSanh"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -580,6 +756,7 @@ onMounted(async () => {
       </div>
     </div>
 
+    <template v-if="!soSanhMode">
     <!-- CARD 1: BỘ LỌC TỔNG QUAN -->
     <div class="filter-card">
       <div class="card-title-row space-between">
@@ -1187,6 +1364,320 @@ onMounted(async () => {
         @size-change="(s) => { sizeSp = s; pageSp = 0 }"
       />
     </div>
+    </template>
+
+    <template v-else>
+      <!-- BỘ LỌC CHẾ ĐỘ ĐỐI CHIẾU -->
+      <div class="filter-card">
+        <div class="card-title-row space-between">
+          <div class="title-with-icon">
+            <div class="icon-circle icon-filter">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+              </svg>
+            </div>
+            <span class="card-title-text">Chế độ đối chiếu</span>
+          </div>
+          <div class="seg-toggle">
+            <button
+              v-for="c in SS_CHE_DO"
+              :key="c.key"
+              type="button"
+              class="seg-btn"
+              :class="{ 'is-active': ssCheDo === c.key }"
+              @click="ssCheDo = c.key"
+            >
+              {{ c.label }}
+            </button>
+          </div>
+        </div>
+
+        <div class="filter-grid">
+          <div class="field-block">
+            <label class="field-label">Năm so sánh</label>
+            <SearchableSelect
+              v-model="ssNam"
+              :options="cacNamChon.map((y) => ({ value: y, label: String(y) }))"
+              label-key="label"
+              value-key="value"
+              :allow-clear="false"
+              placeholder="Năm so sánh"
+            />
+          </div>
+          <div class="field-block">
+            <label class="field-label">Thương hiệu</label>
+            <SearchableSelect
+              v-model="thuongHieuChon"
+              :options="thuongHieuOptions"
+              label-key="label"
+              value-key="value"
+              placeholder="Tất cả thương hiệu"
+              search-placeholder="Tìm thương hiệu..."
+            />
+          </div>
+          <div class="field-block">
+            <label class="field-label">Tìm sản phẩm</label>
+            <div class="search-input-wrap">
+              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input v-model="ssKeyword" type="text" class="input-search" placeholder="Tìm theo tên / mã sản phẩm..." />
+            </div>
+          </div>
+          <div class="field-block field-reset">
+            <label class="field-label">&nbsp;</label>
+            <button class="btn-action-outline" type="button" @click="datLaiSoSanh">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+              </svg>
+              Đặt lại
+            </button>
+          </div>
+
+          <template v-if="ssCheDo === '2ky'">
+            <div class="field-block">
+              <label class="field-label">Kỳ 1 — Từ ngày</label>
+              <input v-model="ssTu1" type="date" class="input-date" />
+            </div>
+            <div class="field-block">
+              <label class="field-label">Kỳ 1 — Đến ngày</label>
+              <input v-model="ssDen1" type="date" class="input-date" />
+            </div>
+            <div class="field-block">
+              <label class="field-label">Kỳ 2 — Từ ngày</label>
+              <input v-model="ssTu2" type="date" class="input-date" />
+            </div>
+            <div class="field-block">
+              <label class="field-label">Kỳ 2 — Đến ngày</label>
+              <input v-model="ssDen2" type="date" class="input-date" />
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- TRẠNG THÁI TẢI -->
+      <div v-if="ssDangTai" class="ss-loading">Đang tải dữ liệu so sánh...</div>
+      <div v-else-if="ssErr" class="ss-error">
+        <span>{{ ssErr }}</span>
+        <button class="btn-action-outline" type="button" @click="taiSoSanh">Thử lại</button>
+      </div>
+      <div v-else-if="!ssKy.length" class="ss-empty">Không có dữ liệu trong khoảng này</div>
+
+      <template v-if="!ssDangTai && !ssErr && ssKy.length">
+        <!-- 6 THẺ KPI -->
+        <div class="stat-grid stat-grid-3">
+          <div class="stat-card">
+            <div class="stat-icon is-emerald">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                <polyline points="17 6 23 6 23 12"></polyline>
+              </svg>
+            </div>
+            <div class="stat-value">{{ formatVnd(ssTong.tongDt) }}</div>
+            <div class="stat-label">Tổng doanh thu</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon is-green">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+                <circle cx="12" cy="12" r="2"></circle>
+                <path d="M6 12h.01M18 12h.01"></path>
+              </svg>
+            </div>
+            <div class="stat-value">{{ formatVnd(ssTong.tongTm) }}</div>
+            <div class="stat-label">Tổng tiền mặt</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon is-blue">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                <line x1="2" y1="10" x2="22" y2="10"></line>
+              </svg>
+            </div>
+            <div class="stat-value">{{ formatVnd(ssTong.tongCk) }}</div>
+            <div class="stat-label">Tổng tiền chuyển khoản</div>
+          </div>
+        </div>
+        <div class="stat-grid stat-grid-3">
+          <div class="stat-card">
+            <div class="stat-icon is-cyan">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="9" cy="21" r="1"></circle>
+                <circle cx="20" cy="21" r="1"></circle>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+              </svg>
+            </div>
+            <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(ssTong.tongDon) }}</div>
+            <div class="stat-label">Tổng đơn hàng</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon is-indigo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+            </div>
+            <div class="stat-value">{{ formatVnd(ssTong.aovTrungBinh) }}</div>
+            <div class="stat-label">AOV trung bình các kỳ</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" :class="ssTong.tangTruongBinhQuan >= 0 ? 'is-emerald' : 'is-rose'">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                <polyline points="17 6 23 6 23 12"></polyline>
+              </svg>
+            </div>
+            <div class="stat-value">{{ layTangTruongLabel(ssTong.tangTruongBinhQuan) }}</div>
+            <div class="stat-label">Tăng trưởng trung bình</div>
+          </div>
+        </div>
+
+        <!-- BIỂU ĐỒ DOANH THU & TỐC ĐỘ TĂNG TRƯỞNG -->
+        <div class="table-card">
+          <div class="card-title-row space-between">
+            <div class="title-with-icon">
+              <div class="icon-circle icon-filter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="20" x2="18" y2="10"></line>
+                  <line x1="12" y1="20" x2="12" y2="4"></line>
+                  <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+              </div>
+              <span class="card-title-text">Doanh thu &amp; Tốc độ tăng trưởng qua các kỳ</span>
+            </div>
+          </div>
+          <BarLineChart
+            :labels="ssTenKy"
+            :bar-series="ssBarSeries"
+            :line-series="ssLineSeries"
+            line-format="percent"
+            :show-line-labels="true"
+            :height="300"
+          />
+        </div>
+
+        <!-- BẢNG ĐỐI CHIẾU CHI TIẾT -->
+        <div class="table-card">
+          <div class="card-title-row space-between">
+            <div class="title-with-icon">
+              <div class="icon-circle icon-filter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                  <line x1="3" y1="9" x2="21" y2="9"></line>
+                  <line x1="9" y1="21" x2="9" y2="9"></line>
+                </svg>
+              </div>
+              <span class="card-title-text">Đối chiếu doanh thu chi tiết các kỳ</span>
+              <span class="brand-chip">Đơn vị: VND</span>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>KỲ SO SÁNH</th>
+                  <th>KHOẢNG THỜI GIAN</th>
+                  <th>TỔNG DOANH THU</th>
+                  <th>TIỀN MẶT</th>
+                  <th>CHUYỂN KHOẢN</th>
+                  <th>SỐ ĐƠN</th>
+                  <th>AOV</th>
+                  <th>ĐÃ BÁN</th>
+                  <th>CHÊNH LỆCH</th>
+                  <th>TĂNG TRƯỞNG</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(k, i) in ssKy" :key="k.maKy" class="row-alt">
+                  <td class="cell-code">
+                    {{ k.tenKy }}
+                    <span v-if="k.laCaoNhat" class="badge-best">Cao nhất</span>
+                  </td>
+                  <td>{{ hienThiNgay(k.tu) }} — {{ hienThiNgay(k.den) }}</td>
+                  <td class="text-right strong-cell">{{ formatVnd(k.doanhThu) }}</td>
+                  <td class="text-right">{{ formatVnd(k.tienMat) }}</td>
+                  <td class="text-right">{{ formatVnd(k.tienChuyenKhoan) }}</td>
+                  <td class="text-right">{{ new Intl.NumberFormat('vi-VN').format(k.soDon) }}</td>
+                  <td class="text-right">{{ formatVnd(k.aov) }}</td>
+                  <td class="text-right">{{ new Intl.NumberFormat('vi-VN').format(k.sanPhamBan) }}</td>
+                  <td class="text-right" :class="k.chenhLech > 0 ? 'tt-up' : k.chenhLech < 0 ? 'tt-down' : ''">
+                    {{ k.chenhLech > 0 ? '+' : '' }}{{ formatVnd(k.chenhLech) }}
+                  </td>
+                  <td class="text-right">
+                    <span :class="k.tangTruong > 0 ? 'tt-up' : k.tangTruong < 0 ? 'tt-down' : ''">
+                      {{ layTangTruongLabel(k.tangTruong) }}
+                    </span>
+                  </td>
+                </tr>
+                <tr class="ss-total-row">
+                  <td colspan="2"><strong>TỔNG CỘNG</strong></td>
+                  <td class="text-right"><strong>{{ formatVnd(ssTong.tongDt) }}</strong></td>
+                  <td class="text-right"><strong>{{ formatVnd(ssTong.tongTm) }}</strong></td>
+                  <td class="text-right"><strong>{{ formatVnd(ssTong.tongCk) }}</strong></td>
+                  <td class="text-right"><strong>{{ new Intl.NumberFormat('vi-VN').format(ssTong.tongDon) }}</strong></td>
+                  <td class="text-right"><strong>{{ formatVnd(ssTong.aovTrungBinh) }}</strong></td>
+                  <td class="text-right"><strong>{{ new Intl.NumberFormat('vi-VN').format(ssKy.reduce((s, k) => s + (k.sanPhamBan || 0), 0)) }}</strong></td>
+                  <td></td>
+                  <td class="text-right">
+                    <span class="ss-growth-badge">Tăng trưởng TB: {{ layTangTruongLabel(ssTong.tangTruongBinhQuan) }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TOP SẢN PHẨM -->
+        <div class="table-card">
+          <div class="card-title-row space-between">
+            <div class="title-with-icon">
+              <div class="icon-circle icon-filter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                  <line x1="3" y1="6" x2="21" y2="6"></line>
+                </svg>
+              </div>
+              <span class="card-title-text">Top sản phẩm bán chạy &amp; Đối chiếu sức mua qua các kỳ</span>
+              <span class="brand-chip">Top 10 mặt hàng</span>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>STT</th>
+                  <th>MÃ SP</th>
+                  <th>TÊN SẢN PHẨM</th>
+                  <th>THƯƠNG HIỆU</th>
+                  <th>TỔNG BÁN</th>
+                  <th>TỔNG DOANH THU</th>
+                  <th v-for="ten in ssTopCotKy" :key="ten">{{ ten.toUpperCase() }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(t, i) in ssTop" :key="t.maSanPham" class="row-alt">
+                  <td class="cell-stt">{{ i + 1 }}</td>
+                  <td class="cell-code">{{ t.maSanPham }}</td>
+                  <td>{{ t.tenSanPham }}</td>
+                  <td><span class="brand-chip">{{ t.tenThuongHieu }}</span></td>
+                  <td class="text-right">{{ new Intl.NumberFormat('vi-VN').format(t.tongBan) }}</td>
+                  <td class="text-right strong-cell">{{ formatVnd(t.tongDoanhThu) }}</td>
+                  <td v-for="(v, j) in t.banTheoKy" :key="j" class="text-right">
+                    {{ new Intl.NumberFormat('vi-VN').format(v || 0) }}
+                  </td>
+                </tr>
+                <tr v-if="!ssTop.length">
+                  <td :colspan="6 + ssTopCotKy.length" class="ss-empty-cell">Không có sản phẩm nào bán chạy trong khoảng này</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+    </template>
 
     <!-- HỘP THOẠI GỬI MAIL TỔNG KẾT -->
     <div v-if="showEmailModal" class="mail-modal-overlay" @click.self="dongGuiMail">
@@ -2002,6 +2493,119 @@ onMounted(async () => {
   .stat-value {
     font-size: 23px;
   }
+}
+
+/* ---------------------- So sánh & tăng trưởng ---------------------- */
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  margin-bottom: 8px;
+  transition: all 0.2s ease;
+}
+
+.btn-back svg {
+  width: 15px;
+  height: 15px;
+}
+
+.btn-back:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.page-header-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.ss-loading,
+.ss-empty {
+  padding: 34px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13.5px;
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #ececef;
+}
+
+.ss-error {
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: #dc2626;
+  font-size: 13.5px;
+  font-weight: 600;
+  background: #fef2f2;
+  border-radius: 14px;
+  border: 1px solid #fecaca;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.badge-best {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #b45309;
+  font-size: 10.5px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.strong-cell {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.tt-up {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.tt-down {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.ss-total-row td {
+  background: #f8fafc;
+  border-top: 2px solid #e2e8f0;
+}
+
+.ss-growth-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.ss-empty-cell {
+  padding: 26px !important;
+  text-align: center;
+  color: #94a3b8;
+  font-style: italic;
 }
 
 @media (max-width: 767px) {
