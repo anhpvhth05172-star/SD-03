@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -25,4 +26,8 @@ public interface GioHangChiTietRepository extends JpaRepository<GioHangChiTiet, 
     @Modifying
     @Query("DELETE FROM GioHangChiTiet g WHERE g.gioHang.id = :idGioHang")
     void xoaTatCaTheoGioHang(@Param("idGioHang") Integer idGioHang);
+
+    @Modifying
+    @Transactional
+    void deleteByGioHang_KhachHang_IdAndSanPhamChiTiet_Id(Long khachHangId, Long sanPhamChiTietId);
 }

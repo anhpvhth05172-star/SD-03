@@ -44,6 +44,7 @@ import About from "@/pages/clients/views/About.vue";
 import OrderList from "@/pages/clients/views/OrderList.vue";
 import OrderLookup from "@/pages/clients/views/OrderLookup.vue";
 import Contact from "@/pages/clients/views/Contact.vue";
+import VNPayReturn from "@/pages/clients/views/VNPayReturn.vue";
 
 const routes = [
   { path: "/dang-nhap", component: LoginPage, meta: { title: "Đăng nhập" } },
@@ -269,6 +270,12 @@ const routes = [
         name: "ClientCheckout",
         component: CheckOut,
         meta: { title: "Thanh toán" },
+      },
+      {
+        path: "/thanh-toan-vnpay",
+        name: "ClientVNPayReturn",
+        component: VNPayReturn,
+        meta: { title: "Ket qua thanh toan VNPAY" },
       },
     ],
   },

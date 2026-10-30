@@ -167,8 +167,7 @@ const savedAddresses = computed(() => {
     .sort((x, y) => Number(y.isDefault) - Number(x.isDefault)); // mặc định lên đầu
 });
 
-const itemImage = (i) =>
-  i.image || i.hinhAnh || i.img || "/placeholder-shoe.png";
+const itemImage = (i) => i.hinhAnh || i.img || i.image || null;
 
 /* ================= PHIẾU GIẢM GIÁ (gọi API thật) ================= */
 const VOUCHER_API = "http://localhost:8080/admin/phieu-giam-gia";
@@ -440,6 +439,20 @@ const voucherOptions = computed(() => {
 
 const bestVoucher = computed(() => voucherOptions.value.find((o) => o.best));
 
+// Tự động áp dụng mã giảm giá tốt nhất cho khách hàng
+watch(
+  [bestVoucher, () => cart.items.length],
+  ([best]) => {
+    if (best && (!voucher.value || voucher.value.id !== best.v.id)) {
+      voucher.value = best.v;
+      voucherCode.value = "";
+      voucherMsg.text = `Đã tự động áp dụng mã ưu đãi tốt nhất (${best.v.code})!`;
+      voucherMsg.ok = true;
+    }
+  },
+  { immediate: true }
+);
+
 const voucherLabel = (v) =>
   v.type === "percent"
     ? `Giảm ${v.value}%${v.max > 0 ? ` (tối đa ${money(v.max)})` : ""}`
@@ -480,8 +493,8 @@ function genMaHoaDon() {
 }
 
 /* ---------- Phương thức thanh toán: id cố định theo bảng phuong_thuc_thanh_toan ---------- */
-// 11 = COD (Thanh toán khi nhận hàng), 2 = Chuyển khoản ngân hàng
-const PAY_METHOD_ID = { cod: 11, bank: 2 };
+// 11 = COD (Thanh toán khi nhận hàng), 2 = Chuyển khoản ngân hàng, 4 = VNPay QR (id 4 trong hinh_thuc_thanh_toan)
+const PAY_METHOD_ID = { cod: 11, bank: 2, vnpay: 4 };
 
 const phuongThucFields = (kind) => ({
   idPhuongThucThanhToan: PAY_METHOD_ID[kind],
@@ -532,6 +545,46 @@ async function submit() {
   if (errors.name || errors.phone || errors.address) return;
 
   submitting.value = true;
+
+  // ====== VNPAY: Tạo đơn CHO_THANH_TOAN + redirect, CHƯA xóa giỏ ======
+  if (f.pay === "vnpay") {
+    const payload = buildHoaDonRequest();
+    // Ghi đè trangThai, BE sẽ set CHO_THANH_TOAN
+    payload.trangThai = "CHO_THANH_TOAN";
+    console.log("[Checkout] VNPAY payload:", payload);
+    try {
+      const res = await fetch("http://localhost:8080/api/vnpay/create-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        let errJson = {};
+        try { errJson = await res.json(); } catch (e) {}
+        throw new Error(errJson.message || `Lỗi tạo thanh toán VNPAY (mã lỗi ${res.status}).`);
+      }
+
+      const payData = await res.json();
+      if (payData && payData.paymentUrl) {
+        // ✅ Redirect sang VNPay — KHÔNG xóa giỏ (giỏ chỉ xóa sau khi VNPayReturn xác nhận thành công)
+        window.location.href = payData.paymentUrl;
+        return;
+      } else {
+        throw new Error("Không nhận được liên kết thanh toán từ VNPAY.");
+      }
+    } catch (e) {
+      console.error("[Checkout] Lỗi VNPAY:", e);
+      submitError.value =
+        e.message === "Failed to fetch"
+          ? "Không kết nối được máy chủ, vui lòng thử lại."
+          : e.message;
+      submitting.value = false;
+      return;
+    }
+  }
+
+  // ====== COD / Bank: flow bình thường ======
   const payload = buildHoaDonRequest();
   console.log("[Checkout] payload gửi hóa đơn:", payload);
   try {
@@ -555,6 +608,21 @@ async function submit() {
     const hd = await res.json(); // HoaDonDTO
     orderId.value = hd.id;
     orderCode.value = hd.maHoaDon ?? hd.ma ?? hd.id;
+
+    // Lưu vào danh sách đơn gần đây để tra cứu
+    try {
+      const orders = JSON.parse(localStorage.getItem("ps_orders") || "[]");
+      orders.unshift({
+        id: orderCode.value,
+        orderId: hd.id,
+        info: { name: f.name, phone: f.phone, address: f.address, note: f.note, pay: f.pay },
+        items: JSON.parse(JSON.stringify(cart.items)),
+        total: finalTotal.value,
+        date: new Date().toLocaleString("vi-VN"),
+      });
+      localStorage.setItem("ps_orders", JSON.stringify(orders.slice(0, 20)));
+    } catch (e) {}
+
     done.value = true;
     clearCart();
   } catch (e) {
@@ -764,6 +832,35 @@ async function submit() {
         <div class="ps-card co-card">
           <h5 class="co-title">Phương thức thanh toán</h5>
 
+          <!-- Cổng thanh toán VNPAY -->
+          <label
+            for="vnpay"
+            class="co-option"
+            :class="{ active: f.pay === 'vnpay' }"
+          >
+            <input
+              id="vnpay"
+              v-model="f.pay"
+              value="vnpay"
+              type="radio"
+              class="form-check-input co-radio"
+            />
+            <span class="co-ico-box vnpay-ico-box">
+              <span class="fw-bold" style="font-size: 0.85rem; letter-spacing: -0.5px;">
+                <span style="color: #005baa;">VN</span><span style="color: #e11b22;">PAY</span>
+              </span>
+            </span>
+            <span class="flex-grow-1">
+              <span class="d-flex align-items-center gap-2">
+                <span class="fw-semibold">Cổng thanh toán VNPAY</span>
+                <span class="badge bg-danger-subtle text-danger" style="font-size: 0.7rem;">Khuyên dùng</span>
+              </span>
+              <span class="d-block small text-muted"
+                >Thanh toán bảo mật qua VNPAY QR, 40+ Ngân hàng nội địa (Vietcombank, BIDV, Agribank, NCB...) hoặc Thẻ Visa/Mastercard.</span
+              >
+            </span>
+          </label>
+
           <label
             for="cod"
             class="co-option"
@@ -827,15 +924,26 @@ async function submit() {
               :key="i.id + '-' + i.size"
               class="co-item"
             >
-              <div class="position-relative flex-shrink-0">
+              <div
+                class="position-relative flex-shrink-0 rounded border bg-light d-flex align-items-center justify-content-center overflow-hidden"
+                style="width: 64px; height: 64px;"
+              >
                 <img
+                  v-if="itemImage(i)"
                   :src="itemImage(i)"
                   :alt="i.name"
-                  class="rounded border"
-                  style="width: 64px; height: 64px; object-fit: cover"
+                  class="rounded"
+                  style="width: 100%; height: 100%; object-fit: cover"
+                  @error="(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }"
                 />
+                <div
+                  :style="itemImage(i) ? 'display:none; align-items:center; justify-content:center; width:100%; height:100%; font-size:1.8rem;' : 'display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-size:1.8rem;'"
+                >
+                  👟
+                </div>
                 <span
                   class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-secondary"
+                  style="z-index: 2;"
                 >
                   {{ i.qty }}
                 </span>
@@ -1215,6 +1323,11 @@ async function submit() {
 .co-suggest {
   cursor: pointer;
   padding: 0.4rem 0.7rem;
+}
+
+.vnpay-ico-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
 }
 
 @media (max-width: 991.98px) {

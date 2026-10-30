@@ -66,6 +66,7 @@ public class HoaDonService {
     private static final int GHI_CHU_TOI_DA = 1000;
 
     private static final String[][] TRANG_THAI_MAP = {
+        {"CHO_THANH_TOAN", "Cho thanh toan"},
         {"CHO_XAC_NHAN", "Chờ xác nhận"},
         {"DA_XAC_NHAN", "Đã xác nhận"},
         {"CHO_GIAO_HANG", "Chờ giao hàng"},
@@ -78,6 +79,7 @@ public class HoaDonService {
 
     private static final Map<String, List<String>> TRANSITION_MAP = new HashMap<>();
     static {
+        TRANSITION_MAP.put("CHO_THANH_TOAN", List.of("CHO_XAC_NHAN", "DA_HUY"));
         TRANSITION_MAP.put("CHO_XAC_NHAN", List.of("DA_XAC_NHAN", "DA_HUY"));
         TRANSITION_MAP.put("DA_XAC_NHAN", List.of("CHO_GIAO_HANG", "DA_HUY"));
         TRANSITION_MAP.put("CHO_GIAO_HANG", List.of("DANG_GIAO_HANG", "DA_HUY"));
@@ -862,6 +864,40 @@ public class HoaDonService {
             return "Online";
         }
         return ma;
+    }
+
+    /**
+     * Huy don CHO_THANH_TOAN (VNPay that bai) - hard delete de gio hang giu nguyen.
+     */
+    @Transactional
+    public void huyDonChoThanhToan(Long id) {
+        HoaDon hoaDon = hoaDonRepository.findById(id).orElse(null);
+        if (hoaDon == null) return;
+        if (!"CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
+            throw new IllegalArgumentException("Chi huy duoc don o trang thai Cho thanh toan");
+        }
+        chiTietHoaDonRepository.deleteByHoaDonId(id);
+        lichSuHoaDonRepository.deleteByHoaDonId(id);
+        hoaDonRepository.deleteById(id);
+    }
+
+    /**
+     * Xac nhan thanh toan VNPay: CHO_THANH_TOAN -> CHO_XAC_NHAN
+     */
+    @Transactional
+    public HoaDonDTO xacNhanThanhToanVNPay(Long id) {
+        HoaDon hoaDon = hoaDonRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Khong tim thay hoa don #" + id));
+        if (!"CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
+            return toFullDTO(hoaDon);
+        }
+        String tu = hoaDon.getTrangThai();
+        hoaDon.setTrangThai("CHO_XAC_NHAN");
+        hoaDon.setNgayCapNhat(LocalDateTime.now());
+        hoaDon.setNguoiCapNhat("VNPAY");
+        HoaDon saved = hoaDonRepository.save(hoaDon);
+        ghiLichSuTrangThai(saved, tu, "CHO_XAC_NHAN");
+        return toFullDTO(saved);
     }
 
     private static boolean isBlank(String s) {

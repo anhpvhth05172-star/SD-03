@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { onMounted, ref, computed, watch } from "vue";
 import {
   cart,
   cartTotal,
@@ -16,8 +16,152 @@ const user = ref(getUser());
 const actionLoadingId = ref(null);
 const actionError = ref("");
 
+// ===== Voucher Logic =====
+const VOUCHER_API = "http://localhost:8080/admin/phieu-giam-gia";
+const allVouchers = ref([]);
+const loadingVouchers = ref(false);
+const selectedVoucher = ref(null);
+
+const isPercent = (loai) => /PHAN_TRAM|PERCENT|%/.test(loai);
+const isPersonal = (scope) => /CA_NHAN|KHACH_HANG|RIENG|PRIVATE/.test(scope);
+
+const VF = {
+  id: (v) => v.id,
+  code: (v) => v.maPhieuGiamGia,
+  loai: (v) => String(v.loaiGiamGia ?? "").toUpperCase(),
+  value: (v) => Number(v.giaTriGiam ?? 0),
+  max: (v) => Number(v.giamToiDa ?? 0),
+  min: (v) => Number(v.hoaDonToiThieu ?? 0),
+  start: (v) => v.ngayBatDau,
+  end: (v) => v.ngayKetThuc,
+  qty: (v) =>
+    v.soLuong != null
+      ? Number(v.soLuong) - Number(v.soLuongDaSuDung ?? 0)
+      : undefined,
+  active: (v) => v.trangThai,
+  scope: (v) => String(v.phamVi ?? "").toUpperCase(),
+  customerIds: (d) =>
+    (d.danhSachKhachHang || d.khachHangIds || d.khachHang || []).map((k) =>
+      typeof k === "object" ? (k.id ?? k.idKhachHang) : k,
+    ),
+};
+
+function checkVoucher(detail, total) {
+  const act = VF.active(detail);
+  if (act === false || /NGUNG|TAT|INACTIVE|HET_HAN/i.test(String(act))) return false;
+
+  const now = new Date();
+  const st = VF.start(detail);
+  const en = VF.end(detail);
+  if (st && now < new Date(st)) return false;
+  if (en && now > new Date(en)) return false;
+
+  const qty = VF.qty(detail);
+  if (qty !== undefined && qty !== null && Number(qty) <= 0) return false;
+
+  if (isPersonal(VF.scope(detail))) {
+    const cid = user.value?.idKhachHang || user.value?.id;
+    if (!cid || !VF.customerIds(detail).includes(cid)) return false;
+  }
+
+  const min = VF.min(detail);
+  if (total < min) return false;
+
+  return true;
+}
+
+function calcDiscount(v, total) {
+  if (!v || total < (v.min || 0)) return 0;
+  let d = v.type === "percent" ? (total * v.value) / 100 : v.value;
+  if (v.max > 0) d = Math.min(d, v.max);
+  return Math.max(0, Math.min(Math.floor(d), total));
+}
+
+async function loadVouchers() {
+  loadingVouchers.value = true;
+  try {
+    const res = await fetch(`${VOUCHER_API}?size=100`);
+    if (!res.ok) throw new Error("Không thể tải voucher");
+    const data = await res.json();
+    const list = data.content || data || [];
+
+    const detailedList = await Promise.all(
+      list.map(async (v) => {
+        try {
+          const dRes = await fetch(`${VOUCHER_API}/detail/${VF.id(v)}`);
+          if (dRes.ok) {
+            const dData = await dRes.json();
+            return { ...v, ...dData };
+          }
+        } catch {
+          // fallback
+        }
+        return v;
+      })
+    );
+    allVouchers.value = detailedList;
+  } catch (err) {
+    allVouchers.value = [];
+  } finally {
+    loadingVouchers.value = false;
+  }
+}
+
+// Danh sách voucher đủ điều kiện và tính mức giảm giá
+const eligibleVouchers = computed(() => {
+  const total = cartTotal.value;
+  if (total <= 0) return [];
+
+  return allVouchers.value
+    .filter((d) => checkVoucher(d, total))
+    .map((d) => {
+      const v = {
+        id: VF.id(d),
+        code: String(VF.code(d)).toUpperCase(),
+        name: d.tenPhieuGiamGia || "",
+        type: isPercent(VF.loai(d)) ? "percent" : "fixed",
+        value: VF.value(d),
+        max: VF.max(d),
+        min: VF.min(d),
+      };
+      const disc = calcDiscount(v, total);
+      return { v, discount: disc };
+    })
+    .filter((o) => o.discount > 0)
+    .sort((a, b) => b.discount - a.discount); // Ưu đãi tốt nhất lên đầu
+});
+
+// Tự động tìm voucher có ưu đãi tốt nhất
+const bestVoucherOption = computed(() => {
+  return eligibleVouchers.value.length > 0 ? eligibleVouchers.value[0] : null;
+});
+
+// Watcher tự động áp dụng voucher tốt nhất
+watch(
+  [bestVoucherOption, cartTotal],
+  ([best]) => {
+    if (best) {
+      selectedVoucher.value = best.v;
+    } else {
+      selectedVoucher.value = null;
+    }
+  },
+  { immediate: true }
+);
+
+// Số tiền được giảm
+const discountAmount = computed(() => {
+  return calcDiscount(selectedVoucher.value, cartTotal.value);
+});
+
+// Tổng tiền sau giảm
+const finalCartTotal = computed(() => {
+  return Math.max(0, cartTotal.value - discountAmount.value);
+});
+
 onMounted(() => {
   fetchCart();
+  loadVouchers();
 });
 
 const handleQtyChange = async (item, delta) => {
@@ -211,17 +355,35 @@ const handleClear = async () => {
       <div class="col-lg-4">
         <div class="ps-card p-4">
           <h5 class="fw-bold mb-3">Tóm tắt đơn hàng</h5>
+          <!-- Voucher tự động áp dụng -->
+          <div v-if="selectedVoucher" class="alert alert-success border-0 py-2 px-3 rounded-3 d-flex align-items-center justify-content-between mb-3 shadow-sm">
+            <div class="small">
+              <div class="d-flex align-items-center gap-1 fw-bold text-success">
+                <i class="bi bi-tag-fill"></i>
+                <span>{{ selectedVoucher.code }}</span>
+                <span class="badge bg-success text-white ms-1" style="font-size: 0.65rem">Ưu đãi tốt nhất</span>
+              </div>
+              <div class="text-secondary" style="font-size: 0.75rem">
+                {{ selectedVoucher.type === 'percent' ? `Giảm ${selectedVoucher.value}%` : `Giảm ${money(selectedVoucher.value)}` }}
+                {{ selectedVoucher.max > 0 ? `(tối đa ${money(selectedVoucher.max)})` : '' }}
+              </div>
+            </div>
+            <div class="fw-bold text-success small">-{{ money(discountAmount) }}</div>
+          </div>
+
           <div class="d-flex justify-content-between mb-2">
             <span class="text-muted-ps">Tạm tính:</span>
             <span class="fw-semibold">{{ money(cartTotal) }}</span>
           </div>
-          <div class="d-flex justify-content-between mb-3">
-            <span class="text-muted-ps">Phí vận chuyển:</span>
-            <span class="text-success fw-bold">Miễn phí giao hàng</span>
+
+          <div v-if="selectedVoucher && discountAmount > 0" class="d-flex justify-content-between mb-3 text-success">
+            <span>Giảm giá voucher:</span>
+            <span class="fw-bold">-{{ money(discountAmount) }}</span>
           </div>
+
           <div class="d-flex justify-content-between border-top pt-3 mb-4">
             <span class="fw-bold fs-5">Tổng cộng:</span>
-            <span class="price fs-4">{{ money(cartTotal) }}</span>
+            <span class="price fs-4">{{ money(finalCartTotal) }}</span>
           </div>
           <RouterLink to="/thanh-toan" class="btn btn-primary w-100 py-3 rounded-pill fw-bold shadow-sm mb-2">
             Tiến hành đặt hàng <i class="bi bi-arrow-right ms-1"></i>

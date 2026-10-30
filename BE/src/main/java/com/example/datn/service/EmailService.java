@@ -405,4 +405,110 @@ public class EmailService {
                 tenPhieu, giaTriGiam, maPhieu,
                 dieuKienApDung, ngayBatDau, ngayKetThuc);
     }
+    /**
+     * Gui email xac nhan dat hang thanh cong (VNPay hoac COD).
+     */
+    @Async
+    public void guiMailDatHangThanhCong(
+            String toEmail,
+            String tenKhachHang,
+            String maHoaDon,
+            String soTien,
+            String phuongThucThanhToan,
+            String diaChiNhanHang
+    ) {
+        if (toEmail == null || toEmail.trim().isEmpty()) {
+            log.warn("Khong the gui email dat hang: email trong");
+            return;
+        }
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail, "PolyShoes Shop");
+            helper.setTo(toEmail.trim());
+            helper.setSubject("[PolyShoes] Dat hang thanh cong - " + maHoaDon);
+            String html = buildOrderSuccessTemplate(
+                tenKhachHang != null ? tenKhachHang : "Quy khach",
+                maHoaDon != null ? maHoaDon : "",
+                soTien != null ? soTien : "0",
+                phuongThucThanhToan != null ? phuongThucThanhToan : "",
+                diaChiNhanHang != null ? diaChiNhanHang : ""
+            );
+            helper.setText(html, true);
+            mailSender.send(message);
+            log.info("Da gui email dat hang {} den {}", maHoaDon, toEmail);
+        } catch (Exception e) {
+            log.error("Loi gui email dat hang den {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    private String buildOrderSuccessTemplate(
+            String tenKhachHang,
+            String maHoaDon,
+            String soTien,
+            String phuongThucThanhToan,
+            String diaChiNhanHang
+    ) {
+        return """
+            <!DOCTYPE html>
+            <html lang="vi">
+            <head>
+              <meta charset="UTF-8">
+              <style>
+                body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px; color: #333; }
+                .email-container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #e1e8ed; }
+                .email-header { background: linear-gradient(135deg, #059669, #10b981); color: #ffffff; padding: 28px 24px; text-align: center; }
+                .email-header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+                .email-header p { margin: 8px 0 0; opacity: 0.9; font-size: 14px; }
+                .email-body { padding: 32px 28px; line-height: 1.6; }
+                .greeting { font-size: 16px; margin-bottom: 16px; }
+                .success-badge { display: inline-block; background: #d1fae5; color: #065f46; padding: 6px 16px; border-radius: 20px; font-weight: 700; font-size: 14px; margin-bottom: 20px; }
+                .card-info { background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 8px; padding: 18px 20px; margin: 24px 0; }
+                .info-row { display: flex; margin-bottom: 10px; font-size: 14.5px; }
+                .info-label { font-weight: 600; width: 180px; color: #475569; }
+                .info-value { font-weight: 700; color: #0f172a; }
+                .amount-highlight { color: #059669; font-size: 18px; }
+                .email-footer { background: #f8fafc; padding: 20px 24px; text-align: center; font-size: 12.5px; color: #64748b; border-top: 1px solid #e2e8f0; }
+              </style>
+            </head>
+            <body>
+              <div class="email-container">
+                <div class="email-header">
+                  <h1>&#x2705; Don hang da dat thanh cong!</h1>
+                  <p>Cam on quy khach da tin tuong mua sam tai PolyShoes</p>
+                </div>
+                <div class="email-body">
+                  <div class="greeting">Xin chao <b>%s</b>,</div>
+                  <p>Don hang cua quy khach da duoc dat thanh cong. Chung toi se xu ly va giao hang som nhat co the. Duoi day la thong tin chi tiet don hang:</p>
+
+                  <div class="card-info">
+                    <div class="info-row">
+                      <span class="info-label">Ma don hang:</span>
+                      <span class="info-value">%s</span>
+                    </div>
+                    <div class="info-row">
+                      <span class="info-label">Tong thanh toan:</span>
+                      <span class="info-value amount-highlight">%s VND</span>
+                    </div>
+                    <div class="info-row">
+                      <span class="info-label">Phuong thuc thanh toan:</span>
+                      <span class="info-value">%s</span>
+                    </div>
+                    <div class="info-row" style="margin-bottom: 0;">
+                      <span class="info-label">Dia chi nhan hang:</span>
+                      <span class="info-value">%s</span>
+                    </div>
+                  </div>
+
+                  <p>Neu quy khach co bat ky thac mac nao, vui long lien he hotline hoac phan hoi email nay.</p>
+                  <p style="margin-top: 24px;">Tran trong,<br/><b>Doi ngu PolyShoes</b></p>
+                </div>
+                <div class="email-footer">
+                  <p>&copy; 2026 PolyShoes. Moi quyen duoc bao luu.</p>
+                </div>
+              </div>
+            </body>
+            </html>
+            """.formatted(tenKhachHang, maHoaDon, soTien, phuongThucThanhToan, diaChiNhanHang);
+    }
 }
