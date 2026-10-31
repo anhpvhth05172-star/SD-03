@@ -169,6 +169,11 @@ const savedAddresses = computed(() => {
 
 const itemImage = (i) => i.hinhAnh || i.img || i.image || null;
 
+// Tổng số lượng sản phẩm khách đã chọn (cộng dồn qty của từng dòng)
+const totalQty = computed(() =>
+  cart.items.reduce((sum, i) => sum + (Number(i.qty) || 0), 0),
+);
+
 /* ================= PHIẾU GIẢM GIÁ (gọi API thật) ================= */
 const VOUCHER_API = "http://localhost:8080/admin/phieu-giam-gia";
 
@@ -450,7 +455,7 @@ watch(
       voucherMsg.ok = true;
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 const voucherLabel = (v) =>
@@ -553,16 +558,23 @@ async function submit() {
     payload.trangThai = "CHO_THANH_TOAN";
     console.log("[Checkout] VNPAY payload:", payload);
     try {
-      const res = await fetch("http://localhost:8080/api/vnpay/create-payment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch(
+        "http://localhost:8080/api/vnpay/create-payment",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify(payload),
+        },
+      );
 
       if (!res.ok) {
         let errJson = {};
-        try { errJson = await res.json(); } catch (e) {}
-        throw new Error(errJson.message || `Lỗi tạo thanh toán VNPAY (mã lỗi ${res.status}).`);
+        try {
+          errJson = await res.json();
+        } catch (e) {}
+        throw new Error(
+          errJson.message || `Lỗi tạo thanh toán VNPAY (mã lỗi ${res.status}).`,
+        );
       }
 
       const payData = await res.json();
@@ -615,7 +627,13 @@ async function submit() {
       orders.unshift({
         id: orderCode.value,
         orderId: hd.id,
-        info: { name: f.name, phone: f.phone, address: f.address, note: f.note, pay: f.pay },
+        info: {
+          name: f.name,
+          phone: f.phone,
+          address: f.address,
+          note: f.note,
+          pay: f.pay,
+        },
         items: JSON.parse(JSON.stringify(cart.items)),
         total: finalTotal.value,
         date: new Date().toLocaleString("vi-VN"),
@@ -716,8 +734,10 @@ async function submit() {
             >
               <input
                 :id="'addr-' + a.id"
+                name="addr"
                 class="form-check-input co-radio"
                 type="radio"
+                :value="a.id"
                 :checked="selectedAddr === a.id"
                 @change="chooseAddress(a.id)"
               />
@@ -739,8 +759,10 @@ async function submit() {
             >
               <input
                 id="addr-new"
+                name="addr"
                 class="form-check-input co-radio"
                 type="radio"
+                value="new"
                 :checked="selectedAddr === 'new'"
                 @change="chooseAddress('new')"
               />
@@ -801,13 +823,6 @@ async function submit() {
               ></textarea>
             </div>
           </div>
-
-          <div class="co-hint">
-            <i class="bi bi-clock"></i>
-            <span
-              >Đơn hàng được giao trong giờ hành chính (thứ 2 đến thứ 7).</span
-            >
-          </div>
         </div>
 
         <!-- Hình thức vận chuyển -->
@@ -815,6 +830,7 @@ async function submit() {
           <h5 class="co-title">Hình thức vận chuyển</h5>
           <label class="co-option active mb-0">
             <input
+              name="ship"
               class="form-check-input co-radio"
               type="radio"
               checked
@@ -832,43 +848,15 @@ async function submit() {
         <div class="ps-card co-card">
           <h5 class="co-title">Phương thức thanh toán</h5>
 
-          <!-- Cổng thanh toán VNPAY -->
           <label
-            for="vnpay"
-            class="co-option"
-            :class="{ active: f.pay === 'vnpay' }"
-          >
-            <input
-              id="vnpay"
-              v-model="f.pay"
-              value="vnpay"
-              type="radio"
-              class="form-check-input co-radio"
-            />
-            <span class="co-ico-box vnpay-ico-box">
-              <span class="fw-bold" style="font-size: 0.85rem; letter-spacing: -0.5px;">
-                <span style="color: #005baa;">VN</span><span style="color: #e11b22;">PAY</span>
-              </span>
-            </span>
-            <span class="flex-grow-1">
-              <span class="d-flex align-items-center gap-2">
-                <span class="fw-semibold">Cổng thanh toán VNPAY</span>
-                <span class="badge bg-danger-subtle text-danger" style="font-size: 0.7rem;">Khuyên dùng</span>
-              </span>
-              <span class="d-block small text-muted"
-                >Thanh toán bảo mật qua VNPAY QR, 40+ Ngân hàng nội địa (Vietcombank, BIDV, Agribank, NCB...) hoặc Thẻ Visa/Mastercard.</span
-              >
-            </span>
-          </label>
-
-          <label
-            for="cod"
+            for="pay-cod"
             class="co-option"
             :class="{ active: f.pay === 'cod' }"
           >
             <input
-              id="cod"
+              id="pay-cod"
               v-model="f.pay"
+              name="pay"
               value="cod"
               type="radio"
               class="form-check-input co-radio"
@@ -886,23 +874,40 @@ async function submit() {
           </label>
 
           <label
-            for="bank"
+            for="pay-vnpay"
             class="co-option mb-0"
-            :class="{ active: f.pay === 'bank' }"
+            :class="{ active: f.pay === 'vnpay' }"
           >
             <input
-              id="bank"
+              id="pay-vnpay"
               v-model="f.pay"
-              value="bank"
+              name="pay"
+              value="vnpay"
               type="radio"
               class="form-check-input co-radio"
             />
-            <span class="co-ico-box"><i class="bi bi-bank"></i></span>
+            <span class="co-ico-box vnpay-ico-box">
+              <span
+                class="fw-bold"
+                style="font-size: 0.85rem; letter-spacing: -0.5px"
+              >
+                <span style="color: #005baa">VN</span
+                ><span style="color: #e11b22">PAY</span>
+              </span>
+            </span>
             <span class="flex-grow-1">
-              <span class="d-block fw-semibold">Chuyển khoản ngân hàng</span>
+              <span class="d-flex align-items-center gap-2">
+                <span class="fw-semibold">Cổng thanh toán VNPAY</span>
+                <span
+                  class="badge bg-danger-subtle text-danger"
+                  style="font-size: 0.7rem"
+                  >Khuyên dùng</span
+                >
+              </span>
               <span class="d-block small text-muted"
-                >Chuyển khoản qua ứng dụng Ngân hàng hoặc Internet
-                Banking.</span
+                >Thanh toán bảo mật qua VNPAY QR, 40+ Ngân hàng nội địa
+                (Vietcombank, BIDV, Agribank, NCB...) hoặc Thẻ
+                Visa/Mastercard.</span
               >
             </span>
           </label>
@@ -916,7 +921,7 @@ async function submit() {
           <div class="ps-card co-card mb-3">
             <div class="co-cart-head">
               <i class="bi bi-bag-check text-primary"></i>
-              Sản phẩm trong đơn ({{ cart.items.length }})
+              Sản phẩm trong đơn ({{ totalQty }})
             </div>
 
             <div
@@ -925,8 +930,8 @@ async function submit() {
               class="co-item"
             >
               <div
-                class="position-relative flex-shrink-0 rounded border bg-light d-flex align-items-center justify-content-center overflow-hidden"
-                style="width: 64px; height: 64px;"
+                class="position-relative flex-shrink-0 rounded border bg-light d-flex align-items-center justify-content-center"
+                style="width: 64px; height: 64px"
               >
                 <img
                   v-if="itemImage(i)"
@@ -934,16 +939,25 @@ async function submit() {
                   :alt="i.name"
                   class="rounded"
                   style="width: 100%; height: 100%; object-fit: cover"
-                  @error="(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }"
+                  @error="
+                    (e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }
+                  "
                 />
                 <div
-                  :style="itemImage(i) ? 'display:none; align-items:center; justify-content:center; width:100%; height:100%; font-size:1.8rem;' : 'display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-size:1.8rem;'"
+                  :style="
+                    itemImage(i)
+                      ? 'display:none; align-items:center; justify-content:center; width:100%; height:100%; font-size:1.8rem;'
+                      : 'display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-size:1.8rem;'
+                  "
                 >
                   👟
                 </div>
                 <span
                   class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-secondary"
-                  style="z-index: 2;"
+                  style="z-index: 2"
                 >
                   {{ i.qty }}
                 </span>
@@ -951,6 +965,7 @@ async function submit() {
               <div class="flex-grow-1 small">
                 <div class="fw-semibold">{{ i.name }}</div>
                 <span class="co-chip">Size {{ i.size }}</span>
+                <span class="co-chip ms-1">Số lượng: {{ i.qty }}</span>
               </div>
               <div class="small fw-bold">{{ money(i.price * i.qty) }}</div>
             </div>
@@ -1091,7 +1106,7 @@ async function submit() {
             <h6 class="co-title mb-3">Tóm tắt đơn hàng</h6>
 
             <div class="co-row">
-              <span>Tạm tính ({{ cart.items.length }} sản phẩm)</span>
+              <span>Tạm tính ({{ totalQty }} sản phẩm)</span>
               <span class="fw-semibold">{{ money(cartTotal) }}</span>
             </div>
             <div class="co-row">
@@ -1185,6 +1200,10 @@ async function submit() {
   margin: 0;
   flex-shrink: 0;
   cursor: pointer;
+}
+/* Ẩn vòng sáng focus của Bootstrap trên radio */
+.co-radio:focus {
+  box-shadow: none;
 }
 .co-ico {
   font-size: 1.4rem;

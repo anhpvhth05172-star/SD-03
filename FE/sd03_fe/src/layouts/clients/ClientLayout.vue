@@ -8,6 +8,9 @@ import "@/pages/clients/css/style.css";
 const route = useRoute();
 const router = useRouter();
 
+// Đường dẫn trang thông tin khách hàng (đổi cho khớp router của bạn)
+const PROFILE_ROUTE = "/thong-tin-khach-hang";
+
 // Search in navbar
 const navSearch = ref("");
 const handleNavSearch = () => {
@@ -18,6 +21,8 @@ const handleNavSearch = () => {
 };
 
 const user = ref(getUser());
+const isLoggedIn = computed(() => !!user.value);
+
 const userName = computed(() => {
   if (!user.value) return "TÀI KHOẢN";
   return (
@@ -27,25 +32,29 @@ const userName = computed(() => {
   ).toUpperCase();
 });
 
-// Dropdown states
+// Dòng phụ dưới tên trong menu: email hoặc số điện thoại nếu có
+const userSub = computed(
+  () => user.value?.email || user.value?.soDienThoai || "Khách hàng thân thiết",
+);
+
+// Chỉ hiện lối vào trang quản trị với tài khoản quản trị (chỉnh theo field vai trò thật của bạn)
+const isAdmin = computed(() => {
+  const r = String(
+    user.value?.role ?? user.value?.vaiTro ?? user.value?.tenVaiTro ?? "",
+  ).toUpperCase();
+  return /ADMIN|QUAN_LY|QUẢN/.test(r);
+});
+
+// Dropdown state
 const showUserMenu = ref(false);
-const showNotiMenu = ref(false);
 
 const toggleUserMenu = (e) => {
   e.stopPropagation();
   showUserMenu.value = !showUserMenu.value;
-  showNotiMenu.value = false;
-};
-
-const toggleNotiMenu = (e) => {
-  e.stopPropagation();
-  showNotiMenu.value = !showNotiMenu.value;
-  showUserMenu.value = false;
 };
 
 const closeDropdowns = () => {
   showUserMenu.value = false;
-  showNotiMenu.value = false;
 };
 
 onMounted(() => {
@@ -62,6 +71,7 @@ const handleLogout = () => {
   user.value = null;
   fetchCart();
   closeDropdowns();
+  router.push("/trang-chu");
 };
 
 // Newsletter
@@ -81,13 +91,18 @@ const handleSubscribe = () => {
 <template>
   <div class="client-root">
     <!-- Top Announcement Bar (Matching Screenshot) -->
-    <div class="client-top-bar py-1 px-3 text-white small" style="background-color: #d32f2f;">
+    <div
+      class="client-top-bar py-1 px-3 text-white small"
+      style="background-color: #d32f2f"
+    >
       <div class="container d-flex justify-content-between align-items-center">
         <span class="d-none d-md-inline text-white">
-          <i class="bi bi-truck me-1"></i> Miễn phí vận chuyển cho đơn từ 500.000đ
+          <i class="bi bi-truck me-1"></i> Miễn phí vận chuyển cho đơn từ
+          500.000đ
         </span>
         <span class="mx-auto mx-md-0 fw-semibold text-white">
-          ⚡ Ưu đãi mùa hè: Nhập <strong class="text-warning">POLY2026</strong> giảm ngay 10%
+          ⚡ Ưu đãi mùa hè: Nhập
+          <strong class="text-warning">POLY2026</strong> giảm ngay 10%
         </span>
         <div class="d-none d-md-flex align-items-center gap-3 text-white">
           <a href="tel:19001234" class="text-white text-decoration-none">
@@ -175,7 +190,9 @@ const handleSubscribe = () => {
           </ul>
 
           <!-- Right Action Items -->
-          <div class="client-actions ms-lg-auto my-2 my-lg-0 d-flex align-items-center gap-2">
+          <div
+            class="client-actions ms-lg-auto my-2 my-lg-0 d-flex align-items-center gap-2"
+          >
             <!-- Search bar input -->
             <div class="client-nav-search d-none d-xl-block position-relative">
               <input
@@ -194,76 +211,6 @@ const handleSubscribe = () => {
               </button>
             </div>
 
-            <!-- User Icon -->
-            <div class="position-relative">
-              <button
-                type="button"
-                class="client-action-btn"
-                title="Tài khoản"
-                @click="toggleUserMenu"
-              >
-                <i class="bi bi-person fs-5"></i>
-              </button>
-
-              <!-- User Dropdown Menu -->
-              <div
-                v-if="showUserMenu"
-                class="client-dropdown-menu shadow-lg"
-                @click.stop
-              >
-                <div class="px-3 py-2 border-bottom">
-                  <div class="fw-bold text-dark small">{{ userName }}</div>
-                  <div class="text-muted small" style="font-size: 0.75rem">
-                    Khách hàng thân thiết
-                  </div>
-                </div>
-                <RouterLink
-                  to="/gio-hang"
-                  class="client-dropdown-item"
-                  @click="closeDropdowns"
-                >
-                  <i class="bi bi-bag-check text-muted"></i>
-                  <span>Giỏ hàng của tôi</span>
-                </RouterLink>
-                <RouterLink
-                  to="/tra-cuu"
-                  class="client-dropdown-item"
-                  @click="closeDropdowns"
-                >
-                  <i class="bi bi-search text-muted"></i>
-                  <span>Tra cứu & đơn hàng của tôi</span>
-                </RouterLink>
-                <div class="client-dropdown-divider"></div>
-                <RouterLink
-                  to="/admin/san-pham"
-                  class="client-dropdown-item text-muted"
-                  @click="closeDropdowns"
-                >
-                  <i class="bi bi-speedometer2"></i>
-                  <span>Trang quản trị (Admin)</span>
-                </RouterLink>
-                <div class="client-dropdown-divider"></div>
-                <button
-                  v-if="user"
-                  type="button"
-                  class="client-dropdown-item text-danger"
-                  @click="handleLogout"
-                >
-                  <i class="bi bi-box-arrow-right"></i>
-                  <span>Đăng xuất</span>
-                </button>
-                <RouterLink
-                  v-else
-                  to="/dang-nhap"
-                  class="client-dropdown-item text-primary"
-                  @click="closeDropdowns"
-                >
-                  <i class="bi bi-box-arrow-in-right"></i>
-                  <span>Đăng nhập</span>
-                </RouterLink>
-              </div>
-            </div>
-
             <!-- Cart Icon with Badge -->
             <RouterLink
               to="/gio-hang"
@@ -276,15 +223,125 @@ const handleSubscribe = () => {
               </span>
             </RouterLink>
 
-            <!-- Admin Badge Pill Button -->
-            <RouterLink
-              to="/admin/san-pham"
-              class="btn client-admin-pill d-none d-sm-inline-flex align-items-center gap-1"
-              title="Vào trang quản trị"
-            >
-              <i class="bi bi-person-fill-gear"></i>
-              <span>ADMINISTRATOR</span>
-            </RouterLink>
+            <!-- Tài khoản: bấm vào tên để mở menu -->
+            <div class="position-relative">
+              <!-- Icon người dùng (chỉ hiện trên màn hình nhỏ) -->
+              <button
+                type="button"
+                class="client-action-btn d-sm-none"
+                title="Tài khoản"
+                @click="toggleUserMenu"
+              >
+                <i class="bi bi-person fs-5"></i>
+              </button>
+
+              <!-- Nút tên người dùng -->
+              <button
+                v-if="isLoggedIn"
+                type="button"
+                class="btn client-admin-pill d-none d-sm-inline-flex align-items-center gap-1"
+                :aria-expanded="showUserMenu"
+                title="Tài khoản của bạn"
+                @click="toggleUserMenu"
+              >
+                <i class="bi bi-person-circle"></i>
+                <span>{{ userName }}</span>
+                <i
+                  class="bi small"
+                  :class="showUserMenu ? 'bi-chevron-up' : 'bi-chevron-down'"
+                ></i>
+              </button>
+
+              <!-- Chưa đăng nhập -->
+              <RouterLink
+                v-else
+                to="/dang-nhap"
+                class="btn client-admin-pill d-none d-sm-inline-flex align-items-center gap-1"
+                title="Đăng nhập"
+              >
+                <i class="bi bi-box-arrow-in-right"></i>
+                <span>ĐĂNG NHẬP</span>
+              </RouterLink>
+
+              <!-- User Dropdown Menu -->
+              <div
+                v-if="showUserMenu"
+                class="client-dropdown-menu shadow-lg"
+                @click.stop
+              >
+                <template v-if="isLoggedIn">
+                  <div class="px-3 py-2 border-bottom">
+                    <div class="fw-bold text-dark small">{{ userName }}</div>
+                    <div class="text-muted small" style="font-size: 0.75rem">
+                      {{ userSub }}
+                    </div>
+                  </div>
+                  <RouterLink
+                    :to="PROFILE_ROUTE"
+                    class="client-dropdown-item"
+                    @click="closeDropdowns"
+                  >
+                    <i class="bi bi-person-vcard text-muted"></i>
+                    <span>Thông tin khách hàng</span>
+                  </RouterLink>
+                  <RouterLink
+                    to="/tra-cuu"
+                    class="client-dropdown-item"
+                    @click="closeDropdowns"
+                  >
+                    <i class="bi bi-receipt text-muted"></i>
+                    <span>Đơn hàng của tôi</span>
+                  </RouterLink>
+                  <RouterLink
+                    to="/gio-hang"
+                    class="client-dropdown-item"
+                    @click="closeDropdowns"
+                  >
+                    <i class="bi bi-bag-check text-muted"></i>
+                    <span>Giỏ hàng của tôi</span>
+                  </RouterLink>
+                  <template v-if="isAdmin">
+                    <div class="client-dropdown-divider"></div>
+                    <RouterLink
+                      to="/admin/san-pham"
+                      class="client-dropdown-item text-muted"
+                      @click="closeDropdowns"
+                    >
+                      <i class="bi bi-speedometer2"></i>
+                      <span>Trang quản trị (Admin)</span>
+                    </RouterLink>
+                  </template>
+                  <div class="client-dropdown-divider"></div>
+                  <button
+                    type="button"
+                    class="client-dropdown-item text-danger"
+                    @click="handleLogout"
+                  >
+                    <i class="bi bi-box-arrow-right"></i>
+                    <span>Đăng xuất</span>
+                  </button>
+                </template>
+
+                <template v-else>
+                  <RouterLink
+                    to="/dang-nhap"
+                    class="client-dropdown-item text-primary"
+                    @click="closeDropdowns"
+                  >
+                    <i class="bi bi-box-arrow-in-right"></i>
+                    <span>Đăng nhập</span>
+                  </RouterLink>
+                  <RouterLink
+                    to="/tra-cuu"
+                    class="client-dropdown-item"
+                    @click="closeDropdowns"
+                  >
+                    <i class="bi bi-search text-muted"></i>
+                    <span>Tra cứu đơn hàng</span>
+                  </RouterLink>
+                </template>
+              </div>
+            </div>
           </div>
         </div>
       </nav>
@@ -307,8 +364,12 @@ const handleSubscribe = () => {
                   <i class="bi bi-truck"></i>
                 </div>
                 <div>
-                  <div class="client-footer-perk-title">Giao hàng toàn quốc</div>
-                  <p class="client-footer-perk-desc">Nhận hàng trong 1–3 ngày, kiểm tra trước khi trả tiền</p>
+                  <div class="client-footer-perk-title">
+                    Giao hàng toàn quốc
+                  </div>
+                  <p class="client-footer-perk-desc">
+                    Nhận hàng trong 1–3 ngày, kiểm tra trước khi trả tiền
+                  </p>
                 </div>
               </div>
             </div>
@@ -318,8 +379,12 @@ const handleSubscribe = () => {
                   <i class="bi bi-arrow-repeat"></i>
                 </div>
                 <div>
-                  <div class="client-footer-perk-title">Đổi size trong 7 ngày</div>
-                  <p class="client-footer-perk-desc">Hỗ trợ đổi miễn phí tận nơi lần đầu tiên cực nhanh</p>
+                  <div class="client-footer-perk-title">
+                    Đổi size trong 7 ngày
+                  </div>
+                  <p class="client-footer-perk-desc">
+                    Hỗ trợ đổi miễn phí tận nơi lần đầu tiên cực nhanh
+                  </p>
                 </div>
               </div>
             </div>
@@ -330,7 +395,10 @@ const handleSubscribe = () => {
                 </div>
                 <div>
                   <div class="client-footer-perk-title">Chính hãng 100%</div>
-                  <p class="client-footer-perk-desc">Cam kết sneaker chuẩn authentic, đền gấp đôi nếu phát hiện giả</p>
+                  <p class="client-footer-perk-desc">
+                    Cam kết sneaker chuẩn authentic, đền gấp đôi nếu phát hiện
+                    giả
+                  </p>
                 </div>
               </div>
             </div>
@@ -341,7 +409,10 @@ const handleSubscribe = () => {
                 </div>
                 <div>
                   <div class="client-footer-perk-title">Hotline CSKH 24/7</div>
-                  <p class="client-footer-perk-desc">Tư vấn chọn size tận tâm: <strong class="text-white">1900 1234</strong></p>
+                  <p class="client-footer-perk-desc">
+                    Tư vấn chọn size tận tâm:
+                    <strong class="text-white">1900 1234</strong>
+                  </p>
                 </div>
               </div>
             </div>
@@ -362,41 +433,75 @@ const handleSubscribe = () => {
                   class="footer-brand-logo"
                 />
                 <div>
-                  <div class="fw-black fs-4 text-white footer-brand-text">POLY SHOES</div>
-                  <div class="text-danger small fw-semibold tracking-wider" style="font-size: 0.72rem; letter-spacing: 0.15em;">AUTHENTIC SNEAKERS</div>
+                  <div class="fw-black fs-4 text-white footer-brand-text">
+                    POLY SHOES
+                  </div>
+                  <div
+                    class="text-danger small fw-semibold tracking-wider"
+                    style="font-size: 0.72rem; letter-spacing: 0.15em"
+                  >
+                    AUTHENTIC SNEAKERS
+                  </div>
                 </div>
               </div>
               <p class="small mb-4 footer-about-text text-white-50">
-                Poly Shoes – Hệ thống phân phối giày sneaker chính hãng hàng đầu. Đa dạng mẫu mã từ Nike, Adidas, Jordan, Puma,... Tự tin bước cùng bạn trên mọi hành trình.
+                Poly Shoes – Hệ thống phân phối giày sneaker chính hãng hàng
+                đầu. Đa dạng mẫu mã từ Nike, Adidas, Jordan, Puma,... Tự tin
+                bước cùng bạn trên mọi hành trình.
               </p>
-              
-              <div class="d-flex flex-column gap-2 small footer-contact-list mb-4 text-white-50">
+
+              <div
+                class="d-flex flex-column gap-2 small footer-contact-list mb-4 text-white-50"
+              >
                 <div class="d-flex align-items-start gap-2">
                   <i class="bi bi-geo-alt-fill text-danger mt-1"></i>
                   <span>123 Trịnh Văn Bô, Nam Từ Liêm, Hà Nội</span>
                 </div>
                 <div class="d-flex align-items-center gap-2">
                   <i class="bi bi-telephone-fill text-danger"></i>
-                  <span>Hotline: <strong class="text-white">1900 1234</strong> (08:30 – 22:00)</span>
+                  <span
+                    >Hotline:
+                    <strong class="text-white">1900 1234</strong> (08:30 –
+                    22:00)</span
+                  >
                 </div>
                 <div class="d-flex align-items-center gap-2">
                   <i class="bi bi-envelope-fill text-danger"></i>
-                  <span>Email: <strong class="text-white">cskh@polyshoes.vn</strong></span>
+                  <span
+                    >Email:
+                    <strong class="text-white">cskh@polyshoes.vn</strong></span
+                  >
                 </div>
               </div>
 
               <!-- Social Links -->
               <div class="d-flex align-items-center gap-2">
-                <a href="javascript:void(0)" class="client-footer-social-btn" title="Facebook">
+                <a
+                  href="javascript:void(0)"
+                  class="client-footer-social-btn"
+                  title="Facebook"
+                >
                   <i class="bi bi-facebook"></i>
                 </a>
-                <a href="javascript:void(0)" class="client-footer-social-btn" title="Instagram">
+                <a
+                  href="javascript:void(0)"
+                  class="client-footer-social-btn"
+                  title="Instagram"
+                >
                   <i class="bi bi-instagram"></i>
                 </a>
-                <a href="javascript:void(0)" class="client-footer-social-btn" title="TikTok">
+                <a
+                  href="javascript:void(0)"
+                  class="client-footer-social-btn"
+                  title="TikTok"
+                >
                   <i class="bi bi-tiktok"></i>
                 </a>
-                <a href="javascript:void(0)" class="client-footer-social-btn" title="YouTube">
+                <a
+                  href="javascript:void(0)"
+                  class="client-footer-social-btn"
+                  title="YouTube"
+                >
                   <i class="bi bi-youtube"></i>
                 </a>
               </div>
@@ -417,12 +522,18 @@ const handleSubscribe = () => {
                   </RouterLink>
                 </li>
                 <li>
-                  <RouterLink to="/cua-hang?brand=Nike" class="client-footer-link">
+                  <RouterLink
+                    to="/cua-hang?brand=Nike"
+                    class="client-footer-link"
+                  >
                     <span>Giày Nike</span>
                   </RouterLink>
                 </li>
                 <li>
-                  <RouterLink to="/cua-hang?brand=Adidas" class="client-footer-link">
+                  <RouterLink
+                    to="/cua-hang?brand=Adidas"
+                    class="client-footer-link"
+                  >
                     <span>Giày Adidas</span>
                   </RouterLink>
                 </li>
@@ -436,7 +547,9 @@ const handleSubscribe = () => {
 
             <!-- Col 3: Customer Service & Policies -->
             <div class="col-lg-3 col-md-6 col-6">
-              <div class="client-footer-title text-white">HỖ TRỢ KHÁCH HÀNG</div>
+              <div class="client-footer-title text-white">
+                HỖ TRỢ KHÁCH HÀNG
+              </div>
               <ul class="client-footer-links">
                 <li>
                   <RouterLink to="/tra-cuu" class="client-footer-link">
@@ -468,11 +581,15 @@ const handleSubscribe = () => {
 
             <!-- Col 4: Newsletter & Payments -->
             <div class="col-lg-3 col-md-6">
-              <div class="client-footer-title text-white">ĐĂNG KÝ NHẬN ƯU ĐÃI</div>
+              <div class="client-footer-title text-white">
+                ĐĂNG KÝ NHẬN ƯU ĐÃI
+              </div>
               <p class="small mb-3 footer-about-text text-white-50">
-                Nhận voucher giảm <strong class="text-danger">50.000₫</strong> cho đơn hàng đầu tiên cùng nhiều ưu đãi hấp dẫn khác.
+                Nhận voucher giảm
+                <strong class="text-danger">50.000₫</strong> cho đơn hàng đầu
+                tiên cùng nhiều ưu đãi hấp dẫn khác.
               </p>
-              
+
               <!-- Newsletter Form -->
               <div class="mb-4">
                 <div class="input-group footer-newsletter-group">
@@ -486,7 +603,7 @@ const handleSubscribe = () => {
                   <button
                     type="button"
                     class="btn btn-danger px-3 fw-bold"
-                    style="background-color: #ef4444; border-color: #ef4444;"
+                    style="background-color: #ef4444; border-color: #ef4444"
                     @click="handleSubscribe"
                   >
                     Đăng ký
@@ -503,7 +620,9 @@ const handleSubscribe = () => {
 
               <!-- Payment Partners -->
               <div>
-                <span class="small fw-semibold text-white-50 d-block mb-2">Phương thức thanh toán tiện lợi:</span>
+                <span class="small fw-semibold text-white-50 d-block mb-2"
+                  >Phương thức thanh toán tiện lợi:</span
+                >
                 <div class="d-flex flex-wrap gap-2 align-items-center">
                   <div class="payment-badge-dark">
                     <i class="bi bi-cash-stack text-success"></i> COD
@@ -512,7 +631,8 @@ const handleSubscribe = () => {
                     <i class="bi bi-bank text-info"></i> Chuyển khoản
                   </div>
                   <div class="payment-badge-dark">
-                    <i class="bi bi-credit-card text-warning"></i> VNPay / Visa/Mastercard
+                    <i class="bi bi-credit-card text-warning"></i> VNPay /
+                    Visa/Mastercard
                   </div>
                 </div>
               </div>
@@ -526,7 +646,9 @@ const handleSubscribe = () => {
         <div
           class="container d-flex flex-column flex-md-row justify-content-between align-items-center gap-2"
         >
-          <span class="text-white-50">© 2026 Poly Shoes. Tất cả các quyền được bảo lưu.</span>
+          <span class="text-white-50"
+            >© 2026 Poly Shoes. Tất cả các quyền được bảo lưu.</span
+          >
           <div class="d-flex align-items-center gap-3">
             <a
               href="javascript:void(0)"

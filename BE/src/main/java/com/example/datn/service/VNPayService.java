@@ -55,17 +55,13 @@ public class VNPayService {
      */
     @Transactional
     public VNPayPaymentResponse createPaymentAndUrl(HttpServletRequest httpRequest, HoaDonRequest hoaDonRequest) {
-        // Bắt buộc trạng thái = CHO_THANH_TOAN (đơn chờ thanh toán, chưa xác nhận)
         hoaDonRequest.setTrangThai("CHO_THANH_TOAN");
 
-        // Tạo đơn hàng thực sự (tạm thời chờ thanh toán)
         HoaDonDTO hoaDon = hoaDonService.create(hoaDonRequest);
         log.info("Đã tạo đơn CHO_THANH_TOAN: {} (id={})", hoaDon.getMaHoaDon(), hoaDon.getId());
 
-        // Lấy số tiền cần thanh toán
         BigDecimal soTien = hoaDon.getTienSauGiamGia();
         if (soTien == null || soTien.compareTo(BigDecimal.ZERO) <= 0) {
-            // Hủy đơn vừa tạo nếu số tiền không hợp lệ
             hoaDonService.huyDonChoThanhToan(hoaDon.getId());
             throw new IllegalArgumentException("Số tiền thanh toán phải lớn hơn 0");
         }
@@ -79,11 +75,6 @@ public class VNPayService {
             .build();
     }
 
-    /**
-     * Bước 2: Xử lý callback từ VNPay sau khi người dùng thanh toán.
-     * - vnp_ResponseCode = "00" → xác nhận đơn (CHO_THANH_TOAN -> CHO_XAC_NHAN)
-     * - Còn lại → hủy (xóa cứng) đơn CHO_THANH_TOAN để giỏ hàng nguyên vẹn
-     */
     @Transactional
     public VNPayCallbackResponse handlePaymentCallback(Map<String, String> fields) {
         String vnpSecureHash = fields.get("vnp_SecureHash");
@@ -94,7 +85,6 @@ public class VNPayService {
 
         String signValue = VNPayConfig.hashAllFields(fieldsCopy, vnPayConfig.getVnpHashSecret());
 
-        // Tách mã hóa đơn từ vnp_TxnRef (format: MAHOADON_timestamp)
         String vnpTxnRef = fields.get("vnp_TxnRef");
         String maHoaDon = vnpTxnRef != null && vnpTxnRef.contains("_")
             ? vnpTxnRef.substring(0, vnpTxnRef.lastIndexOf("_"))
@@ -113,16 +103,13 @@ public class VNPayService {
             } catch (Exception ignored) {}
         }
 
-        // Tìm đơn hàng theo mã
         HoaDon hoaDon = null;
         if (maHoaDon != null && !maHoaDon.trim().isEmpty()) {
             hoaDon = hoaDonRepository.findByMaHoaDon(maHoaDon).orElse(null);
         }
 
-        // Kiểm tra chữ ký bảo mật VNPay
         if (signValue == null || !signValue.equalsIgnoreCase(vnpSecureHash)) {
             log.warn("Chữ ký VNPay không hợp lệ! Kỳ vọng: {}, Nhận: {}", signValue, vnpSecureHash);
-            // Không tự động hủy đơn khi chữ ký lỗi - có thể là tấn công giả mạo
             return VNPayCallbackResponse.builder()
                 .success(false)
                 .message("Chữ ký bảo mật không hợp lệ (Checksum failed). Giao dịch không được xử lý.")
@@ -154,7 +141,6 @@ public class VNPayService {
         }
 
         if (isSuccess) {
-            // ✅ Thanh toán thành công → xác nhận đơn hàng
             if ("CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
                 hoaDonService.xacNhanThanhToanVNPay(hoaDon.getId());
                 // Ghi ghi chú giao dịch vào đơn
@@ -164,12 +150,11 @@ public class VNPayService {
                 String currentNote = hoaDon.getGhiChu() != null ? hoaDon.getGhiChu().trim() : "";
                 String updatedNote = currentNote.isEmpty() ? vnpNote : currentNote + " " + vnpNote;
                 if (updatedNote.length() > 1000) updatedNote = updatedNote.substring(0, 1000);
-                hoaDon.setGhiChu(updatedNote);
+//                hoaDon.setGhiChu(updatedNote);
                 hoaDon.setNgayCapNhat(LocalDateTime.now());
                 hoaDonRepository.save(hoaDon);
                 log.info("VNPay thành công → đơn {} chuyển sang CHO_XAC_NHAN (GD: {})", maHoaDon, vnpTransactionNo);
 
-                // Gửi email xác nhận đơn hàng cho khách hàng
                 try {
                     KhachHang kh = hoaDon.getKhachHang();
                     if (kh != null && kh.getEmail() != null && !kh.getEmail().isBlank()) {
@@ -184,11 +169,9 @@ public class VNPayService {
                     log.warn("Lỗi gửi email xác nhận đơn VNPay {}: {}", maHoaDon, ex.getMessage());
                 }
             } else {
-                // Idempotent: đã xử lý rồi
                 log.info("VNPay callback đã xử lý trước đó cho đơn {}", maHoaDon);
             }
         } else {
-            // ❌ Thanh toán thất bại hoặc hủy → xóa đơn CHO_THANH_TOAN để giỏ hàng nguyên vẹn
             if ("CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
                 try {
                     hoaDonService.huyDonChoThanhToan(hoaDon.getId());
@@ -212,7 +195,6 @@ public class VNPayService {
             .build();
     }
 
-    // ===== Helpers =====
 
     private String buildPaymentUrl(HttpServletRequest request, String maHoaDon, BigDecimal soTien) {
         long amount = soTien.multiply(BigDecimal.valueOf(100)).longValue();

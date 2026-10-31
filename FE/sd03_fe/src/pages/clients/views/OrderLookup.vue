@@ -1,52 +1,251 @@
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, unref, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { getOrder, money } from "../store";
+import * as store from "../store";
 
+const { money } = store;
 const route = useRoute();
-const searchInput = ref(route.query.code || "");
-const searched = ref(false);
-const currentResult = ref(null);
-const errorMessage = ref("");
 
-// Quick order history from localStorage
-const recentOrders = computed(() => {
+/* ================= CẤU HÌNH API ================= */
+const HOA_DON_API = "http://localhost:8080/api/hoa-don";
+
+const getToken = () => {
+  const a = unref(store.auth);
+  if (a?.token) return a.token;
+  for (const area of [localStorage, sessionStorage]) {
+    const t = area.getItem("token") || area.getItem("accessToken");
+    if (t) return t;
+  }
+  return "";
+};
+const authHeaders = () => {
+  const t = getToken();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+};
+async function getJson(url) {
+  const res = await fetch(url, { headers: authHeaders() });
+  if (!res.ok) {
+    const e = new Error(String(res.status));
+    e.status = res.status;
+    throw e;
+  }
+  return res.json();
+}
+
+/* >>> ADAPTER: đổi tên field cho khớp HoaDonDTO của back-end <<< */
+const HD = {
+  id: (h) => h.id,
+  code: (h) => h.maHoaDon ?? h.ma ?? h.id,
+  date: (h) => h.ngayTao ?? h.ngayDat ?? h.createdAt,
+  status: (h) => String(h.trangThai ?? "").toUpperCase(),
+  name: (h) => h.tenKhachHang ?? h.khachHang?.tenKhachHang ?? "",
+  phone: (h) =>
+    h.soDienThoaiKhachHang ?? h.soDienThoai ?? h.khachHang?.soDienThoai ?? "",
+  address: (h) => h.diaChiNhanHang ?? h.diaChi ?? "",
+  note: (h) => h.ghiChu ?? "",
+  payId: (h) => h.idPhuongThucThanhToan ?? h.phuongThucThanhToan?.id,
+  payName: (h) => h.tenPhuongThucThanhToan ?? h.phuongThucThanhToan?.ten ?? "",
+  ship: (h) => Number(h.phiVanChuyen ?? 0),
+  discount: (h) => Number(h.tienGiam ?? h.giamGia ?? h.soTienGiam ?? 0),
+  total: (h) => Number(h.tongTien ?? h.tongTienSauGiam ?? h.thanhTien ?? 0),
+  items: (h) => h.chiTiet ?? h.danhSachChiTiet ?? h.hoaDonChiTiets ?? [],
+};
+const HDI = {
+  name: (i) => i.tenSanPham ?? i.sanPham?.tenSanPham ?? i.name ?? "",
+  size: (i) => i.kichCo ?? i.tenKichCo ?? i.size ?? "",
+  qty: (i) => Number(i.soLuong ?? i.qty ?? 0),
+  price: (i) => Number(i.donGia ?? i.price ?? 0),
+  image: (i) => i.hinhAnh ?? i.img ?? null,
+};
+
+// id cố định theo bảng phuong_thuc_thanh_toan (khớp trang thanh toán)
+const PAY_LABEL = {
+  11: "Thanh toán khi nhận hàng (COD)",
+  2: "Chuyển khoản ngân hàng",
+  4: "Thanh toán qua VNPAY",
+};
+
+// Trạng thái đơn -> nhãn, màu, bước tiến độ (0-3, 4 = hoàn tất)
+const STATUS = {
+  CHO_THANH_TOAN: { label: "Chờ thanh toán", tone: "warn", step: 1 },
+  CHO_XAC_NHAN: { label: "Chờ xác nhận", tone: "warn", step: 1 },
+  DA_XAC_NHAN: { label: "Đã xác nhận", tone: "info", step: 1 },
+  DANG_GIAO: { label: "Đang vận chuyển", tone: "info", step: 2 },
+  DANG_GIAO_HANG: { label: "Đang vận chuyển", tone: "info", step: 2 },
+  HOAN_THANH: { label: "Giao thành công", tone: "ok", step: 4 },
+  DA_GIAO: { label: "Giao thành công", tone: "ok", step: 4 },
+  DA_HUY: { label: "Đã hủy", tone: "danger", step: -1 },
+};
+const statusInfo = (code) =>
+  STATUS[code] || { label: code || "Đang xử lý", tone: "info", step: 1 };
+
+function fmtDate(raw) {
+  if (!raw) return "";
+  const d = new Date(raw);
+  return isNaN(d) ? String(raw) : d.toLocaleString("vi-VN");
+}
+
+// Chuẩn hóa 1 hóa đơn từ BE thành object dùng cho giao diện
+function normalize(h) {
+  const st = HD.status(h);
+  const payId = HD.payId(h);
+  return {
+    id: HD.id(h),
+    code: String(HD.code(h)),
+    date: fmtDate(HD.date(h)),
+    ts: new Date(HD.date(h) || 0).getTime() || 0,
+    status: st,
+    statusInfo: statusInfo(st),
+    name: HD.name(h),
+    phone: HD.phone(h),
+    address: HD.address(h),
+    note: HD.note(h),
+    pay: PAY_LABEL[payId] || HD.payName(h) || "Thanh toán khi nhận hàng (COD)",
+    ship: HD.ship(h),
+    discount: HD.discount(h),
+    total: HD.total(h),
+    items: HD.items(h).map((i) => ({
+      name: HDI.name(i),
+      size: HDI.size(i),
+      qty: HDI.qty(i),
+      price: HDI.price(i),
+      image: HDI.image(i),
+    })),
+    hasItems: HD.items(h).length > 0,
+  };
+}
+
+// Lấy chi tiết hóa đơn theo id (đầy đủ chi tiết sản phẩm)
+async function fetchById(id) {
+  return normalize(await getJson(`${HOA_DON_API}/${id}`));
+}
+
+/* ================= ĐƠN GẦN ĐÂY (đồng bộ trạng thái từ BE) ================= */
+// localStorage chỉ giữ tham chiếu (mã + id) để biết khách đã đặt đơn nào,
+// toàn bộ dữ liệu hiển thị được tải lại từ back-end.
+const storedRefs = () => {
   try {
-    return JSON.parse(localStorage.getItem("ps_orders")) || [];
+    const list = JSON.parse(localStorage.getItem("ps_orders")) || [];
+    return list.filter((o) => o && o.orderId);
   } catch {
     return [];
   }
-});
+};
 
-const doSearch = (codeToSearch) => {
-  const query = (codeToSearch || searchInput.value).trim().toUpperCase();
+const recentOrders = ref([]);
+const loadingRecent = ref(false);
+
+async function loadRecent() {
+  const refs = storedRefs().slice(0, 10); // mới nhất đứng đầu
+  if (!refs.length) {
+    recentOrders.value = [];
+    return;
+  }
+  loadingRecent.value = true;
+  const results = await Promise.all(
+    refs.map((r) => fetchById(r.orderId).catch(() => null)),
+  );
+  // Đơn không còn trên BE (hoặc lỗi) thì bỏ qua
+  recentOrders.value = results.filter(Boolean);
+  loadingRecent.value = false;
+}
+
+/* ================= TRA CỨU ================= */
+const searchInput = ref(route.query.code || "");
+const searched = ref(false);
+const searching = ref(false);
+const currentResult = ref(null);
+const errorMessage = ref("");
+
+const isPhone = (s) => /^0\d{9}$/.test(s);
+
+async function findOrder(query) {
+  // 1) Chuỗi toàn số (không phải SĐT) -> coi là id hóa đơn
+  if (/^\d+$/.test(query) && !isPhone(query)) {
+    try {
+      return await fetchById(query);
+    } catch (e) {
+      if (e.status !== 404) throw e;
+    }
+  }
+
+  // 2) Tìm theo mã hóa đơn / số điện thoại
+  const page = await getJson(
+    `${HOA_DON_API}?keyword=${encodeURIComponent(query)}&size=50`,
+  );
+  const list = page.content || page || [];
+  const matches = list.filter(
+    (h) =>
+      String(HD.code(h)).toUpperCase() === query ||
+      (isPhone(query) && HD.phone(h) === query),
+  );
+  if (!matches.length) return null;
+
+  // Nhiều đơn cùng SĐT -> lấy đơn mới nhất
+  const newest = matches
+    .map((h) => ({ h, ts: new Date(HD.date(h) || 0).getTime() || 0 }))
+    .sort((a, b) => b.ts - a.ts)[0].h;
+
+  // 3) Danh sách có thể không kèm chi tiết sản phẩm -> tải lại theo id
+  const n = normalize(newest);
+  return n.hasItems ? n : await fetchById(n.id);
+}
+
+const doSearch = async (codeToSearch) => {
+  const raw = String(codeToSearch ?? searchInput.value ?? "").trim();
+  const query = (raw.startsWith("#") ? raw.slice(1) : raw).toUpperCase();
   if (!query) {
     errorMessage.value = "Vui lòng nhập mã đơn hàng hoặc số điện thoại.";
     return;
   }
   errorMessage.value = "";
-  searched.value = true;
   searchInput.value = query;
+  searched.value = true;
+  searching.value = true;
+  currentResult.value = null;
 
-  const cleanCode = query.startsWith("#") ? query.slice(1) : query;
-
-  // Try finding by ID
-  let found = getOrder(cleanCode);
-
-  // If not found by ID, try finding by phone in localStorage
-  if (!found && recentOrders.value.length) {
-    found = recentOrders.value.find(
-      (o) => o.info?.phone === query || o.id === cleanCode,
-    );
+  try {
+    currentResult.value = await findOrder(query);
+  } catch (e) {
+    console.error("[TraCuu] Lỗi tra cứu:", e);
+    searched.value = false;
+    errorMessage.value =
+      e.message === "Failed to fetch"
+        ? "Không kết nối được máy chủ, vui lòng thử lại."
+        : e.status === 401 || e.status === 403
+          ? "Bạn chưa có quyền tra cứu, vui lòng đăng nhập và thử lại."
+          : "Không tra cứu được đơn hàng, vui lòng thử lại.";
+  } finally {
+    searching.value = false;
   }
-
-  currentResult.value = found || null;
 };
 
-// If code query param passed, execute search immediately
-if (route.query.code) {
-  doSearch(route.query.code);
+function backToList() {
+  searched.value = false;
+  searchInput.value = "";
+  currentResult.value = null;
+  loadRecent(); // làm mới trạng thái đơn
 }
+
+/* ---------- Tiến độ giao hàng theo trạng thái thật ---------- */
+const stepIndex = computed(() => currentResult.value?.statusInfo.step ?? 1);
+const isCancelled = computed(() => currentResult.value?.status === "DA_HUY");
+const stepClass = (i) => ({
+  done: i < stepIndex.value,
+  current: i === stepIndex.value,
+});
+const confirmNote = computed(() => {
+  const s = currentResult.value?.status;
+  if (s === "CHO_THANH_TOAN") return "Chờ thanh toán";
+  if (s === "CHO_XAC_NHAN") return "Chờ cửa hàng xác nhận";
+  if (s === "DA_XAC_NHAN") return "Đang đóng gói";
+  return "Cửa hàng đã xác nhận";
+});
+
+onMounted(() => {
+  loadRecent();
+  if (route.query.code) doSearch(route.query.code);
+});
 </script>
 
 <template>
@@ -86,8 +285,12 @@ if (route.query.code) {
             placeholder="Nhập mã đơn hàng hoặc số điện thoại..."
             @keyup.enter="doSearch()"
           />
-          <button class="btn btn-primary ol-search-btn" @click="doSearch()">
-            Tra cứu ngay
+          <button
+            class="btn btn-primary ol-search-btn"
+            :disabled="searching"
+            @click="doSearch()"
+          >
+            {{ searching ? "Đang tra cứu..." : "Tra cứu ngay" }}
           </button>
         </div>
 
@@ -100,14 +303,14 @@ if (route.query.code) {
           <span class="ol-recent-label">Đơn bạn đã đặt gần đây:</span>
           <div class="d-flex flex-wrap gap-2 mt-2">
             <button
-              v-for="o in recentOrders.slice(-4)"
+              v-for="o in recentOrders.slice(0, 4)"
               :key="o.id"
               type="button"
               class="ol-chip"
-              @click="doSearch(o.id)"
+              @click="doSearch(o.code)"
             >
-              <i class="bi bi-receipt me-1"></i>#{{ o.id }} ({{
-                o.info?.name || "Khách"
+              <i class="bi bi-receipt me-1"></i>#{{ o.code }} ({{
+                o.name || "Khách"
               }})
             </button>
           </div>
@@ -116,7 +319,11 @@ if (route.query.code) {
     </section>
 
     <!-- ================= DANH SÁCH ĐƠN ĐÃ ĐẶT ================= -->
-    <section v-if="!searched && recentOrders.length" class="mb-5">
+    <section v-if="!searched && loadingRecent" class="mb-5">
+      <div class="text-muted-ps small">Đang tải danh sách đơn hàng...</div>
+    </section>
+
+    <section v-else-if="!searched && recentOrders.length" class="mb-5">
       <div class="ol-head">
         <div class="ol-eyebrow">/ Lịch sử đặt hàng</div>
         <h3 class="ol-h">Đơn hàng bạn đã đặt ({{ recentOrders.length }})</h3>
@@ -131,9 +338,9 @@ if (route.query.code) {
           <div class="ol-order-top">
             <div>
               <div class="d-flex align-items-center flex-wrap gap-2">
-                <span class="ol-order-code">Đơn hàng #{{ o.id }}</span>
-                <span class="ol-status"
-                  ><i class="bi bi-dot"></i>Đang xử lý</span
+                <span class="ol-order-code">Đơn hàng #{{ o.code }}</span>
+                <span class="ol-status" :class="o.statusInfo.tone"
+                  ><i class="bi bi-dot"></i>{{ o.statusInfo.label }}</span
                 >
               </div>
               <div class="text-muted-ps small mt-1">
@@ -149,17 +356,22 @@ if (route.query.code) {
           <!-- Sản phẩm -->
           <div class="d-flex flex-column gap-3 my-3">
             <div
-              v-for="item in o.items"
-              :key="item.id + '-' + item.size"
+              v-for="(item, idx) in o.items"
+              :key="idx + '-' + item.size"
               class="d-flex align-items-center gap-3"
             >
               <div class="ps-thumb flex-shrink-0 ol-thumb">
-                {{ item.emoji || "👟" }}
+                <img
+                  v-if="item.image"
+                  :src="item.image"
+                  :alt="item.name"
+                  class="ol-thumb-img"
+                />
+                <template v-else>👟</template>
               </div>
               <div class="flex-grow-1">
                 <div class="fw-semibold text-dark small">{{ item.name }}</div>
                 <div class="small text-muted-ps">
-                  {{ item.brand }} ·
                   <span class="ol-tag">Size {{ item.size }}</span> · SL:
                   {{ item.qty }}
                 </div>
@@ -174,25 +386,19 @@ if (route.query.code) {
           <div class="ol-order-foot">
             <div class="small text-muted-ps">
               <i class="bi bi-geo-alt-fill text-primary me-1"></i>
-              <span class="fw-semibold text-dark">{{ o.info?.name }}</span> ·
-              {{ o.info?.phone }} ·
+              <span class="fw-semibold text-dark">{{ o.name }}</span> ·
+              {{ o.phone }} ·
               <span class="text-truncate d-inline-block align-bottom ol-addr">
-                {{ o.info?.address }}
+                {{ o.address }}
               </span>
             </div>
             <div class="d-flex gap-2 flex-shrink-0">
               <button
                 class="btn btn-outline-primary btn-sm ol-pill-btn"
-                @click="doSearch(o.id)"
+                @click="doSearch(o.code)"
               >
                 <i class="bi bi-search me-1"></i>Theo dõi tiến độ
               </button>
-              <RouterLink
-                :to="`/don-hang/${o.id}`"
-                class="btn btn-primary btn-sm ol-pill-btn"
-              >
-                Chi tiết
-              </RouterLink>
             </div>
           </div>
         </div>
@@ -201,23 +407,24 @@ if (route.query.code) {
 
     <!-- ================= KẾT QUẢ TRA CỨU ================= -->
     <section v-if="searched" class="mb-5">
-      <button
-        class="ol-back"
-        @click="
-          searched = false;
-          searchInput = '';
-        "
-      >
+      <button class="ol-back" @click="backToList">
         <i class="bi bi-arrow-left me-1"></i>Quay lại danh sách đơn hàng
       </button>
 
-      <div v-if="currentResult" class="ps-card ol-result">
+      <div v-if="searching" class="ps-card text-center p-5">
+        <div class="text-muted-ps">Đang tra cứu đơn hàng...</div>
+      </div>
+
+      <div v-else-if="currentResult" class="ps-card ol-result">
         <!-- Đầu kết quả -->
         <div class="ol-result-top">
           <div>
             <div class="d-flex align-items-center flex-wrap gap-2">
-              <h3 class="mb-0 fw-bold">Đơn hàng #{{ currentResult.id }}</h3>
-              <span class="ol-status"><i class="bi bi-dot"></i>Đang xử lý</span>
+              <h3 class="mb-0 fw-bold">Đơn hàng #{{ currentResult.code }}</h3>
+              <span class="ol-status" :class="currentResult.statusInfo.tone"
+                ><i class="bi bi-dot"></i
+                >{{ currentResult.statusInfo.label }}</span
+              >
             </div>
             <div class="text-muted-ps small mt-1">
               Thời gian đặt hàng: {{ currentResult.date }}
@@ -231,24 +438,30 @@ if (route.query.code) {
           </RouterLink>
         </div>
 
+        <!-- Đơn đã hủy -->
+        <div v-if="isCancelled" class="alert alert-danger small mb-4">
+          <i class="bi bi-x-circle me-1"></i>Đơn hàng này đã bị hủy. Vui lòng
+          liên hệ hotline <strong>1900 1234</strong> nếu cần hỗ trợ.
+        </div>
+
         <!-- Tiến độ giao hàng -->
-        <div class="ol-steps">
-          <div class="ol-step done">
+        <div v-else class="ol-steps">
+          <div class="ol-step" :class="stepClass(0)">
             <div class="ol-step-dot"><i class="bi bi-check-lg"></i></div>
             <div class="ol-step-name">Đã đặt hàng</div>
             <div class="ol-step-note">{{ currentResult.date }}</div>
           </div>
-          <div class="ol-step current">
+          <div class="ol-step" :class="stepClass(1)">
             <div class="ol-step-dot"><i class="bi bi-box-seam"></i></div>
             <div class="ol-step-name">Đã xác nhận</div>
-            <div class="ol-step-note">Đang đóng gói</div>
+            <div class="ol-step-note">{{ confirmNote }}</div>
           </div>
-          <div class="ol-step">
+          <div class="ol-step" :class="stepClass(2)">
             <div class="ol-step-dot"><i class="bi bi-truck"></i></div>
             <div class="ol-step-name">Đang vận chuyển</div>
             <div class="ol-step-note">Dự kiến 1-2 ngày</div>
           </div>
-          <div class="ol-step">
+          <div class="ol-step" :class="stepClass(3)">
             <div class="ol-step-dot"><i class="bi bi-house-check"></i></div>
             <div class="ol-step-name">Giao thành công</div>
             <div class="ol-step-note">Nhận hàng &amp; kiểm tra</div>
@@ -263,26 +476,21 @@ if (route.query.code) {
                 <i class="bi bi-person-lines-fill"></i>Thông tin người nhận
               </h6>
               <div class="ol-kv">
-                <span>Họ và tên</span
-                ><strong>{{ currentResult.info?.name }}</strong>
+                <span>Họ và tên</span><strong>{{ currentResult.name }}</strong>
               </div>
               <div class="ol-kv">
                 <span>Số điện thoại</span
-                ><strong>{{ currentResult.info?.phone }}</strong>
+                ><strong>{{ currentResult.phone }}</strong>
               </div>
               <div class="ol-kv">
                 <span>Địa chỉ giao</span
-                ><strong>{{ currentResult.info?.address }}</strong>
+                ><strong>{{ currentResult.address }}</strong>
               </div>
               <div class="ol-kv">
-                <span>Thanh toán</span>
-                <strong>
-                  {{
-                    currentResult.info?.pay === "bank"
-                      ? "Chuyển khoản ngân hàng"
-                      : "Thanh toán khi nhận hàng (COD)"
-                  }}
-                </strong>
+                <span>Thanh toán</span><strong>{{ currentResult.pay }}</strong>
+              </div>
+              <div v-if="currentResult.note" class="ol-kv">
+                <span>Ghi chú</span><strong>{{ currentResult.note }}</strong>
               </div>
             </div>
           </div>
@@ -292,8 +500,8 @@ if (route.query.code) {
                 <i class="bi bi-bag-check"></i>Sản phẩm trong đơn
               </h6>
               <div
-                v-for="item in currentResult.items"
-                :key="item.id + '-' + item.size"
+                v-for="(item, idx) in currentResult.items"
+                :key="idx + '-' + item.size"
                 class="ol-line"
               >
                 <div class="small">
@@ -306,6 +514,20 @@ if (route.query.code) {
                   money(item.price * item.qty)
                 }}</span>
               </div>
+
+              <div v-if="currentResult.ship" class="ol-line">
+                <span class="small text-muted-ps">Phí vận chuyển</span>
+                <span class="small fw-semibold">{{
+                  money(currentResult.ship)
+                }}</span>
+              </div>
+              <div v-if="currentResult.discount" class="ol-line text-success">
+                <span class="small">Giảm giá</span>
+                <span class="small fw-semibold"
+                  >-{{ money(currentResult.discount) }}</span
+                >
+              </div>
+
               <div class="ol-sum">
                 <span class="fw-bold">Tổng thanh toán</span>
                 <span class="price fs-5">{{ money(currentResult.total) }}</span>
@@ -324,13 +546,7 @@ if (route.query.code) {
           Vui lòng kiểm tra lại mã đơn hàng hoặc số điện thoại bạn đã dùng khi
           đặt hàng.
         </p>
-        <button
-          class="btn btn-primary ol-pill-btn px-4"
-          @click="
-            searchInput = '';
-            searched = false;
-          "
-        >
+        <button class="btn btn-primary ol-pill-btn px-4" @click="backToList">
           Thử lại
         </button>
       </div>
@@ -547,6 +763,7 @@ if (route.query.code) {
   font-size: 1.1rem;
   font-weight: 700;
 }
+/* Nhãn trạng thái: mặc định xanh lá, đổi màu theo tone */
 .ol-status {
   display: inline-flex;
   align-items: center;
@@ -557,6 +774,18 @@ if (route.query.code) {
   background: #ecfdf3;
   border-radius: 999px;
 }
+.ol-status.warn {
+  color: #b45309;
+  background: #fffbeb;
+}
+.ol-status.info {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+.ol-status.danger {
+  color: #b91c1c;
+  background: #fef2f2;
+}
 .ol-status .bi {
   font-size: 1.3rem;
   line-height: 1;
@@ -566,6 +795,12 @@ if (route.query.code) {
   height: 54px;
   font-size: 1.6rem;
   border-radius: 12px;
+  overflow: hidden;
+}
+.ol-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .ol-tag {
   padding: 0.05rem 0.5rem;

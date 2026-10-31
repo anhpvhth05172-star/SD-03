@@ -892,11 +892,11 @@ public class HoaDonService {
             return toFullDTO(hoaDon);
         }
         String tu = hoaDon.getTrangThai();
-        hoaDon.setTrangThai("CHO_XAC_NHAN");
+        hoaDon.setTrangThai("DA_XAC_NHAN");
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         hoaDon.setNguoiCapNhat("VNPAY");
         HoaDon saved = hoaDonRepository.save(hoaDon);
-        ghiLichSuTrangThai(saved, tu, "CHO_XAC_NHAN");
+        ghiLichSuTrangThai(saved, tu, "DA_XAC_NHAN");
         return toFullDTO(saved);
     }
 
