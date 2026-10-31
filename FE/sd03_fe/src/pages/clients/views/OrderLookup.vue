@@ -2,6 +2,7 @@
 import { ref, computed, unref, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import * as store from "../store";
+import { getUser } from "@/utils/auth";
 
 const { money } = store;
 const route = useRoute();
@@ -35,6 +36,7 @@ async function getJson(url) {
 /* >>> ADAPTER: đổi tên field cho khớp HoaDonDTO của back-end <<< */
 const HD = {
   id: (h) => h.id,
+  customerId: (h) => h.idKhachHang ?? h.khachHang?.id ?? h.khachHangId,
   code: (h) => h.maHoaDon ?? h.ma ?? h.id,
   date: (h) => h.ngayTao ?? h.ngayDat ?? h.createdAt,
   status: (h) => String(h.trangThai ?? "").toUpperCase(),
@@ -91,6 +93,7 @@ function normalize(h) {
   const payId = HD.payId(h);
   return {
     id: HD.id(h),
+    customerId: HD.customerId(h),
     code: String(HD.code(h)),
     date: fmtDate(HD.date(h)),
     ts: new Date(HD.date(h) || 0).getTime() || 0,
@@ -115,9 +118,68 @@ function normalize(h) {
   };
 }
 
-// Lấy chi tiết hóa đơn theo id (đầy đủ chi tiết sản phẩm)
+/* ================= CHỈ XEM ĐƠN CỦA TÀI KHOẢN ĐANG ĐĂNG NHẬP ================= */
+function decodeJwt(token) {
+  try {
+    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(decodeURIComponent(escape(atob(payload))));
+  } catch (e) {
+    return null;
+  }
+}
+
+const KHACH_HANG_API = "http://localhost:8080/api/khach-hang";
+
+// Thông tin đăng nhập hiện có (id có thể chưa có, chỉ có tên đăng nhập)
+function getLoginInfo() {
+  const u = getUser();
+  const a = unref(store.auth);
+  const au = unref(a?.user) || a;
+  const p = decodeJwt(getToken());
+  return {
+    loggedIn: !!(u || getToken()),
+    id: u?.id ?? au?.id ?? p?.id ?? p?.userId ?? null,
+    username:
+      u?.tenTaiKhoan ??
+      u?.username ??
+      au?.tenTaiKhoan ??
+      au?.username ??
+      p?.sub ??
+      p?.username ??
+      null,
+    email: u?.email ?? au?.email ?? null,
+  };
+}
+
+// Xác định id khách hàng: ưu tiên id có sẵn, không có thì tra qua API khach-hang
+async function resolveCustomerId() {
+  const info = getLoginInfo();
+  if (info.id != null) return info.id;
+  if (!info.username && !info.email) return null;
+  try {
+    const page = await getJson(`${KHACH_HANG_API}?size=1000`);
+    const list = page.content || page || [];
+    const c = list.find(
+      (k) =>
+        (info.username && k.tenTaiKhoan === info.username) ||
+        (info.email && k.email === info.email),
+    );
+    return c?.id ?? null;
+  } catch (e) {
+    console.warn("[Auth] Không tra được id khách hàng:", e.message);
+    return null;
+  }
+}
+
+const myId = ref(null); // id khách hàng (được xác định khi trang tải)
+const isLoggedIn = ref(getLoginInfo().loggedIn);
+const isMine = (o) =>
+  o && o.customerId != null && String(o.customerId) === String(myId.value);
+
+// Lấy chi tiết hóa đơn theo id; trả về null nếu không phải đơn của mình
 async function fetchById(id) {
-  return normalize(await getJson(`${HOA_DON_API}/${id}`));
+  const o = normalize(await getJson(`${HOA_DON_API}/${id}`));
+  return isMine(o) ? o : null;
 }
 
 /* ================= ĐƠN GẦN ĐÂY (đồng bộ trạng thái từ BE) ================= */
@@ -136,18 +198,39 @@ const recentOrders = ref([]);
 const loadingRecent = ref(false);
 
 async function loadRecent() {
-  const refs = storedRefs().slice(0, 10); // mới nhất đứng đầu
-  if (!refs.length) {
+  // Chưa đăng nhập -> không hiện đơn nào
+  if (!myId.value) {
     recentOrders.value = [];
     return;
   }
   loadingRecent.value = true;
-  const results = await Promise.all(
-    refs.map((r) => fetchById(r.orderId).catch(() => null)),
-  );
-  // Đơn không còn trên BE (hoặc lỗi) thì bỏ qua
-  recentOrders.value = results.filter(Boolean);
-  loadingRecent.value = false;
+  try {
+    // 1) Lấy danh sách đơn của khách hàng đang đăng nhập từ BE
+    const page = await getJson(
+      `${HOA_DON_API}?idKhachHang=${encodeURIComponent(myId.value)}&size=50`,
+    );
+    const list = (page.content || page || [])
+      .map(normalize)
+      .filter(isMine) // chốt chặn phía FE: chỉ giữ đơn của mình
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 10);
+
+    // 2) Danh sách có thể không kèm chi tiết sản phẩm -> tải lại theo id
+    const full = await Promise.all(
+      list.map((o) => (o.hasItems ? o : fetchById(o.id).catch(() => null))),
+    );
+    recentOrders.value = full.filter(Boolean);
+  } catch (e) {
+    console.warn("[TraCuu] Không tải được danh sách đơn:", e.message);
+    // 3) Dự phòng: dùng id đơn đã lưu ở máy, vẫn chỉ giữ đơn của mình
+    const refs = storedRefs().slice(0, 10);
+    const results = await Promise.all(
+      refs.map((r) => fetchById(r.orderId).catch(() => null)),
+    );
+    recentOrders.value = results.filter(Boolean);
+  } finally {
+    loadingRecent.value = false;
+  }
 }
 
 /* ================= TRA CỨU ================= */
@@ -163,7 +246,8 @@ async function findOrder(query) {
   // 1) Chuỗi toàn số (không phải SĐT) -> coi là id hóa đơn
   if (/^\d+$/.test(query) && !isPhone(query)) {
     try {
-      return await fetchById(query);
+      const r = await fetchById(query);
+      if (r) return r;
     } catch (e) {
       if (e.status !== 404) throw e;
     }
@@ -171,13 +255,15 @@ async function findOrder(query) {
 
   // 2) Tìm theo mã hóa đơn / số điện thoại
   const page = await getJson(
-    `${HOA_DON_API}?keyword=${encodeURIComponent(query)}&size=50`,
+    `${HOA_DON_API}?keyword=${encodeURIComponent(query)}&idKhachHang=${encodeURIComponent(myId.value)}&size=50`,
   );
   const list = page.content || page || [];
+  // Chỉ giữ đơn khớp mã/SĐT VÀ thuộc về tài khoản đang đăng nhập
   const matches = list.filter(
     (h) =>
-      String(HD.code(h)).toUpperCase() === query ||
-      (isPhone(query) && HD.phone(h) === query),
+      (String(HD.code(h)).toUpperCase() === query ||
+        (isPhone(query) && HD.phone(h) === query)) &&
+      String(HD.customerId(h)) === String(myId.value),
   );
   if (!matches.length) return null;
 
@@ -196,6 +282,12 @@ const doSearch = async (codeToSearch) => {
   const query = (raw.startsWith("#") ? raw.slice(1) : raw).toUpperCase();
   if (!query) {
     errorMessage.value = "Vui lòng nhập mã đơn hàng hoặc số điện thoại.";
+    return;
+  }
+  if (!myId.value) {
+    errorMessage.value = isLoggedIn.value
+      ? "Không xác định được tài khoản của bạn, vui lòng đăng nhập lại."
+      : "Vui lòng đăng nhập để tra cứu đơn hàng của bạn.";
     return;
   }
   errorMessage.value = "";
@@ -242,7 +334,8 @@ const confirmNote = computed(() => {
   return "Cửa hàng đã xác nhận";
 });
 
-onMounted(() => {
+onMounted(async () => {
+  myId.value = await resolveCustomerId();
   loadRecent();
   if (route.query.code) doSearch(route.query.code);
 });
@@ -315,6 +408,21 @@ onMounted(() => {
             </button>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ================= CHƯA ĐĂNG NHẬP ================= -->
+    <section v-if="!isLoggedIn" class="mb-5">
+      <div class="ps-card text-center p-5">
+        <div class="ol-empty-ico"><i class="bi bi-person-lock"></i></div>
+        <h4 class="fw-bold mb-2">Đăng nhập để xem đơn hàng của bạn</h4>
+        <p class="text-muted-ps mb-4 mx-auto" style="max-width: 450px">
+          Để bảo mật thông tin, bạn chỉ có thể tra cứu những đơn hàng thuộc tài
+          khoản của mình.
+        </p>
+        <RouterLink to="/dang-nhap" class="btn btn-primary ol-pill-btn px-4">
+          Đăng nhập
+        </RouterLink>
       </div>
     </section>
 
@@ -430,12 +538,12 @@ onMounted(() => {
               Thời gian đặt hàng: {{ currentResult.date }}
             </div>
           </div>
-          <RouterLink
+          <!-- <RouterLink
             :to="`/don-hang/${currentResult.id}`"
             class="btn btn-outline-primary ol-pill-btn px-4"
           >
             Xem chi tiết đầy đủ
-          </RouterLink>
+          </RouterLink> -->
         </div>
 
         <!-- Đơn đã hủy -->
