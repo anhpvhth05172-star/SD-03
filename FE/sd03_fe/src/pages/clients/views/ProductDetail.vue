@@ -217,10 +217,10 @@ const specs = computed(() => {
     { label: "Kiểu dáng", value: p.tenKieuDang },
     { label: "Số màu sắc", value: colors.value.length || null },
     { label: "Số kích cỡ", value: sizeCount.value || null },
-    {
-      label: "Tồn kho",
-      value: variants.value.length ? `${totalStock.value} sản phẩm` : null,
-    },
+    // {
+    //   label: "Tồn kho",
+    //   value: variants.value.length ? `${totalStock.value} sản phẩm` : null,
+    // },
   ];
   return rows.filter(
     (r) => r.value !== null && r.value !== undefined && r.value !== "",

@@ -10,14 +10,21 @@ const props = defineProps({
 });
 
 // Hỗ trợ cả format API mới (tenSanPham, giaSauGiam) và format cũ (name, price)
-const displayName = computed(() => props.product.tenSanPham || props.product.name || "");
-const displayBrand = computed(() => props.product.tenThuongHieu || props.product.brand || "");
-const displayType = computed(() => props.product.tenLoaiGiay || props.product.type || "");
+const displayName = computed(
+  () => props.product.tenSanPham || props.product.name || "",
+);
+const displayBrand = computed(
+  () => props.product.tenThuongHieu || props.product.brand || "",
+);
+const displayType = computed(
+  () => props.product.tenLoaiGiay || props.product.type || "",
+);
 
 // Giá gốc (trước giảm)
 const originalPrice = computed(() => {
   const p = props.product;
-  const rawOriginal = p.giaGoc || p.old || p.giaBanMax || p.giaBan || p.price || 0;
+  const rawOriginal =
+    p.giaGoc || p.old || p.giaBanMax || p.giaBan || p.price || 0;
   return Number(rawOriginal);
 });
 
@@ -32,10 +39,12 @@ const discountPercent = computed(() => {
   const p = props.product;
   const pt = p.phanTramGiam || p.discountPercent || p.phanTramGiamKhac;
   if (pt != null && Number(pt) > 0) return Math.round(Number(pt));
-  
+
   // Tính theo tỉ lệ giá gốc và giá bán
   if (originalPrice.value > displayPrice.value && originalPrice.value > 0) {
-    return Math.round(((originalPrice.value - displayPrice.value) / originalPrice.value) * 100);
+    return Math.round(
+      ((originalPrice.value - displayPrice.value) / originalPrice.value) * 100,
+    );
   }
   return 0;
 });
@@ -55,15 +64,22 @@ const displayImg = computed(() => props.product.img || null);
           :src="displayImg"
           :alt="displayName"
           class="product-img"
-          @error="(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }"
+          @error="
+            (e) => {
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'flex';
+            }
+          "
         />
-        <div class="emoji-fallback" :style="displayImg ? 'display:none' : ''">👟</div>
-        
+        <div class="emoji-fallback" :style="displayImg ? 'display:none' : ''">
+          👟
+        </div>
+
         <!-- Badge % giảm giá góc trái trên -->
         <span
           v-if="discountPercent > 0"
           class="badge bg-danger position-absolute top-0 start-0 m-2 rounded-pill px-2 py-1 shadow-sm"
-          style="font-size: 0.72rem; font-weight: 700;"
+          style="font-size: 0.72rem; font-weight: 700"
         >
           -{{ discountPercent }}%
         </span>
@@ -78,18 +94,26 @@ const displayImg = computed(() => props.product.img || null);
           <i class="bi bi-heart"></i>
         </button>
 
-        <div class="card-quick-hover position-absolute bottom-0 start-0 w-100 p-2 text-center">
-          <span class="btn btn-sm btn-light w-100 rounded-pill fw-bold shadow-sm">
+        <div
+          class="card-quick-hover position-absolute bottom-0 start-0 w-100 p-2 text-center"
+        >
+          <span
+            class="btn btn-sm btn-light w-100 rounded-pill fw-bold shadow-sm"
+          >
             <i class="bi bi-eye me-1"></i> Xem chi tiết
           </span>
         </div>
       </div>
       <div class="small text-muted-ps d-flex align-items-center gap-1">
-        <span class="fw-semibold text-secondary">{{ displayBrand || 'Chính hãng' }}</span>
+        <span class="fw-semibold text-secondary">{{
+          displayBrand || "Chính hãng"
+        }}</span>
         <span v-if="displayType">· {{ displayType }}</span>
       </div>
-      <h6 class="mb-0 fw-bold product-title" :title="displayName">{{ displayName }}</h6>
-      
+      <h6 class="mb-0 fw-bold product-title" :title="displayName">
+        {{ displayName }}
+      </h6>
+
       <!-- Khối hiển thị Giá: Giá giảm (hiện tại), Giá gốc và % giảm -->
       <div class="mt-auto pt-2">
         <div class="d-flex align-items-baseline gap-2 flex-wrap">
@@ -103,7 +127,9 @@ const displayImg = computed(() => props.product.img || null);
           </span>
         </div>
         <div v-if="discountPercent > 0" class="small mt-1">
-          <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-0">
+          <span
+            class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-0"
+          >
             Tiết kiệm {{ discountPercent }}%
           </span>
         </div>

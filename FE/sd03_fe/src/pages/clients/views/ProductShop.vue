@@ -10,6 +10,7 @@ import {
 import { useRoute } from "vue-router";
 import { getSanPhamClient } from "@/api/product";
 import ProductCard from "./ProductCard.vue";
+import SearchSelect from "../SearchSelect.vue";
 
 const route = useRoute();
 
@@ -266,14 +267,15 @@ const reset = () => {
           </div>
         </div>
 
+        <!-- [SỬA] Loại giày: select có ô tìm kiếm -->
         <div class="col-6 col-md-3">
-          <div class="select-box">
-            <i class="bi bi-grid"></i>
-            <select v-model="type">
-              <option value="">Tất cả loại giày</option>
-              <option v-for="t in types" :key="t" :value="t">{{ t }}</option>
-            </select>
-          </div>
+          <SearchSelect
+            v-model="type"
+            :options="types"
+            icon="bi-grid"
+            all-label="Tất cả loại giày"
+            placeholder="Tìm loại giày..."
+          />
         </div>
 
         <div class="col-6 col-md-3">
