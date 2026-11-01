@@ -520,13 +520,27 @@ const toggleStatus = async (row) => {
 
   const moi = !row.trangThai
   try {
-    await updateEmployeeStatus(row.id, moi ? 'true' : 'false')
+    const capNhat = await updateEmployeeStatus(row.id, moi ? 'true' : 'false')
+    try { localStorage.setItem('polyshoes_last_updated_staff', JSON.stringify({ ...(capNhat || row), trangThai: moi, _ts: Date.now() })) } catch {}
     row.trangThai = moi
     row.trangThaiLabel = moi ? 'Đang hoạt động' : 'Đã khóa'
     notifySuccess(`Đã ${actionText} tài khoản "${row.tenTaiKhoan}" thành công!`)
     await load()
   } catch (e) {
     notifyError('Thao tác thất bại', e.message)
+  }
+}
+
+const removeEmployee = async (row) => {
+  const ok = await notifyDeleteConfirm(row.tenTaiKhoan || row.maNhanVien)
+  if (!ok) return
+  try {
+    await deleteEmployee(row.id)
+    try { localStorage.setItem('polyshoes_last_updated_staff', JSON.stringify({ ...row, trangThai: false, _ts: Date.now() })) } catch {}
+    notifySuccess(`Đã xóa nhân viên "${row.tenTaiKhoan}" thành công!`)
+    await load()
+  } catch (e) {
+    notifyError('Không thể xóa nhân viên', e.message)
   }
 }
 
@@ -785,7 +799,7 @@ onMounted(async () => {
       </div>
 
       <!-- Phân trang Footer -->
-      <div v-if="totalElements > 0" class="table-card-foot">
+      <div v-if="totalPages > 1" class="table-card-foot">
         <PaginationBar
           :page="page"
           :total-pages="totalPages"

@@ -7,7 +7,7 @@ import {
   trangThaiTiepTheoOf,
   laPos,
 } from '@/constants/invoiceStatus'
-import { notifySuccess, notifyError } from '@/utils/notify'
+import { notifySuccess, notifyError, notifyConfirm } from '@/utils/notify'
 
 const props = defineProps({
   invoice: { type: Object, required: true },
@@ -56,6 +56,15 @@ const xacNhan = async () => {
     errorMsg.value = 'Vui lòng chọn trạng thái kế tiếp'
     return
   }
+  const ma = props.invoice?.maHoaDon || `#${props.invoice?.id}`
+  const hienTai = props.invoice?.trangThai || '—'
+  const ok = await notifyConfirm(
+    'Xác nhận chuyển trạng thái',
+    `Bạn có chắc chắn muốn chuyển hóa đơn "${ma}"?\n\n• Hiện tại: "${hienTai}"\n• Chuyển sang: "${chon.value}"`,
+    'Xác nhận chuyển',
+    'Hủy bỏ'
+  )
+  if (!ok) return
   saving.value = true
   errorMsg.value = ''
   try {

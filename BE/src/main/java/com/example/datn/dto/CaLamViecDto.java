@@ -21,6 +21,7 @@ public class CaLamViecDto {
     private Long idCaLich;
     private String tenCaLich;
     private Long idNhanVien;
+    private String maNhanVien;
     private String tenNhanVien;
     private String tenQuy;
     private LocalDateTime thoiGianMo;
@@ -38,4 +39,5 @@ public class CaLamViecDto {
     private String lyDoLech;
     private String ghiChuMo;
     private List<LichSuCaDto> lichSu;
+    private String tenNguoiNhan;
 }

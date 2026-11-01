@@ -227,6 +227,17 @@ export const layPhuongXa = async (ds, tinh) => {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 10000)
     try {
+      // Ưu tiên api v2 nếu có
+      try {
+        const resV2 = await fetch(`https://provinces.open-api.vn/api/v2/p/${subCode}?depth=2`, { signal: ctrl.signal })
+        if (resV2.ok) {
+          const dataV2 = await resV2.json()
+          if (dataV2 && Array.isArray(dataV2.wards) && dataV2.wards.length > 0) {
+            return { districts: [{ wards: dataV2.wards }] }
+          }
+        }
+      } catch {}
+
       const res = await fetch(`https://provinces.open-api.vn/api/v1/p/${subCode}?depth=3`, { signal: ctrl.signal })
       if (!res.ok) return null
       return await res.json()

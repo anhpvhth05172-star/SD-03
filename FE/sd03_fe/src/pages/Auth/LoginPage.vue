@@ -35,7 +35,10 @@ const submit = async () => {
     datNguoiDung(resp.tenTaiKhoan)
     const laTaiKhoanNhanVien = resp.loaiTaiKhoan === 'NHAN_VIEN' || resp.idNhanVien != null
     if (laTaiKhoanNhanVien) {
-      router.push(duongDanSauDangNhap('/hoa-don'))
+      // duc: admin -> thong-ke, nhan vien -> ban hang; hoang-anh: ton trong ?redirect=
+      const macDinhNhanVien =
+        String(resp.vaiTro || '').toUpperCase() === 'ADMIN' ? '/thong-ke' : '/ban-hang'
+      router.push(duongDanSauDangNhap(macDinhNhanVien))
     } else {
       // Gắn cuộc trò chuyện ẩn danh (nếu có) vào tài khoản để không mất hội thoại cũ
       lienKetSauDangNhap(getMaAnDanh()).catch(() => {})

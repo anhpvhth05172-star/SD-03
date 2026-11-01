@@ -11,6 +11,12 @@ import lombok.Setter;
 @AllArgsConstructor
 public class MoCaRequest {
 
+    private Long idCaLich;
     private Long tienDauCa;
     private String ghiChu;
+
+    public MoCaRequest(Long tienDauCa, String ghiChu) {
+        this.tienDauCa = tienDauCa;
+        this.ghiChu = ghiChu;
+    }
 }

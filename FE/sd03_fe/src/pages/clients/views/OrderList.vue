@@ -1,153 +1,416 @@
 <script setup>
-import { ref, computed } from "vue";
-import { money } from "../store";
+import { ref, computed, unref, watch } from "vue";
+import { useRoute } from "vue-router";
+import * as store from "../store";
+import { getUser } from "@/utils/auth";
 
-const q = ref("");
-const statusFilter = ref("all");
+const { money } = store;
+const route = useRoute();
 
-const orders = computed(() => {
-  try {
-    const list = JSON.parse(localStorage.getItem("ps_orders")) || [];
-    return list.reverse(); // newest first
-  } catch {
-    return [];
+// Đường dẫn trang tra cứu đơn hàng (đổi cho khớp router của bạn)
+const LOOKUP_ROUTE = "/tra-cuu";
+
+/* ================= CẤU HÌNH API ================= */
+const HOA_DON_API = "http://localhost:8080/api/hoa-don";
+
+const getToken = () => {
+  const a = unref(store.auth);
+  if (a?.token) return a.token;
+  for (const area of [localStorage, sessionStorage]) {
+    const t = area.getItem("token") || area.getItem("accessToken");
+    if (t) return t;
   }
-});
+  return "";
+};
+const authHeaders = () => {
+  const t = getToken();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+};
+async function getJson(url) {
+  const res = await fetch(url, { headers: authHeaders() });
+  if (!res.ok) {
+    const e = new Error(String(res.status));
+    e.status = res.status;
+    throw e;
+  }
+  return res.json();
+}
 
-const filteredOrders = computed(() => {
-  return orders.value.filter((o) => {
-    const matchQ =
-      !q.value ||
-      o.id.toLowerCase().includes(q.value.toLowerCase()) ||
-      o.info?.name?.toLowerCase().includes(q.value.toLowerCase()) ||
-      o.info?.phone?.includes(q.value);
-    return matchQ;
-  });
-});
+/* >>> ADAPTER: đổi tên field cho khớp HoaDonDTO (giống trang tra cứu) <<< */
+const HD = {
+  id: (h) => h.id,
+  customerId: (h) => h.idKhachHang ?? h.khachHang?.id ?? h.khachHangId,
+  code: (h) => h.maHoaDon ?? h.ma ?? h.id,
+  date: (h) => h.ngayTao ?? h.ngayDat ?? h.createdAt,
+  status: (h) => String(h.trangThai ?? "").toUpperCase(),
+  name: (h) => h.tenKhachHang ?? h.khachHang?.tenKhachHang ?? "",
+  phone: (h) =>
+    h.soDienThoaiKhachHang ?? h.soDienThoai ?? h.khachHang?.soDienThoai ?? "",
+  address: (h) => h.diaChiNhanHang ?? h.diaChi ?? "",
+  note: (h) => h.ghiChu ?? "",
+  payId: (h) => h.idPhuongThucThanhToan ?? h.phuongThucThanhToan?.id,
+  payName: (h) => h.tenPhuongThucThanhToan ?? h.phuongThucThanhToan?.ten ?? "",
+  ship: (h) => Number(h.phiVanChuyen ?? 0),
+  discount: (h) => Number(h.tienGiam ?? h.giamGia ?? h.soTienGiam ?? 0),
+  total: (h) => Number(h.tongTien ?? h.tongTienSauGiam ?? h.thanhTien ?? 0),
+  items: (h) => h.chiTiet ?? h.danhSachChiTiet ?? h.hoaDonChiTiets ?? [],
+};
+const HDI = {
+  name: (i) => i.tenSanPham ?? i.sanPham?.tenSanPham ?? i.name ?? "",
+  brand: (i) => i.thuongHieu ?? i.tenThuongHieu ?? i.brand ?? "",
+  size: (i) => i.kichCo ?? i.tenKichCo ?? i.size ?? "",
+  qty: (i) => Number(i.soLuong ?? i.qty ?? 0),
+  price: (i) => Number(i.donGia ?? i.price ?? 0),
+  image: (i) => i.hinhAnh ?? i.img ?? null,
+};
+
+const PAY_LABEL = {
+  11: "Thanh toán khi nhận hàng (COD)",
+  2: "Chuyển khoản ngân hàng",
+  4: "Thanh toán qua VNPAY",
+};
+
+const STATUS = {
+  CHO_THANH_TOAN: {
+    label: "Chờ thanh toán",
+    cls: "bg-warning-subtle text-warning-emphasis",
+  },
+  CHO_XAC_NHAN: {
+    label: "Chờ xác nhận",
+    cls: "bg-warning-subtle text-warning-emphasis",
+  },
+  DA_XAC_NHAN: { label: "Đã xác nhận", cls: "bg-primary-subtle text-primary" },
+  DANG_GIAO: {
+    label: "Đang vận chuyển",
+    cls: "bg-primary-subtle text-primary",
+  },
+  DANG_GIAO_HANG: {
+    label: "Đang vận chuyển",
+    cls: "bg-primary-subtle text-primary",
+  },
+  HOAN_THANH: {
+    label: "Giao thành công",
+    cls: "bg-success-subtle text-success",
+  },
+  DA_GIAO: { label: "Giao thành công", cls: "bg-success-subtle text-success" },
+  DA_HUY: { label: "Đã hủy", cls: "bg-danger-subtle text-danger" },
+};
+const statusInfo = (code) =>
+  STATUS[code] || {
+    label: code || "Đang xử lý",
+    cls: "bg-secondary-subtle text-secondary",
+  };
+
+function fmtDate(raw) {
+  if (!raw) return "";
+  const d = new Date(raw);
+  return isNaN(d) ? String(raw) : d.toLocaleString("vi-VN");
+}
+
+function normalize(h) {
+  const payId = HD.payId(h);
+  const items = HD.items(h).map((i) => ({
+    name: HDI.name(i),
+    brand: HDI.brand(i),
+    size: HDI.size(i),
+    qty: HDI.qty(i),
+    price: HDI.price(i),
+    image: HDI.image(i),
+  }));
+  const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
+  const ship = HD.ship(h);
+  const discount = HD.discount(h);
+  return {
+    id: HD.id(h),
+    customerId: HD.customerId(h),
+    code: String(HD.code(h)),
+    date: fmtDate(HD.date(h)),
+    status: HD.status(h),
+    info: {
+      name: HD.name(h),
+      phone: HD.phone(h),
+      address: HD.address(h),
+      note: HD.note(h),
+      pay:
+        PAY_LABEL[payId] || HD.payName(h) || "Thanh toán khi nhận hàng (COD)",
+    },
+    items,
+    subtotal,
+    ship,
+    discount,
+    // Ưu tiên tổng tiền do BE tính; không có thì tự cộng
+    total: HD.total(h) || subtotal + ship - discount,
+  };
+}
+
+/* ================= TẢI ĐƠN HÀNG ================= */
+const order = ref(null);
+const loading = ref(false);
+const error = ref("");
+
+function decodeJwt(token) {
+  try {
+    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(decodeURIComponent(escape(atob(payload))));
+  } catch (e) {
+    return null;
+  }
+}
+
+const KHACH_HANG_API = "http://localhost:8080/api/khach-hang";
+
+// Thông tin đăng nhập hiện có (id có thể chưa có, chỉ có tên đăng nhập)
+function getLoginInfo() {
+  const u = getUser();
+  const a = unref(store.auth);
+  const au = unref(a?.user) || a;
+  const p = decodeJwt(getToken());
+  return {
+    loggedIn: !!(u || getToken()),
+    id: u?.id ?? au?.id ?? p?.id ?? p?.userId ?? null,
+    username:
+      u?.tenTaiKhoan ??
+      u?.username ??
+      au?.tenTaiKhoan ??
+      au?.username ??
+      p?.sub ??
+      p?.username ??
+      null,
+    email: u?.email ?? au?.email ?? null,
+  };
+}
+
+// Xác định id khách hàng: ưu tiên id có sẵn, không có thì tra qua API khach-hang
+async function resolveCustomerId() {
+  const info = getLoginInfo();
+  if (info.id != null) return info.id;
+  if (!info.username && !info.email) return null;
+  try {
+    const page = await getJson(`${KHACH_HANG_API}?size=1000`);
+    const list = page.content || page || [];
+    const c = list.find(
+      (k) =>
+        (info.username && k.tenTaiKhoan === info.username) ||
+        (info.email && k.email === info.email),
+    );
+    return c?.id ?? null;
+  } catch (e) {
+    console.warn("[Auth] Không tra được id khách hàng:", e.message);
+    return null;
+  }
+}
+
+async function loadOrder(id) {
+  order.value = null;
+  error.value = "";
+  if (!id) return;
+
+  loading.value = true;
+  const myId = await resolveCustomerId();
+  if (!myId) {
+    error.value = getLoginInfo().loggedIn
+      ? "Không xác định được tài khoản của bạn, vui lòng đăng nhập lại."
+      : "Vui lòng đăng nhập để xem chi tiết đơn hàng.";
+    loading.value = false;
+    return;
+  }
+
+  try {
+    const o = normalize(await getJson(`${HOA_DON_API}/${id}`));
+    // Chỉ cho xem đơn của chính mình; đơn người khác hiển thị như "không tìm thấy"
+    if (String(o.customerId) === String(myId)) order.value = o;
+  } catch (e) {
+    console.error("[ChiTietDon] Lỗi tải đơn:", e);
+    if (e.status === 404) {
+      error.value = "";
+    } else if (e.status === 401 || e.status === 403) {
+      error.value = "Bạn chưa có quyền xem đơn hàng này, vui lòng đăng nhập.";
+    } else if (e.message === "Failed to fetch") {
+      error.value = "Không kết nối được máy chủ, vui lòng thử lại.";
+    } else {
+      error.value = "Không tải được đơn hàng, vui lòng thử lại.";
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+watch(() => route.params.id, loadOrder, { immediate: true });
+
+const badge = computed(() => statusInfo(order.value?.status));
+const lookupLink = computed(() =>
+  order.value
+    ? { path: LOOKUP_ROUTE, query: { code: order.value.code } }
+    : LOOKUP_ROUTE,
+);
 </script>
 
 <template>
-  <div class="ps-order-list-page">
-    <!-- Breadcrumb -->
-    <nav class="small mb-4 text-muted-ps">
-      <RouterLink to="/trang-chu" class="text-muted-ps text-decoration-none">Trang chủ</RouterLink>
+  <!-- ===== Đang tải ===== -->
+  <div v-if="loading" class="ps-card text-center p-5">
+    <div class="text-muted-ps">Đang tải đơn hàng...</div>
+  </div>
+
+  <!-- ===== Chi tiết đơn hàng ===== -->
+  <div v-else-if="order" class="ps-order-detail">
+    <nav class="small mb-3 text-muted-ps">
+      <RouterLink to="/trang-chu" class="text-muted-ps text-decoration-none"
+        >Trang chủ</RouterLink
+      >
       /
-      <span class="text-dark fw-semibold">Đơn hàng của bạn</span>
+      <RouterLink :to="LOOKUP_ROUTE" class="text-muted-ps text-decoration-none"
+        >Tra cứu đơn hàng</RouterLink
+      >
+      /
+      <span class="text-dark fw-semibold"
+        >Chi tiết đơn hàng #{{ order.code }}</span
+      >
     </nav>
 
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-      <div>
-        <h2 class="mb-1">Đơn hàng của bạn</h2>
-        <p class="text-muted-ps mb-0">Quản lý và theo dõi trạng thái các đơn hàng đã đặt</p>
-      </div>
-      <RouterLink to="/tra-cuu" class="btn btn-outline-primary px-4">
-        <i class="bi bi-search me-1"></i> Tra cứu đơn hàng khác
-      </RouterLink>
-    </div>
-
-    <!-- Filter & Search Bar -->
-    <div class="ps-card p-3 mb-4">
-      <div class="row g-3 align-items-center">
-        <div class="col-md-6">
-          <div class="input-group">
-            <span class="input-group-text bg-white border-end-0">
-              <i class="bi bi-search text-muted"></i>
-            </span>
-            <input
-              v-model="q"
-              class="form-control border-start-0"
-              placeholder="Tìm theo mã đơn (vd: HD123456), tên hoặc số điện thoại..."
-            />
-          </div>
-        </div>
-        <div class="col-md-6 text-md-end">
-          <span class="text-muted-ps small">
-            Tổng cộng: <strong>{{ filteredOrders.length }}</strong> đơn hàng
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Orders List -->
-    <div v-if="filteredOrders.length" class="d-flex flex-column gap-4">
-      <div
-        v-for="o in filteredOrders"
-        :key="o.id"
-        class="ps-card p-4 transition-hover"
-      >
-        <!-- Order Header -->
-        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center border-bottom pb-3 mb-3 gap-2">
-          <div>
-            <div class="d-flex align-items-center gap-2">
-              <span class="fw-bold fs-5 text-dark">Đơn hàng #{{ o.id }}</span>
-              <span class="badge bg-success-subtle text-success rounded-pill px-3 py-1">
-                Chờ xác nhận
-              </span>
-            </div>
-            <div class="text-muted-ps small mt-1">
-              <i class="bi bi-clock me-1"></i> Ngày đặt: {{ o.date }}
-            </div>
-          </div>
-          <div class="text-sm-end">
-            <div class="text-muted-ps small">Tổng tiền:</div>
-            <span class="price fs-5">{{ money(o.total) }}</span>
-          </div>
-        </div>
-
-        <!-- Order Items -->
-        <div class="d-flex flex-column gap-3 mb-3">
+    <div class="row g-4">
+      <div class="col-lg-8">
+        <div class="ps-card p-4 mb-4">
           <div
-            v-for="item in o.items"
-            :key="item.id + '-' + item.size"
-            class="d-flex align-items-center gap-3"
+            class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-3"
+          >
+            <div>
+              <h4 class="mb-1">Đơn hàng #{{ order.code }}</h4>
+              <div class="text-muted-ps small">
+                Thời gian đặt: {{ order.date }}
+              </div>
+            </div>
+            <span class="badge fs-6 px-3 py-2 rounded-pill" :class="badge.cls">
+              {{ badge.label }}
+            </span>
+          </div>
+
+          <h5 class="mb-3">Danh sách sản phẩm</h5>
+          <div
+            v-for="(i, idx) in order.items"
+            :key="idx + '-' + i.size"
+            class="d-flex align-items-center gap-3 py-3"
+            :class="{ 'border-top': idx }"
           >
             <div
-              class="ps-thumb flex-shrink-0"
-              style="width: 60px; height: 60px; font-size: 1.8rem"
+              class="ps-thumb flex-shrink-0 overflow-hidden"
+              style="width: 70px; height: 70px; font-size: 2rem"
             >
-              {{ item.emoji }}
+              <img
+                v-if="i.image"
+                :src="i.image"
+                :alt="i.name"
+                style="width: 100%; height: 100%; object-fit: cover"
+              />
+              <template v-else>👟</template>
             </div>
             <div class="flex-grow-1">
-              <div class="fw-bold text-dark">{{ item.name }}</div>
+              <div class="fw-bold">{{ i.name }}</div>
               <div class="small text-muted-ps">
-                {{ item.brand }} · Size: {{ item.size }} · Số lượng: {{ item.qty }}
+                <template v-if="i.brand">{{ i.brand }} · </template>
+                Size: {{ i.size }} · SL: {{ i.qty }}
               </div>
             </div>
             <div class="text-end">
-              <span class="fw-bold text-dark">{{ money(item.price * item.qty) }}</span>
+              <div class="price">{{ money(i.price * i.qty) }}</div>
+              <div class="small text-muted-ps">{{ money(i.price) }} / đôi</div>
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- Recipient & Action Footer -->
-        <div class="bg-light p-3 rounded-3 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-          <div class="small text-muted-ps">
-            <span class="fw-semibold text-dark">{{ o.info?.name }}</span> · {{ o.info?.phone }} ·
-            <span class="text-truncate d-inline-block align-bottom" style="max-width: 320px;">
-              {{ o.info?.address }}
-            </span>
+      <div class="col-lg-4">
+        <div class="ps-card p-4 mb-4">
+          <h5 class="mb-3">Thông tin nhận hàng</h5>
+          <div class="mb-2">
+            <span class="text-muted-ps small d-block">Người nhận</span>
+            <strong>{{ order.info.name }}</strong>
           </div>
-          <div class="d-flex gap-2">
-            <RouterLink :to="`/don-hang/${o.id}`" class="btn btn-primary btn-sm px-3">
-              Xem chi tiết
+          <div class="mb-2">
+            <span class="text-muted-ps small d-block">Số điện thoại</span>
+            <span>{{ order.info.phone }}</span>
+          </div>
+          <div class="mb-2">
+            <span class="text-muted-ps small d-block">Địa chỉ</span>
+            <span>{{ order.info.address }}</span>
+          </div>
+          <div v-if="order.info.note" class="mb-2">
+            <span class="text-muted-ps small d-block">Ghi chú</span>
+            <span>{{ order.info.note }}</span>
+          </div>
+          <div class="mb-3">
+            <span class="text-muted-ps small d-block"
+              >Hình thức thanh toán</span
+            >
+            <span>{{ order.info.pay }}</span>
+          </div>
+
+          <hr />
+
+          <div class="d-flex justify-content-between mb-2">
+            <span class="text-muted-ps">Tạm tính</span>
+            <span>{{ money(order.subtotal) }}</span>
+          </div>
+          <div class="d-flex justify-content-between mb-2">
+            <span class="text-muted-ps">Phí giao hàng</span>
+            <span v-if="order.ship">{{ money(order.ship) }}</span>
+            <span v-else class="text-success">Miễn phí</span>
+          </div>
+          <div
+            v-if="order.discount"
+            class="d-flex justify-content-between mb-2 text-success"
+          >
+            <span>Giảm giá</span>
+            <span>-{{ money(order.discount) }}</span>
+          </div>
+          <div class="d-flex justify-content-between border-top pt-3 mb-4">
+            <span class="fw-bold">Tổng thanh toán</span>
+            <span class="price fs-5">{{ money(order.total) }}</span>
+          </div>
+
+          <div class="d-flex flex-column gap-2">
+            <RouterLink
+              :to="lookupLink"
+              class="btn btn-outline-primary w-100 py-2"
+            >
+              Theo dõi tiến độ đơn hàng
             </RouterLink>
-            <RouterLink to="/cua-hang" class="btn btn-light-border btn-sm px-3">
-              Mua lại
+            <RouterLink to="/cua-hang" class="btn btn-primary w-100 py-2">
+              Tiếp tục mua hàng
+            </RouterLink>
+            <RouterLink
+              to="/trang-chu"
+              class="btn btn-light-border w-100 py-2 text-center text-decoration-none"
+            >
+              Về trang chủ
             </RouterLink>
           </div>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Empty State -->
-    <div v-else class="ps-card text-center p-5">
-      <div class="display-3 mb-3">📦</div>
-      <h4 class="fw-bold">Bạn chưa có đơn hàng nào</h4>
-      <p class="text-muted-ps mb-4" style="max-width: 420px; margin: 0 auto">
-        Hãy khám phá ngay hàng trăm mẫu sneaker chính hãng với nhiều ưu đãi hấp dẫn đang chờ đón bạn.
-      </p>
-      <RouterLink to="/cua-hang" class="btn btn-primary px-4 py-2">
-        Mua sắm ngay
+  <!-- ===== Không tìm thấy / lỗi ===== -->
+  <div v-else class="ps-card text-center p-5">
+    <div class="fs-1">🔍</div>
+    <h4 class="mt-2">
+      {{ error ? "Không tải được đơn hàng" : "Không tìm thấy đơn hàng" }}
+    </h4>
+    <p class="text-muted-ps">
+      {{ error || "Mã đơn hàng không tồn tại hoặc đã bị xóa." }}
+    </p>
+    <div class="d-flex justify-content-center gap-2 mt-2">
+      <button
+        v-if="error"
+        class="btn btn-outline-primary px-4"
+        @click="loadOrder(route.params.id)"
+      >
+        Thử lại
+      </button>
+      <RouterLink :to="LOOKUP_ROUTE" class="btn btn-outline-primary px-4">
+        Tra cứu đơn hàng
+      </RouterLink>
+      <RouterLink to="/cua-hang" class="btn btn-primary px-4">
+        Quay lại cửa hàng
       </RouterLink>
     </div>
   </div>

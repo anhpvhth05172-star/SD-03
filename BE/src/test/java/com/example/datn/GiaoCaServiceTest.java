@@ -6,7 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.example.datn.dto.CaLamViecDto;
 import com.example.datn.dto.TongKetDto;
 import com.example.datn.entity.HoaDon;
-import com.example.datn.entity.DanhMucCaLamViec;
+import com.example.datn.entity.CaLam;
+import com.example.datn.repository.CaLamRepository;
 import com.example.datn.entity.LichLamViec;
 import com.example.datn.entity.NhanVien;
 import com.example.datn.entity.PhuongThucThanhToan;
@@ -53,7 +54,7 @@ class GiaoCaServiceTest {
     private LichLamViecRepository lichLamViecRepository;
 
     @Autowired
-    private DanhMucCaLamViecRepository danhMucCaLamViecRepository;
+    private CaLamRepository caLamRepository;
 
     @Autowired
     private HoaDonRepository hoaDonRepository;
@@ -79,7 +80,7 @@ class GiaoCaServiceTest {
     private NhanVien nv2;
     private PhuongThucThanhToan ptMat;
     private PhuongThucThanhToan ptKhongMat;
-    private DanhMucCaLamViec caDuocXep;
+    private CaLam caDuocXep;
 
     @BeforeEach
     void setUp() {
@@ -87,13 +88,13 @@ class GiaoCaServiceTest {
         VaiTro vaiTro = taoHayTimVaiTro();
         nv1 = taoNhanVien("testgc", vaiTro);
         nv2 = taoNhanVien("testgc", vaiTro);
-        caDuocXep = new DanhMucCaLamViec();
-        caDuocXep.setMa("TGC-" + java.util.UUID.randomUUID());
-        caDuocXep.setTen("Ca test " + java.util.UUID.randomUUID());
+        caDuocXep = new CaLam();
+        caDuocXep.setMaCa("TGC-" + java.util.UUID.randomUUID().toString().substring(0, 8));
+        caDuocXep.setTenCa("Ca test " + java.util.UUID.randomUUID().toString().substring(0, 8));
         caDuocXep.setBatDau(LocalTime.MIDNIGHT);
         caDuocXep.setKetThuc(LocalTime.of(23, 59, 59));
         caDuocXep.setDangBat(true);
-        caDuocXep = danhMucCaLamViecRepository.save(caDuocXep);
+        caDuocXep = caLamRepository.save(caDuocXep);
         xepLichTest(nv1);
         xepLichTest(nv2);
         ptMat = timPhuongThuc("Tiền mặt");
@@ -114,8 +115,8 @@ class GiaoCaServiceTest {
             jdbcTemplate.update("DELETE FROM ca_lam_viec WHERE id = ?", idCa);
         }
         idCaTao.clear();
-        jdbcTemplate.update("DELETE FROM lich_lam_viec WHERE id_ca = ?", caDuocXep.getId());
-        danhMucCaLamViecRepository.deleteById(caDuocXep.getId());
+        jdbcTemplate.update("DELETE FROM lich_lam_viec WHERE id_ca_lam = ?", caDuocXep.getId());
+        caLamRepository.deleteById(caDuocXep.getId());
         for (Long idNv : idNVTao) {
             jdbcTemplate.update("DELETE FROM nhan_vien WHERE id = ?", idNv);
         }
@@ -129,8 +130,8 @@ class GiaoCaServiceTest {
     private void xepLichTest(NhanVien nhanVien) {
         LichLamViec lich = new LichLamViec();
         lich.setNhanVien(nhanVien);
-        lich.setCaLamViec(caDuocXep);
-        lich.setNgay(LocalDate.now());
+        lich.setCaLam(caDuocXep);
+        lich.setNgayLam(LocalDate.now());
         lichLamViecRepository.save(lich);
     }
 
@@ -304,17 +305,63 @@ class GiaoCaServiceTest {
         jdbcTemplate.update(
             "UPDATE ca_lam_viec SET trang_thai = 'DA_KET_CA' WHERE id = ?", ca2.getId());
 
-        var trangQuanTri = giaoCaService.lichSu(0, 10, null, null, null, null, nv1.getId(), true);
+        var trangQuanTri = giaoCaService.lichSu(0, 10, null, null, null, null, null, nv1.getId(), true);
         assertThat(trangQuanTri.getTotalElements()).isGreaterThanOrEqualTo(2);
         assertThat(trangQuanTri.getContent())
             .extracting(CaLamViecDto::getId)
             .contains(ca1.getId(), ca2.getId());
 
-        var trangNv1 = giaoCaService.lichSu(0, 10, null, null, null, null, nv1.getId(), false);
+        var trangNv1 = giaoCaService.lichSu(0, 10, null, null, null, null, null, nv1.getId(), false);
         assertThat(trangNv1.getContent())
             .extracting(CaLamViecDto::getId)
             .contains(ca1.getId())
             .doesNotContain(ca2.getId());
+    }
+
+    @Test
+    void lichSu_locKeywordTheoMaHoaDonVaTenTaiKhoan() {
+        CaLamViecDto ca = giaoCaService.moCa(10000L, null);
+        idCaTao.add(ca.getId());
+        HoaDon hd = taoHoaDon("TAI_QUAY", "DA_HOAN_THANH", ptMat, new BigDecimal("50000"), ca.getId());
+        jdbcTemplate.update(
+            "UPDATE ca_lam_viec SET trang_thai = 'DA_KET_CA' WHERE id = ?", ca.getId());
+
+        var theoMaHd = giaoCaService.lichSu(0, 50, null, null, null, null, hd.getMaHoaDon(), null, true);
+        assertThat(theoMaHd.getContent())
+            .extracting(CaLamViecDto::getId)
+            .contains(ca.getId());
+
+        var theoTenDangNhap = giaoCaService.lichSu(
+            0, 50, null, null, null, null, nv1.getTenTaiKhoan(), null, true);
+        assertThat(theoTenDangNhap.getContent())
+            .extracting(CaLamViecDto::getId)
+            .contains(ca.getId())
+            .doesNotHaveDuplicates();
+
+        String tuKhoaLa = "kwt" + System.nanoTime();
+        var khongKhop = giaoCaService.lichSu(0, 50, null, null, null, null, tuKhoaLa, null, true);
+        assertThat(khongKhop.getTotalElements()).isZero();
+    }
+
+    @Test
+    void lichSu_tenNguoiNhanSauKhiKetCa() {
+        CaLamViecDto ca = giaoCaService.moCa(0L, null);
+        idCaTao.add(ca.getId());
+
+        var truoc = giaoCaService.lichSu(0, 50, null, null, null, null, ca.getMaCa(), null, true);
+        assertThat(dongCua(truoc, ca.getId()).getTenNguoiNhan()).isNull();
+
+        giaoCaService.ketCa(ca.getId(), 0L, null, null);
+
+        var sau = giaoCaService.lichSu(0, 50, null, null, null, null, ca.getMaCa(), null, true);
+        assertThat(dongCua(sau, ca.getId()).getTenNguoiNhan()).isEqualTo(nv1.getTenTaiKhoan());
+    }
+
+    private static CaLamViecDto dongCua(org.springframework.data.domain.Page<CaLamViecDto> trang, Long id) {
+        return trang.getContent().stream()
+            .filter(d -> id.equals(d.getId()))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("Khong tim thay ca " + id + " trong ket qua"));
     }
 
     // ---- helpers ----

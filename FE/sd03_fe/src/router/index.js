@@ -51,6 +51,8 @@ import ProductCartDetail from '@/pages/clients/views/ProductCartDetail.vue'
 import About from '@/pages/clients/views/About.vue'
 import Contact from '@/pages/clients/views/Contact.vue'
 
+import VNPayReturn from '@/pages/clients/views/VNPayReturn.vue'
+
 const metaBo = { requiresAuth: true, canBo: true }
 
 const routes = [
@@ -89,6 +91,7 @@ const routes = [
       { path: 'gioi-thieu', component: About, meta: { title: 'Giới thiệu' } },
       { path: 'lien-he', component: Contact, meta: { title: 'Liên hệ' } },
       { path: 'goi-y', redirect: '/cua-hang' },
+      { path: 'thanh-toan-vnpay', name: 'ClientVNPayReturn', component: VNPayReturn, meta: { title: 'Kết quả thanh toán VNPay', canKhach: true } },
     ],
   },
   {
@@ -101,24 +104,24 @@ const routes = [
         redirect: '/trang-chu',
       },
       { path: '/san-pham', name: 'ProductList', component: ProductListPage, meta: { ...metaBo, title: 'Quản lý sản phẩm' } },
-      { path: '/san-pham/them', name: 'ProductCreate', component: ProductCreatePage, meta: { ...metaBo, title: 'Thêm mới sản phẩm' } },
+      { path: '/san-pham/them', name: 'ProductCreate', component: ProductCreatePage, meta: { ...metaBo, title: 'Thêm mới sản phẩm', roles: ['ADMIN'] } },
       { path: '/san-pham/bien-the', name: 'ProductVariant', component: ProductVariantPage, meta: { ...metaBo, title: 'Biến thể sản phẩm' } },
       { path: '/bien-the-san-pham', component: ProductVariantPage, meta: { ...metaBo, title: 'Biến thể sản phẩm' } },
-      { path: '/thuoc-tinh', component: AttributeCategoryPage, meta: { ...metaBo, title: 'Danh mục thuộc tính' } },
-      { path: '/thuoc-tinh/:category', component: AttributeCategoryPage, meta: { ...metaBo, title: 'Danh mục thuộc tính' } },
+      { path: '/thuoc-tinh', component: AttributeCategoryPage, meta: { ...metaBo, title: 'Danh mục thuộc tính', roles: ['ADMIN'] } },
+      { path: '/thuoc-tinh/:category', component: AttributeCategoryPage, meta: { ...metaBo, title: 'Danh mục thuộc tính', roles: ['ADMIN'] } },
       { path: '/hoa-don', component: InvoiceListPage, meta: { ...metaBo, title: 'Quản lý hóa đơn' } },
       { path: '/hoa-don/them', component: InvoiceFormPage, meta: { ...metaBo, title: 'Tạo hóa đơn' } },
       { path: '/hoa-don/:id', component: InvoiceDetailPage, meta: { ...metaBo, title: 'Chi tiết hóa đơn' } },
       { path: '/hoa-don/:id/sua', component: InvoiceFormPage, meta: { ...metaBo, title: 'Sửa hóa đơn' } },
-      { path: '/phieu-giam-gia', component: VoucherListPage, meta: { ...metaBo, title: 'Quản lý phiếu giảm giá' } },
-      { path: '/phieu-giam-gia/add', component: DiscountForm, meta: { ...metaBo, title: 'Thêm phiếu giảm giá' } },
-      { path: '/phieu-giam-gia/detail/:id', component: DiscountFormDetail, meta: { ...metaBo, title: 'Chi tiết phiếu giảm giá' } },
-      { path: '/phieu-giam-gia/update/:id', component: DiscountFormUpdate, meta: { ...metaBo, title: 'Cập nhật phiếu giảm giá' } },
+      { path: '/phieu-giam-gia', component: VoucherListPage, meta: { ...metaBo, title: 'Quản lý phiếu giảm giá', roles: ['ADMIN'] } },
+      { path: '/phieu-giam-gia/add', component: DiscountForm, meta: { ...metaBo, title: 'Thêm phiếu giảm giá', roles: ['ADMIN'] } },
+      { path: '/phieu-giam-gia/detail/:id', component: DiscountFormDetail, meta: { ...metaBo, title: 'Chi tiết phiếu giảm giá', roles: ['ADMIN'] } },
+      { path: '/phieu-giam-gia/update/:id', component: DiscountFormUpdate, meta: { ...metaBo, title: 'Cập nhật phiếu giảm giá', roles: ['ADMIN'] } },
       { path: '/phieu-giam-gia/:id/edit', redirect: to => `/phieu-giam-gia/update/${to.params.id}` },
-      { path: '/dot-giam-gia', component: DiscountEventPage, meta: { ...metaBo, title: 'Quản lý đợt giảm giá' } },
-      { path: '/dot-giam-gia/add', component: VoucherForm, meta: { ...metaBo, title: 'Thêm đợt giảm giá' } },
-      { path: '/dot-giam-gia/detail/:id', component: VoucherFormDetail, meta: { ...metaBo, title: 'Chi tiết đợt giảm giá' } },
-      { path: '/dot-giam-gia/update/:id', component: VoucherFormUpdate, meta: { ...metaBo, title: 'Cập nhật đợt giảm giá' } },
+      { path: '/dot-giam-gia', component: DiscountEventPage, meta: { ...metaBo, title: 'Quản lý đợt giảm giá', roles: ['ADMIN'] } },
+      { path: '/dot-giam-gia/add', component: VoucherForm, meta: { ...metaBo, title: 'Thêm đợt giảm giá', roles: ['ADMIN'] } },
+      { path: '/dot-giam-gia/detail/:id', component: VoucherFormDetail, meta: { ...metaBo, title: 'Chi tiết đợt giảm giá', roles: ['ADMIN'] } },
+      { path: '/dot-giam-gia/update/:id', component: VoucherFormUpdate, meta: { ...metaBo, title: 'Cập nhật đợt giảm giá', roles: ['ADMIN'] } },
       { path: '/dot-giam-gia/edit/:id', redirect: to => `/dot-giam-gia/update/${to.params.id}` },
       { path: '/giam-gia', redirect: '/phieu-giam-gia' },
       {
@@ -129,12 +132,18 @@ const routes = [
       {
         path: '/lich-lam-viec',
         component: WorkSchedulePage,
-        meta: { ...metaBo, title: 'Quản lý lịch làm việc', roles: ['ADMIN'] },
+        meta: { ...metaBo, title: 'Quản lý lịch làm việc', roles: ['ADMIN', 'STAFF', 'NHAN_VIEN'] },
       },
       {
         path: '/lich-ca-lam',
         component: ShiftSchedulePage,
-        meta: { ...metaBo, title: 'Lịch ca làm', roles: ['ADMIN'] },
+        meta: { ...metaBo, title: 'Lịch ca làm', roles: ['ADMIN', 'STAFF', 'NHAN_VIEN'] },
+      },
+      {
+        path: '/lich-su-hoat-dong',
+        name: 'ActivityHistory',
+        component: () => import('@/pages/Schedule/ActivityHistoryPage.vue'),
+        meta: { ...metaBo, title: 'Lịch sử hoạt động' },
       },
       {
         path: '/ban-hang',
@@ -217,7 +226,10 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   // Trang đăng nhập/đăng ký: đã đăng nhập thì về trang tương ứng vai trò.
   if (to.meta.loginPage || to.path === '/dang-ky') {
-    if (isNhanVienDangNhap()) return '/hoa-don'
+    if (isNhanVienDangNhap()) {
+      const role = String(getUser()?.vaiTro || '').trim().toUpperCase()
+      return role === 'ADMIN' ? '/thong-ke' : '/ban-hang'
+    }
     if (isKhachHangDangNhap()) return '/trang-chu'
     return true
   }
@@ -255,7 +267,7 @@ router.beforeEach(async (to) => {
   const allowedRoles = to.meta.roles
   if (allowedRoles?.length) {
     const role = String(getUser()?.vaiTro || '').trim().toUpperCase()
-    if (!allowedRoles.includes(role)) return '/hoa-don'
+    if (!allowedRoles.includes(role)) return '/ban-hang'
   }
 
   return true

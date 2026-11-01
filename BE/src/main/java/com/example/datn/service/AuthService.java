@@ -134,7 +134,7 @@ public class AuthService {
         KhachHang khachHang = khachHangRepository
             .findByEmailOrTenTaiKhoan(req.getTaiKhoan().trim())
             .orElseThrow(() -> new DangNhapThatBaiException("Sai tài khoản hoặc mật khẩu"));
-        if (!passwordEncoder.matches(req.getMatKhau(), khachHang.getMatKhau())) {
+        if (!kiemTraMatKhau(req.getMatKhau(), khachHang.getMatKhau())) {
             throw new DangNhapThatBaiException("Sai tài khoản hoặc mật khẩu");
         }
         if (Boolean.FALSE.equals(khachHang.getTrangThai())) {
@@ -174,7 +174,7 @@ public class AuthService {
         NhanVien nhanVien = nhanVienRepository
             .findByEmailOrTenTaiKhoan(req.getTaiKhoan().trim())
             .orElseThrow(() -> new DangNhapThatBaiException("Sai tài khoản hoặc mật khẩu"));
-        if (!kiemTraMatKhauNhanVien(req.getMatKhau(), nhanVien.getMatKhau())) {
+        if (!kiemTraMatKhau(req.getMatKhau(), nhanVien.getMatKhau())) {
             throw new DangNhapThatBaiException("Sai tài khoản hoặc mật khẩu");
         }
         if (Boolean.FALSE.equals(nhanVien.getTrangThai())) {
@@ -203,7 +203,7 @@ public class AuthService {
         return resp;
     }
 
-    private boolean kiemTraMatKhauNhanVien(String nhapVao, String daLuu) {
+    private boolean kiemTraMatKhau(String nhapVao, String daLuu) {
         if (isBlank(daLuu)) {
             return false;
         }

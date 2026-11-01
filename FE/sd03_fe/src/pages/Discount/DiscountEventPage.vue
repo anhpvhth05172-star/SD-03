@@ -391,17 +391,20 @@ onMounted(() => getData(0));
         </table>
       </div>
 
-      <PaginationBar
-        :page="page"
-        :total-pages="totalPages"
-        :total-elements="totalElements"
-        :page-size="pageSize"
-        :from="listEvent.length ? page * pageSize + 1 : 0"
-        :to="page * pageSize + listEvent.length"
-        label="đợt giảm giá"
-        @change="goToPage"
-        @size-change="onSizeChange"
-      />
+      <div v-if="totalPages > 1" class="table-card-foot">
+        <PaginationBar
+          :page="page"
+          :total-pages="totalPages"
+          :total-elements="totalElements"
+          :page-size="pageSize"
+          :sizes="[5, 10, 20, 50]"
+          :from="listEvent.length ? page * pageSize + 1 : 0"
+          :to="page * pageSize + listEvent.length"
+          label="đợt giảm giá"
+          @change="goToPage"
+          @size-change="onSizeChange"
+        />
+      </div>
     </section>
   </div>
 </template>

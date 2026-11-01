@@ -528,8 +528,8 @@ const executeDeleteFast = async (item) => {
         </table>
       </div>
 
+      <div v-if="totalPages > 1" class="table-card-foot">
       <PaginationBar
-        v-if="currentTabItems.length > 0"
         :page="currentPage - 1"
         :total-pages="totalPages"
         :total-elements="currentTabItems.length"
@@ -541,6 +541,7 @@ const executeDeleteFast = async (item) => {
         @change="(p) => { currentPage = p + 1 }"
         @size-change="(s) => { pageSize = s; currentPage = 1 }"
       />
+      </div>
     </div>
 
     <transition name="fade">

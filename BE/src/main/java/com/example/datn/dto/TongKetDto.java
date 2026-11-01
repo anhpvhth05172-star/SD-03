@@ -32,6 +32,7 @@ public class TongKetDto {
     private BigDecimal tienHoanMat;
     private BigDecimal tienDuKien;
     private List<HoaDonTongHopItem> hoaDonGanDay;
+    private List<String> hoaDonDangXuLy;
 
     @Getter
     @Setter

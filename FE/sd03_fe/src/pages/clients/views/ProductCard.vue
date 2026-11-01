@@ -9,63 +9,208 @@ const props = defineProps({
   },
 });
 
-const displayName = computed(() => props.product.tenSanPham || props.product.name || "");
-const displayBrand = computed(() => props.product.tenThuongHieu || props.product.brand || "");
-const displayType = computed(() => props.product.tenLoaiGiay || props.product.type || "");
-const originalPrice = computed(() => Number(props.product.price || props.product.giaBanMin || props.product.giaBan || 0));
-const displayPrice = computed(() => Number(props.product.giaSauGiam || props.product.giaBanMin || props.product.giaBan || props.product.price || 0));
+// Hỗ trợ cả format API mới (tenSanPham, giaSauGiam) và format cũ (name, price)
+const displayName = computed(
+  () => props.product.tenSanPham || props.product.name || "",
+);
+const displayBrand = computed(
+  () => props.product.tenThuongHieu || props.product.brand || "",
+);
+const displayType = computed(
+  () => props.product.tenLoaiGiay || props.product.type || "",
+);
+
+// Giá gốc (trước giảm)
+const originalPrice = computed(() => {
+  const p = props.product;
+  const rawOriginal =
+    p.giaGoc || p.old || p.giaBanMax || p.giaBan || p.price || 0;
+  return Number(rawOriginal);
+});
+
+// Giá thực hiển thị (sau giảm hoặc giá bán min)
+const displayPrice = computed(() => {
+  const p = props.product;
+  return Number(p.giaSauGiam || p.giaBanMin || p.giaBan || p.price || 0);
+});
+
+// % giảm giá
 const discountPercent = computed(() => {
-  const pt = props.product.phanTramGiam;
-  if (pt != null && Number(pt) > 0) return Number(pt);
-  const oldP = Number(props.product.old || 0);
-  if (oldP > 0 && displayPrice.value > 0) return Math.round((1 - displayPrice.value / oldP) * 100);
+  const p = props.product;
+  const pt = p.phanTramGiam || p.discountPercent || p.phanTramGiamKhac;
+  if (pt != null && Number(pt) > 0) return Math.round(Number(pt));
+
+  // Tính theo tỉ lệ giá gốc và giá bán
+  if (originalPrice.value > displayPrice.value && originalPrice.value > 0) {
+    return Math.round(
+      ((originalPrice.value - displayPrice.value) / originalPrice.value) * 100,
+    );
+  }
   return 0;
 });
 const displayImg = computed(() => props.product.img || null);
-const detailPath = computed(() => `/cua-hang/${props.product.id}`);
 </script>
 
 <template>
-  <article class="product-tile ps-card p-3 h-100 d-flex flex-column gap-2">
-    <RouterLink :to="detailPath" class="product-tile-main text-decoration-none text-reset">
-      <div class="ps-thumb product-tile-image position-relative">
-        <img v-if="displayImg" :src="displayImg" :alt="displayName" class="product-img" @error="(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }" />
-        <div class="emoji-fallback" :style="displayImg ? 'display:none' : ''">👟</div>
-        <span v-if="discountPercent > 0" class="ps-pill position-absolute top-0 start-0 m-2 bg-white">-{{ discountPercent }}%</span>
+  <RouterLink
+    :to="`/cua-hang/${product.id}`"
+    class="text-decoration-none text-reset"
+  >
+    <div class="ps-card product-card p-3 h-100 d-flex flex-column gap-2">
+      <div class="ps-thumb position-relative overflow-hidden">
+        <!-- Hiển thị ảnh thật nếu có, fallback về emoji -->
+        <img
+          v-if="displayImg"
+          :src="displayImg"
+          :alt="displayName"
+          class="product-img"
+          @error="
+            (e) => {
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'flex';
+            }
+          "
+        />
+        <div class="emoji-fallback" :style="displayImg ? 'display:none' : ''">
+          👟
+        </div>
+
+        <!-- Badge % giảm giá góc trái trên -->
+        <span
+          v-if="discountPercent > 0"
+          class="badge bg-danger position-absolute top-0 start-0 m-2 rounded-pill px-2 py-1 shadow-sm"
+          style="font-size: 0.72rem; font-weight: 700"
+        >
+          -{{ discountPercent }}%
+        </span>
+
+        <!-- Wishlist Heart Button góc phải trên -->
+        <button
+          type="button"
+          class="wishlist-btn position-absolute top-0 end-0 m-2"
+          title="Yêu thích"
+          @click.prevent
+        >
+          <i class="bi bi-heart"></i>
+        </button>
+
+        <div
+          class="card-quick-hover position-absolute bottom-0 start-0 w-100 p-2 text-center"
+        >
+          <span
+            class="btn btn-sm btn-light w-100 rounded-pill fw-bold shadow-sm"
+          >
+            <i class="bi bi-eye me-1"></i> Xem chi tiết
+          </span>
+        </div>
       </div>
-      <div class="small text-muted-ps mt-2">
-        {{ displayBrand }}<span v-if="displayBrand && displayType"> · </span>{{ displayType }}
+      <div class="small text-muted-ps d-flex align-items-center gap-1">
+        <span class="fw-semibold text-secondary">{{
+          displayBrand || "Chính hãng"
+        }}</span>
+        <span v-if="displayType">· {{ displayType }}</span>
       </div>
-      <h6 class="mb-0 fw-bold">{{ displayName }}</h6>
-      <div class="d-flex align-items-baseline flex-wrap gap-2">
-        <span class="price">{{ money(displayPrice) }}</span>
-        <small v-if="discountPercent > 0 && originalPrice > displayPrice" class="text-muted-ps text-decoration-line-through">{{ money(originalPrice) }}</small>
+      <h6 class="mb-0 fw-bold product-title" :title="displayName">
+        {{ displayName }}
+      </h6>
+
+      <!-- Khối hiển thị Giá: Giá giảm (hiện tại), Giá gốc và % giảm -->
+      <div class="mt-auto pt-2">
+        <div class="d-flex align-items-baseline gap-2 flex-wrap">
+          <span class="price fs-5 fw-extrabold">{{ money(displayPrice) }}</span>
+          <!-- Giá gốc gạch ngang khi có giảm giá -->
+          <span
+            v-if="discountPercent > 0 && originalPrice > displayPrice"
+            class="text-muted-ps text-decoration-line-through small"
+          >
+            {{ money(originalPrice) }}
+          </span>
+        </div>
+        <div v-if="discountPercent > 0" class="small mt-1">
+          <span
+            class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-0"
+          >
+            Tiết kiệm {{ discountPercent }}%
+          </span>
+        </div>
       </div>
-    </RouterLink>
-    <RouterLink :to="detailPath" class="btn btn-outline-primary product-buy-btn mt-auto">
-      <i class="bi bi-bag-plus me-1"></i> Chọn size &amp; mua
-    </RouterLink>
-  </article>
+    </div>
+  </RouterLink>
 </template>
 
 <style scoped>
-.product-tile {
-  border-radius: 14px;
-  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+.product-card {
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.product-tile:hover {
-  transform: translateY(-4px);
-  border-color: #f0c4c3;
-  box-shadow: 0 12px 28px rgba(48, 20, 20, .09);
+
+.product-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+  transition: transform 0.4s ease;
 }
-.product-tile-main { display: flex; flex-direction: column; gap: .5rem; }
-.product-tile-image {
-  border-radius: 10px;
+
+.product-card:hover .product-img {
+  transform: scale(1.08);
+}
+
+.product-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  background: linear-gradient(145deg, #fff5f4, #f8e9e8);
+  line-height: 1.35;
+  font-size: 0.95rem;
+  transition: color 0.2s ease;
 }
-.product-tile h6 { line-height: 1.4; min-height: 2.5em; }
-.product-buy-btn { font-size: .82rem; padding: .55rem .65rem; white-space: nowrap; }
-.product-img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
-.emoji-fallback { display: flex; align-items: center; justify-content: center; font-size: 5rem; width: 100%; height: 100%; }
+
+.product-card:hover .product-title {
+  color: var(--ps-red);
+}
+
+.card-quick-hover {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.25s ease;
+  pointer-events: none;
+}
+
+.product-card:hover .card-quick-hover {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.wishlist-btn {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
+  border: 1px solid #e2e8f0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  z-index: 5;
+}
+
+.wishlist-btn:hover {
+  background: #ffffff;
+  color: #d32f2f;
+  transform: scale(1.15);
+}
+
+.emoji-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 5rem;
+  width: 100%;
+  height: 100%;
+}
 </style>

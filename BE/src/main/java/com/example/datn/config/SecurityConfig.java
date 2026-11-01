@@ -57,8 +57,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/hoa-don").permitAll()
                 .requestMatchers("/api/auth/thong-tin").authenticated()
                 .requestMatchers("/api/phieu-giam-gia/cua-toi", "/api/gio-hang/**").hasRole("KHACH_HANG")
-                .requestMatchers("/api/nhan-vien/**", "/admin/**", "/api/lich-lam-viec/**",
-                    "/api/ca-lam-viec-dinh-nghia/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/ca-lam/**").hasAnyRole("NHAN_VIEN", "ADMIN")
+                .requestMatchers("/api/lich-lam-viec/**").hasAnyRole("NHAN_VIEN", "ADMIN")
+                .requestMatchers("/api/nhan-vien/**", "/admin/**",
+                    "/api/ca-lam/**", "/api/ca-lam-viec-dinh-nghia/**").hasRole("ADMIN")
                 .requestMatchers("/api/thong-ke/**").hasRole("ADMIN")
                 .requestMatchers("/api/ca/lich-su", "/api/ca/*/doi-soat").hasRole("ADMIN")
                 .requestMatchers("/api/hoa-don/**",
