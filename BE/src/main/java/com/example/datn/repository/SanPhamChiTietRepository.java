@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -80,4 +81,8 @@ public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM SanPhamChiTiet s WHERE s.id = :id")
     Optional<SanPhamChiTiet> findByIdForUpdate(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from SanPhamChiTiet s where s.id in :ids order by s.id")
+    List<SanPhamChiTiet> findAllByIdForUpdate(@Param("ids") Collection<Long> ids);
 }
