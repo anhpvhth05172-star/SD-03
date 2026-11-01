@@ -23,6 +23,7 @@ import com.example.datn.entity.NhanVien;
 import com.example.datn.exception.DuplicateRecordException;
 import com.example.datn.exception.ResourceNotFoundException;
 import com.example.datn.repository.CaLamRepository;
+import com.example.datn.repository.CaLamViecRepository;
 import com.example.datn.repository.LichLamViecRepository;
 import com.example.datn.repository.NhanVienRepository;
 import java.time.LocalDate;
@@ -36,9 +37,10 @@ class LichLamViecServiceTest {
     private final LichLamViecRepository lichRepo = mock(LichLamViecRepository.class);
     private final NhanVienRepository nvRepo = mock(NhanVienRepository.class);
     private final CaLamRepository caRepo = mock(CaLamRepository.class);
+    private final CaLamViecRepository caLamViecRepo = mock(CaLamViecRepository.class);
 
     private LichLamViecService service() {
-        return new LichLamViecService(lichRepo, nvRepo, caRepo);
+        return new LichLamViecService(lichRepo, nvRepo, caRepo, caLamViecRepo);
     }
 
     private static NhanVien nv(long id, String ma) {

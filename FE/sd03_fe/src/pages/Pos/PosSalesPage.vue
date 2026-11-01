@@ -733,6 +733,7 @@ const handleCartItemQtyInput = (item, event) => {
 }
 
 const updateCartItemQty = async (item, rawNewQty, event = null) => {
+  if (!kiemTraQuyenBanHang('chỉnh sửa giỏ hàng')) return
   if (!item) return
   const raw = event?.target ? event.target.value.trim() : String(rawNewQty).trim()
   let newQty = parseInt(raw, 10)
@@ -789,6 +790,7 @@ const updateCartItemQty = async (item, rawNewQty, event = null) => {
 }
 
 const removeCartItem = async (item, skipConfirm = false) => {
+  if (!kiemTraQuyenBanHang('xóa sản phẩm')) return
   if (!currentOrder.value) return
   const prodName = item.name || 'sản phẩm này'
   if (!skipConfirm) {
@@ -1156,6 +1158,7 @@ const saveDeliveryAddressToCustomerProfile = async (silent = false) => {
 }
 
 const selectCustomer = async (cust) => {
+  if (!kiemTraQuyenBanHang('chọn khách hàng')) return
   if (!currentOrder.value) createNewOrder()
   currentOrder.value.customer = cust
   customerSearchQuery.value = ''
@@ -2840,6 +2843,7 @@ const openVoucherModal = () => {
 }
 
 const applyVoucher = (voucher) => {
+  if (!kiemTraQuyenBanHang('áp dụng voucher')) return
   if (!currentOrder.value) return
   if (!isVoucherEligible(voucher)) {
     notifyWarning('Chưa đủ điều kiện', getVoucherIneligibilityReason(voucher))
@@ -2852,6 +2856,7 @@ const applyVoucher = (voucher) => {
 }
 
 const removeVoucher = () => {
+  if (!kiemTraQuyenBanHang('hủy voucher')) return
   if (currentOrder.value) {
     currentOrder.value.selectedVoucher = null
     voucherInputCode.value = ''
@@ -2922,7 +2927,7 @@ const handleCheckout = async (options = {}) => {
     return
   }
 
-  if (!activeShift.value) {
+  if (!laAdmin() && !activeShift.value) {
     notifyWarning('Chưa mở ca làm việc', 'Vui lòng mở ca làm việc trước khi thực hiện thanh toán tại quầy!')
     openMoCaModal()
     return
@@ -3636,9 +3641,6 @@ const handleCrossTabStorageSync = (e) => {
 
 onMounted(async () => {
   await fetchActiveShift()
-  if (!laAdmin() && !activeShift.value?.id) {
-    openMoCaModal()
-  }
   loadRecentInvoicesFromStorage()
   loadInitialData()
   loadProvinces()
@@ -3738,24 +3740,14 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Cảnh báo khi quầy chưa mở ca làm việc / Chế độ xem -->
-    <div v-if="!activeShift && !isLoadingShift" class="pos-no-shift-alert-banner" :class="{ 'is-view-mode': !laAdmin() }">
+    <!-- Cảnh báo khi quầy chưa mở ca làm việc (Chỉ hiển thị cho Nhân viên ở Chế độ xem) -->
+    <div v-if="isCheDoXem && !isLoadingShift" class="pos-no-shift-alert-banner is-view-mode">
       <div class="alert-banner-left">
-        <template v-if="!laAdmin()">
-          <span class="badge-view-mode-tag">CHẾ ĐỘ XEM</span>
-          <span class="view-mode-text">Bạn chưa vào ca làm việc nên chỉ có quyền tra cứu thông tin. Các thao tác bán hàng, tạo đơn hàng và chỉnh sửa dữ liệu đang bị khóa.</span>
-        </template>
-        <template v-else>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-          <span><strong>Quầy hiện chưa mở ca làm việc.</strong> Vui lòng bấm <strong>Mở ca</strong> để khai báo tiền két và ghi nhận doanh thu phiên bán hàng!</span>
-        </template>
+        <span class="badge-view-mode-tag">CHẾ ĐỘ XEM</span>
+        <span class="view-mode-text">Bạn chưa vào ca làm việc nên chỉ có quyền tra cứu thông tin. Các thao tác bán hàng, tạo đơn hàng và chỉnh sửa dữ liệu đang bị khóa.</span>
       </div>
-      <button type="button" class="btn-banner-open-shift" :class="{ 'btn-view-mode-red': !laAdmin() }" @click="openMoCaModal">
-        <span>{{ !laAdmin() ? 'Vào ca làm việc ngay' : '+ Mở ca ngay' }}</span>
+      <button type="button" class="btn-banner-open-shift btn-view-mode-red" @click="openMoCaModal">
+        <span>Vào ca làm việc ngay</span>
       </button>
     </div>
 
