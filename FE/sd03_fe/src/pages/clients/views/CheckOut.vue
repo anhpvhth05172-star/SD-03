@@ -2,9 +2,12 @@
 import { reactive, ref, computed, watch, onMounted } from "vue";
 import * as store from "../store";
 import { getCustomer } from "@/api/customer";
-import { getToken, getUser } from "@/utils/auth";
+import { getUser } from "@/utils/auth";
+import { createInvoice } from "@/api/invoice";
 import SearchableSelect from "@/components/SearchableSelect.vue";
 import { getProvinces, getWards, tinhPhi } from "@/api/shipping";
+import { getVoucherDetail, listVouchers } from "@/api/voucher";
+import { notifyConfirm } from "@/utils/notify";
 
 const { cart, cartTotal, money } = store;
 
@@ -63,18 +66,7 @@ async function onProvinceChange(id) {
 }
 
 /* ================= CẤU HÌNH API ================= */
-const API = "http://localhost:8080/api/khach-hang";
-
-const authHeaders = () => {
-  const t = getToken();
-  return t ? { Authorization: `Bearer ${t}` } : {};
-};
-
-async function getJson(url) {
-  const res = await fetch(url, { headers: authHeaders() });
-  if (!res.ok) throw new Error(res.status);
-  return res.json();
-}
+const API = "/api/khach-hang";
 
 async function fetchCustomer() {
   const user = getUser();
@@ -95,6 +87,15 @@ onMounted(async () => {
     customer.value = await fetchCustomer();
   } catch (e) {
     console.error("Không tải được khách hàng:", e);
+  }
+  vouchersLoading.value = true;
+  try {
+    const response = await listVouchers();
+    availableVouchers.value = Array.isArray(response) ? response : [];
+  } catch {
+    voucherMsg.text = "Không tải được danh sách voucher.";
+  } finally {
+    vouchersLoading.value = false;
   }
 });
 
@@ -134,7 +135,9 @@ const itemImage = (i) =>
   i.image || i.hinhAnh || i.img || "/placeholder-shoe.png";
 
 /* ================= PHIẾU GIẢM GIÁ (gọi API thật) ================= */
-const VOUCHER_API = API.replace(/\/khach-hang$/, "/phieu-giam-gia");
+const availableVouchers = ref([]);
+const selectedVoucherId = ref("");
+const vouchersLoading = ref(false);
 
 /* >>> ADAPTER: đổi tên field cho khớp entity/DTO PhieuGiamGia của bạn <<< */
 const VF = {
@@ -172,10 +175,7 @@ async function fetchVoucher(code) {
   // 1) Tìm phiếu theo mã
   let found = null;
   try {
-    const page = await getJson(
-      `${VOUCHER_API}?keyword=${encodeURIComponent(code)}&size=50`,
-    );
-    const list = page.content || page;
+    const list = availableVouchers.value;
     found = list.find((v) => String(VF.code(v)).toUpperCase() === code);
   } catch (e) {
     return { ok: false, message: "Không kiểm tra được mã, vui lòng thử lại." };
@@ -187,7 +187,7 @@ async function fetchVoucher(code) {
   try {
     detail = {
       ...found,
-      ...(await getJson(`${VOUCHER_API}/detail/${VF.id(found)}`)),
+      ...(await getVoucherDetail(VF.id(found))),
     };
   } catch (e) {
     /* dùng dữ liệu từ danh sách */
@@ -309,12 +309,34 @@ watch(
 );
 
 /* ---------- Voucher ---------- */
-const voucherCode = ref("");
 const voucher = ref(null); // { code, ...rule }
 const voucherMsg = reactive({ text: "", ok: false });
 
 // Tổng trước giảm = tiền hàng + phí vận chuyển (khớp cách tính của back-end)
 const orderTotal = computed(() => cartTotal.value + shippingFee.value);
+const voucherIsAvailable = (v) => {
+  const now = new Date();
+  const end = v.ngayKetThuc ? new Date(v.ngayKetThuc) : null;
+  return v.trangThai !== false
+    && (!v.soLuong || Number(v.soLuongDaSuDung || 0) < Number(v.soLuong))
+    && (!v.ngayBatDau || now >= new Date(v.ngayBatDau))
+    && (!end || now <= end);
+};
+const voucherOptions = computed(() => availableVouchers.value
+  .filter((v) => voucherIsAvailable(v) && orderTotal.value >= Number(v.hoaDonToiThieu || 0))
+  .map((v) => ({
+    value: String(v.id),
+    label: `${v.maPhieuGiamGia} · ${v.tenPhieuGiamGia || formatVoucherValue(v)} · ${v.hoaDonToiThieu ? `Đơn từ ${money(v.hoaDonToiThieu)}` : "Không yêu cầu tối thiểu"}`,
+  })));
+const voucherSuggestion = computed(() => availableVouchers.value
+  .filter((v) => voucherIsAvailable(v) && Number(v.hoaDonToiThieu || 0) > orderTotal.value)
+  .sort((a, b) => Number(a.hoaDonToiThieu) - Number(b.hoaDonToiThieu))[0] || null);
+
+function formatVoucherValue(v) {
+  return /PERCENT|PHAN_TRAM|%/i.test(String(v.loaiGiamGia || ""))
+    ? `Giảm ${v.giaTriGiam}%`
+    : `Giảm ${money(v.giaTriGiam || 0)}`;
+}
 
 const discount = computed(() => {
   const v = voucher.value;
@@ -328,9 +350,10 @@ const finalTotal = computed(() => orderTotal.value - discount.value);
 
 const applying = ref(false);
 async function applyVoucher() {
-  const code = voucherCode.value.trim().toUpperCase();
+  const selected = availableVouchers.value.find((v) => String(v.id) === String(selectedVoucherId.value));
+  const code = String(VF.code(selected) || "").trim().toUpperCase();
   if (!code) {
-    voucherMsg.text = "Vui lòng nhập mã giảm giá.";
+    voucherMsg.text = "Vui lòng chọn voucher.";
     voucherMsg.ok = false;
     return;
   }
@@ -349,7 +372,7 @@ async function applyVoucher() {
 }
 function removeVoucher() {
   voucher.value = null;
-  voucherCode.value = "";
+  selectedVoucherId.value = "";
   voucherMsg.text = "";
 }
 // Giỏ thay đổi làm không còn đủ điều kiện -> gỡ voucher
@@ -362,7 +385,6 @@ watch(orderTotal, () => {
 });
 
 /* ---------- Đặt hàng: lưu vào hóa đơn (POST /api/hoa-don) ---------- */
-const HOA_DON_API = "http://localhost:8080/api/hoa-don";
 const ID_NHAN_VIEN_ONLINE = null; // null = không gán nhân viên (đơn online)
 const orderCode = ref("");
 const submitting = ref(false);
@@ -460,34 +482,21 @@ async function submit() {
       toWardCode: shipping.toWardCode,
       phiVanChuyen: shippingFee.value,
     };
-    const res = await fetch(HOA_DON_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      let msg = "";
-      try {
-        const err = await res.json();
-        msg = err.message || err.error || "";
-      } catch (e) {
-        /* không có body JSON */
-      }
-      throw new Error(msg || `Đặt hàng thất bại (mã lỗi ${res.status}).`);
-    }
-
-    const hd = await res.json(); // HoaDonDTO
+    const confirmed = await notifyConfirm(
+      "Xác nhận đặt hàng",
+      `Xác nhận đơn hàng với tổng thanh toán ${money(finalTotal.value)}?`,
+      "Xác nhận đặt hàng",
+    );
+    if (!confirmed) return;
+    const hd = await createInvoice(payload); // HoaDonDTO
     orderId.value = hd.id;
     orderCode.value = hd.maHoaDon ?? hd.ma ?? hd.id;
     done.value = true;
     clearCart();
   } catch (e) {
     console.error("[Checkout] Lỗi tạo hóa đơn:", e);
-    submitError.value =
-      e.message === "Failed to fetch"
-        ? "Không kết nối được máy chủ, vui lòng thử lại."
-        : e.message;
+    submitError.value = e.response?.data?.message
+      || (e.message === "Network Error" ? "Không kết nối được máy chủ, vui lòng thử lại." : e.message);
   } finally {
     submitting.value = false;
   }
@@ -698,29 +707,36 @@ async function submit() {
 
           <!-- Voucher -->
           <div class="border-top pt-3 mb-3">
-            <label class="form-label fw-semibold small">Mã giảm giá</label>
-            <div v-if="!voucher" class="input-group">
-              <input
-                v-model="voucherCode"
-                class="form-control text-uppercase"
-                placeholder="Nhập mã voucher"
-                @keyup.enter="applyVoucher"
+            <label class="form-label fw-semibold small">Chọn voucher</label>
+            <div v-if="!voucher" class="d-flex gap-2 align-items-start">
+              <SearchableSelect
+                v-model="selectedVoucherId"
+                :options="voucherOptions"
+                :disabled="vouchersLoading || !voucherOptions.length"
+                :placeholder="vouchersLoading ? 'Đang tải voucher...' : 'Chọn voucher đủ điều kiện'"
+                class="flex-grow-1"
               />
               <button
                 class="btn btn-outline-primary"
                 type="button"
-                :disabled="applying"
+                :disabled="applying || !selectedVoucherId"
                 @click="applyVoucher"
               >
                 {{ applying ? "Đang kiểm tra..." : "Áp dụng" }}
               </button>
             </div>
+            <div v-if="voucherSuggestion && !voucher" class="small text-primary mt-2">
+              Mua thêm {{ money(Number(voucherSuggestion.hoaDonToiThieu) - orderTotal) }} để dùng
+              <strong>{{ voucherSuggestion.maPhieuGiamGia }}</strong>
+              ({{ formatVoucherValue(voucherSuggestion) }}).
+            </div>
             <div
-              v-else
+              v-if="voucher"
               class="d-flex justify-content-between align-items-center border rounded p-2 bg-light"
             >
               <span class="small">
                 🏷️ <strong>{{ voucher.code }}</strong>
+                <span class="text-success">−{{ money(discount) }}</span>
               </span>
               <button
                 class="btn btn-sm btn-link text-danger p-0"

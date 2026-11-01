@@ -273,7 +273,7 @@ const handleSubscribe = () => {
                 </button>
                 <RouterLink
                   v-else
-                  to="/login"
+                  to="/khach-hang"
                   class="client-dropdown-item text-primary"
                   @click="closeDropdowns"
                 >

@@ -73,7 +73,7 @@ const datLai = async () => {
     }
     const resp = await (laNhanVien.value ? datLaiMatKhauNhanVien : datLaiMatKhau)(payload)
     notifySuccess('Đặt lại mật khẩu thành công', resp?.message || '')
-    router.push(route.query.cheDo === 'nhan-vien' ? '/login-nhan-vien' : '/login')
+    router.push(route.query.cheDo === 'nhan-vien' ? '/nhan-vien' : '/khach-hang')
   } catch (e) {
     error.value = e.message || 'Đặt lại mật khẩu thất bại'
   } finally {
@@ -152,7 +152,7 @@ const datLai = async () => {
       </form>
 
       <p class="auth-switch">
-        <router-link :to="route.query.cheDo === 'nhan-vien' ? '/login-nhan-vien' : '/login'">Quay lại đăng nhập</router-link>
+        <router-link :to="route.query.cheDo === 'nhan-vien' ? '/nhan-vien' : '/khach-hang'">Quay lại đăng nhập</router-link>
       </p>
     </div>
   </div>

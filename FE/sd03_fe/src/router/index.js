@@ -54,11 +54,17 @@ import Contact from '@/pages/clients/views/Contact.vue'
 const metaBo = { requiresAuth: true, canBo: true }
 
 const routes = [
-  { path: '/login', component: LoginPage, meta: { title: 'Đăng nhập khách hàng', loginPage: true, loginMode: 'khach' } },
-  { path: '/login-nhan-vien', component: LoginPage, meta: { title: 'Đăng nhập nhân viên', loginPage: true, loginMode: 'nhan-vien' } },
+  { path: '/khach-hang', component: LoginPage, meta: { title: 'Đăng nhập khách hàng', loginPage: true, loginMode: 'khach' } },
+  { path: '/nhan-vien', component: LoginPage, meta: { title: 'Đăng nhập nhân viên', loginPage: true, loginMode: 'nhan-vien' } },
+  { path: '/login', redirect: (to) => ({ path: '/khach-hang', query: to.query }) },
+  { path: '/login-nhan-vien', redirect: (to) => ({ path: '/nhan-vien', query: to.query }) },
+  { path: '/khach-hang/them', redirect: '/quan-ly-khach-hang/them' },
+  { path: '/khach-hang/:id/sua', redirect: (to) => `/quan-ly-khach-hang/${to.params.id}/sua` },
+  { path: '/nhan-vien/them', redirect: '/quan-ly-nhan-vien/them' },
+  { path: '/nhan-vien/:id/sua', redirect: (to) => `/quan-ly-nhan-vien/${to.params.id}/sua` },
   {
     path: '/dang-nhap',
-    redirect: (to) => ({ path: to.query.cheDo === 'khach' ? '/login' : '/login-nhan-vien', query: to.query.redirect ? { redirect: to.query.redirect } : {} }),
+    redirect: (to) => ({ path: to.query.cheDo === 'khach' ? '/khach-hang' : '/nhan-vien', query: to.query.redirect ? { redirect: to.query.redirect } : {} }),
   },
   { path: '/dang-ky', component: RegisterPage, meta: { title: 'Đăng ký' } },
   { path: '/quen-mat-khau', component: QuenMatKhauPage, meta: { title: 'Quên mật khẩu' } },
@@ -141,32 +147,32 @@ const routes = [
         },
       },
       {
-        path: '/khach-hang',
+        path: '/quan-ly-khach-hang',
         component: CustomerListPage,
         meta: { ...metaBo, title: 'Quản lý khách hàng' },
       },
       {
-        path: '/khach-hang/them',
+        path: '/quan-ly-khach-hang/them',
         component: CustomerCreatePage,
         meta: { ...metaBo, title: 'Quản lý khách hàng' },
       },
       {
-        path: '/khach-hang/:id/sua',
+        path: '/quan-ly-khach-hang/:id/sua',
         component: CustomerCreatePage,
         meta: { ...metaBo, title: 'Quản lý khách hàng' },
       },
       {
-        path: '/nhan-vien',
+        path: '/quan-ly-nhan-vien',
         component: EmployeeListPage,
         meta: { ...metaBo, title: 'Quản lý nhân viên', roles: ['ADMIN'] },
       },
       {
-        path: '/nhan-vien/them',
+        path: '/quan-ly-nhan-vien/them',
         component: EmployeeCreatePage,
         meta: { ...metaBo, title: 'Quản lý nhân viên', roles: ['ADMIN'] },
       },
       {
-        path: '/nhan-vien/:id/sua',
+        path: '/quan-ly-nhan-vien/:id/sua',
         component: EmployeeCreatePage,
         meta: { ...metaBo, title: 'Quản lý nhân viên', roles: ['ADMIN'] },
       },
@@ -194,12 +200,12 @@ const routes = [
     redirect: (to) => {
       const sub = to.params.pathMatch
       const path = Array.isArray(sub) ? sub.join('/') : sub
-      return path ? `/${path}` : '/login-nhan-vien'
+      return path ? `/${path}` : '/nhan-vien'
     },
   },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/login',
+    redirect: '/khach-hang',
   },
 ]
 
@@ -221,24 +227,24 @@ router.beforeEach(async (to) => {
   const token = getToken()
   const refreshToken = getRefreshToken()
 
-  if (!token && !refreshToken) return '/login-nhan-vien'
+  if (!token && !refreshToken) return '/nhan-vien'
 
   if (!(token && !isTokenExpired(token))) {
     if (!refreshToken) {
       if (token) dangXuat()
-      return '/login-nhan-vien'
+      return '/nhan-vien'
     }
     try {
       await refreshSession()
     } catch {
       dangXuat()
-      return '/login-nhan-vien'
+      return '/nhan-vien'
     }
   }
 
   // Vùng quản trị: chỉ nhân viên. Khách hàng về trang tài khoản, chưa đăng nhập về đăng nhập.
   if (to.meta.canBo && !isNhanVienDangNhap()) {
-    return isKhachHangDangNhap() ? '/tai-khoan' : '/login-nhan-vien'
+    return isKhachHangDangNhap() ? '/tai-khoan' : '/nhan-vien'
   }
 
   // Trang khách hàng: nhân viên về trang quản trị.

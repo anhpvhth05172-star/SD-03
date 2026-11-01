@@ -284,7 +284,7 @@ onMounted(() => {
           {{ exporting ? 'Đang xuất...' : 'Xuất Excel' }}
         </button>
 
-        <button class="btn-action-primary" type="button" @click="router.push('/khach-hang/them')">
+        <button class="btn-action-primary" type="button" @click="router.push('/quan-ly-khach-hang/them')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
             stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -497,7 +497,7 @@ onMounted(() => {
         <!-- Cụm nút hành động (style giống nhân viên) -->
         <div class="profile-modal-actions">
           <button class="btn-profile-edit" type="button"
-            @click="router.push(`/khach-hang/${detailData.id}/sua`)">
+            @click="router.push(`/quan-ly-khach-hang/${detailData.id}/sua`)">
             <i class="bi bi-pencil-square"></i>
             <span>Chỉnh sửa thông tin</span>
           </button>

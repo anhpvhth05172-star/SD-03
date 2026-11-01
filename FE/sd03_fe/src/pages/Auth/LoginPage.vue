@@ -35,17 +35,24 @@ const submit = async () => {
     datNguoiDung(resp.tenTaiKhoan)
     const laTaiKhoanNhanVien = resp.loaiTaiKhoan === 'NHAN_VIEN' || resp.idNhanVien != null
     if (laTaiKhoanNhanVien) {
-      router.push('/hoa-don')
+      router.push(duongDanSauDangNhap('/hoa-don'))
     } else {
       // Gắn cuộc trò chuyện ẩn danh (nếu có) vào tài khoản để không mất hội thoại cũ
       lienKetSauDangNhap(getMaAnDanh()).catch(() => {})
-      router.push('/trang-chu')
+      router.push(duongDanSauDangNhap('/trang-chu'))
     }
   } catch (e) {
     error.value = e.message || 'Đăng nhập thất bại'
   } finally {
     loading.value = false
   }
+}
+
+const duongDanSauDangNhap = (macDinh) => {
+  const redirect = route.query.redirect
+  return typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')
+    ? redirect
+    : macDinh
 }
 </script>
 
@@ -95,12 +102,6 @@ const submit = async () => {
       <p class="auth-footer">© 2026 FF T-Shirt Fashion Store. Hệ thống quản lý bán hàng.</p>
       <p v-if="cheDo === 'khach'" class="auth-customer-links">
         Chưa có tài khoản? <router-link to="/dang-ky">Đăng ký</router-link>
-      </p>
-      <p class="auth-customer-links">
-        {{ cheDo === 'khach' ? 'Bạn là nhân viên?' : 'Bạn là khách hàng?' }}
-        <router-link :to="cheDo === 'khach' ? '/login-nhan-vien' : '/login'">
-          {{ cheDo === 'khach' ? 'Đăng nhập nhân viên' : 'Đăng nhập khách hàng' }}
-        </router-link>
       </p>
     </div>
   </div>

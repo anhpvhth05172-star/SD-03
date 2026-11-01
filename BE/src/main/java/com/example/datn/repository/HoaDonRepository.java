@@ -15,6 +15,16 @@ import org.springframework.data.repository.query.Param;
 public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
 
     @Query("""
+        SELECT h.nhanVien.id, COUNT(h)
+        FROM HoaDon h
+        WHERE h.nhanVien IS NOT NULL
+          AND h.loaiDon = 'ONLINE'
+          AND h.trangThai NOT IN ('DA_HOAN_THANH', 'DA_HUY', 'DA_HOAN_TIEN')
+        GROUP BY h.nhanVien.id
+        """)
+    List<Object[]> countOpenOrdersByEmployee();
+
+    @Query("""
         SELECT COALESCE(SUM(h.tienSauGiamGia - COALESCE(h.phiVanChuyen, 0)), 0) FROM HoaDon h
         WHERE h.daXoa = false AND h.trangThai IN :trangThais
           AND h.ngayTao >= :tu AND h.ngayTao < :den

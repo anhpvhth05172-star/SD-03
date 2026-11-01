@@ -13,6 +13,8 @@ export const moCa = (payload) => http.post('/ca/mo-ca', payload).then((r) => r.d
 // GET /api/ca/{id}/tong-ket — TongKetDto (đối soát trước khi kết ca)
 export const getTongKet = (id) => http.get(`/ca/${id}/tong-ket`).then((r) => r.data)
 
+export const getDoiSoat = (id) => http.get(`/ca/${id}/doi-soat`).then((r) => r.data)
+
 // POST /api/ca/{id}/ket-ca — lỗi: 400 LY_DO_LECH_THIEU / CON_HD_DANG_XU_LY, 409 CA_DANG_KET
 export const ketCa = (id, payload) => http.post(`/ca/${id}/ket-ca`, payload).then((r) => r.data)
 

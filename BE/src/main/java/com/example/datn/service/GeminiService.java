@@ -26,7 +26,7 @@ import org.springframework.web.client.RestClient;
 public class GeminiService {
 
     private static final String URL_DEFAULT =
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent";
     private static final int TIMEOUT_MS = 15_000;
 
     private final RestClient restClient;

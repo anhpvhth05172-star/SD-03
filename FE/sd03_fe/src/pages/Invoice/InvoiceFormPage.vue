@@ -172,7 +172,7 @@ const validate = () => {
   if (!form.value.idPhuongThucThanhToan) {
     e.idPhuongThucThanhToan = 'Vui lòng chọn phương thức thanh toán'
   }
-  if (!form.value.idNhanVien) e.idNhanVien = 'Vui lòng chọn nhân viên'
+  if (form.value.loaiDon !== 'Online' && !form.value.idNhanVien) e.idNhanVien = 'Vui lòng chọn nhân viên'
 
   const ten = String(form.value.tenKhachHang || '').trim()
   if (!ten) e.tenKhachHang = 'Tên khách hàng không được để trống'
@@ -338,7 +338,7 @@ onMounted(async () => {
           </select>
           <div v-if="errors.idPhuongThucThanhToan" class="field-error">{{ errors.idPhuongThucThanhToan }}</div>
         </div>
-        <div class="field">
+        <div v-if="form.loaiDon !== 'Online'" class="field">
           <label>Nhân viên *</label>
           <select v-model="form.idNhanVien">
             <option value="">— Không chọn —</option>

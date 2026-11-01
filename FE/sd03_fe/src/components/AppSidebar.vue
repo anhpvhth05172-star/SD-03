@@ -53,12 +53,12 @@ const menu = [
   },
   {
     label: 'Quản lý khách hàng',
-    path: '/admin/khach-hang',
+    path: '/quan-ly-khach-hang',
     iconType: 'customers',
   },
   {
     label: 'Quản lý nhân viên',
-    path: '/admin/nhan-vien',
+    path: '/quan-ly-nhan-vien',
     iconType: 'employees',
     adminOnly: true,
   },

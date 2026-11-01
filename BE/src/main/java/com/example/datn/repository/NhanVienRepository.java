@@ -10,6 +10,11 @@ import org.springframework.data.repository.query.Param;
 
 public interface NhanVienRepository extends JpaRepository<NhanVien, Long> {
 
+    @Query("SELECT n FROM NhanVien n WHERE n.trangThai = true AND n.vaiTro.maVaiTro <> 'ADMIN' ORDER BY n.id")
+    java.util.List<NhanVien> findActiveOrderAssignees();
+
+    java.util.Optional<NhanVien> findFirstByVaiTro_MaVaiTroAndTrangThaiTrueAndEmailIsNotNullOrderByIdAsc(String maVaiTro);
+
     boolean existsByMaNhanVien(String maNhanVien);
 
     java.util.Optional<NhanVien> findByMaNhanVien(String maNhanVien);

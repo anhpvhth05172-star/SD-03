@@ -605,7 +605,7 @@ const submit = async () => {
       notifySuccess(msg)
     }
     setTimeout(() => {
-      router.push('/nhan-vien')
+      router.push('/quan-ly-nhan-vien')
     }, 600)
   } catch (e) {
     errorMsg.value = e.message
@@ -688,7 +688,7 @@ onMounted(async () => {
 <template>
   <div class="employee-create-page">
     <div class="top-nav-bar">
-      <button class="btn-back" type="button" title="Quay lại danh sách" @click="router.push('/nhan-vien')">
+      <button class="btn-back" type="button" title="Quay lại danh sách" @click="router.push('/quan-ly-nhan-vien')">
         <i class="bi bi-arrow-left"></i>
       </button>
     </div>
@@ -869,7 +869,7 @@ onMounted(async () => {
               <span>{{ saving ? 'Đang lưu...' : isEdit ? 'Cập nhật nhân viên' : 'Tạo nhân viên' }}</span>
             </button>
 
-            <button class="btn-cancel-action" type="button" @click="router.push('/nhan-vien')">
+            <button class="btn-cancel-action" type="button" @click="router.push('/quan-ly-nhan-vien')">
               Hủy
             </button>
           </div>

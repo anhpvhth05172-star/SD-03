@@ -6,6 +6,7 @@ const props = defineProps({
   values: { type: Array, default: () => [] },
   color: { type: String, default: '#d92d20' },
   mode: { type: String, default: 'cot' },
+  currency: { type: Boolean, default: false },
   series: { type: Array, default: null },
   height: { type: Number, default: 250 },
 })
@@ -45,7 +46,7 @@ const xCenter = (i) => PAD.l + band.value * i + band.value / 2
 const yOf = (v) => PAD.t + innerH.value * (1 - (Number(v) || 0) / yMax.value)
 
 const bars = computed(() => {
-  if (multi.value || props.mode !== 'cot') return []
+  if (multi.value || !['cot', 'ket-hop'].includes(props.mode)) return []
   const vals = props.values || []
   return vals.map((v, i) => {
     const y = yOf(v)
@@ -70,7 +71,7 @@ const areaPath = (vals) => {
   return `M ${first} ${base} ` + vals.map((v, i) => `L ${xCenter(i)} ${yOf(v)}`).join(' ') + ` L ${last} ${base} Z`
 }
 
-const showDots = computed(() => (props.values || []).length <= 40 && !multi.value)
+const showDots = computed(() => (props.values || []).length <= 40 && !multi.value && ['duong', 'ket-hop'].includes(props.mode))
 
 const labelStep = computed(() => {
   const n = labels.value.length
@@ -78,9 +79,16 @@ const labelStep = computed(() => {
   return Math.ceil(n / 8)
 })
 
-const showLine = computed(() => props.mode === 'duong')
+const showLine = computed(() => ['duong', 'ket-hop'].includes(props.mode))
 
 const fmt = (v) => new Intl.NumberFormat('vi-VN').format(Number(v) || 0)
+const fmtValue = (v) => props.currency ? `${fmt(v)} đ` : fmt(v)
+const fmtTick = (v) => {
+  if (!props.currency) return fmt(v)
+  if (v >= 1000000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(v / 1000000)} tr`
+  if (v >= 1000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(v / 1000)} N`
+  return `${fmt(v)} đ`
+}
 
 const isEmpty = computed(() => {
   if (multi.value) return !props.series.some((s) => (s.values || []).some((v) => Number(v) > 0))
@@ -117,7 +125,7 @@ const isEmpty = computed(() => {
           text-anchor="end"
           class="blc-tick"
         >
-          {{ t.label }}
+          {{ fmtTick(t.label) }}
         </text>
       </g>
 
@@ -135,7 +143,7 @@ const isEmpty = computed(() => {
       </g>
 
       <template v-if="!isEmpty">
-        <g v-if="mode === 'cot' && !multi">
+        <g v-if="['cot', 'ket-hop'].includes(mode) && !multi">
           <rect
             v-for="(b, i) in bars"
             :key="'b' + i"
@@ -148,8 +156,30 @@ const isEmpty = computed(() => {
             :fill="color"
             class="blc-bar"
           >
-            <title>{{ b.label }}: {{ fmt(b.v) }}</title>
+            <title>{{ b.label }}: {{ fmtValue(b.v) }}</title>
           </rect>
+          <polyline
+            v-if="mode === 'ket-hop' && values.length > 1"
+            :points="linePoints(values)"
+            fill="none"
+            stroke="#2563eb"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <circle
+            v-if="mode === 'ket-hop'"
+            v-for="(v, i) in values"
+            :key="'combo-dot' + i"
+            :cx="xCenter(i)"
+            :cy="yOf(v)"
+            r="3.5"
+            fill="#fff"
+            stroke="#2563eb"
+            stroke-width="2"
+          >
+            <title>{{ labels[i] }}: {{ fmtValue(v) }}</title>
+          </circle>
         </g>
 
         <g v-else>
@@ -179,7 +209,7 @@ const isEmpty = computed(() => {
                 :stroke="s.color || color"
                 stroke-width="2"
               >
-                <title>{{ labels[i] }}: {{ fmt(v) }}</title>
+                <title>{{ labels[i] }}: {{ fmtValue(v) }}</title>
               </circle>
             </template>
           </g>
