@@ -26,5 +26,7 @@ public interface ChiTietHoaDonRepository extends JpaRepository<ChiTietHoaDon, Lo
         GROUP BY id_hoa_don
         """, nativeQuery = true)
     List<Object[]> tongSoLuongTheoHoaDon(@Param("ids") List<Long> ids);
+
+    List<ChiTietHoaDon> findByHoaDon_Id(Long hoaDonId);
 }
 

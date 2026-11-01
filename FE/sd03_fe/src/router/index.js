@@ -51,6 +51,8 @@ import ProductCartDetail from '@/pages/clients/views/ProductCartDetail.vue'
 import About from '@/pages/clients/views/About.vue'
 import Contact from '@/pages/clients/views/Contact.vue'
 
+import VNPayReturn from '@/pages/clients/views/VNPayReturn.vue'
+
 const metaBo = { requiresAuth: true, canBo: true }
 
 const routes = [
@@ -83,6 +85,7 @@ const routes = [
       { path: 'gioi-thieu', component: About, meta: { title: 'Giới thiệu' } },
       { path: 'lien-he', component: Contact, meta: { title: 'Liên hệ' } },
       { path: 'goi-y', redirect: '/cua-hang' },
+      { path: 'thanh-toan-vnpay', name: 'ClientVNPayReturn', component: VNPayReturn, meta: { title: 'Kết quả thanh toán VNPay', canKhach: true } },
     ],
   },
   {

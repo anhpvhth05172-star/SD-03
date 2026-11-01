@@ -14,8 +14,14 @@ export const money = (n) => {
 };
 
 // ===== Cart State =====
+// [SỬA] Chỉ khôi phục giỏ hàng local khi đang đăng nhập.
+// Chưa đăng nhập thì giỏ hàng luôn rỗng, tránh hiện dữ liệu của tài khoản cũ.
 const saved = (() => {
   try {
+    if (!getUser()) {
+      localStorage.removeItem("ps_cart");
+      return [];
+    }
     return JSON.parse(localStorage.getItem("ps_cart")) || [];
   } catch {
     return [];
@@ -52,6 +58,16 @@ export const cartTotal = computed(() => {
   );
 });
 
+// [SỬA] Xóa giỏ hàng ở phía client (dùng khi đăng xuất).
+// KHÔNG gọi API nên giỏ hàng trên server vẫn còn cho lần đăng nhập sau.
+export function resetCartLocal() {
+  cart.items = [];
+  cart.serverCart = null;
+  cart.loading = false;
+  cart.error = null;
+  localStorage.removeItem("ps_cart");
+}
+
 const mapServerItem = (item) => ({
   id: item.idSanPham,
   variantId: item.idSanPhamChiTiet,
@@ -74,7 +90,8 @@ const mapServerItem = (item) => ({
 export async function fetchCart() {
   const user = getUser();
   if (!user || !user.idKhachHang) {
-    cart.serverCart = null;
+    // [SỬA] Chưa đăng nhập -> xóa sạch giỏ hàng local
+    resetCartLocal();
     return cart.items;
   }
 
@@ -136,7 +153,9 @@ export async function addToCart(p, variantId, size, qty = 1, color = "") {
 export async function updateCartItemQty(idGioHangChiTiet, qty) {
   const user = getUser();
   if (!user || !user.idKhachHang) {
-    const item = cart.items.find((i) => i.idGioHangChiTiet === idGioHangChiTiet);
+    const item = cart.items.find(
+      (i) => i.idGioHangChiTiet === idGioHangChiTiet,
+    );
     if (item) item.qty = qty;
     return;
   }

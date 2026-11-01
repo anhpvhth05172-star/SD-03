@@ -1,74 +1,637 @@
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { getSanPhamClient } from "@/api/product";
 import ProductCard from "./ProductCard.vue";
 
 const featured = ref([]);
-const brands = ref([]);
+const currentSlide = ref(0);
+let bannerTimer = null;
+
+// Banner slider với nội dung chính xác theo ảnh mẫu
+const banners = [
+  {
+    tag: "NEW ARRIVAL",
+    titleStart: "BỨT PHÁ PHONG CÁCH",
+    titleHighlight: "CÙNG",
+    brandHighlight: "NIKE AIR & JORDAN",
+    desc: "Đậm chất hiện đại, tinh tế trong từng chi tiết.\nSẵn sàng đồng hành cùng bạn trên mọi hành trình.",
+    btnPrimary: "Xem dòng sản phẩm",
+    btnPrimaryLink: "/cua-hang?brand=Nike",
+    btnSecondary: "Xem tất cả",
+    btnSecondaryLink: "/cua-hang",
+    image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1000&q=80",
+    gradient: "linear-gradient(105deg, #0a0102 0%, #1a0407 35%, #50080f 70%, #880e18 100%)",
+    subLabels: ["NIKE", "JORDAN", "AIR MAX", "JUST DO IT"]
+  },
+  {
+    tag: "SPECIAL EDITION",
+    titleStart: "CHINH PHỤC TỪNG BƯỚC",
+    titleHighlight: "VỚI",
+    brandHighlight: "ADIDAS ULTRABOOST",
+    desc: "Đệm Boost đàn hồi đỉnh cao, thiết kế ôm chân hoàn hảo.\nTận hưởng độ êm ái vượt trội suốt ngày dài.",
+    btnPrimary: "Xem dòng sản phẩm",
+    btnPrimaryLink: "/cua-hang?brand=Adidas",
+    btnSecondary: "Xem tất cả",
+    btnSecondaryLink: "/cua-hang",
+    image: "https://images.unsplash.com/photo-1552346154-21d32810aba3?auto=format&fit=crop&w=1000&q=80",
+    gradient: "linear-gradient(105deg, #030712 0%, #111827 40%, #1f293d 75%, #374151 100%)",
+    subLabels: ["ADIDAS", "ULTRABOOST", "ORIGINALS", "SUPERSTAR"]
+  }
+];
+
+const nextSlide = () => {
+  currentSlide.value = (currentSlide.value + 1) % banners.length;
+};
+
+const prevSlide = () => {
+  currentSlide.value = (currentSlide.value - 1 + banners.length) % banners.length;
+};
+
+const goToSlide = (index) => {
+  currentSlide.value = index;
+  resetTimer();
+};
+
+const resetTimer = () => {
+  if (bannerTimer) clearInterval(bannerTimer);
+  bannerTimer = setInterval(nextSlide, 5000);
+};
+
+// 7 thương hiệu nổi bật có logo/icon hiển thị dạng card trắng như ảnh mẫu
+const featuredBrands = [
+  { name: "Nike", icon: "bi-check2", link: "/cua-hang?brand=Nike", isNike: true },
+  { name: "Jordan", icon: "bi-person-arms-up", link: "/cua-hang?brand=Jordan", isJumpman: true },
+  { name: "MLB", text: "⚾ MLB", link: "/cua-hang?brand=MLB" },
+  { name: "Lacoste", text: "🐊", link: "/cua-hang?brand=Lacoste" },
+  { name: "Salomon", iconText: "S", nameText: "Salomon", link: "/cua-hang?brand=Salomon" },
+  { name: "On Running", text: "8", nameText: "On Running", link: "/cua-hang?brand=On" },
+  { name: "Under Armour", iconText: "X", nameText: "Under Armour", link: "/cua-hang?brand=Under Armour" },
+];
 
 onMounted(async () => {
+  resetTimer();
   try {
     const res = await getSanPhamClient({ page: 0, size: 8 });
     const list = res?.content ?? res ?? [];
-    featured.value = list.slice(0, 4);
-    brands.value = [...new Set(list.map((p) => p.tenThuongHieu).filter(Boolean))];
+    featured.value = list.slice(0, 8);
   } catch {
-    // Giữ bố cục trang ổn định nếu API tạm thời không khả dụng.
+    // fallback
   }
 });
 
-const perks = [
-  { icon: "bi-patch-check", t: "Sản phẩm chính hãng", d: "An tâm chọn lựa, chất lượng được cam kết." },
-  { icon: "bi-arrow-repeat", t: "Đổi size dễ dàng", d: "Hỗ trợ đổi size trong 7 ngày." },
-  { icon: "bi-truck", t: "Giao hàng toàn quốc", d: "Nhận hàng và kiểm tra trước khi thanh toán." },
-];
+onUnmounted(() => {
+  if (bannerTimer) clearInterval(bannerTimer);
+});
 </script>
 
 <template>
-  <section class="home-hero mb-5">
-    <div class="home-hero-copy">
-      <span class="home-eyebrow"><i class="bi bi-stars me-2"></i>POLY SHOES · EVERYDAY ESSENTIALS</span>
-      <h1>Chọn đôi giày.<br /><span>Đi theo cách bạn.</span></h1>
-      <p>Những thiết kế sneaker năng động, dễ phối đồ và sẵn sàng đồng hành cùng bạn mỗi ngày.</p>
-      <div class="d-flex flex-wrap align-items-center gap-3">
-        <RouterLink to="/cua-hang" class="btn btn-primary btn-lg px-4">Khám phá cửa hàng <i class="bi bi-arrow-right ms-2"></i></RouterLink>
-        <span class="home-caption"><i class="bi bi-box-seam me-1"></i> Giao hàng toàn quốc</span>
+  <div class="ps-home-container">
+    <!-- 1. BANNER HERO SLIDER ĐÚNG MẪU -->
+    <section class="banner-carousel position-relative mb-5 overflow-hidden">
+      <div 
+        class="banner-slides-wrapper" 
+        :style="{ transform: `translateX(-${currentSlide * 100}%)` }"
+      >
+        <div 
+          v-for="(banner, idx) in banners" 
+          :key="idx" 
+          class="banner-slide"
+          :style="{ background: banner.gradient }"
+        >
+          <div class="container h-100 position-relative">
+            <div class="row h-100 align-items-center g-4 py-4 py-lg-5">
+              <!-- Cột trái: Văn bản -->
+              <div class="col-lg-6 text-white text-content z-2 ps-lg-4">
+                <div class="banner-top-tag mb-2 d-flex align-items-center gap-2">
+                  <span class="text-white-50 small fw-bold tracking-widest">{{ banner.tag }}</span>
+                  <span class="tag-dash"></span>
+                </div>
+                
+                <h1 class="banner-title text-white mb-3">
+                  {{ banner.titleStart }}<br />
+                  <span class="text-white fw-bold">{{ banner.titleHighlight }}</span>
+                  <span class="text-danger fw-black ms-2">{{ banner.brandHighlight }}</span>
+                </h1>
+
+                <p class="banner-desc text-white-50 mb-4" style="white-space: pre-line;">
+                  {{ banner.desc }}
+                </p>
+
+                <div class="d-flex flex-wrap gap-3 align-items-center">
+                  <RouterLink 
+                    :to="banner.btnPrimaryLink" 
+                    class="btn btn-danger banner-btn-primary rounded-pill px-4 py-2 d-inline-flex align-items-center gap-2 fw-bold"
+                  >
+                    <span>{{ banner.btnPrimary }}</span>
+                    <i class="bi bi-arrow-right"></i>
+                  </RouterLink>
+                  <RouterLink 
+                    :to="banner.btnSecondaryLink" 
+                    class="btn btn-outline-light banner-btn-secondary rounded-pill px-4 py-2 fw-semibold"
+                  >
+                    {{ banner.btnSecondary }}
+                  </RouterLink>
+                </div>
+              </div>
+
+              <!-- Cột phải: Ảnh giày đỏ nổi bật và nhãn thương hiệu -->
+              <div class="col-lg-6 text-center position-relative banner-img-wrap">
+                <div class="glow-radial"></div>
+                <img 
+                  :src="banner.image" 
+                  :alt="banner.brandHighlight" 
+                  class="banner-hero-img img-fluid"
+                  loading="lazy"
+                />
+
+                <!-- Text nhãn dọc bên phải theo thiết kế ảnh mẫu -->
+                <div class="banner-right-labels d-none d-lg-flex flex-column text-white-50">
+                  <span v-for="lbl in banner.subLabels" :key="lbl" class="banner-sub-lbl">
+                    {{ lbl }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="home-hero-art" aria-label="Bộ sưu tập giày Poly Shoes">
-      <div class="hero-orbit hero-orbit-one"></div><div class="hero-orbit hero-orbit-two"></div>
-      <span class="hero-stamp">MOVE<br />YOUR<br />WAY</span>
-      <div class="hero-shoe">👟</div>
-      <span class="hero-art-note">NEW<br />SEASON</span>
-      <span class="hero-art-index">01 / 26</span>
-    </div>
-  </section>
 
-  <section v-if="brands.length" class="brand-section mb-5">
-    <div class="section-kicker">THƯƠNG HIỆU ĐƯỢC YÊU THÍCH</div>
-    <div class="brand-list">
-      <RouterLink v-for="b in brands" :key="b" :to="{ path: '/cua-hang', query: { brand: b } }" class="brand-chip">{{ b }}<i class="bi bi-arrow-up-right"></i></RouterLink>
-      <RouterLink to="/cua-hang" class="brand-chip brand-chip-all">Tất cả sản phẩm <i class="bi bi-arrow-right"></i></RouterLink>
-    </div>
-  </section>
+      <!-- Nút tròn chuyển slide mũi tên trái/phải -->
+      <button 
+        class="banner-nav-btn prev-btn" 
+        @click="prevSlide" 
+        aria-label="Slide trước"
+      >
+        <i class="bi bi-chevron-left"></i>
+      </button>
+      <button 
+        class="banner-nav-btn next-btn" 
+        @click="nextSlide" 
+        aria-label="Slide sau"
+      >
+        <i class="bi bi-chevron-right"></i>
+      </button>
 
-  <section v-if="featured.length" class="mb-5">
-    <div class="shop-section-heading">
-      <div><div class="section-kicker">LỰA CHỌN DÀNH CHO BẠN</div><h2>Sản phẩm nổi bật</h2></div>
-      <RouterLink to="/cua-hang" class="section-link">Xem tất cả <i class="bi bi-arrow-right ms-1"></i></RouterLink>
-    </div>
-    <div class="row g-3 g-lg-4">
-      <div v-for="p in featured" :key="p.id" class="col-6 col-lg-3"><ProductCard :product="p" /></div>
-    </div>
-  </section>
+      <!-- Dots chuyển slide -->
+      <div class="banner-dots">
+        <button
+          v-for="(_, i) in banners"
+          :key="i"
+          class="banner-dot"
+          :class="{ active: currentSlide === i }"
+          @click="goToSlide(i)"
+          :aria-label="'Chuyển đến slide ' + (i + 1)"
+        ></button>
+      </div>
+    </section>
 
-  <section class="perks-strip row g-3">
-    <div v-for="x in perks" :key="x.t" class="col-md-4">
-      <div class="perk-card h-100"><span class="perk-icon"><i :class="`bi ${x.icon}`"></i></span><div><h3>{{ x.t }}</h3><p>{{ x.d }}</p></div><i class="bi bi-arrow-up-right perk-arrow"></i></div>
-    </div>
-  </section>
+    <!-- 2. THƯƠNG HIỆU HÀNG ĐẦU (7 Ô Card trắng bo viền theo ảnh mẫu) -->
+    <section class="mb-5">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+          <div class="section-tag small fw-bold text-danger d-flex align-items-center gap-1">
+            <span class="slash-mark">/</span> THƯƠNG HIỆU ĐỒNG HÀNH
+          </div>
+          <h4 class="fw-black text-dark mb-0 mt-1">Những thương hiệu hàng đầu</h4>
+        </div>
+        <RouterLink to="/cua-hang" class="text-danger fw-semibold small text-decoration-none">
+          Xem tất cả <i class="bi bi-arrow-right"></i>
+        </RouterLink>
+      </div>
+
+      <div class="row g-2 g-md-3">
+        <div v-for="b in featuredBrands" :key="b.name" class="col-4 col-md-3 col-lg">
+          <RouterLink :to="b.link" class="brand-showcase-card text-decoration-none text-dark">
+            <div class="brand-logo-area">
+              <!-- Nike Swoosh -->
+              <svg v-if="b.isNike" class="brand-svg-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M21.707 5.293c-.27-.27-.69-.33-1.02-.15l-14 8a1.002 1.002 0 0 0-.47.67c-.07.36.05.73.32.98l4 3.73c.18.17.43.27.67.27.18 0 .36-.05.52-.16l9.98-7.06c.35-.25.46-.73.27-1.11-.19-.38-.66-.54-1.05-.35l-9.17 6.49-2.73-2.55 12.68-7.77z"/>
+              </svg>
+              <!-- Jumpman Icon -->
+              <i v-else-if="b.isJumpman" class="bi bi-person-walking fs-3"></i>
+              <!-- Text brand -->
+              <span v-else class="fw-bold fs-6">{{ b.text || b.nameText }}</span>
+            </div>
+            <div v-if="b.nameText" class="brand-subtext">{{ b.nameText }}</div>
+          </RouterLink>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. PROMO 2 BANNER (Streetwear 2026 & Giày chạy bộ - Đúng mẫu ảnh) -->
+    <section class="row g-4 mb-5">
+      <!-- Banner trái: Streetwear 2026 nền trắng -->
+      <div class="col-md-6">
+        <div class="promo-card-custom promo-card-streetwear p-4 rounded-4 position-relative overflow-hidden d-flex align-items-center">
+          <div class="promo-text-col z-2">
+            <span class="badge bg-danger rounded-pill px-2 py-1 small fw-bold mb-2">HOT TREND</span>
+            <h4 class="fw-black text-dark mb-1">Sneaker Streetwear 2026</h4>
+            <p class="text-muted-ps small mb-3">Thời trang hiện đại, phong cách trẻ trung năng động.</p>
+            <RouterLink to="/cua-hang" class="btn btn-danger btn-sm rounded-pill px-3 fw-bold">
+              Mua Ngay <i class="bi bi-arrow-right"></i>
+            </RouterLink>
+          </div>
+          <div class="promo-img-col">
+            <img 
+              src="https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=500&q=80" 
+              alt="Streetwear Sneaker" 
+              class="promo-shoe-img"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Banner phải: Giày Chạy Bộ & Thể Thao nền tối đỏ -->
+      <div class="col-md-6">
+        <div class="promo-card-custom promo-card-running p-4 rounded-4 position-relative overflow-hidden d-flex align-items-center">
+          <div class="promo-text-col z-2">
+            <span class="badge bg-danger rounded-pill px-2 py-1 small fw-bold mb-2">GIẢM ĐẾN 30%</span>
+            <h4 class="fw-black text-white mb-1">Giày Chạy Bộ & Thể Thao</h4>
+            <p class="text-white-50 small mb-3">Công nghệ tiên tiến, bứt phá từng bước chân.</p>
+            <RouterLink to="/cua-hang" class="btn btn-light btn-sm rounded-pill px-3 fw-bold text-dark">
+              Xem Ngay <i class="bi bi-arrow-right"></i>
+            </RouterLink>
+          </div>
+          <div class="promo-img-col">
+            <img 
+              src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=500&q=80" 
+              alt="Running Sneaker" 
+              class="promo-shoe-img"
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. SẢN PHẨM NỔI BẬT (Heading & Link khám phá bộ sưu tập) -->
+    <section class="mb-5">
+      <div class="d-flex justify-content-between align-items-end mb-4">
+        <div>
+          <div class="section-tag small fw-bold text-danger d-flex align-items-center gap-1">
+            <span class="slash-mark">/</span> TUYỂN CHỌN <span class="text-danger">HÀNG ĐẦU</span>
+          </div>
+          <h3 class="fw-black text-dark mb-0 mt-1">Sản phẩm nổi bật</h3>
+        </div>
+        <RouterLink 
+          to="/cua-hang" 
+          class="text-danger fw-semibold small text-decoration-none"
+        >
+          Khám phá bộ sưu tập <i class="bi bi-arrow-right"></i>
+        </RouterLink>
+      </div>
+
+      <div v-if="featured.length" class="row g-3 g-md-4">
+        <div v-for="p in featured" :key="p.id" class="col-6 col-md-4 col-lg-3">
+          <ProductCard :product="p" />
+        </div>
+      </div>
+      <div v-else class="text-center py-5 ps-card">
+        <div class="fs-1 mb-2">👟</div>
+        <h5 class="fw-bold">Đang cập nhật sản phẩm...</h5>
+        <p class="text-muted small">Mời bạn quay lại danh mục sản phẩm sau nhé!</p>
+      </div>
+    </section>
+
+    <!-- 5. KHỐI TRẢI NGHIỆM MUA SẮM (Banner đỏ nhỏ bên trái + 4 cam kết bên phải - Theo đúng ảnh) -->
+    <section class="mb-5">
+      <div class="experience-strip rounded-4 p-4 p-md-4 bg-white border">
+        <div class="row align-items-center g-4">
+          <!-- Cột đỏ nhỏ giày bên trái -->
+          <div class="col-lg-5 d-flex align-items-center gap-3">
+            <div class="experience-thumb-box rounded-3 overflow-hidden flex-shrink-0">
+              <img 
+                src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=300&q=80" 
+                alt="Sneaker Shoes" 
+                class="experience-thumb-img"
+              />
+            </div>
+            <div>
+              <div class="small fw-bold text-danger text-uppercase mb-1">/ VÌ SAO CHỌN POLY SHOES?</div>
+              <h4 class="fw-black text-dark mb-0 lh-sm">
+                Trải nghiệm mua sắm<br />sneaker đơn giản và an toàn
+              </h4>
+            </div>
+          </div>
+
+          <!-- 4 cột cam kết bên phải đúng ảnh -->
+          <div class="col-lg-7">
+            <div class="row g-3 text-start">
+              <div class="col-6 col-md-3">
+                <div class="exp-perk-item">
+                  <div class="exp-icon-shield text-danger mb-2">
+                    <i class="bi bi-shield-check fs-4"></i>
+                  </div>
+                  <div class="fw-bold small text-dark">Chính hãng 100%</div>
+                  <p class="text-muted-ps extra-small mb-0">Cam kết nguồn gốc, hoàn tiền nếu phát hiện hàng giả.</p>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="exp-perk-item">
+                  <div class="exp-icon-shield text-danger mb-2">
+                    <i class="bi bi-arrow-repeat fs-4"></i>
+                  </div>
+                  <div class="fw-bold small text-dark">Đổi size trong 7 ngày</div>
+                  <p class="text-muted-ps extra-small mb-0">Hỗ trợ đổi miễn phí lần đầu nếu không vừa.</p>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="exp-perk-item">
+                  <div class="exp-icon-shield text-danger mb-2">
+                    <i class="bi bi-credit-card-2-front fs-4"></i>
+                  </div>
+                  <div class="fw-bold small text-dark">Thanh toán an toàn</div>
+                  <p class="text-muted-ps extra-small mb-0">Đa dạng hình thức, bảo mật tuyệt đối.</p>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="exp-perk-item">
+                  <div class="exp-icon-shield text-danger mb-2">
+                    <i class="bi bi-headset fs-4"></i>
+                  </div>
+                  <div class="fw-bold small text-dark">Hỗ trợ 24/7</div>
+                  <p class="text-muted-ps extra-small mb-0">Tư vấn nhanh chóng, chuyên nghiệp.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
 </template>
 
 <style scoped>
-.home-hero{min-height:410px;display:grid;grid-template-columns:1.05fr .95fr;overflow:hidden;border-radius:24px;background:#b8202e;color:#fff;position:relative;isolation:isolate}.home-hero-copy{padding:clamp(2rem,5vw,4.5rem);align-self:center;z-index:2}.home-eyebrow{font-size:.72rem;letter-spacing:.15em;font-weight:800;color:#ffe0df}.home-hero h1{font-size:clamp(2.7rem,5vw,4.6rem);line-height:1.02;letter-spacing:-.06em;margin:1.1rem 0;font-weight:850}.home-hero h1 span{color:#ffd7d5}.home-hero-copy p{font-size:1.05rem;line-height:1.7;color:#ffe8e6;max-width:470px;margin-bottom:1.5rem}.home-hero .btn{background:#fff;color:#a61f2b;border:0;box-shadow:none;border-radius:10px;font-weight:750}.home-caption{font-size:.8rem;color:#ffe0df}.home-hero-art{position:relative;display:grid;place-items:center;min-height:360px;background:radial-gradient(ellipse at 50% 50%,#f56c67 0,rgba(245,108,103,.28) 36%,transparent 69%)}.hero-orbit{position:absolute;border:1px solid rgba(255,255,255,.25);border-radius:50%;width:360px;height:360px}.hero-orbit-two{width:275px;height:275px;border-style:dashed}.hero-shoe{font-size:clamp(8rem,18vw,14rem);filter:drop-shadow(0 24px 15px rgba(84,0,8,.25));transform:rotate(-18deg);z-index:1}.hero-stamp{position:absolute;left:10%;top:20%;font-size:.72rem;line-height:1.2;letter-spacing:.15em;font-weight:900;transform:rotate(-12deg);color:#ffd8d5}.hero-art-note{position:absolute;right:13%;top:22%;font-size:.8rem;line-height:1.1;font-weight:900;letter-spacing:.12em;border:1px solid rgba(255,255,255,.65);padding:.55rem;transform:rotate(8deg)}.hero-art-index{position:absolute;right:8%;bottom:9%;font-size:.7rem;letter-spacing:.15em;color:#ffe0df}.brand-section{padding:1.4rem 0;border-bottom:1px solid #eceef2}.section-kicker{font-size:.7rem;letter-spacing:.13em;font-weight:800;color:#9b1c28;margin-bottom:.55rem}.brand-list{display:flex;gap:.65rem;overflow-x:auto;padding:.25rem 0}.brand-chip{display:flex;align-items:center;gap:1rem;white-space:nowrap;padding:.7rem 1rem;border:1px solid #e9e9ec;border-radius:9px;background:#fff;color:#26303d;text-decoration:none;font-size:.88rem;font-weight:700;transition:.18s}.brand-chip i{color:#bd2632}.brand-chip:hover{border-color:#c62828;color:#a61f1f;transform:translateY(-2px)}.brand-chip-all{background:#fff5f4;border-color:#f2d1d0;color:#a61f1f}.shop-section-heading{display:flex;justify-content:space-between;align-items:end;margin-bottom:1.1rem}.shop-section-heading h2{font-size:1.8rem;margin:0;letter-spacing:-.04em}.section-link{color:#a61f1f;font-weight:700;text-decoration:none}.perk-card{position:relative;display:flex;align-items:center;gap:1rem;background:#fff;border:1px solid #eeeef1;border-radius:13px;padding:1.15rem}.perk-icon{width:44px;height:44px;border-radius:12px;background:#fff0ef;color:#b8202e;display:grid;place-items:center;font-size:1.25rem;flex-shrink:0}.perk-card h3{font-size:.92rem;font-weight:800;margin:0 0 .25rem;letter-spacing:0}.perk-card p{font-size:.78rem;color:#747b87;margin:0}.perk-arrow{margin-left:auto;color:#c62828;align-self:flex-start}@media(max-width:767.98px){.home-hero{grid-template-columns:1fr;min-height:unset}.home-hero-copy{padding:2rem 1.5rem 1rem}.home-hero h1{font-size:3rem}.home-hero-art{min-height:230px}.hero-shoe{font-size:9rem}.hero-orbit{width:240px;height:240px}.hero-orbit-two{width:185px;height:185px}.hero-stamp{left:12%;top:15%}.hero-art-note{right:12%;top:14%}.shop-section-heading h2{font-size:1.45rem}}
+/* Hero Carousel */
+.banner-carousel {
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.banner-slides-wrapper {
+  display: flex;
+  transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+  width: 100%;
+}
+
+.banner-slide {
+  min-width: 100%;
+  box-sizing: border-box;
+  min-height: 440px;
+  display: flex;
+  align-items: center;
+}
+
+@media (min-width: 768px) {
+  .banner-slide {
+    min-height: 480px;
+  }
+}
+
+.banner-top-tag {
+  letter-spacing: 0.15em;
+}
+
+.tag-dash {
+  display: inline-block;
+  width: 32px;
+  height: 2px;
+  background-color: #ef4444;
+}
+
+.banner-title {
+  font-size: 2.5rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+@media (min-width: 992px) {
+  .banner-title {
+    font-size: 3rem;
+  }
+}
+
+.banner-desc {
+  max-width: 460px;
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+.banner-btn-primary {
+  background-color: #d32f2f !important;
+  border-color: #d32f2f !important;
+  font-size: 0.9rem;
+}
+
+.banner-btn-secondary {
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  font-size: 0.9rem;
+}
+
+.banner-btn-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Image Column */
+.banner-img-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.glow-radial {
+  position: absolute;
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.35) 0%, rgba(0, 0, 0, 0) 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.banner-hero-img {
+  max-height: 360px;
+  width: auto;
+  object-fit: contain;
+  transform: rotate(-18deg);
+  filter: drop-shadow(0 20px 30px rgba(0, 0, 0, 0.5));
+  transition: transform 0.4s ease;
+}
+
+.banner-slide:hover .banner-hero-img {
+  transform: rotate(-14deg) scale(1.04);
+}
+
+.banner-right-labels {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  gap: 12px;
+  text-align: right;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+/* Nav & Dots */
+.banner-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s ease;
+}
+
+.banner-nav-btn:hover {
+  background: #d32f2f;
+  border-color: #d32f2f;
+}
+
+.prev-btn { left: 16px; }
+.next-btn { right: 16px; }
+
+.banner-dots {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+
+.banner-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.4);
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.banner-dot.active {
+  width: 22px;
+  background: #d32f2f;
+}
+
+/* Brand Showcase Cards */
+.brand-showcase-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem 0.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 84px;
+  transition: all 0.25s ease;
+}
+
+.brand-showcase-card:hover {
+  border-color: #d32f2f;
+  box-shadow: 0 6px 16px rgba(211, 47, 47, 0.1);
+  transform: translateY(-3px);
+}
+
+.brand-logo-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+}
+
+.brand-svg-icon {
+  width: 38px;
+  height: 38px;
+}
+
+.brand-subtext {
+  font-size: 0.68rem;
+  color: #64748b;
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+/* Promo Custom Cards */
+.promo-card-custom {
+  min-height: 180px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+}
+
+.promo-card-custom:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+}
+
+.promo-card-streetwear {
+  background: #ffffff;
+}
+
+.promo-card-running {
+  background: linear-gradient(105deg, #09090b 0%, #18181b 40%, #580c14 100%);
+  border-color: #27272a;
+}
+
+.promo-shoe-img {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 220px;
+  height: auto;
+  object-fit: contain;
+  transform: rotate(-10deg);
+  transition: transform 0.3s ease;
+}
+
+.promo-card-custom:hover .promo-shoe-img {
+  transform: rotate(-6deg) scale(1.05);
+}
+
+.slash-mark {
+  font-weight: 900;
+  font-size: 1.1rem;
+}
+
+/* Experience Strip */
+.experience-strip {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+}
+
+.experience-thumb-box {
+  width: 130px;
+  height: 95px;
+  background: #fee2e2;
+}
+
+.experience-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.extra-small {
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.exp-icon-shield {
+  display: inline-block;
+}
 </style>

@@ -27,6 +27,8 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
 
     boolean existsByMaHoaDon(String maHoaDon);
 
+    Optional<HoaDon> findByMaHoaDon(String maHoaDon);
+
     boolean existsByMaHoaDonAndIdNot(String maHoaDon, Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -107,4 +109,6 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
         """
     )
     List<Object[]> tongHopTheoKhachHang();
+
+    List<HoaDon> findByTrangThaiAndNgayTaoBefore(String trangThai, LocalDateTime before);
 }
