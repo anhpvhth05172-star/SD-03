@@ -41,7 +41,6 @@ public class LichLamViecService {
     private final LichLamViecRepository lichRepo;
     private final NhanVienRepository nvRepo;
     private final CaLamRepository caRepo;
-    private final CaLamViecRepository caLamViecRepo;
 
     @Transactional(readOnly = true)
     public List<LichLamViecDTO> list(LocalDate tu, LocalDate den, String tim, Long idCa, LocalDate ngay) {
@@ -50,24 +49,8 @@ public class LichLamViecService {
             .toList();
     }
 
-    private void kiemTraQuyenThaoTac() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null) return;
-        boolean laAdmin = auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
-        if (laAdmin) {
-            return; // Admin không cần mở ca
-        }
-        if (auth.getPrincipal() instanceof Long idNhanVien) {
-            boolean coCaDangMo = caLamViecRepo.findFirstByNhanVienIdAndTrangThaiAndDaXoaFalse(idNhanVien, "DANG_MO").isPresent();
-            if (!coCaDangMo) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CA_CHUA_MO: Bạn đang ở chế độ xem. Vui lòng mở ca làm việc để thực hiện thao tác!");
-            }
-        }
-    }
-
     @Transactional
     public LichLamViecDTO create(LichLamViecRequest req) {
-        kiemTraQuyenThaoTac();
         NhanVien nv = nvRepo.findByMaNhanVien(req.maNhanVien())
             .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhân viên " + req.maNhanVien()));
         CaLam ca = timCaBat(req.idCa());
@@ -82,7 +65,6 @@ public class LichLamViecService {
 
     @Transactional
     public LichLamViecDTO update(Long id, LichLamViecRequest req) {
-        kiemTraQuyenThaoTac();
         LichLamViec existing = lichRepo.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lịch làm việc"));
         NhanVien nv = nvRepo.findByMaNhanVien(req.maNhanVien())
@@ -98,7 +80,6 @@ public class LichLamViecService {
 
     @Transactional
     public void delete(Long id) {
-        kiemTraQuyenThaoTac();
         if (!lichRepo.existsById(id)) {
             throw new ResourceNotFoundException("Không tìm thấy lịch làm việc");
         }
@@ -107,7 +88,6 @@ public class LichLamViecService {
 
     @Transactional
     public void deleteTheoNgay(LocalDate ngay) {
-        kiemTraQuyenThaoTac();
         lichRepo.deleteByNgayLam(ngay);
     }
 
@@ -118,7 +98,6 @@ public class LichLamViecService {
 
     @Transactional
     public XepTuDongResponse xepTuDong(XepTuDongRequest req) {
-        kiemTraQuyenThaoTac();
         LocalDate tuNgay = req.tuNgay() != null ? req.tuNgay() : (req.ngay() != null ? req.ngay() : LocalDate.now());
         LocalDate denNgay = req.denNgay() != null ? req.denNgay() : (req.ngay() != null ? req.ngay() : tuNgay);
 
@@ -265,7 +244,6 @@ public class LichLamViecService {
 
     @Transactional
     public ImportLichResponse importLich(ImportLichRequest req) {
-        kiemTraQuyenThaoTac();
         List<ImportLoiRow> loi = new ArrayList<>();
         List<LichLamViec> hopLe = new ArrayList<>();
         Set<String> trongBatch = new HashSet<>();

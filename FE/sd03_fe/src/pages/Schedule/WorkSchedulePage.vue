@@ -4,8 +4,7 @@ import { useRouter } from 'vue-router'
 import PaginationBar from '@/components/PaginationBar.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { listEmployees } from '@/api/employee'
-import { getDangMo } from '@/api/giaoCa'
-import { laAdmin } from '@/utils/session'
+// da bo phan giao ca o lich lam viec
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import {
   listLich,
@@ -29,31 +28,7 @@ import {
 const router = useRouter()
 const pad2 = (x) => String(x).padStart(2, '0')
 
-/* ---------------------------------- Dữ liệu ca hiện tại (kiểm tra vào ca) ---------------------------------- */
-const caHienTai = ref(null)
-
-const kiemTraCaHienTai = async () => {
-  try {
-    caHienTai.value = await getDangMo()
-  } catch {
-    caHienTai.value = null
-  }
-}
-
-const diToiGiaoCa = () => {
-  router.push('/ca')
-}
-
-const isCheDoXem = computed(() => !laAdmin() && !caHienTai.value?.id)
-
-const kiemTraQuyenThaoTac = (hanhDong = 'thao tác') => {
-  if (laAdmin()) return true
-  if (isCheDoXem.value) {
-    notifyWarning('Chưa mở ca làm việc', `Bạn đang ở Chế độ xem. Vui lòng mở ca làm việc để ${hanhDong}!`)
-    return false
-  }
-  return true
-}
+/* ---------------------------------- Quản lý lịch làm việc ---------------------------------- */
 
 /* ---------------------------------- Dữ liệu nhân viên + ca + lịch ---------------------------------- */
 const nhanViens = ref([])
@@ -98,7 +73,6 @@ const taiDuLieu = async () => {
     if (nvRes.status === 'fulfilled') nhanViens.value = nvRes.value?.content || []
     if (caRes.status === 'fulfilled') cas.value = caRes.value || []
     if (lichRes.status === 'fulfilled') lichs.value = lichRes.value || []
-    await kiemTraCaHienTai()
   } catch (err) {
     console.error('Lỗi khi tải dữ liệu lịch:', err)
   }
@@ -291,7 +265,6 @@ const apDungPreset = (type) => {
 }
 
 const moXepCaTuDong = () => {
-  if (!kiemTraQuyenThaoTac('xếp ca tự động')) return
   autoForm.idCaLams = caDangBat.value.map((c) => c.id)
   autoForm.maNhanViens = dsNhanVien.value.map((n) => n.maNhanVien)
   autoForm.soNhanVienMoiCa = 1
@@ -416,7 +389,6 @@ const xepCaTuDongBtn = async () => {
 }
 
 const datLaiLich = async () => {
-  if (!kiemTraQuyenThaoTac('đặt lại lịch')) return
   const khoa = fNgay.value ? khoaNgay(docNgay(fNgay.value)) : ''
   if (!khoa) {
     notifyWarning('Chưa chọn Ngày làm', 'Hãy chọn ngày cần đặt lại lịch trước')
@@ -449,7 +421,6 @@ const importPreview = ref(null)
 const importLoading = ref(false)
 
 const moImport = () => {
-  if (!kiemTraQuyenThaoTac('nhập file lịch')) return
   importFileName.value = ''
   importPreview.value = null
   showImport.value = true
@@ -566,7 +537,6 @@ const onFormCaChange = (val) => {
 }
 
 const moFormThem = () => {
-  if (!kiemTraQuyenThaoTac('thêm lịch làm việc')) return
   formMode.value = 'them'
   form.value = {
     id: null,
@@ -579,7 +549,6 @@ const moFormThem = () => {
 }
 
 const moFormSua = (row) => {
-  if (!kiemTraQuyenThaoTac('sửa lịch làm việc')) return
   formMode.value = 'sua'
   form.value = {
     id: row.id,
@@ -638,7 +607,6 @@ const moChiTiet = (row) => {
 }
 
 const xoaChiTiet = async () => {
-  if (!kiemTraQuyenThaoTac('xóa lịch làm việc')) return
   const row = detailRow.value
   if (!row) return
   const ok = await notifyDeleteConfirm(
@@ -739,7 +707,6 @@ const rangeTuanText = computed(() => {
 })
 
 const onCellClick = (ca, khoa) => {
-  if (!kiemTraQuyenThaoTac('thêm ca cho nhân viên')) return
   formMode.value = 'them'
   form.value = {
     id: null,
@@ -790,20 +757,7 @@ onMounted(() => {
 
 <template>
   <div class="schedule-page-container">
-    <!-- 1. THÔNG BÁO CHẾ ĐỘ XEM / VÀO CA LÀM VIỆC -->
-    <div v-if="isCheDoXem" class="shift-alert-banner">
-      <div class="shift-alert-left">
-        <span class="badge-mode">CHẾ ĐỘ XEM</span>
-        <span class="shift-alert-text">
-          Bạn chưa vào ca làm việc nên chỉ có quyền tra cứu thông tin. Các thao tác chỉnh sửa lịch làm việc đang bị khóa.
-        </span>
-      </div>
-      <button type="button" class="btn-enter-shift" @click="diToiGiaoCa">
-        Vào ca làm việc ngay
-      </button>
-    </div>
-
-    <!-- 2. BREADCRUMBS -->
+    <!-- 1. BREADCRUMBS -->
     <div class="schedule-breadcrumbs">
       <span class="crumb-parent">Lịch làm việc</span>
       <span class="crumb-separator">/</span>

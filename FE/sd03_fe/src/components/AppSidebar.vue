@@ -91,6 +91,7 @@ const menu = [
     label: 'Giao ca',
     path: '/ca',
     iconType: 'cashRegister',
+    adminOnly: true,
   },
 ]
 

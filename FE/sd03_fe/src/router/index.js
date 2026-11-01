@@ -185,7 +185,7 @@ const routes = [
         path: '/ca',
         name: 'GiaoCaList',
         component: GiaoCaListPage,
-        meta: { ...metaBo, title: 'Lịch sử giao ca', roles: ['ADMIN', 'STAFF', 'NHAN_VIEN'] },
+        meta: { ...metaBo, title: 'Lịch sử giao ca', roles: ['ADMIN'] },
       },
       {
         path: '/ca/:id/doi-soat',
