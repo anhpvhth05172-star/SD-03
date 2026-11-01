@@ -190,7 +190,7 @@ watch(() => route.fullPath, () => {
       <span class="status-badge" :class="caHienTai ? 'status-yellow' : 'status-gray'">
         {{ caHienTai ? 'ĐANG TRONG CA' : 'CHƯA VÀO CA LÀM VIỆC' }}
       </span>
-      <h1 class="screen-title">Mở ca làm việc & Kiểm đếm tiền ban đầu</h1>
+      <h1 class="screen-title">{{ isAdmin ? 'Theo dõi ca làm việc' : 'Mở ca làm việc & Kiểm đếm tiền ban đầu' }}</h1>
     </div>
 
     <div v-if="caTruoc" class="previous-shift">
@@ -204,8 +204,9 @@ watch(() => route.fullPath, () => {
 
     <div v-if="caHienTai" class="open-shift-info">
       <span>Ca {{ caHienTai.maCa }} · {{ caHienTai.tenCaLich || 'Ca chưa gắn lịch' }} đang mở từ {{ formatDateTime(caHienTai.thoiGianMo) }}.</span>
-      <button type="button" class="btn-shift-action" @click="router.push('/ban-hang')">Đi tới bán hàng</button>
+      <button v-if="!isAdmin" type="button" class="btn-shift-action" @click="router.push('/ban-hang')">Đi tới bán hàng</button>
     </div>
+    <div v-else-if="isAdmin" class="open-shift-info">Hiện chưa có ca làm việc nào đang mở.</div>
     <form v-else class="open-shift-form" @submit.prevent="batDauCa">
       <div class="open-shift-fields">
         <div class="f-item">

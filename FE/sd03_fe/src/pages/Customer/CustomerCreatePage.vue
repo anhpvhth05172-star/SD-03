@@ -427,7 +427,7 @@ const submit = async () => {
     }
     notifySuccess(msg)
     setTimeout(() => {
-      router.push('/khach-hang')
+      router.push('/quan-ly-khach-hang')
     }, 500)
   } catch (e) {
     errorMsg.value = e.message
@@ -664,7 +664,7 @@ onMounted(async () => {
           <button class="btn-primary" type="button" :disabled="saving" @click="submit">
             {{ saving ? 'Đang lưu...' : isEdit ? 'Cập nhật' : 'Thêm' }}
           </button>
-          <button class="btn-cancel" type="button" @click="router.push('/khach-hang')">Hủy</button>
+          <button class="btn-cancel" type="button" @click="router.push('/quan-ly-khach-hang')">Hủy</button>
         </div>
       </div>
     </div>

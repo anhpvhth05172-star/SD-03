@@ -142,6 +142,13 @@ public class GiaoCaService {
     }
 
     @Transactional(readOnly = true)
+    public CaLamViecDto getCaDangMo() {
+        return caLamViecRepository.findFirstByTrangThaiAndDaXoaFalse(TRANG_THAI_DANG_MO)
+            .map(this::toDto)
+            .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
     public TongKetDto tongKet(Long id) {
         CaLamViec ca = timVaKiemQuyen(id);
         return toTongKet(ca);
@@ -207,6 +214,15 @@ public class GiaoCaService {
     public CaLamViecDto doiSoat(Long id) {
         CaLamViec ca = timVaKiemQuyen(id);
         CaLamViecDto dto = toDto(ca);
+        if (TRANG_THAI_DANG_MO.equals(ca.getTrangThai())) {
+            TongKetDto tongKet = toTongKet(ca);
+            dto.setTongHoaDon(tongKet.getTongHoaDon());
+            dto.setTongDoanhThu(tongKet.getTongDoanhThu());
+            dto.setTienMatThu(tongKet.getTienMatThu());
+            dto.setTienKhongMat(tongKet.getTienKhongMat());
+            dto.setTienHoanMat(tongKet.getTienHoanMat());
+            dto.setTienDuKien(tongKet.getTienDuKien());
+        }
         dto.setLichSu(lichSuCuaCa(id));
         return dto;
     }

@@ -50,6 +50,10 @@ public class GiaoCaController {
 
     @GetMapping("/dang-mo")
     public CaLamViecDto dangMo(Authentication auth) {
+        if (auth != null && auth.getAuthorities().stream()
+            .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()))) {
+            return giaoCaService.getCaDangMo();
+        }
         return giaoCaService.getDangMoOf(idNhanVien(auth));
     }
 
@@ -70,7 +74,7 @@ public class GiaoCaController {
 
     @GetMapping("/{id}/doi-soat")
     public CaLamViecDto doiSoat(@PathVariable Long id, Authentication auth) {
-        idNhanVien(auth);
+        idUser(auth);
         return giaoCaService.doiSoat(id);
     }
 

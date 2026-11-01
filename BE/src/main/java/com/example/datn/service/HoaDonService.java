@@ -38,6 +38,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -389,6 +390,7 @@ public class HoaDonService {
     public HoaDonDTO create(HoaDonRequest req) {
         kiemTraNguoiTaoHoaDon(req);
         validateHeader(req, null);
+        phanCongNhanVienDonOnline(req);
         CaLamViecDto caDangMo = chuanBiTaoHdTaiQuay(req);
         xacDinhPhiVanChuyenOnline(req);
         PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
@@ -408,6 +410,23 @@ public class HoaDonService {
             ghiLichSuSuDung(hoaDon, phieu);
         }
         return toFullDTO(hoaDon);
+    }
+
+    private void phanCongNhanVienDonOnline(HoaDonRequest req) {
+        if (!"ONLINE".equals(toMaLoaiDon(req.getLoaiDon()))) return;
+        List<NhanVien> nhanViens = nhanVienRepository.findActiveOrderAssignees();
+        if (nhanViens.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không có nhân viên hoạt động để nhận đơn online");
+        }
+        Map<Long, Long> soDonDangXuLy = new HashMap<>();
+        for (Object[] row : hoaDonRepository.countOpenOrdersByEmployee()) {
+            soDonDangXuLy.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
+        }
+        NhanVien nhanDon = nhanViens.stream()
+            .min(Comparator.comparingLong((NhanVien n) -> soDonDangXuLy.getOrDefault(n.getId(), 0L))
+                .thenComparing(NhanVien::getId))
+            .orElseThrow();
+        req.setIdNhanVien(nhanDon.getId());
     }
 
     private void kiemTraNguoiTaoHoaDon(HoaDonRequest req) {

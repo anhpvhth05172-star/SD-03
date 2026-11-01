@@ -24,6 +24,7 @@ import {
   tinhNhanVien,
   tinhSanPham,
   tinhTrangThaiDon,
+  taoSoSanhDoanhThu,
 } from './statisticsData'
 
 const pad2 = (x) => String(x).padStart(2, '0')
@@ -297,6 +298,7 @@ const thTheo = ref('doanhThu')
 
 const kwNv = ref('')
 const sortNv = ref('doanhThuCao')
+const vaiTroNv = ref('')
 const pageNv = ref(0)
 const sizeNv = ref(5)
 
@@ -305,6 +307,13 @@ const tonKhoSp = ref('')
 const sortSp = ref('banChay')
 const pageSp = ref(0)
 const sizeSp = ref(5)
+
+const loaiSoSanh = ref('thang')
+const cacKySoSanh = ref([`${new Date().getFullYear()}-${pad2(new Date().getMonth() + 1)}`])
+const thangSoSanh = ref(`${new Date().getFullYear()}-${pad2(new Date().getMonth() + 1)}`)
+const namQuySoSanh = ref(new Date().getFullYear())
+const quySoSanh = ref(`Q${Math.floor(new Date().getMonth() / 3) + 1}`)
+const namSoSanh = ref(new Date().getFullYear())
 
 const QUICK = [
   { key: 'homNay', label: 'Hôm nay' },
@@ -346,6 +355,7 @@ const datLaiBoLoc = () => {
   timThuongHieu.value = ''
   kwNv.value = ''
   sortNv.value = 'doanhThuCao'
+  vaiTroNv.value = ''
   pageNv.value = 0
   kwSp.value = ''
   tonKhoSp.value = ''
@@ -469,6 +479,7 @@ const nhanVienDayDu = computed(() => tinhNhanVien(nhanVienHienTai.value, khoang.
 const nhanVienLoc = computed(() => {
   const kw = kwNv.value.trim().toLowerCase()
   let rows = nhanVienDayDu.value
+  if (vaiTroNv.value) rows = rows.filter((r) => r.vaiTro === vaiTroNv.value)
   if (kw) {
     rows = rows.filter(
       (r) =>
@@ -482,6 +493,68 @@ const nhanVienLoc = computed(() => {
   else sorted.sort((a, b) => b.doanhThu - a.doanhThu)
   return sorted
 })
+
+const vaiTroNvOptions = computed(() => [
+  { value: '', label: 'Tất cả vai trò' },
+  ...[...new Set(nhanVienDayDu.value.map((r) => r.vaiTro).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'vi'))
+    .map((vaiTro) => ({ value: vaiTro, label: vaiTro })),
+])
+
+const duLieuSoSanh = computed(() => taoSoSanhDoanhThu(
+  bang.value,
+  cacKySoSanh.value,
+  loaiSoSanh.value,
+  thuongHieuChon.value,
+))
+
+const giaTriKySoSanh = () => {
+  if (loaiSoSanh.value === 'thang') return thangSoSanh.value
+  if (loaiSoSanh.value === 'quy') {
+    const year = Number(namQuySoSanh.value)
+    return Number.isInteger(year) && year >= 2000 ? `${year}-${quySoSanh.value}` : ''
+  }
+  const year = Number(namSoSanh.value)
+  return Number.isInteger(year) && year >= 2000 ? String(year) : ''
+}
+
+const nhanKySoSanh = (key) => {
+  if (loaiSoSanh.value === 'thang') {
+    const [year, month] = key.split('-')
+    return `${month}/${year}`
+  }
+  if (loaiSoSanh.value === 'quy') {
+    const [year, quarter] = key.split('-')
+    return `${quarter}/${year}`
+  }
+  return key
+}
+
+const themKySoSanh = () => {
+  const key = giaTriKySoSanh()
+  if (!key || cacKySoSanh.value.includes(key) || cacKySoSanh.value.length >= 4) return
+  cacKySoSanh.value = [...cacKySoSanh.value, key]
+}
+
+const xoaKySoSanh = (key) => {
+  if (cacKySoSanh.value.length <= 1) return
+  cacKySoSanh.value = cacKySoSanh.value.filter((item) => item !== key)
+}
+
+const doiLoaiSoSanh = () => {
+  const now = new Date()
+  if (loaiSoSanh.value === 'thang') {
+    thangSoSanh.value = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`
+    cacKySoSanh.value = [thangSoSanh.value]
+  } else if (loaiSoSanh.value === 'quy') {
+    namQuySoSanh.value = now.getFullYear()
+    quySoSanh.value = `Q${Math.floor(now.getMonth() / 3) + 1}`
+    cacKySoSanh.value = [`${namQuySoSanh.value}-${quySoSanh.value}`]
+  } else {
+    namSoSanh.value = now.getFullYear()
+    cacKySoSanh.value = [String(namSoSanh.value)]
+  }
+}
 
 const tongTrangNv = computed(() => Math.max(1, Math.ceil(nhanVienLoc.value.length / sizeNv.value)))
 const dongNv = computed(() => {
@@ -1033,6 +1106,95 @@ onMounted(async () => {
       </div>
     </div>
 
+    <div class="filter-card chart-card comparison-card">
+      <div class="card-title-row space-between">
+        <div class="title-with-icon">
+          <div class="icon-circle icon-chart">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="4" height="10" rx="1"></rect>
+              <rect x="10" y="5" width="4" height="16" rx="1"></rect>
+              <rect x="17" y="8" width="4" height="13" rx="1"></rect>
+              <path d="m3 7 6-4 5 3 7-4"></path>
+            </svg>
+          </div>
+          <span class="card-title-text">So sánh tăng trưởng doanh thu</span>
+        </div>
+        <span class="comparison-unit">Doanh thu (VND)</span>
+      </div>
+
+      <div class="comparison-controls">
+        <div class="field-block comparison-type">
+          <label class="field-label">So sánh theo</label>
+          <SearchableSelect
+            v-model="loaiSoSanh"
+            :options="[
+              { value: 'thang', label: 'Tháng' },
+              { value: 'quy', label: 'Quý' },
+              { value: 'nam', label: 'Năm' },
+            ]"
+            label-key="label"
+            value-key="value"
+            :allow-clear="false"
+            @change="doiLoaiSoSanh"
+          />
+        </div>
+        <div v-if="loaiSoSanh === 'thang'" class="field-block">
+          <label class="field-label">Tháng muốn thêm</label>
+          <input v-model="thangSoSanh" type="month" class="input-date" />
+        </div>
+        <template v-else-if="loaiSoSanh === 'quy'">
+          <div class="field-block">
+            <label class="field-label">Năm</label>
+            <input v-model.number="namQuySoSanh" type="number" min="2000" class="input-date" />
+          </div>
+          <div class="field-block">
+            <label class="field-label">Quý</label>
+            <SearchableSelect
+              v-model="quySoSanh"
+              :options="[
+                { value: 'Q1', label: 'Quý 1' },
+                { value: 'Q2', label: 'Quý 2' },
+                { value: 'Q3', label: 'Quý 3' },
+                { value: 'Q4', label: 'Quý 4' },
+              ]"
+              label-key="label"
+              value-key="value"
+              :allow-clear="false"
+            />
+          </div>
+        </template>
+        <div v-else class="field-block">
+          <label class="field-label">Năm muốn thêm</label>
+          <input v-model.number="namSoSanh" type="number" min="2000" class="input-date" />
+        </div>
+        <button class="btn-action-outline comparison-add" type="button" :disabled="cacKySoSanh.length >= 4" @click="themKySoSanh">
+          Thêm kỳ
+        </button>
+      </div>
+
+      <div class="comparison-periods" aria-label="Các kỳ đang so sánh">
+        <span v-for="key in cacKySoSanh" :key="key" class="comparison-period">
+          {{ nhanKySoSanh(key) }}
+          <button
+            type="button"
+            :aria-label="`Bỏ kỳ ${nhanKySoSanh(key)}`"
+            :disabled="cacKySoSanh.length <= 1"
+            @click="xoaKySoSanh(key)"
+          >×</button>
+        </span>
+        <span class="comparison-hint">Chọn tối đa 4 kỳ để đối chiếu.</span>
+      </div>
+
+      <BarLineChart
+        :labels="duLieuSoSanh.labels"
+        :values="duLieuSoSanh.values"
+        mode="ket-hop"
+        :currency="true"
+        color="#d92d20"
+        :height="290"
+      />
+    </div>
+
     <!-- HÀNG: CHU KỲ + TRẠNG THÁI ĐƠN -->
     <div class="charts-grid">
       <div class="filter-card chart-card">
@@ -1166,9 +1328,20 @@ onMounted(async () => {
             placeholder="Doanh thu cao nhất"
           />
         </div>
+        <div class="field-block">
+          <label class="field-label">Vai trò</label>
+          <SearchableSelect
+            v-model="vaiTroNv"
+            :options="vaiTroNvOptions"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả vai trò"
+            @change="pageNv = 0"
+          />
+        </div>
         <div class="field-block field-reset">
           <label class="field-label">&nbsp;</label>
-          <button class="btn-action-outline" type="button" @click="kwNv = ''; sortNv = 'doanhThuCao'; pageNv = 0">
+          <button class="btn-action-outline" type="button" @click="kwNv = ''; sortNv = 'doanhThuCao'; vaiTroNv = ''; pageNv = 0">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
             </svg>
@@ -2487,6 +2660,71 @@ onMounted(async () => {
 .growth-pill.is-down {
   background: #fef2f2;
   color: #ef4444;
+}
+
+.comparison-card {
+  margin-top: 18px;
+}
+
+.comparison-unit,
+.comparison-hint {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.comparison-controls {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+
+.comparison-controls .field-block {
+  min-width: 150px;
+}
+
+.comparison-controls .comparison-type {
+  width: 180px;
+}
+
+.comparison-add {
+  min-height: 40px;
+}
+
+.comparison-periods {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.comparison-period {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-radius: 18px;
+  color: #7f1d1d;
+  background: #fef2f2;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.comparison-period button {
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.comparison-period button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 @media (max-width: 1199px) {

@@ -41,7 +41,7 @@ export const luuPhien = (resp) => {
 }
 
 export const getLastLoginPath = () =>
-  localStorage.getItem(LOGIN_KIND_KEY) === 'nhan-vien' ? '/login-nhan-vien' : '/login'
+  localStorage.getItem(LOGIN_KIND_KEY) === 'nhan-vien' ? '/nhan-vien' : '/khach-hang'
 
 export const dangXuat = () => {
   localStorage.removeItem(TOKEN_KEY)

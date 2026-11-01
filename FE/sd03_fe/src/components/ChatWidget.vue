@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import {
   layHoiThoaiKhach,
   guiTinKhach,
@@ -9,7 +9,7 @@ import {
   hoiAI,
   layTinAI,
 } from '@/api/chat'
-import { getMaAnDanh, isNhanVienDangNhap } from '@/utils/auth'
+import { isNhanVienDangNhap } from '@/utils/auth'
 
 const mo = ref(false)
 const cheDo = ref('nhan-vien') // 'nhan-vien' | 'ai'
@@ -47,7 +47,6 @@ const doiCheDo = async (mode) => {
 }
 
 const taiHoiThoai = async () => {
-  const ma = getMaAnDanh()
   if (cheDo.value === 'ai') {
     hoiThoaiAI.value = await layHoiThoaiAI()
     tuIdAI = 0
@@ -107,16 +106,7 @@ const gui = async () => {
   try {
     if (cheDo.value === 'ai') {
       const kq = await hoiAI(text)
-      tinNhan.value = [
-        ...tinNhan.value,
-        kq.tinKhach,
-        {
-          id: `ai-${Date.now()}`,
-          loaiNguoiGui: 'AI',
-          noiDung: kq.noiDungAI,
-          ngayTao: new Date().toISOString(),
-        },
-      ]
+      tinNhan.value = [...tinNhan.value, kq.tinKhach]
       tuIdAI = typeof kq.tinKhach.id === 'number' ? kq.tinKhach.id : tuIdAI
       noiDung.value = ''
       await nextTick()
@@ -150,12 +140,6 @@ onMounted(() => {
 })
 onUnmounted(() => {
   if (timer) clearInterval(timer)
-})
-
-watch(mo, (v) => {
-  if (!v && timer) {
-    /* vẫn poll để badge khi mở lại */
-  }
 })
 </script>
 
