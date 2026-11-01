@@ -23,14 +23,16 @@ class ThongKeControllerEmailTest {
 
     private ThongKeService thongKeService;
     private BaoCaoTongKetService baoCaoTongKetService;
+    private QuyenGuard quyenGuard;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         thongKeService = mock(ThongKeService.class);
         baoCaoTongKetService = mock(BaoCaoTongKetService.class);
+        quyenGuard = mock(QuyenGuard.class);
         mockMvc = MockMvcBuilders
-            .standaloneSetup(new ThongKeController(thongKeService, new QuyenGuard(), baoCaoTongKetService))
+            .standaloneSetup(new ThongKeController(thongKeService, quyenGuard, baoCaoTongKetService))
             .setControllerAdvice(new ApiExceptionHandler())
             .build();
     }
