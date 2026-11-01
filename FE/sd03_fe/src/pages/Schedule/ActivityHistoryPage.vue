@@ -11,7 +11,6 @@ import PaginationBar from '@/components/PaginationBar.vue'
 const router = useRouter()
 const pad2 = (x) => String(x).padStart(2, '0')
 
-/* ---------------------------------- Kiểm tra trạng thái vào ca ---------------------------------- */
 const caHienTai = ref(null)
 
 const kiemTraCaHienTai = async () => {
@@ -26,7 +25,6 @@ const diToiGiaoCa = () => {
   router.push('/ca')
 }
 
-/* ---------------------------------- Danh sách ca làm việc & nhân viên ---------------------------------- */
 const cas = ref([])
 const nhanViens = ref([])
 
@@ -83,7 +81,6 @@ const timTenCa = (row) => {
   return row.maCa || 'Ca làm'
 }
 
-/* ---------------------------------- Định dạng ngày giờ ---------------------------------- */
 const formatThoiGian = (dt) => {
   if (!dt) return '—'
   const d = new Date(dt)
@@ -91,7 +88,6 @@ const formatThoiGian = (dt) => {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())} ${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`
 }
 
-/* ---------------------------------- Bộ lọc & Danh sách ---------------------------------- */
 const fKeyword = ref('')
 const fTuNgay = ref('')
 const fDenNgay = ref('')
@@ -179,58 +175,43 @@ onMounted(async () => {
 
 <template>
   <div class="activity-history-page">
-    <!-- 1. THÔNG BÁO CHẾ ĐỘ XEM / VÀO CA LÀM VIỆC -->
     <div v-if="!caHienTai" class="shift-alert-banner">
       <div class="shift-alert-left">
         <span class="badge-mode">CHẾ ĐỘ XEM</span>
         <span class="shift-alert-text">
-          Bạn chưa vào ca làm việc nên chỉ có quyền tra cứu thông tin. Các thao tác bán hàng, tạo đơn hàng và chỉnh sửa dữ liệu đang bị khóa.
+          Bạn chưa vào ca làm việc nên chỉ có quyền tra cứu thông tin. Các thao tác bán hàng, tạo đơn hàng và chỉnh sửa
+          dữ liệu đang bị khóa.
         </span>
       </div>
       <button type="button" class="btn-enter-shift" @click="diToiGiaoCa">
         Vào ca làm việc ngay
       </button>
     </div>
-
-    <!-- 2. BREADCRUMBS -->
+    >
     <div class="schedule-breadcrumbs">
       <span class="crumb-parent">Lịch làm việc</span>
       <span class="crumb-separator">/</span>
       <span class="crumb-current">Lịch sử hoạt động</span>
     </div>
 
-    <!-- 3. HỘP TÌM KIẾM VÀ BỘ LỌC -->
     <div class="filter-card">
       <div class="filter-grid">
         <div class="filter-col col-search">
           <label class="filter-label">TÌM KIẾM</label>
           <div class="search-input-box">
-            <input
-              v-model="fKeyword"
-              type="text"
-              class="form-input"
-              placeholder="Tìm theo tài khoản / mã ca / mã hóa đơn..."
-              @input="onKeywordInput"
-            />
+            <input v-model="fKeyword" type="text" class="form-input"
+              placeholder="Tìm theo tài khoản / mã ca / mã hóa đơn..." @input="onKeywordInput" />
           </div>
         </div>
 
         <div class="filter-col col-date">
           <label class="filter-label">TỪ NGÀY:</label>
-          <input
-            v-model="fTuNgay"
-            type="date"
-            class="form-input"
-          />
+          <input v-model="fTuNgay" type="date" class="form-input" />
         </div>
 
         <div class="filter-col col-date">
           <label class="filter-label">ĐẾN NGÀY:</label>
-          <input
-            v-model="fDenNgay"
-            type="date"
-            class="form-input"
-          />
+          <input v-model="fDenNgay" type="date" class="form-input" />
         </div>
 
         <div class="filter-col col-status">
@@ -245,7 +226,8 @@ onMounted(async () => {
         <div class="filter-col col-action">
           <label class="filter-label">&nbsp;</label>
           <button type="button" class="btn-reload" title="Tải lại bộ lọc" @click="taiLai">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round" width="15" height="15">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
             </svg>
             Tải lại
@@ -254,7 +236,6 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 4. BẢNG DANH SÁCH LỊCH SỬ HOẠT ĐỘNG GIAO CA -->
     <div class="table-card">
       <div class="table-responsive">
         <table class="data-table">
@@ -323,43 +304,34 @@ onMounted(async () => {
               <td class="text-right">
                 <div class="cash-info">
                   <span class="cash-start">Đầu: {{ formatVnd(row.tienDauCa || 0) }}</span>
-                  <span class="cash-end">Cuối: <strong>{{ formatVnd(row.tienThucTe ?? row.tienDauCa ?? 0) }}</strong></span>
+                  <span class="cash-end">Cuối: <strong>{{ formatVnd(row.tienThucTe ?? row.tienDauCa ?? 0)
+                      }}</strong></span>
                 </div>
               </td>
 
               <!-- Chênh lệch -->
               <td class="text-center">
-                <span
-                  class="diff-badge"
-                  :class="{
-                    'diff-zero': !row.chenhLech || Number(row.chenhLech) === 0,
-                    'diff-neg': Number(row.chenhLech) < 0,
-                    'diff-pos': Number(row.chenhLech) > 0,
-                  }"
-                >
+                <span class="diff-badge" :class="{
+                  'diff-zero': !row.chenhLech || Number(row.chenhLech) === 0,
+                  'diff-neg': Number(row.chenhLech) < 0,
+                  'diff-pos': Number(row.chenhLech) > 0,
+                }">
                   {{ (Number(row.chenhLech) > 0 ? '+' : '') + formatVnd(row.chenhLech || 0) }}
                 </span>
               </td>
 
               <!-- Trạng thái -->
               <td class="text-center">
-                <span
-                  class="status-pill"
-                  :class="row.trangThai === 'DA_KET_CA' ? 'status-closed' : 'status-open'"
-                >
+                <span class="status-pill" :class="row.trangThai === 'DA_KET_CA' ? 'status-closed' : 'status-open'">
                   {{ row.trangThai === 'DA_KET_CA' ? 'Đã đóng' : 'Đang mở' }}
                 </span>
               </td>
 
               <!-- Hành động -->
               <td class="text-center">
-                <button
-                  type="button"
-                  class="btn-action-doc"
-                  title="Xem biên bản đối soát"
-                  @click="xemDoiSoat(row)"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                <button type="button" class="btn-action-doc" title="Xem biên bản đối soát" @click="xemDoiSoat(row)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                    stroke-linejoin="round" width="16" height="16">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                     <polyline points="14 2 14 8 20 8"></polyline>
                     <line x1="16" y1="13" x2="8" y2="13"></line>
@@ -374,20 +346,9 @@ onMounted(async () => {
       </div>
 
       <!-- PHÂN TRANG -->
-      <div v-if="totalPages > 1" class="table-card-foot">
-        <PaginationBar
-          :page="page"
-          :total-pages="totalPages"
-          :total-elements="totalElements"
-          :page-size="pageSize"
-          :from="list.length ? page * pageSize + 1 : 0"
-          :to="page * pageSize + list.length"
-          :sizes="[10, 20, 50]"
-          label="lượt giao ca"
-          @change="datTrang"
-          @size-change="doiSize"
-        />
-      </div>
+      <PaginationBar :page="page" :total-pages="totalPages" :total-elements="totalElements" :page-size="pageSize"
+        :from="list.length ? page * pageSize + 1 : 0" :to="page * pageSize + list.length" :sizes="[10, 20, 50]"
+        label="lượt giao ca" @change="datTrang" @size-change="doiSize" />
     </div>
   </div>
 </template>
@@ -444,23 +405,20 @@ onMounted(async () => {
 }
 
 .btn-enter-shift {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  background: #1e3a8a;
   color: #ffffff;
   border: none;
-  border-radius: 8px;
-  padding: 8px 18px;
+  border-radius: 6px;
+  padding: 7px 16px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.15s ease;
 }
 
 .btn-enter-shift:hover {
-  background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
-  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.35);
-  transform: translateY(-1px);
+  background: #172554;
 }
 
 /* 2. Breadcrumbs */
@@ -490,9 +448,9 @@ onMounted(async () => {
 .filter-card {
   background: #ffffff;
   border: 1px solid #f1f5f9;
-  border-radius: 14px;
-  padding: 18px 22px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
+  border-radius: 10px;
+  padding: 14px 20px 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .filter-grid {
@@ -536,8 +494,8 @@ onMounted(async () => {
 .form-input,
 .form-select {
   height: 38px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
   padding: 0 12px;
   font-size: 13px;
   color: #1e293b;
@@ -550,8 +508,8 @@ onMounted(async () => {
 
 .form-input:focus,
 .form-select:focus {
-  border-color: #dc2626;
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 .form-input::placeholder {
@@ -562,34 +520,32 @@ onMounted(async () => {
   height: 38px;
   padding: 0 16px;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
   font-size: 13px;
-  font-weight: 600;
-  color: #475569;
+  font-weight: 500;
+  color: #334155;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.15s;
   white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .btn-reload:hover {
-  background: #fef2f2;
-  border-color: #fca5a5;
-  color: #dc2626;
-  transform: translateY(-1px);
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
 }
 
 /* 4. Table Card */
 .table-card {
   background: #ffffff;
-  border: 1px solid #f1f5f9;
-  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .table-responsive {
@@ -605,12 +561,11 @@ onMounted(async () => {
 
 .data-table thead th {
   background: #f8fafc;
-  color: #475569;
-  font-size: 11.5px;
+  color: #1e293b;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 13px 16px;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  padding: 14px 16px;
   border-bottom: 1px solid #e2e8f0;
   white-space: nowrap;
   text-align: left;
@@ -630,14 +585,14 @@ onMounted(async () => {
 }
 
 .data-table tbody td {
-  padding: 13px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid #f1f5f9;
   vertical-align: middle;
-  color: #334155;
+  color: #1e293b;
 }
 
 .table-row:hover td {
-  background: #f8fafc;
+  background: #fafbfc;
 }
 
 .col-num {
@@ -656,7 +611,7 @@ onMounted(async () => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #1e293b;
+  background: #243c5a;
   color: #ffffff;
   font-weight: 700;
   font-size: 13px;
@@ -675,7 +630,7 @@ onMounted(async () => {
 
 .user-code {
   font-weight: 700;
-  color: #0f172a;
+  color: #1e293b;
   font-size: 13px;
   line-height: 1.25;
 }
@@ -768,37 +723,34 @@ onMounted(async () => {
 }
 
 .status-closed {
-  background: #f0fdf4;
-  color: #059669;
-  border: 1px solid #bbf7d0;
+  background: #dcfce7;
+  color: #15803d;
 }
 
 .status-open {
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecdd3;
+  background: #fef9c3;
+  color: #a16207;
 }
 
 /* Action button */
 .btn-action-doc {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #cbd5e1;
   background: #ffffff;
-  color: #64748b;
-  cursor: pointer;
+  border-radius: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  color: #475569;
   transition: all 0.15s ease;
 }
 
 .btn-action-doc:hover {
-  background: #eff6ff;
-  border-color: #93c5fd;
-  color: #2563eb;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.15);
+  background: #f1f5f9;
+  color: #1e3a8a;
+  border-color: #94a3b8;
   transform: translateY(-1px);
 }
 
