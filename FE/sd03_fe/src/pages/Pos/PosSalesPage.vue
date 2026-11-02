@@ -3270,12 +3270,6 @@ const handleCheckout = async (options = {}) => {
       }
     })
 
-    if (isDeliveryOrder) {
-      notifySuccess('Tạo đơn giao hàng thành công!', `Đơn hàng ${currentOrder.value.code} đã được tạo với trạng thái Đã xác nhận`)
-    } else {
-      notifySuccess('Thanh toán thành công!', `Đã hoàn tất hóa đơn ${currentOrder.value.code}`)
-    }
-
     pendingOrders.value.splice(activeOrderIndex.value, 1)
     if (pendingOrders.value.length === 0) {
       createNewOrder(true)
@@ -3290,16 +3284,24 @@ const handleCheckout = async (options = {}) => {
 
     validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: true })
 
-    if (savedDto?.id) {
-      const shouldAutoPrint = options?.autoPrint || currentOrder.value.paymentMethod === 'CHUYEN_KHOAN'
-      router.push({
-        path: `/hoa-don/${savedDto.id}`,
-        query: shouldAutoPrint ? { autoPrint: 'true' } : {}
-      })
-      return
-    }
+    // Tự động hỏi in hóa đơn sau khi thanh toán
+    const wantPrint = await notifyConfirm(
+      isDeliveryOrder ? 'Tạo đơn giao hàng thành công!' : 'Thanh toán thành công!',
+      `Đã hoàn tất hóa đơn "${completedRecord.code}". Bạn có muốn in hóa đơn không?`,
+      'In hóa đơn',
+      'Không in',
+      'success'
+    )
 
-    isReceiptModalOpen.value = true
+    if (wantPrint) {
+      isReceiptModalOpen.value = true
+      await nextTick()
+      setTimeout(() => {
+        printReceipt()
+      }, 100)
+    } else {
+      notifySuccess('Thanh toán thành công!', `Đã hoàn tất hóa đơn ${completedRecord.code}`)
+    }
 
   } catch (err) {
     console.error('Checkout error:', err)

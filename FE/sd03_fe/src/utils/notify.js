@@ -197,10 +197,12 @@ export const notifyConfirm = async (
   title = 'Bạn có chắc chắn?',
   text = 'Thao tác này sẽ không thể hoàn tác!',
   confirmButtonText = 'Đồng ý',
-  cancelButtonText = 'Hủy bỏ'
+  cancelButtonText = 'Hủy bỏ',
+  iconType = 'warning'
 ) => {
+  const iconHtml = MINIMAL_ICONS[iconType] || MINIMAL_ICONS.warning
   const contentHtml = `
-    ${MINIMAL_ICONS.warning}
+    ${iconHtml}
     <div class="minimal-title">${title}</div>
     ${text ? `<div class="minimal-desc">${formatHighlight(text)}</div>` : ''}
   `
