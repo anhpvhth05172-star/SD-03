@@ -3856,45 +3856,45 @@ onUnmounted(() => {
           <span class="station-divider">•</span>
           <span class="station-num">BÁN HÀNG TẠI QUẦY</span>
         </div>
-        <div class="pos-status-indicator" v-if="activeShift">
-          <span class="pulse-dot"></span>
-          <span>Ca đang mở</span>
-        </div>
-        <div class="pos-status-indicator view-mode-indicator" v-else-if="!laAdmin()">
-          <span class="pulse-dot view-mode"></span>
-          <span>Chế độ xem (Chưa mở ca)</span>
-        </div>
-        <div class="pos-status-indicator shift-closed" v-else>
-          <span class="pulse-dot closed"></span>
-          <span>Chưa mở ca</span>
-        </div>
+        <template v-if="!laAdmin()">
+          <div class="pos-status-indicator" v-if="activeShift">
+            <span class="pulse-dot"></span>
+            <span>Ca đang mở</span>
+          </div>
+          <div class="pos-status-indicator view-mode-indicator" v-else>
+            <span class="pulse-dot view-mode"></span>
+            <span>Chế độ xem (Chưa mở ca)</span>
+          </div>
+        </template>
       </div>
 
       <div class="pos-header-actions">
-        <!-- Nút Mở / Đóng ca làm việc trên quầy POS -->
-        <div v-if="activeShift" class="pos-shift-group">
-          <span class="pos-shift-badge" :title="`Ca làm việc ${activeShift.tenCaLich || activeShift.maCa} đang hoạt động`">
-            <span class="pulse-dot"></span>
-            Ca: <strong>{{ activeShift.tenCaLich || activeShift.maCa }}</strong>
-            <small v-if="activeShift.tenCaLich" class="pos-shift-code-tag">({{ activeShift.maCa }})</small>
-          </span>
-          <button type="button" class="btn-pos-close-shift" @click="openKetCaModal" title="Đóng và kết ca làm việc này">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-            </svg>
-            <span>Đóng ca</span>
-          </button>
-        </div>
+        <!-- Nút Mở / Đóng ca làm việc trên quầy POS (Chỉ hiển thị cho Nhân viên, Admin không cần mở/đóng ca) -->
+        <template v-if="!laAdmin()">
+          <div v-if="activeShift" class="pos-shift-group">
+            <span class="pos-shift-badge" :title="`Ca làm việc ${activeShift.tenCaLich || activeShift.maCa} đang hoạt động`">
+              <span class="pulse-dot"></span>
+              Ca: <strong>{{ activeShift.tenCaLich || activeShift.maCa }}</strong>
+              <small v-if="activeShift.tenCaLich" class="pos-shift-code-tag">({{ activeShift.maCa }})</small>
+            </span>
+            <button type="button" class="btn-pos-close-shift" @click="openKetCaModal" title="Đóng và kết ca làm việc này">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+              <span>Đóng ca</span>
+            </button>
+          </div>
 
-        <button v-else type="button" class="btn-pos-open-shift" @click="openMoCaModal" title="Mở ca làm việc mới để bắt đầu bán hàng">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="16"></line>
-            <line x1="8" y1="12" x2="16" y2="12"></line>
-          </svg>
-          <span>Mở ca</span>
-        </button>
+          <button v-else type="button" class="btn-pos-open-shift" @click="openMoCaModal" title="Mở ca làm việc mới để bắt đầu bán hàng">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="16"></line>
+              <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+            <span>Mở ca</span>
+          </button>
+        </template>
 
         <div class="pos-orders-counter-pill" :title="`Nhân viên phụ trách: ${staffName} (${staffRoleLabel})`">
           <span class="counter-lbl">NV:</span>
