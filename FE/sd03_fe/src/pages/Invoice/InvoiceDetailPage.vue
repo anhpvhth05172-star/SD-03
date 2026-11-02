@@ -130,6 +130,7 @@ const visibleSteps = computed(() => {
 })
 
 const isTerminal = computed(() => !!data.value && isTerminalOf(data.value))
+const isDaHoanThanh = computed(() => data.value?.trangThai === 'Đã hoàn thành' || data.value?.maTrangThai === 'DA_HOAN_THANH')
 
 const tiepTheoList = computed(() => trangThaiTiepTheoOf(data.value))
 
@@ -654,10 +655,15 @@ const taiPdfHienTai = async () => {
 }
 
 watch(() => route.params.id, load)
-onMounted(() => {
-  load()
+onMounted(async () => {
+  await load()
   document.addEventListener('click', onDocClick, true)
   document.addEventListener('keydown', onEscape)
+  if (route.query.autoPrint === 'true') {
+    setTimeout(() => {
+      inHoaDon()
+    }, 400)
+  }
 })
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocClick, true)
@@ -1214,7 +1220,7 @@ onBeforeUnmount(() => {
               </svg>
               In hóa đơn
             </button>
-            <div v-if="!isTerminal && tiepTheoMenuList.length" ref="statusMenuRef" class="status-menu-wrap">
+            <div v-if="!isTerminal && !isDaHoanThanh && tiepTheoMenuList.length" ref="statusMenuRef" class="status-menu-wrap">
               <button class="btn btn-outline" type="button" :disabled="updatingStatus" @click="toggleStatusMenu">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M5 12h14M12 5l7 7-7 7" />
@@ -1249,9 +1255,6 @@ onBeforeUnmount(() => {
                 <path d="M15 9l-6 6M9 9l6 6" />
               </svg>
               {{ updatingStatus ? 'Đang xử lý...' : 'Hủy đơn' }}
-            </button>
-            <button class="btn btn-outline" type="button" @click="router.push('/hoa-don')">
-              Quay lại danh sách
             </button>
           </div>
         </div>

@@ -7261,3 +7261,89 @@ input:checked + .toggle-slider:before {
   font-size: 11px;
   font-weight: 500;
 }
+
+
+/* Compact Cart Table Enhancements */
+.cart-table thead th {
+  padding: 8px 10px !important;
+  font-size: 11px !important;
+}
+
+.cart-table tbody td {
+  padding: 8px 10px !important;
+}
+
+.product-item-wrap {
+  gap: 8px !important;
+}
+
+.prod-thumb-mini {
+  width: 36px !important;
+  height: 36px !important;
+}
+
+.price-active,
+.price-strikethrough,
+.price-total {
+  white-space: nowrap !important;
+}
+
+/* Next Voucher Upsell Banner */
+.next-voucher-upsell-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-space, #eff6ff;
+  background-color: #f0f7ff;
+  border: 1px dashed #3b82f6;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  animation: fadeIn 0.2s ease-in;
+}
+
+.upsell-icon-col {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.upsell-body-col {
+  flex: 1;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: #1e3a8a;
+}
+
+.upsell-title {
+  font-weight: 500;
+  color: #1e40af;
+}
+
+.upsell-highlight-amt {
+  font-weight: 700;
+  color: #2563eb;
+}
+
+.upsell-code-badge {
+  display: inline-block;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #bfdbfe;
+  font-family: monospace;
+  margin: 0 2px;
+}
+
+.upsell-desc {
+  font-size: 11.5px;
+  color: #475569;
+  margin-top: 2px;
+}
+
+.upsell-benefit {
+  color: #ea580c;
+}

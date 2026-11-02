@@ -430,6 +430,8 @@ const savePendingOrdersToStorage = () => {
       },
       paymentMethod: o.paymentMethod || 'TIEN_MAT',
       selectedVoucher: o.selectedVoucher || null,
+      customCashGiven: Boolean(o.customCashGiven),
+      userRemovedVoucher: Boolean(o.userRemovedVoucher),
       cashGiven: Number(o.cashGiven || 0),
       transferGiven: Number(o.transferGiven || 0),
       note: o.note || ''
@@ -540,6 +542,8 @@ const createNewOrder = (silent = false) => {
     },
     paymentMethod: 'TIEN_MAT',
     selectedVoucher: null,
+    userRemovedVoucher: false,
+    customCashGiven: false,
     cashGiven: 0,
     transferGiven: 0,
     note: ''
@@ -870,11 +874,19 @@ const getRemainingStock = (idCtsp) => {
   return Math.max(0, baseStock - reserved)
 }
 
+const handleCashGivenInput = (e) => {
+  if (!currentOrder.value) return
+  currentOrder.value.customCashGiven = true
+  currentOrder.value.cashGiven = e.target.value === '' ? 0 : Math.max(0, Number(e.target.value))
+}
+
 const setQuickCash = (amount) => {
   if (!currentOrder.value) return
   if (amount === 'EXACT') {
+    currentOrder.value.customCashGiven = false
     currentOrder.value.cashGiven = finalTotal.value
   } else {
+    currentOrder.value.customCashGiven = true
     currentOrder.value.cashGiven = Number(amount)
   }
 }
@@ -2063,8 +2075,8 @@ const confirmBankPaymentReceived = async () => {
   setTimeout(async () => {
     isPaymentSuccessAnim.value = false
     isBankQrModalOpen.value = false
-    // Tự động hoàn tất hóa đơn ngay lập tức vào database, không cần ấn nút thanh toán nữa
-    await handleCheckout({ skipConfirm: true })
+    // Tự động hoàn tất hóa đơn ngay lập tức vào database và tự động in hóa đơn
+    await handleCheckout({ skipConfirm: true, autoPrint: true })
   }, 600)
 }
 
@@ -2453,6 +2465,78 @@ const bestVoucherSuggestion = computed(() => {
   return {
     voucher: best,
     discount: discountVal
+  }
+})
+
+
+const nextVoucherSuggestion = computed(() => {
+  if (!currentOrder.value || subTotal.value <= 0 || allVouchers.value.length === 0) return null
+  const now = new Date()
+  const eligibleHigher = allVouchers.value.filter(v => {
+    if (v.trangThai === false) return false
+    if (v.ngayBatDau && new Date(v.ngayBatDau) > now) return false
+    if (v.ngayKetThuc && new Date(v.ngayKetThuc) < now) return false
+    if (v.soLuong && v.soLuongDaSuDung !== undefined && v.soLuongDaSuDung >= v.soLuong) return false
+    const minRequired = Number(v.hoaDonToiThieu || 0)
+    return minRequired > subTotal.value
+  })
+
+  if (eligibleHigher.length === 0) return null
+
+  eligibleHigher.sort((a, b) => {
+    const diffA = Number(a.hoaDonToiThieu || 0) - subTotal.value
+    const diffB = Number(b.hoaDonToiThieu || 0) - subTotal.value
+    if (diffA !== diffB) return diffA - diffB
+    const potA = calculateVoucherDiscount(a, Number(a.hoaDonToiThieu || 0))
+    const potB = calculateVoucherDiscount(b, Number(b.hoaDonToiThieu || 0))
+    return potB - potA
+  })
+
+  const target = eligibleHigher[0]
+  const neededMore = Number(target.hoaDonToiThieu || 0) - subTotal.value
+  const potentialDiscount = calculateVoucherDiscount(target, Number(target.hoaDonToiThieu || 0))
+
+  return {
+    voucher: target,
+    neededMore,
+    minRequired: Number(target.hoaDonToiThieu || 0),
+    potentialDiscount
+  }
+})
+
+// Tự động áp dụng phiếu giảm giá tốt nhất đủ điều kiện
+watch([() => subTotal.value, () => bestVoucherSuggestion.value], ([newSubTotal, newBest]) => {
+  if (!currentOrder.value) return
+  if (newSubTotal <= 0) {
+    currentOrder.value.selectedVoucher = null
+    currentOrder.value.userRemovedVoucher = false
+    return
+  }
+  if (!currentOrder.value.userRemovedVoucher && newBest?.voucher) {
+    if (currentOrder.value.selectedVoucher?.id !== newBest.voucher.id) {
+      currentOrder.value.selectedVoucher = newBest.voucher
+    }
+  } else if (currentOrder.value.selectedVoucher) {
+    if (!isVoucherEligible(currentOrder.value.selectedVoucher)) {
+      if (newBest?.voucher) {
+        currentOrder.value.selectedVoucher = newBest.voucher
+      } else {
+        currentOrder.value.selectedVoucher = null
+      }
+    }
+  }
+}, { immediate: true })
+
+// Mặc định ô tiền khách đưa bằng tổng tiền cần thanh toán
+watch(finalTotal, (newTotal) => {
+  if (currentOrder.value && !currentOrder.value.customCashGiven) {
+    currentOrder.value.cashGiven = newTotal
+  }
+}, { immediate: true })
+
+watch(activeOrderIndex, () => {
+  if (currentOrder.value && !currentOrder.value.customCashGiven) {
+    currentOrder.value.cashGiven = finalTotal.value
   }
 })
 
@@ -3139,8 +3223,11 @@ const handleCheckout = async (options = {}) => {
     validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: true })
 
     if (savedDto?.id) {
-      // Khi click vào thanh toán lập tức chuyển sang trang hóa đơn chi tiết của hóa đơn vừa thanh toán
-      router.push(`/hoa-don/${savedDto.id}`)
+      const shouldAutoPrint = options?.autoPrint || currentOrder.value.paymentMethod === 'CHUYEN_KHOAN'
+      router.push({
+        path: `/hoa-don/${savedDto.id}`,
+        query: shouldAutoPrint ? { autoPrint: 'true' } : {}
+      })
       return
     }
 
@@ -3878,8 +3965,8 @@ onUnmounted(() => {
                         </div>
                       </td>
                       <td class="text-center">
-                        <div class="price-stack">
-                          <span class="price-active">{{ formatVnd(item.price) }}</span>
+                        <div class="price-stack" style="white-space: nowrap !important;">
+                          <span class="price-active" style="white-space: nowrap !important;">{{ formatVnd(item.price) }}</span>
                           <span v-if="item.originalPrice && item.originalPrice > item.price"
                             class="price-strikethrough">
                             {{ formatVnd(item.originalPrice) }}
@@ -4294,6 +4381,27 @@ onUnmounted(() => {
             </div>
           </div>
 
+          
+            <!-- Banner gợi ý mua thêm để đạt voucher tiếp theo -->
+            <div v-if="nextVoucherSuggestion" class="next-voucher-upsell-box">
+              <div class="upsell-icon-col">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </div>
+              <div class="upsell-body-col">
+                <div class="upsell-title">
+                  Mua thêm <span class="upsell-highlight-amt">{{ formatVnd(nextVoucherSuggestion.neededMore) }}</span> để dùng mã
+                  <span class="upsell-code-badge">{{ nextVoucherSuggestion.voucher.ma }}</span>
+                </div>
+                <div class="upsell-desc">
+                  Ưu đãi giảm thêm lên tới <strong class="upsell-benefit">{{ formatVnd(nextVoucherSuggestion.potentialDiscount) }}</strong>
+                </div>
+              </div>
+            </div>
+
           <div class="billing-summary-block">
             <div class="bill-row">
               <span class="bill-label">Tổng tiền hàng ({{ totalCartQty }} sản phẩm):</span>
@@ -4350,9 +4458,9 @@ onUnmounted(() => {
                 <input
                   type="number"
                   class="cash-amount-inp"
-                  :value="currentOrder.cashGiven === 0 ? '' : currentOrder.cashGiven"
-                  @input="currentOrder.cashGiven = $event.target.value === '' ? 0 : Math.max(0, Number($event.target.value))"
-                  placeholder="Nhập số tiền khách đưa..."
+                  :value="currentOrder.cashGiven === 0 && !currentOrder.customCashGiven ? '' : currentOrder.cashGiven"
+                  @input="handleCashGivenInput($event)"
+                  placeholder=""
                   min="0"
                   step="1000"
                   @focus="$event.target.select()"

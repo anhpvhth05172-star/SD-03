@@ -67,6 +67,7 @@ const menu = [
     label: 'Quản lý lịch làm việc',
     path: '/lich-lam-viec',
     iconType: 'schedule',
+    adminOnly: true,
     children: [
       { label: 'Lịch làm việc', path: '/lich-lam-viec' },
       { label: 'Lịch sử hoạt động', path: '/lich-su-hoat-dong' },
