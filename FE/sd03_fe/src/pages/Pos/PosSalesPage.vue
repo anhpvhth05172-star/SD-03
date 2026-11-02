@@ -336,12 +336,52 @@ const recalculateAvailableStocks = () => {
   })
 }
 
+const syncCartPricesWithCatalog = (sourceList = allProducts.value) => {
+  if (!Array.isArray(pendingOrders.value) || !Array.isArray(sourceList) || sourceList.length === 0) return
+  const prodMap = new Map(sourceList.map(p => [Number(p.id), p]))
+  let hasPriceChange = false
+
+  for (const order of pendingOrders.value) {
+    if (!Array.isArray(order.cart)) continue
+    for (const item of order.cart) {
+      const freshProd = prodMap.get(Number(item.idCtsp))
+      if (!freshProd) continue
+
+      const freshOriginalPrice = Number(freshProd.price || freshProd.giaBan || 0)
+      const freshEffectivePrice = getEffectivePrice(freshProd)
+      const freshDisc = freshProd.discount || (freshProd.phanTramGiam ? `-${Math.round(freshProd.phanTramGiam)}%` : null)
+      const freshGiaSauGiam = freshProd.giaSauGiam !== undefined && freshProd.giaSauGiam !== null ? Number(freshProd.giaSauGiam) : null
+      const freshPhanTramGiam = freshProd.phanTramGiam !== undefined && freshProd.phanTramGiam !== null ? Number(freshProd.phanTramGiam) : null
+
+      if (
+        item.price !== freshEffectivePrice ||
+        item.originalPrice !== freshOriginalPrice ||
+        item.discount !== freshDisc ||
+        item.giaSauGiam !== freshGiaSauGiam ||
+        item.phanTramGiam !== freshPhanTramGiam
+      ) {
+        item.originalPrice = freshOriginalPrice
+        item.price = freshEffectivePrice
+        item.discount = freshDisc
+        item.giaSauGiam = freshGiaSauGiam
+        item.phanTramGiam = freshPhanTramGiam
+        hasPriceChange = true
+      }
+    }
+  }
+
+  if (hasPriceChange) {
+    savePendingOrdersToStorage()
+  }
+}
+
 const setServerProductsList = (rawList) => {
   if (!Array.isArray(rawList)) return
   rawList.forEach(p => {
     p._serverStock = Number(p.stock !== undefined ? p.stock : (p.soLuong || 0))
   })
   allProducts.value = rawList
+  syncCartPricesWithCatalog(rawList)
   reconcilePendingOrdersWithServerStock()
   recalculateAvailableStocks()
 }
@@ -681,6 +721,11 @@ const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
 
   if (existingItem) {
     existingItem.quantity += qtyToAdd
+    existingItem.price = effectivePrice
+    existingItem.originalPrice = Number(productVariant.price || productVariant.giaBan || 0)
+    existingItem.discount = productVariant.discount || (productVariant.phanTramGiam ? `-${Math.round(productVariant.phanTramGiam)}%` : null)
+    existingItem.phanTramGiam = productVariant.phanTramGiam !== undefined ? productVariant.phanTramGiam : null
+    existingItem.giaSauGiam = productVariant.giaSauGiam !== undefined ? productVariant.giaSauGiam : null
   } else {
     cart.push({
       idCtsp: productVariant.id,
@@ -693,9 +738,9 @@ const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
       size: productVariant.size || productVariant.tenKichCo || '---',
       price: effectivePrice,
       originalPrice: Number(productVariant.price || productVariant.giaBan || 0),
-      discount: productVariant.discount || null,
-      phanTramGiam: productVariant.phanTramGiam || null,
-      giaSauGiam: productVariant.giaSauGiam || null,
+      discount: productVariant.discount || (productVariant.phanTramGiam ? `-${Math.round(productVariant.phanTramGiam)}%` : null),
+      phanTramGiam: productVariant.phanTramGiam !== undefined ? productVariant.phanTramGiam : null,
+      giaSauGiam: productVariant.giaSauGiam !== undefined ? productVariant.giaSauGiam : null,
       quantity: qtyToAdd,
       maxStock: getServerBaseStock(targetProd || productVariant),
       img: productVariant.img || ''
@@ -1409,14 +1454,14 @@ watch([modalFilters, modalPageSize], () => {
 
 const modalSelectedIds = ref([])
 
-const openProductPicker = () => {
+const openProductPicker = async () => {
   if (!currentOrder.value) {
     createNewOrder()
   }
-  validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: true })
   resetModalFilters()
   modalSelectedIds.value = []
   isProductModalOpen.value = true
+  await handleDiscountChanged()
 }
 
 const isModalRowSelected = (id) => modalSelectedIds.value.includes(id)
@@ -1476,6 +1521,7 @@ const quickAddSingleProductFromModal = (product) => {
 const closeProductPicker = () => {
   isProductModalOpen.value = false
   modalSelectedIds.value = []
+  syncCartPricesWithCatalog()
 }
 
 const confirmModalSelection = () => {
@@ -1504,6 +1550,7 @@ const confirmModalSelection = () => {
 
   isProductModalOpen.value = false
   modalSelectedIds.value = []
+  syncCartPricesWithCatalog()
 
   if (outOfStock > 0) {
     notifyWarning(
@@ -2746,15 +2793,13 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
   if (isSyncingHardCases) return { abortedByStaffLock: false, changes: [] }
   if (!options.isBeforeCheckout) {
     const hasOpenModalOrDialog =
-      isProductModalOpen.value ||
       isVoucherModalOpen.value ||
       isQrModalOpen.value ||
       isAddCustomerModalOpen.value ||
       isSwapModalOpen.value ||
       isReceiptModalOpen.value ||
       isRecentInvoicesModalOpen.value ||
-      isProcessingCheckout.value ||
-      (typeof document !== 'undefined' && document.body.classList.contains('swal2-shown'))
+      isProcessingCheckout.value
     if (hasOpenModalOrDialog) {
       return { abortedByStaffLock: false, changes: [] }
     }
@@ -2766,7 +2811,7 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
   try {
     const [formRes, prodRes, empRes] = await Promise.allSettled([
       withRequestTimeout(http.get('/hoa-don/form-data'), 4000),
-      withRequestTimeout(fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500`).then(r => r.json()), 4000),
+      withRequestTimeout(fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&_t=${Date.now()}`, { cache: 'no-store' }).then(r => r.json()), 4000),
       withRequestTimeout(http.get('/nhan-vien', { params: { page: 0, size: 100 } }), 4000)
     ])
 
@@ -2829,7 +2874,9 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
           else if (oldEffectivePrice !== newEffectivePrice || oldDisc !== newDisc) {
             item.originalPrice = newOriginalPrice
             item.price = newEffectivePrice
-            item.discount = freshProd.discount || null
+            item.discount = freshProd.discount || (freshProd.phanTramGiam ? `-${Math.round(freshProd.phanTramGiam)}%` : null)
+            item.phanTramGiam = freshProd.phanTramGiam !== undefined ? freshProd.phanTramGiam : null
+            item.giaSauGiam = freshProd.giaSauGiam !== undefined ? freshProd.giaSauGiam : null
             if (!newDisc) {
               changes.push(
                 `Đợt giảm giá kết thúc: Sản phẩm "${item.name}" (Size ${item.size} - ${item.color})${orderLabel} đã hết khuyến mãi (${oldDisc || 'KM'}), đơn giá về giá gốc ${formatVnd(newEffectivePrice)}`
@@ -3598,7 +3645,7 @@ const loadInitialData = async () => {
 
     const [formRes, prodRes, brandRes, catRes, colorRes, sizeRes, empRes] = await Promise.allSettled([
       http.get('/hoa-don/form-data'),
-      fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500`).then(r => r.json()),
+      fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&_t=${Date.now()}`, { cache: 'no-store' }).then(r => r.json()),
       fetch(`${API_BASE}/attributes/thuong_hieu`).then(r => r.json()),
       fetch(`${API_BASE}/attributes/loai_giay`).then(r => r.json()),
       fetch(`${API_BASE}/attributes/mau_sac`).then(r => r.json()),
@@ -3728,9 +3775,21 @@ const handleWindowClick = (e) => {
   }
 }
 
+const handleDiscountChanged = async () => {
+  try {
+    const res = await fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&_t=${Date.now()}`, { cache: 'no-store' }).then(r => r.json())
+    if (res && Array.isArray(res.content)) {
+      setServerProductsList(res.content.filter(p => p.trangThai !== false))
+    }
+  } catch (e) {
+    console.warn('Lỗi tải lại sản phẩm khi đợt giảm giá thay đổi:', e)
+  }
+  validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: false })
+}
+
 const handleWindowFocusOrVisible = () => {
   if (document.visibilityState === 'visible') {
-    validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: false })
+    handleDiscountChanged()
   }
 }
 
@@ -3738,12 +3797,13 @@ const handleCrossTabStorageSync = (e) => {
   if (!e || !e.key) return
   if (
     e.key === 'polyshoes_pos_sync_signal' ||
+    e.key === 'polyshoes_discount_updated' ||
     e.key === 'polyshoes_last_updated_staff' ||
     e.key === 'vaiTroHienTai' ||
     e.key === 'polyshoes_user'
   ) {
     staffUserRef.value = getUser()
-    validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: false })
+    handleDiscountChanged()
   }
 }
 
@@ -3760,11 +3820,12 @@ onMounted(async () => {
   window.addEventListener('polyshoes:shift-changed', fetchActiveShift)
   window.addEventListener('polyshoes:open-ket-ca', openKetCaModal)
   window.addEventListener('polyshoes:open-mo-ca', openMoCaModal)
+  window.addEventListener('polyshoes:discount-changed', handleDiscountChanged)
   realtimePollTimer = setInterval(() => {
     if (document.visibilityState === 'visible') {
-      validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: false })
+      handleDiscountChanged()
     }
-  }, 5000)
+  }, 3000)
 })
 
 onUnmounted(() => {
@@ -3776,6 +3837,7 @@ onUnmounted(() => {
   window.removeEventListener('polyshoes:shift-changed', fetchActiveShift)
   window.removeEventListener('polyshoes:open-ket-ca', openKetCaModal)
   window.removeEventListener('polyshoes:open-mo-ca', openMoCaModal)
+  window.removeEventListener('polyshoes:discount-changed', handleDiscountChanged)
   if (realtimePollTimer) {
     clearInterval(realtimePollTimer)
     realtimePollTimer = null
