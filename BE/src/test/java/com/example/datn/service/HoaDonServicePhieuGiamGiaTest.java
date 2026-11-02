@@ -254,10 +254,26 @@ class HoaDonServicePhieuGiamGiaTest {
     }
 
     @Test
-    void suDungPhieuKhongChonKhachHang_BiTuChoi() {
+    void suDungPhieuTaiQuayKhongChonKhachHang_DuocPhep() {
         chuanBi(phieu("PERCENT", "20", 1));
 
-        assertThatThrownBy(() -> service.create(yeuCau(PGG_ID, null)))
+        assertThatCode(() -> service.create(yeuCau(PGG_ID, null)))
+            .doesNotThrowAnyException();
+    }
+
+    @Test
+    void suDungPhieuOnlineKhongChonKhachHang_BiTuChoi() {
+        chuanBi(phieu("PERCENT", "20", 1));
+        when(ghnService.tinhPhi(any())).thenReturn(30000);
+
+        HoaDonRequest req = yeuCau(PGG_ID, null);
+        req.setLoaiDon("Online");
+        req.setToProvinceId(1000000);
+        req.setToDistrictId(1442);
+        req.setToWardCode("20107");
+        req.setDiaChiNhanHang("1 Pho Chua Boc, Quan Dong Da, Ha Noi");
+
+        assertThatThrownBy(() -> service.create(req))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("chọn khách hàng");
     }

@@ -288,8 +288,8 @@ const saveAttributeDirectly = async () => {
       return
     }
     const num = Number(formatted)
-    if (isNaN(num) || num < 10 || num > 60) {
-      formError.value = 'Kích cỡ giày phải là số hợp lệ từ 10 đến 60!'
+    if (!Number.isFinite(num) || num <= 0) {
+      formError.value = 'Kích cỡ phải là số lớn hơn 0.'
       return
     }
   }
@@ -465,8 +465,8 @@ const executeDeleteFast = async (item) => {
             <tr>
               <th width="60" class="text-center">STT</th>
               <th width="150" class="text-center">MÃ THUỘC TÍNH</th>
-              <th width="240">TÊN {{ activeTabInfo.label.toUpperCase() }}</th>
-              <th>MÔ TẢ / GIÁ TRỊ</th>
+              <th width="240" class="text-center">TÊN {{ activeTabInfo.label.toUpperCase() }}</th>
+              <th class="text-center">MÔ TẢ / GIÁ TRỊ</th>
               <th width="170" class="text-center">TRẠNG THÁI</th>
               <th width="120" class="text-center">THAO TÁC</th>
             </tr>
@@ -477,12 +477,12 @@ const executeDeleteFast = async (item) => {
               <td class="text-center code-plain-text">
                 {{ (item.ma || (activeTabInfo.codePrefix + String(item.id).padStart(3, '0'))).toUpperCase() }}
               </td>
-              <td>
+              <td class="text-center">
                 <div class="name-col">
                   <span class="name-main">{{ activeTab === 'kich_co' ? `Size ${item.ten}` : item.ten }}</span>
                 </div>
               </td>
-              <td>
+              <td class="text-center">
                 <div v-if="activeTab === 'mau_sac'" class="color-preview-cell" @click="copyHex(item.mo_ta)"
                   title="Click để sao chép mã màu">
                   <span class="color-circle"
@@ -528,8 +528,8 @@ const executeDeleteFast = async (item) => {
         </table>
       </div>
 
+      <div v-if="totalPages > 1" class="table-card-foot">
       <PaginationBar
-        v-if="currentTabItems.length > 0"
         :page="currentPage - 1"
         :total-pages="totalPages"
         :total-elements="currentTabItems.length"
@@ -541,6 +541,7 @@ const executeDeleteFast = async (item) => {
         @change="(p) => { currentPage = p + 1 }"
         @size-change="(s) => { pageSize = s; currentPage = 1 }"
       />
+      </div>
     </div>
 
     <transition name="fade">

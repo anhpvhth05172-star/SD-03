@@ -17,6 +17,16 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(KhongCoQuyenException.class)
+    public ResponseEntity<ErrorResponse> handleKhongCoQuyen(KhongCoQuyenException ex) {
+        ErrorResponse response = ErrorResponse.builder()
+                .status(HttpStatus.FORBIDDEN.value())
+                .message(ex.getMessage())
+                .timestamp(LocalDateTime.now())
+                .build();
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationException(MethodArgumentNotValidException ex) {
         Map<String, String> errors = new HashMap<>();
@@ -43,6 +53,17 @@ public class GlobalExceptionHandler {
                 .build();
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(BiChanException.class)
+    public ResponseEntity<ErrorResponse> handleBiChan(BiChanException ex) {
+        ErrorResponse response = ErrorResponse.builder()
+                .status(HttpStatus.CONFLICT.value())
+                .message(ex.getMessage())
+                .timestamp(LocalDateTime.now())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 
     @ExceptionHandler(ResourceNotFoundException.class)

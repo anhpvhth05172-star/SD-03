@@ -19,9 +19,6 @@ public class GHNConfig {
     @Value("${app.ghn.shop-id:}")
     private String shopId = "";
 
-    @Value("${app.ghn.service-type-id:2}")
-    private int serviceTypeId = 2;
-
     @Value("${app.ghn.package-length-cm:30}")
     private int packageLengthCm = 30;
 

@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppHeader from '../components/AppHeader.vue'
+import EmployeeShiftEntry from '../components/EmployeeShiftEntry.vue'
 
 const route = useRoute()
 const pageTitle = computed(() => route.meta.title || '')
@@ -15,6 +16,7 @@ const pageTitle = computed(() => route.meta.title || '')
 
       <div class="main-area">
         <AppHeader :title="pageTitle" />
+        <EmployeeShiftEntry />
 
         <div class="page-body">
           <router-view :key="$route.fullPath" />

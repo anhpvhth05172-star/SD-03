@@ -14,7 +14,30 @@ import org.springframework.data.repository.query.Param;
 
 public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
 
+    @Query("""
+        SELECT h.nhanVien.id, COUNT(h)
+        FROM HoaDon h
+        WHERE h.nhanVien IS NOT NULL
+          AND h.loaiDon = 'ONLINE'
+          AND h.trangThai NOT IN ('DA_HOAN_THANH', 'DA_HUY', 'DA_HOAN_TIEN')
+        GROUP BY h.nhanVien.id
+        """)
+    List<Object[]> countOpenOrdersByEmployee();
+
+    @Query("""
+        SELECT COALESCE(SUM(h.tienSauGiamGia - COALESCE(h.phiVanChuyen, 0)), 0) FROM HoaDon h
+        WHERE h.daXoa = false AND h.trangThai IN :trangThais
+          AND h.ngayTao >= :tu AND h.ngayTao < :den
+        """)
+    java.math.BigDecimal tongDoanhThuTheoTrangThai(
+        @Param("trangThais") java.util.Collection<String> trangThais,
+        @Param("tu") LocalDateTime tu,
+        @Param("den") LocalDateTime den
+    );
+
     boolean existsByMaHoaDon(String maHoaDon);
+
+    Optional<HoaDon> findByMaHoaDon(String maHoaDon);
 
     boolean existsByMaHoaDonAndIdNot(String maHoaDon, Long id);
 
@@ -25,14 +48,17 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
     @Query(
         value = """
             SELECT * FROM hoa_don h
-            WHERE (:ma IS NULL OR h.ma_hoa_don LIKE CONCAT('%', :ma, '%') COLLATE Latin1_General_CS_AS)
+            WHERE (:ma IS NULL OR h.ma_hoa_don LIKE CONCAT('%', :ma, '%') OR h.ten_khach_hang LIKE CONCAT('%', :ma, '%') OR h.so_dien_thoai_khach_hang LIKE CONCAT('%', :ma, '%'))
               AND (:tuNgay IS NULL OR h.ngay_tao >= :tuNgay)
               AND (:denNgay IS NULL OR h.ngay_tao <= :denNgay)
-              AND (:loaiDon IS NULL OR h.loai_don = :loaiDon)
+              AND (:loaiDon IS NULL OR
+          (:loaiDon = 'ONLINE' AND (h.loai_don = 'ONLINE' OR h.loai_don = N'Online')) OR
+          (:loaiDon = 'TAI_QUAY_GIAO_HANG' AND (h.loai_don = 'TAI_QUAY_GIAO_HANG' OR (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND h.dia_chi_nhan_hang IS NOT NULL AND TRIM(h.dia_chi_nhan_hang) <> ''))) OR
+          (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))))
               AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
               AND h.da_xoa = :daXoa
             ORDER BY CASE WHEN h.trang_thai IN ('DA_HOAN_THANH', 'DA_HOAN_TIEN') THEN 1 ELSE 0 END ASC,
-                     h.ngay_tao ASC, h.id ASC
+                     h.ngay_tao DESC, h.id DESC
             """,
         nativeQuery = true
     )
@@ -48,21 +74,27 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
     @Query(
         value = """
             SELECT * FROM hoa_don h
-            WHERE (:ma IS NULL OR h.ma_hoa_don LIKE CONCAT('%', :ma, '%') COLLATE Latin1_General_CS_AS)
+            WHERE (:ma IS NULL OR h.ma_hoa_don LIKE CONCAT('%', :ma, '%') OR h.ten_khach_hang LIKE CONCAT('%', :ma, '%') OR h.so_dien_thoai_khach_hang LIKE CONCAT('%', :ma, '%'))
               AND (:tuNgay IS NULL OR h.ngay_tao >= :tuNgay)
               AND (:denNgay IS NULL OR h.ngay_tao <= :denNgay)
-              AND (:loaiDon IS NULL OR h.loai_don = :loaiDon)
+              AND (:loaiDon IS NULL OR
+          (:loaiDon = 'ONLINE' AND (h.loai_don = 'ONLINE' OR h.loai_don = N'Online')) OR
+          (:loaiDon = 'TAI_QUAY_GIAO_HANG' AND (h.loai_don = 'TAI_QUAY_GIAO_HANG' OR (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND h.dia_chi_nhan_hang IS NOT NULL AND TRIM(h.dia_chi_nhan_hang) <> ''))) OR
+          (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))))
               AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
               AND h.da_xoa = :daXoa
             ORDER BY CASE WHEN h.trang_thai IN ('DA_HOAN_THANH', 'DA_HOAN_TIEN') THEN 1 ELSE 0 END ASC,
-                     h.ngay_tao ASC, h.id ASC
+                     h.ngay_tao DESC, h.id DESC
             """,
         countQuery = """
             SELECT COUNT(*) FROM hoa_don h
-            WHERE (:ma IS NULL OR h.ma_hoa_don LIKE CONCAT('%', :ma, '%') COLLATE Latin1_General_CS_AS)
+            WHERE (:ma IS NULL OR h.ma_hoa_don LIKE CONCAT('%', :ma, '%') OR h.ten_khach_hang LIKE CONCAT('%', :ma, '%') OR h.so_dien_thoai_khach_hang LIKE CONCAT('%', :ma, '%'))
               AND (:tuNgay IS NULL OR h.ngay_tao >= :tuNgay)
               AND (:denNgay IS NULL OR h.ngay_tao <= :denNgay)
-              AND (:loaiDon IS NULL OR h.loai_don = :loaiDon)
+              AND (:loaiDon IS NULL OR
+          (:loaiDon = 'ONLINE' AND (h.loai_don = 'ONLINE' OR h.loai_don = N'Online')) OR
+          (:loaiDon = 'TAI_QUAY_GIAO_HANG' AND (h.loai_don = 'TAI_QUAY_GIAO_HANG' OR (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND h.dia_chi_nhan_hang IS NOT NULL AND TRIM(h.dia_chi_nhan_hang) <> ''))) OR
+          (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))))
               AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
               AND h.da_xoa = :daXoa
             """,
@@ -87,4 +119,6 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
         """
     )
     List<Object[]> tongHopTheoKhachHang();
+
+    List<HoaDon> findByTrangThaiAndNgayTaoBefore(String trangThai, LocalDateTime before);
 }

@@ -69,7 +69,13 @@ public class SqlMigrationRunner implements ApplicationRunner {
                 // Tự quản lý giao dịch ở mức kết nối để script lồng vào giao dịch của mình.
                 conn.setAutoCommit(false);
                 try {
-                    st.execute(doc(r));
+                    String noiDung = doc(r);
+                    for (String batch : noiDung.split("(?im)^\\s*GO\\s*(?:--.*)?$")) {
+                        String cauLenh = batch.trim();
+                        if (!cauLenh.isEmpty()) {
+                            st.execute(cauLenh);
+                        }
+                    }
                     try (Statement st2 = conn.createStatement()) {
                         st2.execute(
                             "INSERT INTO " + BANG + " (ten_file) VALUES (N'"

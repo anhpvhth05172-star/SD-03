@@ -23,11 +23,22 @@ public interface CaLamViecRepository extends JpaRepository<CaLamViec, Long> {
 
     @Query("""
         SELECT c FROM CaLamViec c
+        LEFT JOIN c.nhanVien nv
         WHERE c.daXoa = false
           AND (:idNhanVien IS NULL OR c.nhanVien.id = :idNhanVien)
           AND (:trangThai IS NULL OR c.trangThai = :trangThai)
           AND (:tu IS NULL OR c.thoiGianMo >= :tu)
           AND (:den IS NULL OR c.thoiGianMo < :den)
+          AND (:keyword IS NULL
+               OR LOWER(c.maCa) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(nv.tenTaiKhoan) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(nv.maNhanVien) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(nv.email) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR EXISTS (
+                   SELECT 1 FROM HoaDon h
+                   WHERE h.idCaLamViec = c.id
+                     AND LOWER(h.maHoaDon) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               ))
         ORDER BY c.thoiGianMo DESC
         """)
     Page<CaLamViec> lichSu(
@@ -35,6 +46,7 @@ public interface CaLamViecRepository extends JpaRepository<CaLamViec, Long> {
         @Param("trangThai") String trangThai,
         @Param("tu") LocalDateTime tu,
         @Param("den") LocalDateTime den,
+        @Param("keyword") String keyword,
         Pageable pageable
     );
 
@@ -72,16 +84,29 @@ public interface CaLamViecRepository extends JpaRepository<CaLamViec, Long> {
         @Param("nguoiCapNhat") String nguoiCapNhat
     );
 
-    @Query("SELECT COUNT(h) FROM HoaDon h WHERE h.idCaLamViec = :idCa AND h.trangThai = 'DA_HOAN_THANH' AND h.loaiDon = 'TAI_QUAY'")
+    @Query("""
+        SELECT COUNT(h) FROM HoaDon h
+        WHERE h.idCaLamViec = :idCa
+          AND h.loaiDon = 'TAI_QUAY'
+          AND h.trangThai NOT IN ('CHO_XAC_NHAN', 'DA_HUY')
+          AND h.daXoa = false
+        """)
     int demHoaDonTaiQuayHoanThanh(@Param("idCa") Long idCa);
 
-    @Query("SELECT COALESCE(SUM(h.tienSauGiamGia), 0) FROM HoaDon h WHERE h.idCaLamViec = :idCa AND h.trangThai = 'DA_HOAN_THANH'")
+    @Query("""
+        SELECT COALESCE(SUM(h.tienSauGiamGia), 0) FROM HoaDon h
+        WHERE h.idCaLamViec = :idCa
+          AND h.trangThai NOT IN ('CHO_XAC_NHAN', 'DA_HUY', 'DA_HOAN_TIEN')
+          AND h.daXoa = false
+        """)
     BigDecimal tongDoanhThuHieuLuc(@Param("idCa") Long idCa);
 
     @Query("""
         SELECT COALESCE(SUM(h.tienSauGiamGia), 0) FROM HoaDon h
         JOIN h.phuongThucThanhToan p
-        WHERE h.idCaLamViec = :idCa AND h.trangThai = 'DA_HOAN_THANH'
+        WHERE h.idCaLamViec = :idCa
+          AND h.trangThai NOT IN ('CHO_XAC_NHAN', 'DA_HUY', 'DA_HOAN_TIEN')
+          AND h.daXoa = false
           AND p.tenPhuongThuc LIKE %:tuKhoa%
         """)
     BigDecimal tongTienMatHieuLuc(@Param("idCa") Long idCa, @Param("tuKhoa") String tuKhoa);
@@ -89,7 +114,9 @@ public interface CaLamViecRepository extends JpaRepository<CaLamViec, Long> {
     @Query("""
         SELECT COALESCE(SUM(h.tienSauGiamGia), 0) FROM HoaDon h
         JOIN h.phuongThucThanhToan p
-        WHERE h.idCaLamViec = :idCa AND h.trangThai = 'DA_HOAN_THANH'
+        WHERE h.idCaLamViec = :idCa
+          AND h.trangThai NOT IN ('CHO_XAC_NHAN', 'DA_HUY', 'DA_HOAN_TIEN')
+          AND h.daXoa = false
           AND p.tenPhuongThuc NOT LIKE %:tuKhoa%
         """)
     BigDecimal tongTienKhongMatHieuLuc(@Param("idCa") Long idCa, @Param("tuKhoa") String tuKhoa);
@@ -98,14 +125,16 @@ public interface CaLamViecRepository extends JpaRepository<CaLamViec, Long> {
         SELECT COALESCE(SUM(h.tienSauGiamGia), 0) FROM HoaDon h
         JOIN h.phuongThucThanhToan p
         WHERE h.idCaLamViec = :idCa AND h.trangThai = 'DA_HOAN_TIEN'
+          AND h.daXoa = false
           AND p.tenPhuongThuc LIKE %:tuKhoa%
         """)
     BigDecimal tongTienHoanMat(@Param("idCa") Long idCa, @Param("tuKhoa") String tuKhoa);
 
     @Query("""
         SELECT h FROM HoaDon h
-        WHERE h.idCaLamViec = :idCa AND h.loaiDon = 'TAI_QUAY'
-          AND h.trangThai NOT IN ('DA_HOAN_THANH', 'DA_HUY', 'DA_HOAN_TIEN')
+        WHERE h.idCaLamViec = :idCa
+          AND h.loaiDon = 'TAI_QUAY'
+          AND h.trangThai = 'CHO_XAC_NHAN'
           AND h.daXoa = false
         """)
     List<HoaDon> hoaDonDangXuLy(@Param("idCa") Long idCa);

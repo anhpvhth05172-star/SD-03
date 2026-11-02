@@ -11,7 +11,6 @@ export const createCustomer = (data) =>
 export const updateCustomer = (id, data) =>
   http.put(`/khach-hang/${id}`, data).then((r) => r.data)
 
-export const deleteCustomer = (id) => http.delete(`/khach-hang/${id}`).then((r) => r.data)
 
 export const suggestCustomerCode = (ten) =>
   http.get('/khach-hang/ma-tu-dong', { params: { ten } }).then((r) => r.data)
@@ -39,6 +38,3 @@ export const deleteAddress = (idKhachHang, id) =>
 
 export const setDefaultAddress = (idKhachHang, id) =>
   http.put(`/khach-hang/${idKhachHang}/dia-chi/${id}/mac-dinh`).then((r) => r.data)
-
-export const sendCustomersBulkEmail = (data) =>
-  http.post('/khach-hang/gui-email-hang-loat', data).then((r) => r.data)

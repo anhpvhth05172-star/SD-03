@@ -30,16 +30,47 @@ const statusTabs = [
   { value: 'INACTIVE', label: 'Ngừng kinh doanh' },
 ]
 const selectedIds = ref([])
-const isAllSelected = computed({
-  get: () => products.value.length > 0 && selectedIds.value.length === products.value.length,
-  set: (val) => {
-    if (val) {
-      selectedIds.value = products.value.map(p => p.id)
-    } else {
-      selectedIds.value = []
+const posPendingOrders = ref([])
+
+const loadPosPendingOrders = () => {
+  try {
+    const raw = localStorage.getItem('polyshoes_pos_pending_orders_v1')
+    posPendingOrders.value = raw ? JSON.parse(raw) : []
+  } catch {
+    posPendingOrders.value = []
+  }
+}
+
+const getPosReservedForProduct = (item) => {
+  if (!item || !Array.isArray(posPendingOrders.value)) return 0
+  let reserved = 0
+  for (const order of posPendingOrders.value) {
+    if (!Array.isArray(order.cart)) continue
+    for (const c of order.cart) {
+      const matchId = c.idSanPham && item.id && Number(c.idSanPham) === Number(item.id)
+      const matchCode = c.maSp && item.maSanPham && String(c.maSp).toUpperCase() === String(item.maSanPham).toUpperCase()
+      const matchName = !c.idSanPham && c.name && item.tenSanPham && String(c.name).trim() === String(item.tenSanPham).trim()
+      if (matchId || matchCode || matchName) {
+        reserved += Number(c.quantity || 0)
+      }
     }
   }
-})
+  return reserved
+}
+
+const getAvailableProductStock = (item) => {
+  const base = Number(item?.soLuong ?? 0)
+  return Math.max(0, base - getPosReservedForProduct(item))
+}
+
+const handlePosStorageSync = (e) => {
+  if (!e || !e.key || e.key === 'polyshoes_pos_pending_orders_v1' || e.key === 'polyshoes_pos_sync_signal') {
+    loadPosPendingOrders()
+    if (e?.key === 'polyshoes_pos_sync_signal') {
+      fetchProducts()
+    }
+  }
+}
 
 const filters = reactive({
   keyword: '',
@@ -67,32 +98,6 @@ const origins = ref([])
 
 let debounceTimer = null
 let currentAbortController = null
-
-const isEditModalOpen = ref(false)
-const isUpdating = ref(false)
-const editErrors = reactive({
-  tenSanPham: '',
-  idThuongHieu: '',
-  idLoaiGiay: '',
-  idChatLieu: '',
-  idKieuDang: '',
-  idXuatXu: ''
-})
-
-const editForm = reactive({
-  id: null,
-  maSanPham: '',
-  tenSanPham: '',
-  idThuongHieu: '',
-  idLoaiGiay: '',
-  idChatLieu: '',
-  idKieuDang: '',
-  idXuatXu: '',
-  doiTuong: 'Nam',
-  tinhNang: '',
-  moTa: '',
-  trangThai: true
-})
 
 const isQuickAddModalOpen = ref(false)
 const isSubmittingQuickAdd = ref(false)
@@ -130,14 +135,7 @@ const showToastNotice = (title, message, type = 'success') => {
   }
 }
 
-const activeFilterCount = computed(() => {
-  let count = 0
-  if (filters.keyword && filters.keyword.trim()) count++
-  if (filters.idThuongHieu) count++
-  if (filters.idLoaiGiay) count++
-  if (filters.trangThai !== '' && filters.trangThai !== null && filters.trangThai !== undefined) count++
-  return count
-})
+
 
 const normalizeAttributeList = (data) => {
   if (!data) return []
@@ -262,12 +260,6 @@ const reloadAllData = () => {
   fetchProducts()
 }
 
-const selectTab = (tab) => {
-  activeTab.value = tab || 'ALL'
-  currentPage.value = 0
-  fetchProducts()
-}
-
 const onFilterChange = () => {
   currentPage.value = 0
   fetchProducts()
@@ -290,7 +282,6 @@ const resetFilters = () => {
   filters.idXuatXu = ''
   filters.doiTuong = ''
   filters.trangThai = ''
-  activeTab.value = 'ALL'
   currentPage.value = 0
   fetchProducts()
   showToastNotice('Thành công', 'Đã đặt lại bộ lọc về mặc định', 'success')
@@ -359,43 +350,9 @@ const toggleStatus = async (item) => {
   }
 }
 
-const deleteProduct = async (id) => {
-  const target = products.value.find(p => p.id === id)
-  const name = target ? (target.tenSanPham || target.maSanPham) : ''
-  const confirmed = await notifyDeleteConfirm(name)
-  if (!confirmed) return
-  const originalList = [...products.value]
-  products.value = products.value.filter(p => p.id !== id)
-  if (totalElements.value > 0) totalElements.value--
-
-  try {
-    const res = await fetch(`${API_BASE}/san-pham/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}))
-      products.value = originalList
-      if (totalElements.value >= 0) totalElements.value++
-      showToastNotice('Không thể xóa', errData.message || 'Sản phẩm đã có dữ liệu giao dịch liên quan', 'danger')
-    } else {
-      showToastNotice('Thành công', 'Đã xóa sản phẩm thành công', 'success')
-      fetchProducts()
-    }
-  } catch (err) {
-    products.value = originalList
-    if (totalElements.value >= 0) totalElements.value++
-    showToastNotice('Lỗi kết nối', 'Không thể kết nối tới máy chủ', 'danger')
-  }
-}
-
-const copyToClipboard = (text) => {
-  if (!text) return
-  navigator.clipboard.writeText(text)
-  showToastNotice('Đã sao chép', `Đã sao chép mã "${text}" vào clipboard`, 'success')
-}
-
 const viewProductDetails = (item) => {
   router.push('/san-pham/bien-the')
 }
-const viewProductVariants = viewProductDetails
 
 const isExporting = ref(false)
 
@@ -452,95 +409,6 @@ const exportToExcel = async () => {
     showToastNotice('Lỗi', 'Không thể xuất file Excel', 'danger')
   } finally {
     isExporting.value = false
-  }
-}
-
-
-const openQuickEdit = (item) => {
-  editForm.id = item.id
-  editForm.maSanPham = item.maSanPham || `SP0${item.id}`
-  editForm.tenSanPham = item.tenSanPham || ''
-  editForm.idThuongHieu = item.idThuongHieu || (brands.value.find(b => b.ten === item.tenThuongHieu)?.id || '')
-  editForm.idLoaiGiay = item.idLoaiGiay || (categories.value.find(c => c.ten === item.tenLoaiGiay)?.id || '')
-  editForm.idChatLieu = item.idChatLieu || (materials.value.find(m => m.ten === item.tenChatLieu)?.id || '')
-  editForm.idKieuDang = item.idKieuDang || (styles.value.find(s => s.ten === item.tenKieuDang)?.id || '')
-  editForm.idXuatXu = item.idXuatXu || (origins.value.find(o => o.ten === item.tenXuatXu)?.id || '')
-  editForm.doiTuong = item.doiTuong || 'Nam'
-  editForm.tinhNang = item.tinhNang || ''
-  editForm.moTa = item.moTa || ''
-  editForm.trangThai = item.trangThai !== false
-
-  Object.keys(editErrors).forEach(k => editErrors[k] = '')
-  isEditModalOpen.value = true
-}
-
-const validateEditForm = () => {
-  let valid = true
-  Object.keys(editErrors).forEach(k => editErrors[k] = '')
-
-  if (!editForm.tenSanPham || !editForm.tenSanPham.trim()) {
-    editErrors.tenSanPham = 'Tên sản phẩm không được để trống'
-    valid = false
-  }
-  if (!editForm.idThuongHieu) {
-    editErrors.idThuongHieu = 'Vui lòng chọn Thương hiệu'
-    valid = false
-  }
-  if (!editForm.idLoaiGiay) {
-    editErrors.idLoaiGiay = 'Vui lòng chọn Loại giày'
-    valid = false
-  }
-  if (!editForm.idChatLieu) {
-    editErrors.idChatLieu = 'Vui lòng chọn Chất liệu'
-    valid = false
-  }
-  if (!editForm.idKieuDang) {
-    editErrors.idKieuDang = 'Vui lòng chọn Kiểu dáng'
-    valid = false
-  }
-  if (!editForm.idXuatXu) {
-    editErrors.idXuatXu = 'Vui lòng chọn Xuất xứ'
-    valid = false
-  }
-  return valid
-}
-
-const submitQuickEdit = async () => {
-  if (!validateEditForm()) return
-
-  isUpdating.value = true
-  const payload = {
-    tenSanPham: editForm.tenSanPham.trim(),
-    idThuongHieu: Number(editForm.idThuongHieu),
-    idLoaiGiay: Number(editForm.idLoaiGiay),
-    idChatLieu: Number(editForm.idChatLieu),
-    idKieuDang: Number(editForm.idKieuDang),
-    idXuatXu: Number(editForm.idXuatXu),
-    doiTuong: editForm.doiTuong,
-    tinhNang: editForm.tinhNang ? editForm.tinhNang.trim() : '',
-    moTa: editForm.moTa ? editForm.moTa.trim() : '',
-    trangThai: editForm.trangThai
-  }
-
-  try {
-    const res = await fetch(`${API_BASE}/san-pham/${editForm.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-
-    if (res.ok) {
-      showToastNotice('Thành công', `Đã cập nhật sản phẩm "${editForm.tenSanPham}" thành công!`, 'success')
-      isEditModalOpen.value = false
-      fetchProducts()
-    } else {
-      const errData = await res.json().catch(() => ({}))
-      showToastNotice('Lỗi cập nhật', errData.message || 'Không thể lưu thay đổi', 'danger')
-    }
-  } catch (err) {
-    showToastNotice('Lỗi kết nối', 'Không thể kết nối máy chủ', 'danger')
-  } finally {
-    isUpdating.value = false
   }
 }
 
@@ -677,10 +545,15 @@ const generateAiContent = async (targetForm) => {
 }
 
 onMounted(() => {
+  loadPosPendingOrders()
+  window.addEventListener('storage', handlePosStorageSync)
+  window.addEventListener('focus', loadPosPendingOrders)
   Promise.allSettled([fetchOptions(), fetchProducts()])
 })
 
 onUnmounted(() => {
+  window.removeEventListener('storage', handlePosStorageSync)
+  window.removeEventListener('focus', loadPosPendingOrders)
   if (debounceTimer) clearTimeout(debounceTimer)
   if (currentAbortController) currentAbortController.abort()
 })
@@ -699,14 +572,8 @@ onUnmounted(() => {
     <div class="filter-box">
       <div class="status-tabs-row">
         <div class="tabs-group">
-          <SearchableSelect
-            v-model="activeTab"
-            :options="statusTabs"
-            label-key="label"
-            value-key="value"
-            placeholder="Trạng thái"
-            @change="selectTab"
-          />
+          <SearchableSelect v-model="activeTab" :options="statusTabs" label-key="label" value-key="value"
+            placeholder="Trạng thái" @change="selectTab" />
         </div>
 
         <div class="page-actions">
@@ -801,12 +668,12 @@ onUnmounted(() => {
           <thead>
             <tr>
               <th width="60" class="text-center">STT</th>
-              <th width="120">MÃ SẢN PHẨM</th>
-              <th width="320">SẢN PHẨM</th>
-              <th width="140">THƯƠNG HIỆU</th>
-              <th width="140">LOẠI GIÀY</th>
-              <th width="100" class="text-center">SỐ LƯỢNG</th>
-              <th width="160" class="text-end">GIÁ BÁN</th>
+              <th width="130" class="text-center">MÃ SẢN PHẨM</th>
+              <th width="280">SẢN PHẨM</th>
+              <th width="140" class="text-center">THƯƠNG HIỆU</th>
+              <th width="140" class="text-center">LOẠI GIÀY</th>
+              <th width="110" class="text-center">SỐ LƯỢNG</th>
+              <th width="170" class="text-center">GIÁ BÁN</th>
               <th width="140" class="text-center">TRẠNG THÁI</th>
               <th width="120" class="text-center">HÀNH ĐỘNG</th>
             </tr>
@@ -814,18 +681,23 @@ onUnmounted(() => {
           <tbody>
             <tr v-for="(item, idx) in products" :key="item.id">
               <td class="text-center text-muted">{{ currentPage * pageSize + idx + 1 }}</td>
-              <td class="code-plain-text">{{ item.maSanPham || `SP0${item.id}` }}</td>
+              <td class="text-center code-plain-text">{{ item.maSanPham || `SP0${item.id}` }}</td>
               <td>
                 <div class="product-details-col">
                   <span class="name-plain-text">{{ item.tenSanPham }}</span>
                   <span v-if="item.doiTuong" class="target-badge">{{ item.doiTuong }}</span>
                 </div>
               </td>
-              <td class="attr-plain-text">{{ item.tenThuongHieu || '---' }}</td>
-              <td class="attr-plain-text">{{ item.tenLoaiGiay || '---' }}</td>
-              <td class="text-center qty-plain-text">{{ formatNumber(item.soLuong !== undefined && item.soLuong !== null
-                ? item.soLuong : 0) }}</td>
-              <td class="text-end price-plain-text">
+              <td class="text-center attr-plain-text">{{ item.tenThuongHieu || '---' }}</td>
+              <td class="text-center attr-plain-text">{{ item.tenLoaiGiay || '---' }}</td>
+              <td class="text-center qty-plain-text">
+                <div>{{ formatNumber(getAvailableProductStock(item)) }}</div>
+                <div v-if="getPosReservedForProduct(item) > 0"
+                  style="font-size: 11px; color: #d97706; font-weight: 600; margin-top: 2px;">
+                  Giữ tại quầy: {{ getPosReservedForProduct(item) }} (Kho: {{ formatNumber(item.soLuong || 0) }})
+                </div>
+              </td>
+              <td class="text-center price-plain-text">
                 <div v-if="hasProductDiscount(item)" class="product-price-discount-box">
                   <div class="product-sale-price-row">
                     <span class="product-sale-price">{{ formatProductDiscountedPrice(item) }}</span>
@@ -842,7 +714,8 @@ onUnmounted(() => {
               </td>
               <td class="text-center">
                 <div class="action-btns">
-                  <label class="switch-toggle" :title="item.trangThai ? 'Click để ngừng kinh doanh' : 'Click để bật kinh doanh'">
+                  <label class="switch-toggle"
+                    :title="item.trangThai ? 'Click để ngừng kinh doanh' : 'Click để bật kinh doanh'">
                     <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
                     <span class="slider round"></span>
                   </label>
@@ -903,18 +776,10 @@ onUnmounted(() => {
       </div>
 
       <div v-if="totalPages > 1" class="table-card-foot">
-        <PaginationBar
-          :page="currentPage"
-          :total-pages="totalPages"
-          :total-elements="totalElements"
-          :page-size="pageSize"
-          :sizes="pageSizeOptions"
-          :from="products.length ? currentPage * pageSize + 1 : 0"
-          :to="currentPage * pageSize + products.length"
-          label="sản phẩm"
-          @change="changePage"
-          @size-change="onSizeChange"
-        />
+        <PaginationBar :page="currentPage" :total-pages="totalPages" :total-elements="totalElements"
+          :page-size="pageSize" :sizes="pageSizeOptions" :from="products.length ? currentPage * pageSize + 1 : 0"
+          :to="currentPage * pageSize + products.length" label="sản phẩm" @change="changePage"
+          @size-change="onSizeChange" />
       </div>
     </div>
 
@@ -1115,7 +980,7 @@ onUnmounted(() => {
                       SEO</span>
                   </div>
                   <button type="button" class="btn-ai-generate" :disabled="isGeneratingAi"
-                    @click="generateAiContent(editForm)">
+                    @click="generateAiContent(quickAddForm)">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                       stroke-width="2.2">
                       <path

@@ -11,6 +11,8 @@ import java.util.List;
 @Repository
 public interface KhachHangPhieuGiamGiaRepository extends JpaRepository<KhachHangPhieuGiamGia, Long> {
 
+    boolean existsByPhieuGiamGia_IdAndKhachHang_IdAndTrangThaiTrue(Long idPhieu, Long idKhachHang);
+
     @Query("""
         select r from KhachHangPhieuGiamGia r
         join fetch r.khachHang kh

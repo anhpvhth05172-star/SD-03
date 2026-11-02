@@ -6,8 +6,14 @@ const props = defineProps({
   values: { type: Array, default: () => [] },
   color: { type: String, default: '#d92d20' },
   mode: { type: String, default: 'cot' },
+  currency: { type: Boolean, default: false },
   series: { type: Array, default: null },
   height: { type: Number, default: 250 },
+  // Mở rộng cho màn so sánh doanh thu (mặc định null → không đổi caller cũ)
+  barSeries: { type: Array, default: null }, // [{label, color, values}] — cột nhóm
+  lineSeries: { type: Array, default: null }, // [{label, color, values}] — đường thang riêng
+  lineFormat: { type: String, default: 'so' }, // 'so' | 'percent'
+  showLineLabels: { type: Boolean, default: false },
 })
 
 const W = 760
@@ -15,6 +21,8 @@ const H = computed(() => props.height)
 const PAD = { l: 46, r: 14, t: 14, b: 30 }
 
 const multi = computed(() => Array.isArray(props.series) && props.series.length > 0)
+const hasBarSeries = computed(() => Array.isArray(props.barSeries) && props.barSeries.length > 0)
+const hasLineSeries = computed(() => Array.isArray(props.lineSeries) && props.lineSeries.length > 0)
 const labels = computed(() => props.labels || [])
 
 const activeSeries = computed(() => {
@@ -24,7 +32,9 @@ const activeSeries = computed(() => {
 
 const yMax = computed(() => {
   let m = 0
-  activeSeries.value.forEach((s) => (s.values || []).forEach((v) => { if (Number(v) > m) m = Number(v) }))
+  const quet = (vals) => (vals || []).forEach((v) => { if (Number(v) > m) m = Number(v) })
+  activeSeries.value.forEach((s) => quet(s.values))
+  if (hasBarSeries.value) props.barSeries.forEach((s) => quet(s.values))
   if (m <= 0) return 4
   const pow = Math.pow(10, Math.floor(Math.log10(m)))
   return [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].map((x) => x * pow).find((x) => x >= m) || m
@@ -45,7 +55,7 @@ const xCenter = (i) => PAD.l + band.value * i + band.value / 2
 const yOf = (v) => PAD.t + innerH.value * (1 - (Number(v) || 0) / yMax.value)
 
 const bars = computed(() => {
-  if (multi.value || props.mode !== 'cot') return []
+  if (multi.value || hasBarSeries.value || !['cot', 'ket-hop'].includes(props.mode)) return []
   const vals = props.values || []
   return vals.map((v, i) => {
     const y = yOf(v)
@@ -60,6 +70,81 @@ const bars = computed(() => {
   })
 })
 
+/* ---------------------------------- Cột nhóm (barSeries) ---------------------------------- */
+const groupBarW = computed(() => {
+  const n = Math.max(1, (props.barSeries || []).length)
+  return Math.max(2, Math.min(24, (band.value * 0.8) / n))
+})
+
+const groupedBars = computed(() => {
+  if (!hasBarSeries.value || props.mode !== 'cot') return []
+  const n = props.barSeries.length
+  const w = groupBarW.value
+  const out = []
+  props.barSeries.forEach((s, si) => {
+    (s.values || []).forEach((v, i) => {
+      const groupX = PAD.l + band.value * i + (band.value - w * n) / 2
+      const y = yOf(v)
+      out.push({
+        x: groupX + w * si,
+        y,
+        w: Math.max(1, w - 1),
+        h: Math.max(0, PAD.t + innerH.value - y),
+        v,
+        color: s.color || props.color,
+        cat: labels.value[i] || '',
+        label: s.label || '',
+      })
+    })
+  })
+  return out
+})
+
+/* ---------------------------------- Đường thang riêng (lineSeries) ---------------------------------- */
+const lineScale = computed(() => {
+  if (!hasLineSeries.value) return null
+  let min = 0
+  let max = 0
+  props.lineSeries.forEach((s) =>
+    (s.values || []).forEach((v) => {
+      const n = Number(v) || 0
+      if (n < min) min = n
+      if (n > max) max = n
+    })
+  )
+  if (min === 0 && max === 0) max = 1
+  const range = max - min || 1
+  const pad = range * 0.12
+  return { lo: min < 0 ? min - pad : 0, hi: max + pad }
+})
+
+const yLine = (v) => {
+  const s = lineScale.value
+  if (!s) return PAD.t + innerH.value
+  const ty = ((Number(v) || 0) - s.lo) / (s.hi - s.lo || 1)
+  return PAD.t + innerH.value * (1 - ty)
+}
+
+const linePointsSeries = (vals) => (vals || []).map((v, i) => `${xCenter(i)},${yLine(v)}`).join(' ')
+
+const fmtLine = (v) =>
+  props.lineFormat === 'percent'
+    ? `${Number(v) > 0 ? '+' : ''}${fmt(v)}%`
+    : fmt(v)
+
+const showLineDots = computed(() => labels.value.length <= 40)
+
+const legendItems = computed(() => {
+  if (multi.value) return props.series
+  if (hasBarSeries.value || hasLineSeries.value) {
+    return [
+      ...(hasBarSeries.value ? props.barSeries : []),
+      ...(hasLineSeries.value ? props.lineSeries : []),
+    ]
+  }
+  return []
+})
+
 const linePoints = (vals) => (vals || []).map((v, i) => `${xCenter(i)},${yOf(v)}`).join(' ')
 
 const areaPath = (vals) => {
@@ -70,7 +155,7 @@ const areaPath = (vals) => {
   return `M ${first} ${base} ` + vals.map((v, i) => `L ${xCenter(i)} ${yOf(v)}`).join(' ') + ` L ${last} ${base} Z`
 }
 
-const showDots = computed(() => (props.values || []).length <= 40 && !multi.value)
+const showDots = computed(() => (props.values || []).length <= 40 && !multi.value && ['duong', 'ket-hop'].includes(props.mode))
 
 const labelStep = computed(() => {
   const n = labels.value.length
@@ -78,11 +163,22 @@ const labelStep = computed(() => {
   return Math.ceil(n / 8)
 })
 
-const showLine = computed(() => props.mode === 'duong')
+const showLine = computed(() => ['duong', 'ket-hop'].includes(props.mode))
 
 const fmt = (v) => new Intl.NumberFormat('vi-VN').format(Number(v) || 0)
+const fmtValue = (v) => props.currency ? `${fmt(v)} đ` : fmt(v)
+const fmtTick = (v) => {
+  if (!props.currency) return fmt(v)
+  if (v >= 1000000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(v / 1000000)} tr`
+  if (v >= 1000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(v / 1000)} N`
+  return `${fmt(v)} đ`
+}
 
 const isEmpty = computed(() => {
+  if (hasBarSeries.value || hasLineSeries.value) {
+    const coGiaTri = (ds) => (ds || []).some((s) => (s.values || []).some((v) => Number(v) !== 0))
+    return !coGiaTri(hasBarSeries.value ? props.barSeries : null) && !coGiaTri(props.lineSeries)
+  }
   if (multi.value) return !props.series.some((s) => (s.values || []).some((v) => Number(v) > 0))
   return !(props.values || []).some((v) => Number(v) > 0)
 })
@@ -90,8 +186,8 @@ const isEmpty = computed(() => {
 
 <template>
   <div class="blc-wrap">
-    <div v-if="multi && series" class="blc-legend">
-      <span v-for="(s, i) in series" :key="i" class="blc-legend-item">
+    <div v-if="legendItems.length" class="blc-legend">
+      <span v-for="(s, i) in legendItems" :key="i" class="blc-legend-item">
         <span class="blc-dot" :style="{ background: s.color }"></span>
         {{ s.label }}
       </span>
@@ -117,7 +213,7 @@ const isEmpty = computed(() => {
           text-anchor="end"
           class="blc-tick"
         >
-          {{ t.label }}
+          {{ fmtTick(t.label) }}
         </text>
       </g>
 
@@ -135,7 +231,24 @@ const isEmpty = computed(() => {
       </g>
 
       <template v-if="!isEmpty">
-        <g v-if="mode === 'cot' && !multi">
+        <g v-if="mode === 'cot' && hasBarSeries">
+          <rect
+            v-for="(b, i) in groupedBars"
+            :key="'gb' + i"
+            :x="b.x"
+            :y="b.y"
+            :width="b.w"
+            :height="b.h"
+            rx="3"
+            ry="3"
+            :fill="b.color"
+            class="blc-bar"
+          >
+            <title>{{ b.cat }} — {{ b.label }}: {{ fmt(b.v) }}</title>
+          </rect>
+        </g>
+
+        <g v-else-if="['cot', 'ket-hop'].includes(mode) && !multi">
           <rect
             v-for="(b, i) in bars"
             :key="'b' + i"
@@ -148,8 +261,30 @@ const isEmpty = computed(() => {
             :fill="color"
             class="blc-bar"
           >
-            <title>{{ b.label }}: {{ fmt(b.v) }}</title>
+            <title>{{ b.label }}: {{ fmtValue(b.v) }}</title>
           </rect>
+          <polyline
+            v-if="mode === 'ket-hop' && values.length > 1"
+            :points="linePoints(values)"
+            fill="none"
+            stroke="#2563eb"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <circle
+            v-if="mode === 'ket-hop'"
+            v-for="(v, i) in values"
+            :key="'combo-dot' + i"
+            :cx="xCenter(i)"
+            :cy="yOf(v)"
+            r="3.5"
+            fill="#fff"
+            stroke="#2563eb"
+            stroke-width="2"
+          >
+            <title>{{ labels[i] }}: {{ fmtValue(v) }}</title>
+          </circle>
         </g>
 
         <g v-else>
@@ -179,8 +314,55 @@ const isEmpty = computed(() => {
                 :stroke="s.color || color"
                 stroke-width="2"
               >
-                <title>{{ labels[i] }}: {{ fmt(v) }}</title>
+                <title>{{ labels[i] }}: {{ fmtValue(v) }}</title>
               </circle>
+            </template>
+          </g>
+        </g>
+
+        <!-- Đường tăng trưởng thang riêng (lineSeries) -->
+        <g v-if="hasLineSeries">
+          <line
+            v-if="lineScale && lineScale.lo < 0 && lineScale.hi > 0"
+            :x1="PAD.l"
+            :x2="W - PAD.r"
+            :y1="yLine(0)"
+            :y2="yLine(0)"
+            stroke="#cbd5e1"
+            stroke-width="1"
+            stroke-dasharray="4 4"
+          />
+          <g v-for="(s, si) in lineSeries" :key="'ls' + si">
+            <polyline
+              :points="linePointsSeries(s.values)"
+              fill="none"
+              :stroke="s.color || '#059669'"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <template v-if="showLineDots">
+              <g v-for="(v, i) in s.values" :key="'ld' + i">
+                <circle
+                  :cx="xCenter(i)"
+                  :cy="yLine(v)"
+                  r="3.4"
+                  fill="#ffffff"
+                  :stroke="s.color || '#059669'"
+                  stroke-width="2"
+                >
+                  <title>{{ labels[i] }}: {{ fmtLine(v) }}</title>
+                </circle>
+                <text
+                  v-if="showLineLabels"
+                  :x="xCenter(i)"
+                  :y="yLine(v) - 9"
+                  text-anchor="middle"
+                  class="blc-line-label"
+                >
+                  {{ fmtLine(v) }}
+                </text>
+              </g>
             </template>
           </g>
         </g>
@@ -254,5 +436,11 @@ const isEmpty = computed(() => {
 
 .blc-bar:hover {
   opacity: 0.82;
+}
+
+.blc-line-label {
+  font-size: 10px;
+  font-weight: 600;
+  fill: #059669;
 }
 </style>

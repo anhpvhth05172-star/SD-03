@@ -225,6 +225,34 @@ export const tinhChuoiBanHang = (bang, tu, den, kieu = 'ngay', boiSo = 1) => {
   }))
 }
 
+/** Aggregate revenue for explicitly selected months, quarters, or years. */
+export const taoSoSanhDoanhThu = (bang, cacKy, loai, thuongHieu = '') => {
+  const totals = new Map((cacKy || []).map((key) => [key, 0]))
+  for (const [ngay, row] of bang || []) {
+    const date = docKhoa(ngay)
+    const key = loai === 'thang'
+      ? `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`
+      : loai === 'quy'
+        ? `${date.getFullYear()}-Q${Math.floor(date.getMonth() / 3) + 1}`
+        : String(date.getFullYear())
+    if (!totals.has(key)) continue
+    const selected = thuongHieu ? row.brands?.[thuongHieu] : row
+    totals.set(key, totals.get(key) + Number(selected?.doanhThu || 0))
+  }
+  const labels = [...totals.keys()].map((key) => {
+    if (loai === 'thang') {
+      const [year, month] = key.split('-')
+      return `${month}/${year}`
+    }
+    if (loai === 'quy') {
+      const [year, quarter] = key.split('-')
+      return `${quarter}/${year}`
+    }
+    return key
+  })
+  return { labels, values: [...totals.values()].map(Math.round) }
+}
+
 /** Bảng "Tổng quan theo chu kỳ thời gian" (Hôm nay / Tuần này / Tháng này / Năm nay). */
 export const tinhChuKy = (bang, hienTai = new Date()) => {
   const nay = dauNgay(hienTai)

@@ -13,7 +13,7 @@ import {
   updateEmployee,
 } from '@/api/employee'
 import { setFlash } from '@/utils/flash'
-import { datVaiTro, layNguoiDung, vaiTroHienTai } from '@/utils/session'
+import { layNguoiDung } from '@/utils/session'
 import { notifyConfirm, notifyError, notifySuccess, notifyWarning } from '@/utils/notify'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import {
@@ -568,7 +568,21 @@ const submit = async () => {
     const payload = buildPayload()
     let msg = ''
     if (isEdit) {
-      await updateEmployee(route.params.id, payload)
+      const capNhat = await updateEmployee(route.params.id, payload)
+      try {
+        localStorage.setItem('polyshoes_last_updated_staff', JSON.stringify({ ...capNhat, _ts: Date.now() }))
+        const rawUser = localStorage.getItem('polyshoes_user')
+        if (rawUser) {
+          const parsedUser = JSON.parse(rawUser)
+          if (Number(parsedUser?.idNhanVien) === Number(capNhat?.id) || parsedUser?.tenTaiKhoan === capNhat?.tenTaiKhoan) {
+            if (capNhat?.maVaiTro) {
+              datVaiTro(capNhat.maVaiTro)
+              parsedUser.vaiTro = capNhat.maVaiTro
+              localStorage.setItem('polyshoes_user', JSON.stringify(parsedUser))
+            }
+          }
+        }
+      } catch {}
       msg = `Đã cập nhật thông tin nhân viên "${form.value.tenTaiKhoan}" thành công!`
       setFlash(msg)
     } else {
@@ -591,7 +605,7 @@ const submit = async () => {
       notifySuccess(msg)
     }
     setTimeout(() => {
-      router.push('/nhan-vien')
+      router.push('/quan-ly-nhan-vien')
     }, 600)
   } catch (e) {
     errorMsg.value = e.message
@@ -674,7 +688,7 @@ onMounted(async () => {
 <template>
   <div class="employee-create-page">
     <div class="top-nav-bar">
-      <button class="btn-back" type="button" title="Quay lại danh sách" @click="router.push('/nhan-vien')">
+      <button class="btn-back" type="button" title="Quay lại danh sách" @click="router.push('/quan-ly-nhan-vien')">
         <i class="bi bi-arrow-left"></i>
       </button>
     </div>
@@ -855,7 +869,7 @@ onMounted(async () => {
               <span>{{ saving ? 'Đang lưu...' : isEdit ? 'Cập nhật nhân viên' : 'Tạo nhân viên' }}</span>
             </button>
 
-            <button class="btn-cancel-action" type="button" @click="router.push('/nhan-vien')">
+            <button class="btn-cancel-action" type="button" @click="router.push('/quan-ly-nhan-vien')">
               Hủy
             </button>
           </div>

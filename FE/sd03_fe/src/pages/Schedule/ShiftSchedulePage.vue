@@ -1,25 +1,16 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import PaginationBar from '@/components/PaginationBar.vue'
 import { notifySuccess, notifyWarning, notifyDeleteConfirm } from '@/utils/notify'
 import SearchableSelect from '@/components/SearchableSelect.vue'
-import {
-  danhSachCa,
-  themCa,
-  capNhatCa,
-  doiTrangThaiCa,
-  caTrungTen,
-  xoaCa,
-  soLichCuaCa,
-  slugMaCa,
-} from './scheduleData'
+import { listCaLam, createCaLam, updateCaLam, toggleCaLam, deleteCaLam } from '@/api/schedule'
+import { slugMaCa } from './scheduleData'
 
-/* ---------------------------------- Bộ lọc + bảng ---------------------------------- */
-const fKeyword = ref('')
-const fTrangThai = ref('')
-
+/* ---------------------------------- Dữ liệu ca làm ---------------------------------- */
+const cas = ref([])
 const caLoc = computed(() => {
   const kw = fKeyword.value.trim().toLowerCase()
-  let rows = [...danhSachCa]
+  let rows = [...cas.value]
   if (kw) {
     rows = rows.filter(
       (c) =>
@@ -30,37 +21,81 @@ const caLoc = computed(() => {
   if (fTrangThai.value === 'tat') rows = rows.filter((c) => !c.dangBat)
   return rows
 })
+const tongCa = computed(() => cas.value.length)
+const soDangBat = computed(() => cas.value.filter((c) => c.dangBat).length)
+const soLichCuaCa = () => 0
 
-const tongCa = computed(() => danhSachCa.length)
-const soDangBat = computed(() => danhSachCa.filter((c) => c.dangBat).length)
+const taiCa = async () => {
+  try {
+    cas.value = await listCaLam()
+  } catch {
+    cas.value = []
+  }
+}
+onMounted(taiCa)
+
+/* ---------------------------------- Bộ lọc + bảng ---------------------------------- */
+const fKeyword = ref('')
+const fTrangThai = ref('')
+/* ---------------------------------- Phân trang ---------------------------------- */
+const currentPage = ref(0)
+const pageSize = ref(10)
+const pageSizeOptions = [5, 10, 20, 50]
+
+const totalElements = computed(() => caLoc.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalElements.value / pageSize.value)))
+
+const caHienThi = computed(() => {
+  const start = currentPage.value * pageSize.value
+  return caLoc.value.slice(start, start + pageSize.value)
+})
+
+const changePage = (p) => {
+  if (p >= 0 && p < totalPages.value && p !== currentPage.value) {
+    currentPage.value = p
+  }
+}
+
+const onSizeChange = (s) => {
+  pageSize.value = s
+  currentPage.value = 0
+}
+
+watch([fKeyword, fTrangThai], () => {
+  currentPage.value = 0
+})
+
 
 const datLaiBoLoc = () => {
   fKeyword.value = ''
   fTrangThai.value = ''
+  currentPage.value = 0
 }
 
 /* ---------------------------------- Thao tác ---------------------------------- */
-const doiTrangThaiBtn = (ca) => {
-  doiTrangThaiCa(ca.id)
-  notifySuccess(
-    ca.dangBat ? 'Đã bật ca làm' : 'Đã tắt ca làm',
-    `${ca.ten} (${ca.batDau} - ${ca.ketThuc})`
-  )
+const doiTrangThaiBtn = async (ca) => {
+  try {
+    await toggleCaLam(ca.id)
+    await taiCa()
+    notifySuccess(
+      ca.dangBat ? 'Đã tắt ca làm' : 'Đã bật ca làm',
+      `${ca.ten} (${ca.batDau} - ${ca.ketThuc})`
+    )
+  } catch (e) {
+    notifyWarning('Không đổi được trạng thái', e.response?.data?.message || e.message || '')
+  }
 }
 
 const xoaCaBtn = async (ca) => {
-  const n = soLichCuaCa(ca.id)
-  if (n > 0) {
-    notifyWarning(
-      'Không thể xóa ca làm',
-      `Còn ${n} lịch làm việc đang gắn với ca "${ca.ten}" — hãy xóa hoặc đổi các lịch đó trước`
-    )
-    return
-  }
   const ok = await notifyDeleteConfirm(`ca làm "${ca.ten}"`)
   if (!ok) return
-  xoaCa(ca.id)
-  notifySuccess('Đã xóa ca làm', ca.ten)
+  try {
+    await deleteCaLam(ca.id)
+    await taiCa()
+    notifySuccess('Đã xóa ca làm', ca.ten)
+  } catch (e) {
+    notifyWarning('Không thể xóa ca làm', e.response?.data?.message || e.message || '')
+  }
 }
 
 /* ---------------------------------- Form thêm / sửa ---------------------------------- */
@@ -83,16 +118,12 @@ const moFormSua = (ca) => {
   showForm.value = true
 }
 
-const luuForm = () => {
+const luuForm = async () => {
   formError.value = ''
   const f = form.value
   const ten = f.ten.trim()
   if (!ten) {
     formError.value = 'Vui lòng nhập tên ca làm'
-    return
-  }
-  if (caTrungTen(ten, formMode.value === 'sua' ? f.id : null)) {
-    formError.value = 'Tên ca làm đã tồn tại — vui lòng chọn tên khác'
     return
   }
   if (!f.batDau || !f.ketThuc) {
@@ -103,15 +134,20 @@ const luuForm = () => {
     formError.value = 'Giờ kết thúc phải sau giờ bắt đầu'
     return
   }
-  const payload = { ten, batDau: f.batDau, ketThuc: f.ketThuc, ma: slugMaCa(ten) }
-  if (formMode.value === 'sua') {
-    capNhatCa(f.id, payload)
-    notifySuccess('Đã cập nhật ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
-  } else {
-    themCa(payload)
-    notifySuccess('Đã thêm ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
+  const payload = { ten, batDau: f.batDau, ketThuc: f.ketThuc }
+  try {
+    if (formMode.value === 'sua') {
+      await updateCaLam(f.id, payload)
+      notifySuccess('Đã cập nhật ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
+    } else {
+      await createCaLam(payload)
+      notifySuccess('Đã thêm ca làm', `${ten} (${f.batDau} - ${f.ketThuc})`)
+    }
+    await taiCa()
+    showForm.value = false
+  } catch (e) {
+    formError.value = e.response?.data?.message || e.message || 'Lỗi khi lưu ca làm'
   }
-  showForm.value = false
 }
 </script>
 
@@ -210,11 +246,11 @@ const luuForm = () => {
             </tr>
           </thead>
           <tbody>
-            <tr v-if="caLoc.length === 0">
+            <tr v-if="caHienThi.length === 0">
               <td colspan="7" class="text-center empty-row">Không có ca làm nào phù hợp</td>
             </tr>
-            <tr v-for="(ca, i) in caLoc" :key="ca.id" class="row-alt">
-              <td class="cell-stt">{{ i + 1 }}</td>
+            <tr v-for="(ca, i) in caHienThi" :key="ca.id" class="row-alt">
+              <td class="cell-stt">{{ currentPage * pageSize + i + 1 }}</td>
               <td class="cell-code"><span class="code-chip">{{ ca.ma }}</span></td>
               <td class="cell-name">{{ ca.ten }}</td>
               <td>{{ ca.batDau }} - {{ ca.ketThuc }}</td>
@@ -246,6 +282,21 @@ const luuForm = () => {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div v-if="totalPages > 1" class="table-card-foot">
+        <PaginationBar
+          :page="currentPage"
+          :total-pages="totalPages"
+          :total-elements="totalElements"
+          :page-size="pageSize"
+          :sizes="pageSizeOptions"
+          :from="caHienThi.length ? currentPage * pageSize + 1 : 0"
+          :to="currentPage * pageSize + caHienThi.length"
+          label="ca làm"
+          @change="changePage"
+          @size-change="onSizeChange"
+        />
       </div>
     </div>
 

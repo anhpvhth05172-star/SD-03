@@ -9,6 +9,7 @@ import com.example.datn.util.PhieuGiamGiaUtil;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,7 +26,12 @@ public class PhieuGiamGiaController {
 
     @GetMapping
     public List<PhieuGiamGiaDTO> list() {
+        LocalDateTime now = LocalDateTime.now();
         return phieuGiamGiaRepository.findAllWithDot().stream()
+            .filter(p -> !"CA_NHAN".equalsIgnoreCase(p.getPhamVi()))
+            .filter(p -> Boolean.TRUE.equals(p.getTrangThai()))
+            .filter(p -> p.getNgayBatDau() == null || !now.isBefore(p.getNgayBatDau()))
+            .filter(p -> p.getNgayKetThuc() == null || !now.isAfter(p.getNgayKetThuc()))
             .map(this::toDTO)
             .toList();
     }

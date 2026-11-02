@@ -6,8 +6,8 @@ import { listEmployees } from '@/api/employee'
 import { API_BASE } from '@/api/http'
 import { formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
-import { notifySuccess } from '@/utils/notify'
-import { nhanVienMau } from '@/pages/Schedule/scheduleData'
+import { notifySuccess, notifyError } from '@/utils/notify'
+import { fetchTongQuan, fetchTrangThaiDon, fetchEmailMacDinh, guiMailTongKet, fetchSoSanh } from '@/api/statistics'
 import BarLineChart from '@/components/charts/BarLineChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
 import {
@@ -24,6 +24,7 @@ import {
   tinhNhanVien,
   tinhSanPham,
   tinhTrangThaiDon,
+  taoSoSanhDoanhThu,
 } from './statisticsData'
 
 const pad2 = (x) => String(x).padStart(2, '0')
@@ -61,12 +62,243 @@ const sanPhams = ref([])
 const bang = ref(new Map())
 const capNhatLuc = ref(gioHienTai())
 
+const tongQuanData = ref(null)
+const trangThaiData = ref([])
+const dangTai = ref(false)
+
+/* ---------------------------------- Gửi mail tổng kết + so sánh ---------------------------------- */
+const showEmailModal = ref(false)
+const emailLoai = ref('THANG')
+const emailThang = ref(new Date().getMonth() + 1)
+const emailNam = ref(new Date().getFullYear())
+const emailNhan = ref('')
+const emailDangGui = ref(false)
+const emailErr = ref('')
+const soSanhMode = ref(false)
+
+const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
+
+const cacNamChon = computed(() => {
+  const hienTai = new Date().getFullYear()
+  const ds = []
+  for (let y = 2020; y <= hienTai; y++) ds.push(y)
+  return ds
+})
+
+const chuyenCheDoSoSanh = () => {
+  soSanhMode.value = !soSanhMode.value
+  if (soSanhMode.value) taiSoSanh()
+}
+
+/* ---------------------------------- So sánh & tăng trưởng ---------------------------------- */
+const ssCheDo = ref('thang')
+const ssNam = ref(new Date().getFullYear())
+const ssTu1 = ref('')
+const ssDen1 = ref('')
+const ssTu2 = ref('')
+const ssDen2 = ref('')
+const ssKeyword = ref('')
+const ssData = ref(null)
+const ssDangTai = ref(false)
+const ssErr = ref('')
+
+const SS_CHE_DO = [
+  { key: 'thang', label: 'Theo Tháng (12 tháng)' },
+  { key: 'quy', label: 'Theo Quý (4 quý)' },
+  { key: 'nam', label: 'Theo Năm (Đối chiếu nhiều năm)' },
+  { key: '2ky', label: 'Tùy chọn 2 kỳ' },
+]
+
+const ssDu4Ngay = computed(() =>
+  Boolean(ssTu1.value && ssDen1.value && ssTu2.value && ssDen2.value)
+)
+
+const ssCoTheTai = computed(() => ssCheDo.value !== '2ky' || ssDu4Ngay.value)
+
+const taiSoSanh = async () => {
+  if (!ssCoTheTai.value) return
+  ssDangTai.value = true
+  ssErr.value = ''
+  try {
+    const params = { cheDo: ssCheDo.value }
+    if (ssCheDo.value !== '2ky') params.nam = ssNam.value
+    if (ssCheDo.value === '2ky') {
+      params.tu1 = ssTu1.value
+      params.den1 = ssDen1.value
+      params.tu2 = ssTu2.value
+      params.den2 = ssDen2.value
+    }
+    if (thuongHieuChon.value) params.thuongHieu = thuongHieuChon.value
+    const kw = ssKeyword.value.trim()
+    if (kw) params.keyword = kw
+    ssData.value = await fetchSoSanh(params)
+  } catch (e) {
+    ssData.value = null
+    ssErr.value = e?.response?.data?.message || e?.message || 'Không tải được dữ liệu so sánh'
+    notifyError('Không tải được dữ liệu so sánh', ssErr.value)
+  } finally {
+    ssDangTai.value = false
+  }
+}
+
+const datLaiSoSanh = () => {
+  ssCheDo.value = 'thang'
+  ssNam.value = new Date().getFullYear()
+  ssTu1.value = ''
+  ssDen1.value = ''
+  ssTu2.value = ''
+  ssDen2.value = ''
+  ssKeyword.value = ''
+}
+
+let ssTimer = null
+watch([ssCheDo, ssNam, thuongHieuChon], () => {
+  taiSoSanh()
+})
+watch(ssKeyword, () => {
+  clearTimeout(ssTimer)
+  ssTimer = setTimeout(() => taiSoSanh(), 400)
+})
+watch([ssTu1, ssDen1, ssTu2, ssDen2], () => {
+  if (ssCheDo.value !== '2ky') return
+  clearTimeout(ssTimer)
+  ssTimer = setTimeout(() => taiSoSanh(), 400)
+})
+
+const ssKy = computed(() => ssData.value?.ky || [])
+const ssTop = computed(() => ssData.value?.topSanPham || [])
+const ssTenKy = computed(() => ssKy.value.map((k) => k.tenKy))
+
+const ssTong = computed(() => {
+  let dt = 0
+  let tm = 0
+  let ck = 0
+  let don = 0
+  for (const k of ssKy.value) {
+    dt += k.doanhThu || 0
+    tm += k.tienMat || 0
+    ck += k.tienChuyenKhoan || 0
+    don += k.soDon || 0
+  }
+  const ttBq =
+    ssKy.value.length > 0
+      ? Math.round(ssKy.value.reduce((s, k) => s + (k.tangTruong || 0), 0) / ssKy.value.length)
+      : 0
+  return {
+    tongDt: dt,
+    tongTm: tm,
+    tongCk: ck,
+    tongDon: don,
+    aovTrungBinh: don > 0 ? Math.round(dt / don) : 0,
+    tangTruongBinhQuan: ttBq,
+  }
+})
+
+const ssBarSeries = computed(() => [
+  { label: 'Tiền mặt', color: '#16a34a', values: ssKy.value.map((k) => k.tienMat || 0) },
+  { label: 'Chuyển khoản', color: '#3b82f6', values: ssKy.value.map((k) => k.tienChuyenKhoan || 0) },
+])
+
+const ssLineSeries = computed(() => [
+  { label: 'Tốc độ tăng trưởng (%)', color: '#d92d20', values: ssKy.value.map((k) => k.tangTruong || 0) },
+])
+
+const ssTopCotKy = computed(() => ssTenKy.value)
+
+const xuatSoSanh = async () => {
+  if (!ssKy.value.length) {
+    notifyError('Không có dữ liệu để xuất')
+    return
+  }
+  const rows = ssKy.value.map((k, i) => [
+    i + 1,
+    k.tenKy,
+    k.doanhThu || 0,
+    k.tienMat || 0,
+    k.tienChuyenKhoan || 0,
+    k.soDon || 0,
+    k.aov || 0,
+    k.sanPhamBan || 0,
+    k.chenhLech || 0,
+    k.tangTruong || 0,
+  ])
+  await exportExcel(
+    'so-sanh-tang-truong-doanh-thu.xlsx',
+    [
+      'STT',
+      'Kỳ so sánh',
+      'Tổng doanh thu',
+      'Tiền mặt',
+      'Chuyển khoản',
+      'Số đơn',
+      'AOV',
+      'Đã bán',
+      'Chênh lệch',
+      'Tăng trưởng (%)',
+    ],
+    rows,
+    { sheetName: 'So sánh doanh thu' }
+  )
+  notifySuccess('Đã xuất Excel', 'Tệp Excel (.xlsx) đã được tải xuống')
+}
+
+const moGuiMail = () => {
+  emailErr.value = ''
+  showEmailModal.value = true
+  if (!emailNhan.value) {
+    fetchEmailMacDinh()
+      .then((r) => {
+        if (!emailNhan.value) emailNhan.value = r?.email || ''
+      })
+      .catch(() => {})
+  }
+}
+
+const dongGuiMail = () => {
+  showEmailModal.value = false
+  emailErr.value = ''
+}
+
+const guiBaoCao = async () => {
+  emailErr.value = ''
+  const email = (emailNhan.value || '').trim()
+  if (!EMAIL_RE.test(email)) {
+    emailErr.value = 'Email người nhận không hợp lệ'
+    return
+  }
+  if (emailLoai.value === 'THANG' && (!emailThang.value || !emailNam.value)) {
+    emailErr.value = 'Vui lòng chọn tháng và năm báo cáo'
+    return
+  }
+  if (emailLoai.value === 'NAM' && !emailNam.value) {
+    emailErr.value = 'Vui lòng chọn năm báo cáo'
+    return
+  }
+  emailDangGui.value = true
+  try {
+    const payload = { loai: emailLoai.value, nam: emailNam.value, emailNhan: email }
+    if (emailLoai.value === 'THANG') payload.thang = emailThang.value
+    const res = await guiMailTongKet(payload)
+    if (res?.thanhCong) {
+      notifySuccess('Đã gửi báo cáo', `Báo cáo đã được gửi tới ${res.emailNhan}`)
+      dongGuiMail()
+    } else {
+      notifyError('Gửi báo cáo thất bại', res?.lyDo || 'Nhà cung cấp email không chấp nhận — báo cáo CHƯA được gửi')
+    }
+  } catch (e) {
+    notifyError('Gửi báo cáo thất bại', e?.message || 'Không kết nối được máy chủ')
+  } finally {
+    emailDangGui.value = false
+  }
+}
+
 const chartMode = ref('cot')
 const thMode = ref('tron')
 const thTheo = ref('doanhThu')
 
 const kwNv = ref('')
 const sortNv = ref('doanhThuCao')
+const vaiTroNv = ref('')
 const pageNv = ref(0)
 const sizeNv = ref(5)
 
@@ -75,6 +307,13 @@ const tonKhoSp = ref('')
 const sortSp = ref('banChay')
 const pageSp = ref(0)
 const sizeSp = ref(5)
+
+const loaiSoSanh = ref('thang')
+const cacKySoSanh = ref([`${new Date().getFullYear()}-${pad2(new Date().getMonth() + 1)}`])
+const thangSoSanh = ref(`${new Date().getFullYear()}-${pad2(new Date().getMonth() + 1)}`)
+const namQuySoSanh = ref(new Date().getFullYear())
+const quySoSanh = ref(`Q${Math.floor(new Date().getMonth() / 3) + 1}`)
+const namSoSanh = ref(new Date().getFullYear())
 
 const QUICK = [
   { key: 'homNay', label: 'Hôm nay' },
@@ -116,6 +355,7 @@ const datLaiBoLoc = () => {
   timThuongHieu.value = ''
   kwNv.value = ''
   sortNv.value = 'doanhThuCao'
+  vaiTroNv.value = ''
   pageNv.value = 0
   kwSp.value = ''
   tonKhoSp.value = ''
@@ -131,9 +371,7 @@ const denDate = computed(() => docInputDate(denNgay.value) || new Date())
 const sanPhamHienTai = computed(() =>
   sanPhams.value.length ? sanPhams.value : SAN_PHAM_MAU
 )
-const nhanVienHienTai = computed(() =>
-  nhanViens.value.length ? nhanViens.value : nhanVienMau
-)
+const nhanVienHienTai = computed(() => nhanViens.value)
 
 const dongSanPhamAll = computed(() =>
   tinhSanPham(sanPhamHienTai.value, tuDate.value, denDate.value)
@@ -146,9 +384,23 @@ const tyLeChon = computed(() => {
   return tl === undefined ? 0 : tl
 })
 
-const khoang = computed(() =>
-  tinhKhoang(bang.value, tuDate.value, denDate.value, tyLeChon.value)
-)
+const khoang = computed(() => {
+  if (tongQuanData.value) {
+    const t = tongQuanData.value
+    return {
+      doanhThu: t.doanhThu || 0,
+      tienMat: t.tienMat || 0,
+      tienChuyenKhoan: t.tienChuyenKhoan || 0,
+      soDon: t.soDon || 0,
+      aov: t.aov || 0,
+      sanPhamBan: t.sanPhamBan || 0,
+      khachMoi: t.khachMoi || 0,
+      soTra: 0,
+      soNgay: 0,
+    }
+  }
+  return tinhKhoang(bang.value, tuDate.value, denDate.value, tyLeChon.value)
+})
 
 const chuoiBanHang = computed(() =>
   tinhChuoiBanHang(bang.value, tuDate.value, denDate.value, kieuTongQuan.value, tyLeChon.value)
@@ -197,7 +449,12 @@ const seriesTH = computed(() =>
 )
 
 const chuKy = computed(() => tinhChuKy(bang.value))
-const trangThai = computed(() => tinhTrangThaiDon(bang.value, tuDate.value, denDate.value, tyLeChon.value))
+const trangThai = computed(() => {
+  if (trangThaiData.value.length) {
+    return trangThaiData.value.map((x) => ({ ...x, mau: mauTrangThai(x.ten) }))
+  }
+  return tinhTrangThaiDon(bang.value, tuDate.value, denDate.value, tyLeChon.value)
+})
 const slicesTrangThai = computed(() =>
   trangThai.value.map((x) => ({ label: x.ten, value: x.soLuong, color: x.mau }))
 )
@@ -222,6 +479,7 @@ const nhanVienDayDu = computed(() => tinhNhanVien(nhanVienHienTai.value, khoang.
 const nhanVienLoc = computed(() => {
   const kw = kwNv.value.trim().toLowerCase()
   let rows = nhanVienDayDu.value
+  if (vaiTroNv.value) rows = rows.filter((r) => r.vaiTro === vaiTroNv.value)
   if (kw) {
     rows = rows.filter(
       (r) =>
@@ -235,6 +493,68 @@ const nhanVienLoc = computed(() => {
   else sorted.sort((a, b) => b.doanhThu - a.doanhThu)
   return sorted
 })
+
+const vaiTroNvOptions = computed(() => [
+  { value: '', label: 'Tất cả vai trò' },
+  ...[...new Set(nhanVienDayDu.value.map((r) => r.vaiTro).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'vi'))
+    .map((vaiTro) => ({ value: vaiTro, label: vaiTro })),
+])
+
+const duLieuSoSanh = computed(() => taoSoSanhDoanhThu(
+  bang.value,
+  cacKySoSanh.value,
+  loaiSoSanh.value,
+  thuongHieuChon.value,
+))
+
+const giaTriKySoSanh = () => {
+  if (loaiSoSanh.value === 'thang') return thangSoSanh.value
+  if (loaiSoSanh.value === 'quy') {
+    const year = Number(namQuySoSanh.value)
+    return Number.isInteger(year) && year >= 2000 ? `${year}-${quySoSanh.value}` : ''
+  }
+  const year = Number(namSoSanh.value)
+  return Number.isInteger(year) && year >= 2000 ? String(year) : ''
+}
+
+const nhanKySoSanh = (key) => {
+  if (loaiSoSanh.value === 'thang') {
+    const [year, month] = key.split('-')
+    return `${month}/${year}`
+  }
+  if (loaiSoSanh.value === 'quy') {
+    const [year, quarter] = key.split('-')
+    return `${quarter}/${year}`
+  }
+  return key
+}
+
+const themKySoSanh = () => {
+  const key = giaTriKySoSanh()
+  if (!key || cacKySoSanh.value.includes(key) || cacKySoSanh.value.length >= 4) return
+  cacKySoSanh.value = [...cacKySoSanh.value, key]
+}
+
+const xoaKySoSanh = (key) => {
+  if (cacKySoSanh.value.length <= 1) return
+  cacKySoSanh.value = cacKySoSanh.value.filter((item) => item !== key)
+}
+
+const doiLoaiSoSanh = () => {
+  const now = new Date()
+  if (loaiSoSanh.value === 'thang') {
+    thangSoSanh.value = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`
+    cacKySoSanh.value = [thangSoSanh.value]
+  } else if (loaiSoSanh.value === 'quy') {
+    namQuySoSanh.value = now.getFullYear()
+    quySoSanh.value = `Q${Math.floor(now.getMonth() / 3) + 1}`
+    cacKySoSanh.value = [`${namQuySoSanh.value}-${quySoSanh.value}`]
+  } else {
+    namSoSanh.value = now.getFullYear()
+    cacKySoSanh.value = [String(namSoSanh.value)]
+  }
+}
 
 const tongTrangNv = computed(() => Math.max(1, Math.ceil(nhanVienLoc.value.length / sizeNv.value)))
 const dongNv = computed(() => {
@@ -360,12 +680,35 @@ const xuatSanPham = async () => {
   notifySuccess('Đã xuất Excel', 'Tệp Excel (.xlsx) đã được tải xuống')
 }
 
-const capNhatDoanhThu = () => {
+const capNhatDoanhThu = async () => {
+  await napThongKe()
   capNhatLuc.value = gioHienTai()
-  notifySuccess('Đã cập nhật doanh thu', 'Dữ liệu minh họa đã được tính lại')
+  notifySuccess('Đã cập nhật doanh thu', 'Dữ liệu thống kê đã được tải lại')
 }
 
 /* ---------------------------------- Nạp dữ liệu ---------------------------------- */
+const napThongKe = async () => {
+  if (!tuNgay.value || !denNgay.value) return
+  dangTai.value = true
+  try {
+    const thuongHieu = thuongHieuChon.value || null
+    const [tong, trangThai] = await Promise.all([
+      fetchTongQuan(tuNgay.value, denNgay.value, thuongHieu),
+      fetchTrangThaiDon(tuNgay.value, denNgay.value, thuongHieu),
+    ])
+    tongQuanData.value = tong
+    trangThaiData.value = trangThai
+    capNhatLuc.value = gioHienTai()
+  } catch (e) {
+    console.error('Lỗi tải thống kê:', e)
+    tongQuanData.value = null
+    trangThaiData.value = []
+    notifyError('Không tải được dữ liệu thống kê')
+  } finally {
+    dangTai.value = false
+  }
+}
+
 const locThuongHieu = computed(() => {
   const kw = timThuongHieu.value.trim().toLowerCase()
   if (!kw) return thuongHieus.value
@@ -392,9 +735,15 @@ const onTonKhoSpChange = (val) => {
   pageSp.value = 0
 }
 
+watch([tuNgay, denNgay, thuongHieuChon], () => {
+  if (!docInputDate(tuNgay.value) || !docInputDate(denNgay.value)) return
+  napThongKe()
+})
+
 onMounted(async () => {
   bang.value = taoBangNgay()
   capNhatLuc.value = gioHienTai()
+  napThongKe()
 
   try {
     const d = await listEmployees({ page: 0, size: 500 })
@@ -430,6 +779,57 @@ onMounted(async () => {
 
 <template>
   <div class="statistics-page-container">
+    <!-- PAGE HEADER -->
+    <div class="page-header">
+      <div class="page-header-text">
+        <template v-if="soSanhMode">
+          <button type="button" class="btn-back" @click="chuyenCheDoSoSanh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            Quay lại
+          </button>
+          <div>
+            <h1 class="page-title">So sánh &amp; Tăng trưởng doanh thu</h1>
+            <p class="page-subtitle">Đối chiếu doanh thu, đo lường tốc độ tăng trưởng và theo dõi biến động sức mua sản phẩm</p>
+          </div>
+        </template>
+        <template v-else>
+          <h1 class="page-title">Thống kê doanh thu</h1>
+          <p class="page-subtitle">Tổng hợp kinh doanh, phân tích sản phẩm và theo dõi tăng trưởng bán hàng</p>
+        </template>
+      </div>
+      <div class="page-header-actions">
+        <button type="button" class="btn-mail-outline" @click="moGuiMail">
+          <i class="bi bi-envelope"></i>
+          Gửi mail tổng kết
+        </button>
+        <button v-if="soSanhMode" type="button" class="btn-action-outline" @click="xuatSoSanh">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Xuất Excel So sánh
+        </button>
+        <button
+          v-if="!soSanhMode"
+          type="button"
+          class="btn-action-outline"
+          @click="chuyenCheDoSoSanh"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+          </svg>
+          So sánh doanh thu
+        </button>
+      </div>
+    </div>
+
+    <template v-if="!soSanhMode">
     <!-- CARD 1: BỘ LỌC TỔNG QUAN -->
     <div class="filter-card">
       <div class="card-title-row space-between">
@@ -442,16 +842,35 @@ onMounted(async () => {
           <span class="card-title-text">Bộ lọc tổng quan</span>
         </div>
 
-        <div class="quick-range-group">
+        <div class="title-actions">
+          <div class="quick-range-group">
+            <button
+              v-for="q in QUICK"
+              :key="q.key"
+              type="button"
+              class="quick-range-btn"
+              :class="{ 'is-active': quickActive === q.key }"
+              @click="CHON_NHANH(q.key)"
+            >
+              {{ q.label }}
+            </button>
+          </div>
+          <button type="button" class="btn-mail-outline btn-mail-sm" @click="moGuiMail">
+            <i class="bi bi-envelope"></i>
+            Gửi mail tổng kết
+          </button>
           <button
-            v-for="q in QUICK"
-            :key="q.key"
             type="button"
-            class="quick-range-btn"
-            :class="{ 'is-active': quickActive === q.key }"
-            @click="CHON_NHANH(q.key)"
+            class="btn-action-outline btn-compare-sm"
+            :class="{ 'is-active': soSanhMode }"
+            @click="chuyenCheDoSoSanh"
           >
-            {{ q.label }}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+            So sánh doanh thu
           </button>
         </div>
       </div>
@@ -521,9 +940,6 @@ onMounted(async () => {
         <span class="info-text">
           Đang hiển thị dữ liệu tổng quan từ ngày <strong>{{ hienThiNgay(tuNgay) }}</strong> đến ngày
           <strong>{{ hienThiNgay(denNgay) }}</strong>
-        </span>
-        <span class="mock-badge" title="API thống kê chưa được kết nối — số liệu được sinh minh họa phía frontend">
-          Dữ liệu minh họa · chưa kết nối API
         </span>
       </div>
       <div class="info-right">
@@ -690,6 +1106,95 @@ onMounted(async () => {
       </div>
     </div>
 
+    <div class="filter-card chart-card comparison-card">
+      <div class="card-title-row space-between">
+        <div class="title-with-icon">
+          <div class="icon-circle icon-chart">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="4" height="10" rx="1"></rect>
+              <rect x="10" y="5" width="4" height="16" rx="1"></rect>
+              <rect x="17" y="8" width="4" height="13" rx="1"></rect>
+              <path d="m3 7 6-4 5 3 7-4"></path>
+            </svg>
+          </div>
+          <span class="card-title-text">So sánh tăng trưởng doanh thu</span>
+        </div>
+        <span class="comparison-unit">Doanh thu (VND)</span>
+      </div>
+
+      <div class="comparison-controls">
+        <div class="field-block comparison-type">
+          <label class="field-label">So sánh theo</label>
+          <SearchableSelect
+            v-model="loaiSoSanh"
+            :options="[
+              { value: 'thang', label: 'Tháng' },
+              { value: 'quy', label: 'Quý' },
+              { value: 'nam', label: 'Năm' },
+            ]"
+            label-key="label"
+            value-key="value"
+            :allow-clear="false"
+            @change="doiLoaiSoSanh"
+          />
+        </div>
+        <div v-if="loaiSoSanh === 'thang'" class="field-block">
+          <label class="field-label">Tháng muốn thêm</label>
+          <input v-model="thangSoSanh" type="month" class="input-date" />
+        </div>
+        <template v-else-if="loaiSoSanh === 'quy'">
+          <div class="field-block">
+            <label class="field-label">Năm</label>
+            <input v-model.number="namQuySoSanh" type="number" min="2000" class="input-date" />
+          </div>
+          <div class="field-block">
+            <label class="field-label">Quý</label>
+            <SearchableSelect
+              v-model="quySoSanh"
+              :options="[
+                { value: 'Q1', label: 'Quý 1' },
+                { value: 'Q2', label: 'Quý 2' },
+                { value: 'Q3', label: 'Quý 3' },
+                { value: 'Q4', label: 'Quý 4' },
+              ]"
+              label-key="label"
+              value-key="value"
+              :allow-clear="false"
+            />
+          </div>
+        </template>
+        <div v-else class="field-block">
+          <label class="field-label">Năm muốn thêm</label>
+          <input v-model.number="namSoSanh" type="number" min="2000" class="input-date" />
+        </div>
+        <button class="btn-action-outline comparison-add" type="button" :disabled="cacKySoSanh.length >= 4" @click="themKySoSanh">
+          Thêm kỳ
+        </button>
+      </div>
+
+      <div class="comparison-periods" aria-label="Các kỳ đang so sánh">
+        <span v-for="key in cacKySoSanh" :key="key" class="comparison-period">
+          {{ nhanKySoSanh(key) }}
+          <button
+            type="button"
+            :aria-label="`Bỏ kỳ ${nhanKySoSanh(key)}`"
+            :disabled="cacKySoSanh.length <= 1"
+            @click="xoaKySoSanh(key)"
+          >×</button>
+        </span>
+        <span class="comparison-hint">Chọn tối đa 4 kỳ để đối chiếu.</span>
+      </div>
+
+      <BarLineChart
+        :labels="duLieuSoSanh.labels"
+        :values="duLieuSoSanh.values"
+        mode="ket-hop"
+        :currency="true"
+        color="#d92d20"
+        :height="290"
+      />
+    </div>
+
     <!-- HÀNG: CHU KỲ + TRẠNG THÁI ĐƠN -->
     <div class="charts-grid">
       <div class="filter-card chart-card">
@@ -823,9 +1328,20 @@ onMounted(async () => {
             placeholder="Doanh thu cao nhất"
           />
         </div>
+        <div class="field-block">
+          <label class="field-label">Vai trò</label>
+          <SearchableSelect
+            v-model="vaiTroNv"
+            :options="vaiTroNvOptions"
+            label-key="label"
+            value-key="value"
+            placeholder="Tất cả vai trò"
+            @change="pageNv = 0"
+          />
+        </div>
         <div class="field-block field-reset">
           <label class="field-label">&nbsp;</label>
-          <button class="btn-action-outline" type="button" @click="kwNv = ''; sortNv = 'doanhThuCao'; pageNv = 0">
+          <button class="btn-action-outline" type="button" @click="kwNv = ''; sortNv = 'doanhThuCao'; vaiTroNv = ''; pageNv = 0">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
             </svg>
@@ -870,18 +1386,20 @@ onMounted(async () => {
         </table>
       </div>
 
-      <PaginationBar
-        :page="pageNv"
-        :total-pages="tongTrangNv"
-        :total-elements="nhanVienLoc.length"
-        :page-size="sizeNv"
-        :from="dongNv.length ? pageNv * sizeNv + 1 : 0"
-        :to="pageNv * sizeNv + dongNv.length"
-        :sizes="[5, 10, 20]"
-        label="nhân viên"
-        @change="datTrangNv"
-        @size-change="(s) => { sizeNv = s; pageNv = 0 }"
-      />
+      <div v-if="tongTrangNv > 1" class="table-card-foot">
+        <PaginationBar
+          :page="pageNv"
+          :total-pages="tongTrangNv"
+          :total-elements="nhanVienLoc.length"
+          :page-size="sizeNv"
+          :from="dongNv.length ? pageNv * sizeNv + 1 : 0"
+          :to="pageNv * sizeNv + dongNv.length"
+          :sizes="[5, 10, 20]"
+          label="nhân viên"
+          @change="datTrangNv"
+          @size-change="(s) => { sizeNv = s; pageNv = 0 }"
+        />
+      </div>
     </div>
 
     <!-- TỔNG QUAN SẢN PHẨM -->
@@ -1008,18 +1526,416 @@ onMounted(async () => {
         </table>
       </div>
 
-      <PaginationBar
-        :page="pageSp"
-        :total-pages="tongTrangSp"
-        :total-elements="sanPhamLoc.length"
-        :page-size="sizeSp"
-        :from="dongSp.length ? pageSp * sizeSp + 1 : 0"
-        :to="pageSp * sizeSp + dongSp.length"
-        :sizes="[5, 10, 20]"
-        label="sản phẩm"
-        @change="datTrangSp"
-        @size-change="(s) => { sizeSp = s; pageSp = 0 }"
-      />
+      <div v-if="tongTrangSp > 1" class="table-card-foot">
+        <PaginationBar
+          :page="pageSp"
+          :total-pages="tongTrangSp"
+          :total-elements="sanPhamLoc.length"
+          :page-size="sizeSp"
+          :from="dongSp.length ? pageSp * sizeSp + 1 : 0"
+          :to="pageSp * sizeSp + dongSp.length"
+          :sizes="[5, 10, 20]"
+          label="sản phẩm"
+          @change="datTrangSp"
+          @size-change="(s) => { sizeSp = s; pageSp = 0 }"
+        />
+      </div>
+    </div>
+    </template>
+
+    <template v-else>
+      <!-- BỘ LỌC CHẾ ĐỘ ĐỐI CHIẾU -->
+      <div class="filter-card">
+        <div class="card-title-row space-between">
+          <div class="title-with-icon">
+            <div class="icon-circle icon-filter">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+              </svg>
+            </div>
+            <span class="card-title-text">Chế độ đối chiếu</span>
+          </div>
+          <div class="seg-toggle">
+            <button
+              v-for="c in SS_CHE_DO"
+              :key="c.key"
+              type="button"
+              class="seg-btn"
+              :class="{ 'is-active': ssCheDo === c.key }"
+              @click="ssCheDo = c.key"
+            >
+              {{ c.label }}
+            </button>
+          </div>
+        </div>
+
+        <div class="filter-grid">
+          <div class="field-block">
+            <label class="field-label">Năm so sánh</label>
+            <SearchableSelect
+              v-model="ssNam"
+              :options="cacNamChon.map((y) => ({ value: y, label: String(y) }))"
+              label-key="label"
+              value-key="value"
+              :allow-clear="false"
+              placeholder="Năm so sánh"
+            />
+          </div>
+          <div class="field-block">
+            <label class="field-label">Thương hiệu</label>
+            <SearchableSelect
+              v-model="thuongHieuChon"
+              :options="thuongHieuOptions"
+              label-key="label"
+              value-key="value"
+              placeholder="Tất cả thương hiệu"
+              search-placeholder="Tìm thương hiệu..."
+            />
+          </div>
+          <div class="field-block">
+            <label class="field-label">Tìm sản phẩm</label>
+            <div class="search-input-wrap">
+              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input v-model="ssKeyword" type="text" class="input-search" placeholder="Tìm theo tên / mã sản phẩm..." />
+            </div>
+          </div>
+          <div class="field-block field-reset">
+            <label class="field-label">&nbsp;</label>
+            <button class="btn-action-outline" type="button" @click="datLaiSoSanh">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+              </svg>
+              Đặt lại
+            </button>
+          </div>
+
+          <template v-if="ssCheDo === '2ky'">
+            <div class="field-block">
+              <label class="field-label">Kỳ 1 — Từ ngày</label>
+              <input v-model="ssTu1" type="date" class="input-date" />
+            </div>
+            <div class="field-block">
+              <label class="field-label">Kỳ 1 — Đến ngày</label>
+              <input v-model="ssDen1" type="date" class="input-date" />
+            </div>
+            <div class="field-block">
+              <label class="field-label">Kỳ 2 — Từ ngày</label>
+              <input v-model="ssTu2" type="date" class="input-date" />
+            </div>
+            <div class="field-block">
+              <label class="field-label">Kỳ 2 — Đến ngày</label>
+              <input v-model="ssDen2" type="date" class="input-date" />
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- TRẠNG THÁI TẢI -->
+      <div v-if="ssDangTai" class="ss-loading">Đang tải dữ liệu so sánh...</div>
+      <div v-else-if="ssErr" class="ss-error">
+        <span>{{ ssErr }}</span>
+        <button class="btn-action-outline" type="button" @click="taiSoSanh">Thử lại</button>
+      </div>
+      <div v-else-if="!ssKy.length" class="ss-empty">Không có dữ liệu trong khoảng này</div>
+
+      <template v-if="!ssDangTai && !ssErr && ssKy.length">
+        <!-- 6 THẺ KPI -->
+        <div class="stat-grid stat-grid-3">
+          <div class="stat-card">
+            <div class="stat-icon is-emerald">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                <polyline points="17 6 23 6 23 12"></polyline>
+              </svg>
+            </div>
+            <div class="stat-value">{{ formatVnd(ssTong.tongDt) }}</div>
+            <div class="stat-label">Tổng doanh thu</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon is-green">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+                <circle cx="12" cy="12" r="2"></circle>
+                <path d="M6 12h.01M18 12h.01"></path>
+              </svg>
+            </div>
+            <div class="stat-value">{{ formatVnd(ssTong.tongTm) }}</div>
+            <div class="stat-label">Tổng tiền mặt</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon is-blue">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                <line x1="2" y1="10" x2="22" y2="10"></line>
+              </svg>
+            </div>
+            <div class="stat-value">{{ formatVnd(ssTong.tongCk) }}</div>
+            <div class="stat-label">Tổng tiền chuyển khoản</div>
+          </div>
+        </div>
+        <div class="stat-grid stat-grid-3">
+          <div class="stat-card">
+            <div class="stat-icon is-cyan">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="9" cy="21" r="1"></circle>
+                <circle cx="20" cy="21" r="1"></circle>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+              </svg>
+            </div>
+            <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(ssTong.tongDon) }}</div>
+            <div class="stat-label">Tổng đơn hàng</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon is-indigo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+            </div>
+            <div class="stat-value">{{ formatVnd(ssTong.aovTrungBinh) }}</div>
+            <div class="stat-label">AOV trung bình các kỳ</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" :class="ssTong.tangTruongBinhQuan >= 0 ? 'is-emerald' : 'is-rose'">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                <polyline points="17 6 23 6 23 12"></polyline>
+              </svg>
+            </div>
+            <div class="stat-value">{{ layTangTruongLabel(ssTong.tangTruongBinhQuan) }}</div>
+            <div class="stat-label">Tăng trưởng trung bình</div>
+          </div>
+        </div>
+
+        <!-- BIỂU ĐỒ DOANH THU & TỐC ĐỘ TĂNG TRƯỞNG -->
+        <div class="table-card">
+          <div class="card-title-row space-between">
+            <div class="title-with-icon">
+              <div class="icon-circle icon-filter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="20" x2="18" y2="10"></line>
+                  <line x1="12" y1="20" x2="12" y2="4"></line>
+                  <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+              </div>
+              <span class="card-title-text">Doanh thu &amp; Tốc độ tăng trưởng qua các kỳ</span>
+            </div>
+          </div>
+          <BarLineChart
+            :labels="ssTenKy"
+            :bar-series="ssBarSeries"
+            :line-series="ssLineSeries"
+            line-format="percent"
+            :show-line-labels="true"
+            :height="300"
+          />
+        </div>
+
+        <!-- BẢNG ĐỐI CHIẾU CHI TIẾT -->
+        <div class="table-card">
+          <div class="card-title-row space-between">
+            <div class="title-with-icon">
+              <div class="icon-circle icon-filter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                  <line x1="3" y1="9" x2="21" y2="9"></line>
+                  <line x1="9" y1="21" x2="9" y2="9"></line>
+                </svg>
+              </div>
+              <span class="card-title-text">Đối chiếu doanh thu chi tiết các kỳ</span>
+              <span class="brand-chip">Đơn vị: VND</span>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>KỲ SO SÁNH</th>
+                  <th>KHOẢNG THỜI GIAN</th>
+                  <th>TỔNG DOANH THU</th>
+                  <th>TIỀN MẶT</th>
+                  <th>CHUYỂN KHOẢN</th>
+                  <th>SỐ ĐƠN</th>
+                  <th>AOV</th>
+                  <th>ĐÃ BÁN</th>
+                  <th>CHÊNH LỆCH</th>
+                  <th>TĂNG TRƯỞNG</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(k, i) in ssKy" :key="k.maKy" class="row-alt">
+                  <td class="cell-code">
+                    {{ k.tenKy }}
+                    <span v-if="k.laCaoNhat" class="badge-best">Cao nhất</span>
+                  </td>
+                  <td>{{ hienThiNgay(k.tu) }} — {{ hienThiNgay(k.den) }}</td>
+                  <td class="text-right strong-cell">{{ formatVnd(k.doanhThu) }}</td>
+                  <td class="text-right">{{ formatVnd(k.tienMat) }}</td>
+                  <td class="text-right">{{ formatVnd(k.tienChuyenKhoan) }}</td>
+                  <td class="text-right">{{ new Intl.NumberFormat('vi-VN').format(k.soDon) }}</td>
+                  <td class="text-right">{{ formatVnd(k.aov) }}</td>
+                  <td class="text-right">{{ new Intl.NumberFormat('vi-VN').format(k.sanPhamBan) }}</td>
+                  <td class="text-right" :class="k.chenhLech > 0 ? 'tt-up' : k.chenhLech < 0 ? 'tt-down' : ''">
+                    {{ k.chenhLech > 0 ? '+' : '' }}{{ formatVnd(k.chenhLech) }}
+                  </td>
+                  <td class="text-right">
+                    <span :class="k.tangTruong > 0 ? 'tt-up' : k.tangTruong < 0 ? 'tt-down' : ''">
+                      {{ layTangTruongLabel(k.tangTruong) }}
+                    </span>
+                  </td>
+                </tr>
+                <tr class="ss-total-row">
+                  <td colspan="2"><strong>TỔNG CỘNG</strong></td>
+                  <td class="text-right"><strong>{{ formatVnd(ssTong.tongDt) }}</strong></td>
+                  <td class="text-right"><strong>{{ formatVnd(ssTong.tongTm) }}</strong></td>
+                  <td class="text-right"><strong>{{ formatVnd(ssTong.tongCk) }}</strong></td>
+                  <td class="text-right"><strong>{{ new Intl.NumberFormat('vi-VN').format(ssTong.tongDon) }}</strong></td>
+                  <td class="text-right"><strong>{{ formatVnd(ssTong.aovTrungBinh) }}</strong></td>
+                  <td class="text-right"><strong>{{ new Intl.NumberFormat('vi-VN').format(ssKy.reduce((s, k) => s + (k.sanPhamBan || 0), 0)) }}</strong></td>
+                  <td></td>
+                  <td class="text-right">
+                    <span class="ss-growth-badge">Tăng trưởng TB: {{ layTangTruongLabel(ssTong.tangTruongBinhQuan) }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TOP SẢN PHẨM -->
+        <div class="table-card">
+          <div class="card-title-row space-between">
+            <div class="title-with-icon">
+              <div class="icon-circle icon-filter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                  <line x1="3" y1="6" x2="21" y2="6"></line>
+                </svg>
+              </div>
+              <span class="card-title-text">Top sản phẩm bán chạy &amp; Đối chiếu sức mua qua các kỳ</span>
+              <span class="brand-chip">Top 10 mặt hàng</span>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>STT</th>
+                  <th>MÃ SP</th>
+                  <th>TÊN SẢN PHẨM</th>
+                  <th>THƯƠNG HIỆU</th>
+                  <th>TỔNG BÁN</th>
+                  <th>TỔNG DOANH THU</th>
+                  <th v-for="ten in ssTopCotKy" :key="ten">{{ ten.toUpperCase() }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(t, i) in ssTop" :key="t.maSanPham" class="row-alt">
+                  <td class="cell-stt">{{ i + 1 }}</td>
+                  <td class="cell-code">{{ t.maSanPham }}</td>
+                  <td>{{ t.tenSanPham }}</td>
+                  <td><span class="brand-chip">{{ t.tenThuongHieu }}</span></td>
+                  <td class="text-right">{{ new Intl.NumberFormat('vi-VN').format(t.tongBan) }}</td>
+                  <td class="text-right strong-cell">{{ formatVnd(t.tongDoanhThu) }}</td>
+                  <td v-for="(v, j) in t.banTheoKy" :key="j" class="text-right">
+                    {{ new Intl.NumberFormat('vi-VN').format(v || 0) }}
+                  </td>
+                </tr>
+                <tr v-if="!ssTop.length">
+                  <td :colspan="6 + ssTopCotKy.length" class="ss-empty-cell">Không có sản phẩm nào bán chạy trong khoảng này</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+    </template>
+
+    <!-- HỘP THOẠI GỬI MAIL TỔNG KẾT -->
+    <div v-if="showEmailModal" class="mail-modal-overlay" @click.self="dongGuiMail">
+      <div class="mail-modal-dialog" role="dialog" aria-modal="true" aria-label="Gửi Mail Tổng Kết Doanh Thu">
+        <div class="mail-modal-header">
+          <h3 class="mail-modal-title">
+            <span class="mail-title-icon"><i class="bi bi-envelope-paper"></i></span>
+            Gửi Mail Tổng Kết Doanh Thu
+          </h3>
+          <button type="button" class="mail-modal-close" aria-label="Đóng" @click="dongGuiMail">×</button>
+        </div>
+
+        <div class="mail-modal-body">
+          <div class="mail-toggle">
+            <button
+              type="button"
+              class="mail-toggle-btn"
+              :class="{ 'is-active': emailLoai === 'THANG' }"
+              @click="emailLoai = 'THANG'"
+            >
+              Báo cáo tổng kết Tháng
+            </button>
+            <button
+              type="button"
+              class="mail-toggle-btn"
+              :class="{ 'is-active': emailLoai === 'NAM' }"
+              @click="emailLoai = 'NAM'"
+            >
+              Báo cáo tổng kết Năm
+            </button>
+          </div>
+
+          <div class="mail-field-row">
+            <div v-if="emailLoai === 'THANG'" class="mail-field">
+              <label class="mail-field-label">Chọn Tháng</label>
+              <select v-model="emailThang" class="mail-select">
+                <option v-for="m in 12" :key="m" :value="m">Tháng {{ m }}</option>
+              </select>
+            </div>
+            <div class="mail-field">
+              <label class="mail-field-label">Chọn Năm</label>
+              <select v-model="emailNam" class="mail-select">
+                <option v-for="y in cacNamChon" :key="y" :value="y">{{ y }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mail-field">
+            <label class="mail-field-label">Email Admin nhận báo cáo</label>
+            <input
+              v-model="emailNhan"
+              type="email"
+              class="mail-input"
+              placeholder="admin@polyshoes.vn"
+              @input="emailErr = ''"
+            />
+            <span class="mail-field-note">
+              Mặc định lấy địa chỉ email Admin hệ thống. Bạn có thể thay đổi để kiểm thử gửi vào email bất kỳ.
+            </span>
+            <span v-if="emailErr" class="mail-field-err">{{ emailErr }}</span>
+          </div>
+
+          <div class="mail-info-box">
+            <i class="bi bi-clock-history"></i>
+            <span>
+              <strong>Trạng thái tự động của hệ thống (@Scheduled):</strong>
+              Hệ thống tự động gửi báo cáo vào 23:59 ngày cuối mỗi tháng và 31/12 cuối năm về hộp thư Quản trị viên.
+            </span>
+          </div>
+        </div>
+
+        <div class="mail-modal-footer">
+          <button type="button" class="mail-btn-cancel" :disabled="emailDangGui" @click="dongGuiMail">
+            Hủy bỏ
+          </button>
+          <button type="button" class="mail-btn-send" :disabled="emailDangGui" @click="guiBaoCao">
+            <span v-if="emailDangGui" class="mail-spinner" aria-hidden="true"></span>
+            {{ emailDangGui ? 'Đang gửi...' : 'Gửi báo cáo ngay' }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -1085,13 +2001,13 @@ onMounted(async () => {
 .icon-chart,
 .icon-cycle {
   background: #ffe4e6;
-  color: #f43f5e;
+  color: var(--primary);
 }
 
 .icon-brand,
 .icon-status {
   background: #fff1f2;
-  color: #e11d48;
+  color: var(--primary-hover);
 }
 
 .icon-users {
@@ -1144,13 +2060,13 @@ onMounted(async () => {
 
 .quick-range-btn:hover {
   border-color: #fecdd3;
-  color: #e11d48;
+  color: var(--primary-hover);
 }
 
 .quick-range-btn.is-active {
   background: #fff1f2;
-  border-color: #f43f5e;
-  color: #e11d48;
+  border-color: var(--primary);
+  color: var(--primary-hover);
 }
 
 /* Ô lọc */
@@ -1194,7 +2110,7 @@ onMounted(async () => {
 }
 
 .input-date:focus {
-  border-color: #f43f5e;
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
 }
 
@@ -1228,7 +2144,7 @@ onMounted(async () => {
 }
 
 .input-search:focus {
-  border-color: #f43f5e;
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
 }
 
@@ -1246,7 +2162,7 @@ onMounted(async () => {
   border: 1px solid #ffe4e6;
   border-radius: 8px;
   background: #ffffff;
-  color: #f43f5e;
+  color: var(--primary);
   font-size: 13px;
   font-weight: 600;
   display: inline-flex;
@@ -1265,7 +2181,7 @@ onMounted(async () => {
 .btn-action-outline:hover {
   background: #fff1f2;
   border-color: #fecdd3;
-  color: #e11d48;
+  color: var(--primary-hover);
 }
 
 /* Thanh thông tin */
@@ -1305,18 +2221,6 @@ onMounted(async () => {
 
 .info-text strong {
   color: #0f172a;
-}
-
-.mock-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  border-radius: 20px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  color: #b45309;
-  font-size: 11.5px;
-  font-weight: 700;
 }
 
 .info-right {
@@ -1407,7 +2311,7 @@ onMounted(async () => {
 
 .stat-icon.is-rose {
   background: #fff1f2;
-  color: #f43f5e;
+  color: var(--primary);
 }
 
 .stat-value {
@@ -1758,6 +2662,71 @@ onMounted(async () => {
   color: #ef4444;
 }
 
+.comparison-card {
+  margin-top: 18px;
+}
+
+.comparison-unit,
+.comparison-hint {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.comparison-controls {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+
+.comparison-controls .field-block {
+  min-width: 150px;
+}
+
+.comparison-controls .comparison-type {
+  width: 180px;
+}
+
+.comparison-add {
+  min-height: 40px;
+}
+
+.comparison-periods {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.comparison-period {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-radius: 18px;
+  color: #7f1d1d;
+  background: #fef2f2;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.comparison-period button {
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.comparison-period button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 @media (max-width: 1199px) {
   .charts-grid {
     grid-template-columns: 1fr;
@@ -1766,6 +2735,119 @@ onMounted(async () => {
   .stat-value {
     font-size: 23px;
   }
+}
+
+/* ---------------------- So sánh & tăng trưởng ---------------------- */
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  margin-bottom: 8px;
+  transition: all 0.2s ease;
+}
+
+.btn-back svg {
+  width: 15px;
+  height: 15px;
+}
+
+.btn-back:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.page-header-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.ss-loading,
+.ss-empty {
+  padding: 34px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13.5px;
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #ececef;
+}
+
+.ss-error {
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: #dc2626;
+  font-size: 13.5px;
+  font-weight: 600;
+  background: #fef2f2;
+  border-radius: 14px;
+  border: 1px solid #fecaca;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.badge-best {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #b45309;
+  font-size: 10.5px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.strong-cell {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.tt-up {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.tt-down {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.ss-total-row td {
+  background: #f8fafc;
+  border-top: 2px solid #e2e8f0;
+}
+
+.ss-growth-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.ss-empty-cell {
+  padding: 26px !important;
+  text-align: center;
+  color: #94a3b8;
+  font-style: italic;
 }
 
 @media (max-width: 767px) {
@@ -1793,6 +2875,356 @@ onMounted(async () => {
 
   .field-block.grow {
     min-width: 0;
+  }
+}
+
+/* ---------------------- Page header ---------------------- */
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.page-subtitle {
+  font-size: 13.5px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.page-header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-mail-outline {
+  height: 42px;
+  padding: 0 16px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #16a34a;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.btn-mail-outline i {
+  font-size: 14px;
+}
+
+.btn-mail-outline:hover {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+.btn-mail-outline:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.title-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-mail-sm,
+.btn-compare-sm {
+  height: 36px;
+  padding: 0 12px;
+}
+
+.btn-action-outline.is-active {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: var(--primary-hover);
+}
+
+/* ---------------------- Hộp thoại gửi mail tổng kết ---------------------- */
+.mail-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.mail-modal-dialog {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  width: 100%;
+  max-width: 560px;
+  overflow: hidden;
+  border: 1px solid #f1f5f9;
+  animation: mailModalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes mailModalPop {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.mail-modal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mail-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mail-title-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff1f2;
+  color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.mail-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #94a3b8;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.mail-modal-close:hover {
+  color: #0f172a;
+}
+
+.mail-modal-body {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.mail-toggle {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 10px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.mail-toggle-btn {
+  flex: 1;
+  height: 38px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.mail-toggle-btn.is-active {
+  background: #ffffff;
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.mail-field-row {
+  display: flex;
+  gap: 14px;
+}
+
+.mail-field-row .mail-field {
+  flex: 1;
+}
+
+.mail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mail-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.mail-select,
+.mail-input {
+  height: 40px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13.5px;
+  color: #1e293b;
+  background: #ffffff;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.mail-select:focus,
+.mail-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.1);
+}
+
+.mail-field-note {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.mail-field-err {
+  font-size: 12.5px;
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.mail-info-box {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 12.5px;
+  color: #065f46;
+  line-height: 1.6;
+}
+
+.mail-info-box i {
+  color: #059669;
+  font-size: 15px;
+  margin-top: 2px;
+}
+
+.mail-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.mail-btn-cancel {
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.mail-btn-cancel:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.mail-btn-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mail-btn-send {
+  height: 40px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.mail-btn-send:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.mail-btn-send:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.mail-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: mailSpin 0.7s linear infinite;
+}
+
+@keyframes mailSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1199px) {
+  .title-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .page-header-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 </style>

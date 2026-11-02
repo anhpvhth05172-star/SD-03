@@ -1,129 +1,87 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { notifyWarning } from '@/utils/notify'
+import { getDoiSoat } from '@/api/giaoCa'
+import { formatVnd, formatDateTime } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
-
-const id = route.params.id
 const loading = ref(true)
-const notFound = ref(false)
+const error = ref('')
+const ca = ref(null)
 
-onMounted(() => {
-  loading.value = false
-  notifyWarning('Đang phát triển', 'Trang đối soát ca đang được phát triển. Vui lòng quay lại sau.')
+onMounted(async () => {
+  try {
+    ca.value = await getDoiSoat(route.params.id)
+  } catch (e) {
+    error.value = e.response?.data?.message || e.message || 'Không tải được biên bản giao ca.'
+  } finally {
+    loading.value = false
+  }
 })
 </script>
 
 <template>
-<div class="doi-soat-placeholder">
-  <div class="placeholder-card">
-    <div class="placeholder-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <polyline points="12 6 12 12 16 14" />
-      </svg>
+  <main class="reconcile-page">
+    <div class="reconcile-heading">
+      <div>
+        <h1>Biên bản giao ca</h1>
+        <p v-if="ca">{{ ca.maCa }} · {{ ca.tenCaLich || 'Không gắn lịch ca' }}</p>
+      </div>
+      <button type="button" class="btn-back" @click="router.push('/ca')">Quay lại danh sách</button>
     </div>
-    <h2 class="placeholder-title">Trang đối soát ca</h2>
-    <p class="placeholder-desc">Chức năng này đang được phát triển (Task 6).</p>
-    <p class="placeholder-id">Mã ca: <strong>{{ id }}</strong></p>
-    <router-link to="/ca" class="btn-back">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M19 12H5M12 19l-7-7 7-7" />
-      </svg>
-      Quay lại lịch sử giao ca
-    </router-link>
-  </div>
-</div>
+
+    <div v-if="loading" class="reconcile-card">Đang tải biên bản...</div>
+    <div v-else-if="error" class="reconcile-card error">{{ error }}</div>
+    <template v-else-if="ca">
+      <section class="reconcile-grid">
+        <article class="reconcile-card"><span>Nhân viên</span><strong>{{ ca.tenNhanVien || '—' }}</strong></article>
+        <article class="reconcile-card"><span>Quầy</span><strong>{{ ca.tenQuy || '—' }}</strong></article>
+        <article class="reconcile-card"><span>Thời gian mở</span><strong>{{ formatDateTime(ca.thoiGianMo) }}</strong></article>
+        <article class="reconcile-card"><span>Thời gian kết</span><strong>{{ ca.thoiGianKet ? formatDateTime(ca.thoiGianKet) : 'Ca đang mở' }}</strong></article>
+        <article class="reconcile-card"><span>Tiền đầu ca</span><strong>{{ formatVnd(ca.tienDauCa) }}</strong></article>
+        <article class="reconcile-card"><span>Số hóa đơn</span><strong>{{ ca.tongHoaDon ?? 0 }}</strong></article>
+        <article class="reconcile-card"><span>Doanh thu</span><strong>{{ formatVnd(ca.tongDoanhThu) }}</strong></article>
+        <article class="reconcile-card"><span>Tiền mặt thu</span><strong>{{ formatVnd(ca.tienMatThu) }}</strong></article>
+        <article class="reconcile-card"><span>Thanh toán không tiền mặt</span><strong>{{ formatVnd(ca.tienKhongMat) }}</strong></article>
+        <article class="reconcile-card"><span>Tiền mặt hoàn</span><strong>{{ formatVnd(ca.tienHoanMat) }}</strong></article>
+        <article class="reconcile-card"><span>Tiền dự kiến trong quỹ</span><strong>{{ formatVnd(ca.tienDuKien) }}</strong></article>
+        <article class="reconcile-card"><span>Tiền thực tế</span><strong>{{ ca.tienThucTe == null ? '—' : formatVnd(ca.tienThucTe) }}</strong></article>
+        <article class="reconcile-card"><span>Chênh lệch</span><strong>{{ ca.chenhLech == null ? '—' : formatVnd(ca.chenhLech) }}</strong><small v-if="ca.lyDoLech">{{ ca.lyDoLech }}</small></article>
+        <article class="reconcile-card"><span>Ghi chú mở ca</span><strong>{{ ca.ghiChuMo || '—' }}</strong></article>
+      </section>
+
+      <section class="reconcile-card history-card">
+        <h2>Lịch sử thao tác</h2>
+        <div v-if="!ca.lichSu?.length" class="empty-history">Chưa có lịch sử thao tác.</div>
+        <div v-else class="history-list">
+          <article v-for="(item, index) in ca.lichSu" :key="`${item.hanhDong}-${item.thoiGian}-${index}`" class="history-item">
+            <strong>{{ item.hanhDong === 'MO_CA' ? 'Mở ca' : item.hanhDong === 'KET_CA' ? 'Kết ca' : item.hanhDong }}</strong>
+            <span>{{ item.tenNhanVien || 'Nhân viên' }} · {{ formatDateTime(item.thoiGian) }}</span>
+            <small v-if="item.ghiChu">{{ item.ghiChu }}</small>
+          </article>
+        </div>
+      </section>
+    </template>
+  </main>
 </template>
 
 <style scoped>
-.doi-soat-placeholder {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-  background: #f8fafc;
-}
-
-.placeholder-card {
-  background: #fff;
-  border-radius: 16px;
-  border: 1px solid #eef2f6;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-  padding: 48px 40px;
-  text-align: center;
-  max-width: 420px;
-  width: 100%;
-}
-
-.placeholder-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #fef3c7, #fde68a);
-  color: #b45309;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 20px;
-}
-
-.placeholder-icon svg {
-  width: 32px;
-  height: 32px;
-}
-
-.placeholder-title {
-  margin: 0 0 8px;
-  font-size: 22px;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.placeholder-desc {
-  margin: 0 0 16px;
-  font-size: 15px;
-  color: #64748b;
-}
-
-.placeholder-id {
-  margin: 0 0 24px;
-  font-size: 14px;
-  color: #475569;
-}
-
-.placeholder-id strong {
-  color: #1e293b;
-  font-family: monospace;
-}
-
-.btn-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #fff;
-  color: #475569;
-  font-size: 14px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: all 0.15s ease;
-}
-
-.btn-back svg {
-  width: 18px;
-  height: 18px;
-}
-
-.btn-back:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-  color: #1e293b;
-  transform: translateX(-2px);
-}
+.reconcile-page { padding: 20px; background: #f8fafc; min-height: 100vh; }
+.reconcile-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.reconcile-heading h1 { margin: 0; color: #0f172a; font-size: 24px; }
+.reconcile-heading p { margin: 5px 0 0; color: #64748b; }
+.reconcile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.reconcile-card { padding: 16px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; box-shadow: 0 3px 10px rgb(15 23 42 / 4%); }
+.reconcile-card > span { display: block; margin-bottom: 7px; color: #64748b; font-size: 13px; }
+.reconcile-card > strong { color: #0f172a; font-size: 16px; }
+.reconcile-card small { display: block; margin-top: 5px; color: #64748b; }
+.history-card { margin-top: 16px; }
+.history-card h2 { margin: 0 0 12px; font-size: 18px; }
+.history-list { display: grid; gap: 10px; }
+.history-item { display: grid; gap: 4px; padding: 10px 12px; border-left: 3px solid #2563eb; background: #f8fafc; }
+.history-item span, .history-item small, .empty-history { color: #64748b; font-size: 13px; }
+.error { color: #b91c1c; }
+.btn-back { padding: 9px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #334155; cursor: pointer; }
+@media (max-width: 600px) { .reconcile-heading { align-items: flex-start; flex-direction: column; } }
 </style>

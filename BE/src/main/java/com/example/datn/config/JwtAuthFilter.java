@@ -108,7 +108,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     static List<SimpleGrantedAuthority> taoAuthorities(String vaiTro, String loaiTaiKhoan) {
         List<SimpleGrantedAuthority> authorities = new ArrayList<>();
         authorities.add(new SimpleGrantedAuthority("ROLE_" + loaiTaiKhoan));
-        if (vaiTro != null && !vaiTro.isBlank()) {
+        // Vai trò quản trị chỉ có ý nghĩa trên tài khoản nhân viên.
+        if (JwtService.LOAI_NHAN_VIEN.equals(loaiTaiKhoan) && vaiTro != null && !vaiTro.isBlank()) {
             authorities.add(new SimpleGrantedAuthority("ROLE_" + vaiTro.trim().toUpperCase()));
         }
         return authorities;
