@@ -4489,13 +4489,6 @@ onUnmounted(() => {
                 <span class="cash-currency-badge">₫</span>
               </div>
             </div>
-            <div class="quick-cash-row">
-              <button class="quick-chip chip-exact" @click="setQuickCash('EXACT')">Đủ tiền</button>
-              <button class="quick-chip" @click="setQuickCash(50000)">50k</button>
-              <button class="quick-chip" @click="setQuickCash(100000)">100k</button>
-              <button class="quick-chip" @click="setQuickCash(200000)">200k</button>
-              <button class="quick-chip" @click="setQuickCash(500000)">500k</button>
-            </div>
           </div>
 
           <div class="cash-settlement-box" v-if="currentOrder && currentOrder.paymentMethod === 'KET_HOP'">
