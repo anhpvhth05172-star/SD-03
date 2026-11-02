@@ -2393,12 +2393,24 @@ const formatVoucherValue = (v) => {
 
 const filteredVouchers = computed(() => {
   const q = voucherSearchQuery.value.trim().toLowerCase()
-  if (!q) return allVouchers.value
-  return allVouchers.value.filter(v =>
-    (v.ma && v.ma.toLowerCase().includes(q)) ||
-    (v.ten && v.ten.toLowerCase().includes(q)) ||
-    (v.maPhieuGiamGia && v.maPhieuGiamGia.toLowerCase().includes(q))
-  )
+  const custId = currentOrder.value?.customer?.id || null
+
+  return allVouchers.value.filter(v => {
+    // Ẩn phiếu giảm giá cá nhân nếu khách hàng đã dùng rồi hoặc chưa được cấp
+    const isCaNhan = v.phamVi === 'CA_NHAN' || v.scope === 'CA_NHAN'
+    if (isCaNhan) {
+      if (!custId) return false
+      if (Array.isArray(v.idKhachHangsChuaDung) && !v.idKhachHangsChuaDung.includes(custId)) {
+        return false
+      }
+    }
+    if (!q) return true
+    return (
+      (v.ma && v.ma.toLowerCase().includes(q)) ||
+      (v.ten && v.ten.toLowerCase().includes(q)) ||
+      (v.maPhieuGiamGia && v.maPhieuGiamGia.toLowerCase().includes(q))
+    )
+  })
 })
 
 const calculateVoucherDiscount = (voucher, currentSubTotal) => {
@@ -2422,6 +2434,15 @@ const calculateVoucherDiscount = (voucher, currentSubTotal) => {
 const isVoucherEligible = (v) => {
   if (!currentOrder.value) return false
   if (v.trangThai === false) return false
+
+  const isCaNhan = v.phamVi === 'CA_NHAN' || v.scope === 'CA_NHAN'
+  if (isCaNhan) {
+    const custId = currentOrder.value?.customer?.id
+    if (!custId) return false
+    if (Array.isArray(v.idKhachHangsChuaDung) && !v.idKhachHangsChuaDung.includes(custId)) {
+      return false
+    }
+  }
 
   const now = new Date()
   if (v.ngayBatDau && new Date(v.ngayBatDau) > now) return false
@@ -2505,7 +2526,7 @@ const nextVoucherSuggestion = computed(() => {
 })
 
 // Tự động áp dụng phiếu giảm giá tốt nhất đủ điều kiện
-watch([() => subTotal.value, () => bestVoucherSuggestion.value], ([newSubTotal, newBest]) => {
+watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrder.value?.customer?.id], ([newSubTotal, newBest]) => {
   if (!currentOrder.value) return
   if (newSubTotal <= 0) {
     currentOrder.value.selectedVoucher = null

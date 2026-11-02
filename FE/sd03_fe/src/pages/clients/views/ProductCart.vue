@@ -65,7 +65,11 @@ function checkVoucher(detail, total, ignoreMin = false) {
 
   if (isPersonal(VF.scope(detail))) {
     const cid = user.value?.idKhachHang || user.value?.id;
-    if (!cid || !VF.customerIds(detail).includes(cid)) return false;
+    if (!cid) return false;
+    const khList = detail.khachHangs || detail.danhSachKhachHang || detail.khachHang || [];
+    const custRecord = khList.find(k => (k.idKhachHang ?? k.id) === cid);
+    if (!custRecord) return false;
+    if (custRecord.ngaySuDung || custRecord.trangThai === false) return false;
   }
 
   if (!ignoreMin) {

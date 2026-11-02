@@ -39,8 +39,28 @@ public class FormDataResponse {
         Integer soLuong,
         Integer soLuongDaSuDung,
         Integer gioiHanMoiTaiKhoan,
-        Boolean trangThai
-    ) {}
+        Boolean trangThai,
+        String phamVi,
+        List<Long> idKhachHangsChuaDung
+    ) {
+        public PhieuGiamGiaOption(
+            Long id,
+            String ma,
+            String ten,
+            String loaiGiamGia,
+            BigDecimal giaTriGiam,
+            BigDecimal giamToiDa,
+            BigDecimal hoaDonToiThieu,
+            LocalDateTime ngayBatDau,
+            LocalDateTime ngayKetThuc,
+            Integer soLuong,
+            Integer soLuongDaSuDung,
+            Integer gioiHanMoiTaiKhoan,
+            Boolean trangThai
+        ) {
+            this(id, ma, ten, loaiGiamGia, giaTriGiam, giamToiDa, hoaDonToiThieu, ngayBatDau, ngayKetThuc, soLuong, soLuongDaSuDung, gioiHanMoiTaiKhoan, trangThai, "CONG_KHAI", List.of());
+        }
+    }
 
     public record SanPhamChiTietOption(
         Long id,

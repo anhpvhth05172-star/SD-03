@@ -243,8 +243,14 @@ function checkVoucher(detail, ignoreMin = false) {
   if (isPersonal(VF.scope(detail))) {
     const cid = customer.value?.id;
     if (!cid) return "Vui lòng đăng nhập để dùng mã này.";
-    if (!VF.customerIds(detail).includes(cid))
+    const khList = detail.khachHangs || detail.danhSachKhachHang || detail.khachHang || [];
+    const custRecord = khList.find(k => (k.idKhachHang ?? k.id) === cid);
+    if (!custRecord) {
       return "Mã này không áp dụng cho tài khoản của bạn.";
+    }
+    if (custRecord.ngaySuDung || custRecord.trangThai === false) {
+      return "Bạn đã sử dụng mã giảm giá này rồi.";
+    }
   }
 
   const min = VF.min(detail);
@@ -397,6 +403,7 @@ async function applyVoucher() {
   voucherMsg.ok = true;
 }
 function removeVoucher() {
+  userRemovedVoucher.value = true;
   voucher.value = null;
   voucherCode.value = "";
   voucherMsg.text = "";
@@ -471,6 +478,33 @@ const voucherOptions = computed(() => {
 });
 
 const bestVoucher = computed(() => voucherOptions.value.find((o) => o.best));
+const userRemovedVoucher = ref(false);
+
+// Tự động áp dụng mã giảm giá tốt nhất khi có sản phẩm trong giỏ
+watch([bestVoucher, orderTotal], ([best, total]) => {
+  if (total <= 0) {
+    voucher.value = null;
+    userRemovedVoucher.value = false;
+    return;
+  }
+  if (!userRemovedVoucher.value && best) {
+    if (!voucher.value || voucher.value.id !== best.v.id) {
+      voucher.value = best.v;
+      voucherMsg.text = `Đã tự động áp dụng mã ${best.v.code} (tiết kiệm ${money(best.discount)})`;
+      voucherMsg.ok = true;
+    }
+  } else if (voucher.value) {
+    const curDetail = allVouchers.value.find((x) => VF.id(x) === voucher.value.id);
+    if (!curDetail || checkVoucher(curDetail)) {
+      if (best) {
+        voucher.value = best.v;
+      } else {
+        voucher.value = null;
+      }
+    }
+  }
+}, { immediate: true });
+
 
 // Voucher đang áp dụng mà bị hết lượt (sau khi tải lại danh sách) -> gỡ
 watch(allVouchers, () => {

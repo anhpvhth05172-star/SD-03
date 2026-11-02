@@ -14,6 +14,7 @@ import com.example.datn.entity.ChiTietHoaDon;
 import com.example.datn.entity.DiaChiKhachHang;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.KhachHang;
+import com.example.datn.entity.KhachHangPhieuGiamGia;
 import com.example.datn.entity.LichSuHoaDon;
 import com.example.datn.entity.LichSuSuDungPhieuGiamGia;
 import com.example.datn.entity.NhanVien;
@@ -605,6 +606,17 @@ public class HoaDonService {
         ghiLichSuTrangThai(saved, maHienTai, maMoi, ghiChuHopLe);
         if ("DA_HUY".equals(maMoi)) {
             hoanTonKho(id);
+            if (hoaDon.getPhieuGiamGia() != null && hoaDon.getKhachHang() != null) {
+                if ("CA_NHAN".equalsIgnoreCase(hoaDon.getPhieuGiamGia().getPhamVi())) {
+                    khachHangPhieuGiamGiaRepository.findByPhieuGiamGia_IdAndKhachHang_Id(hoaDon.getPhieuGiamGia().getId(), hoaDon.getKhachHang().getId())
+                        .ifPresent(khPg -> {
+                            khPg.setNgaySuDung(null);
+                            khPg.setTrangThai(true);
+                            khachHangPhieuGiamGiaRepository.save(khPg);
+                        });
+                }
+                lichSuSuDungRepository.deleteByHoaDonId(hoaDon.getId());
+            }
         }
         if (laLanThatBaiThuBa) {
             hoanTraTonKho(hoaDon);
@@ -727,6 +739,14 @@ public class HoaDonService {
         List<FormDataResponse.PhuongThucOption> phuongThucs = phuongThucThanhToanRepository.findAll().stream()
             .map(p -> new FormDataResponse.PhuongThucOption(p.getId(), p.getTenPhuongThuc()))
             .toList();
+        List<KhachHangPhieuGiamGia> allKhPg = khachHangPhieuGiamGiaRepository.findAll();
+        java.util.Map<Long, List<Long>> khChuaDungMap = allKhPg.stream()
+            .filter(r -> Boolean.TRUE.equals(r.getTrangThai()) && r.getNgaySuDung() == null && r.getPhieuGiamGia() != null && r.getKhachHang() != null)
+            .collect(java.util.stream.Collectors.groupingBy(
+                r -> r.getPhieuGiamGia().getId(),
+                java.util.stream.Collectors.mapping(r -> r.getKhachHang().getId(), java.util.stream.Collectors.toList())
+            ));
+
         List<FormDataResponse.PhieuGiamGiaOption> phieuGiamGias = phieuGiamGiaRepository.findAll().stream()
             .map(p -> new FormDataResponse.PhieuGiamGiaOption(
                 p.getId(), p.getMaPhieuGiamGia(),
@@ -734,7 +754,9 @@ public class HoaDonService {
                 p.getLoaiGiamGia(),
                 p.getGiaTriGiam(), p.getGiamToiDa(), p.getHoaDonToiThieu(),
                 p.getNgayBatDau(), p.getNgayKetThuc(), p.getSoLuong(), p.getSoLuongDaSuDung(),
-                p.getGioiHanMoiTaiKhoan(), p.getTrangThai()
+                p.getGioiHanMoiTaiKhoan(), p.getTrangThai(),
+                p.getPhamVi(),
+                khChuaDungMap.getOrDefault(p.getId(), List.of())
             ))
             .toList();
         List<FormDataResponse.SanPhamChiTietOption> spcts = sanPhamChiTietRepository.findAll().stream()
@@ -1161,6 +1183,16 @@ private NhanVien timNhanVien(Long id) {
         lichSu.setSoTienGiam(hoaDon.getTienGiam() != null ? hoaDon.getTienGiam() : BigDecimal.ZERO);
         lichSu.setThoiGian(LocalDateTime.now());
         lichSuSuDungRepository.save(lichSu);
+
+        // Đánh dấu khách hàng đã sử dụng phiếu cá nhân (dùng 1 lần)
+        if ("CA_NHAN".equalsIgnoreCase(phieu.getPhamVi())) {
+            khachHangPhieuGiamGiaRepository.findByPhieuGiamGia_IdAndKhachHang_Id(phieu.getId(), hoaDon.getKhachHang().getId())
+                .ifPresent(khPg -> {
+                    khPg.setNgaySuDung(LocalDateTime.now());
+                    khPg.setTrangThai(false);
+                    khachHangPhieuGiamGiaRepository.save(khPg);
+                });
+        }
     }
 
     
