@@ -2438,21 +2438,39 @@ const formatVoucherValue = (v) => {
   return formatVnd(Number(v.giaTriGiam || 0))
 }
 
+const hasCustomerUsedVoucher = (v, custId) => {
+  if (!v || !custId) return false
+  const targetId = Number(custId)
+  if (Array.isArray(v.idKhachHangsDaDung)) {
+    return v.idKhachHangsDaDung.some(id => Number(id) === targetId)
+  }
+  return false
+}
+
+const isVoucherAssignedToCustomer = (v, custId) => {
+  if (!v || !custId) return false
+  const targetId = Number(custId)
+  if (Array.isArray(v.idKhachHangsChuaDung)) {
+    return v.idKhachHangsChuaDung.some(id => Number(id) === targetId)
+  }
+  return false
+}
+
 const filteredVouchers = computed(() => {
   const q = voucherSearchQuery.value.trim().toLowerCase()
-  const custId = currentOrder.value?.customer?.id || null
+  const custId = currentOrder.value?.customer?.id ? Number(currentOrder.value.customer.id) : null
 
   return allVouchers.value.filter(v => {
     // Ẩn phiếu giảm giá cá nhân nếu khách hàng đã dùng rồi hoặc chưa được cấp
     const isCaNhan = v.phamVi === 'CA_NHAN' || v.scope === 'CA_NHAN'
     if (isCaNhan) {
       if (!custId) return false
-      if (Array.isArray(v.idKhachHangsChuaDung) && !v.idKhachHangsChuaDung.includes(custId)) {
+      if (!isVoucherAssignedToCustomer(v, custId)) {
         return false
       }
     }
     // Ẩn nếu khách hàng đã dùng hết lượt phiếu này
-    if (custId && Array.isArray(v.idKhachHangsDaDung) && v.idKhachHangsDaDung.includes(custId)) {
+    if (custId && hasCustomerUsedVoucher(v, custId)) {
       return false
     }
     if (!q) return true
@@ -2486,17 +2504,17 @@ const isVoucherEligible = (v, order = currentOrder.value) => {
   if (!v || !order) return false
   if (v.trangThai === false) return false
 
-  const custId = order.customer?.id || null
+  const custId = order.customer?.id ? Number(order.customer.id) : null
   const isCaNhan = v.phamVi === 'CA_NHAN' || v.scope === 'CA_NHAN'
   if (isCaNhan) {
     if (!custId) return false
-    if (Array.isArray(v.idKhachHangsChuaDung) && !v.idKhachHangsChuaDung.includes(custId)) {
+    if (!isVoucherAssignedToCustomer(v, custId)) {
       return false
     }
   }
 
   // Khách hàng đã dùng hết lượt phiếu này (dù là công khai hay cá nhân)
-  if (custId && Array.isArray(v.idKhachHangsDaDung) && v.idKhachHangsDaDung.includes(custId)) {
+  if (custId && hasCustomerUsedVoucher(v, custId)) {
     return false
   }
 
@@ -2546,15 +2564,15 @@ const bestVoucherSuggestion = computed(() => {
 const nextVoucherSuggestion = computed(() => {
   if (!currentOrder.value || subTotal.value <= 0 || allVouchers.value.length === 0) return null
   const now = new Date()
-  const custId = currentOrder.value?.customer?.id || null
+  const custId = currentOrder.value?.customer?.id ? Number(currentOrder.value.customer.id) : null
   const eligibleHigher = allVouchers.value.filter(v => {
     if (v.trangThai === false) return false
     const isCaNhan = v.phamVi === 'CA_NHAN' || v.scope === 'CA_NHAN'
     if (isCaNhan) {
       if (!custId) return false
-      if (Array.isArray(v.idKhachHangsChuaDung) && !v.idKhachHangsChuaDung.includes(custId)) return false
+      if (!isVoucherAssignedToCustomer(v, custId)) return false
     }
-    if (custId && Array.isArray(v.idKhachHangsDaDung) && v.idKhachHangsDaDung.includes(custId)) return false
+    if (custId && hasCustomerUsedVoucher(v, custId)) return false
     if (v.ngayBatDau && new Date(v.ngayBatDau) > now) return false
     if (v.ngayKetThuc && new Date(v.ngayKetThuc) < now) return false
     if (v.soLuong && v.soLuongDaSuDung !== undefined && v.soLuongDaSuDung >= v.soLuong) return false
@@ -2586,19 +2604,45 @@ const nextVoucherSuggestion = computed(() => {
 })
 
 // Tự động áp dụng phiếu giảm giá tốt nhất đủ điều kiện
-watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrder.value?.customer?.id], ([newSubTotal, newBest]) => {
+watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrder.value?.customer?.id], ([newSubTotal, newBest], [, , oldCustId]) => {
   if (!currentOrder.value) return
   if (newSubTotal <= 0) {
     currentOrder.value.selectedVoucher = null
+    currentOrder.value.userSelectedVoucherManually = false
     currentOrder.value.userRemovedVoucher = false
     return
   }
-  // Nếu chưa chọn voucher hoặc voucher đang chọn không còn hợp lệ (ví dụ: đã dùng rồi, không đủ điều kiện...)
-  if (!currentOrder.value.selectedVoucher || !isVoucherEligible(currentOrder.value.selectedVoucher)) {
-    currentOrder.value.selectedVoucher = newBest?.voucher || null
+
+  // Nếu thay đổi khách hàng, cho phép tự động tính lại voucher tốt nhất cho khách mới
+  const currentCustId = currentOrder.value?.customer?.id
+  if (currentCustId !== oldCustId) {
+    currentOrder.value.userSelectedVoucherManually = false
     currentOrder.value.userRemovedVoucher = false
+  }
+
+  // 1. Nếu voucher đang chọn không còn hợp lệ (ví dụ: khách đã dùng hết lượt, đơn không đủ hoaDonToiThieu...)
+  if (currentOrder.value.selectedVoucher && !isVoucherEligible(currentOrder.value.selectedVoucher)) {
+    currentOrder.value.selectedVoucher = newBest?.voucher || null
+    currentOrder.value.userSelectedVoucherManually = false
+    currentOrder.value.userRemovedVoucher = false
+    return
+  }
+
+  // 2. Nếu người dùng đã chủ động chọn voucher này (ví dụ bấm chọn GG018), và nó vẫn hợp lệ:
+  // TUYỆT ĐỐI KHÔNG GHI ĐÈ bằng mã khác!
+  if (currentOrder.value.userSelectedVoucherManually && currentOrder.value.selectedVoucher) {
+    return
+  }
+
+  // 3. Nếu chưa có voucher và người dùng không chủ động gỡ: tự động áp dụng voucher tốt nhất
+  if (!currentOrder.value.selectedVoucher) {
+    if (!currentOrder.value.userRemovedVoucher && newBest?.voucher) {
+      currentOrder.value.selectedVoucher = newBest.voucher
+      currentOrder.value.userSelectedVoucherManually = false
+    }
   } else if (!currentOrder.value.userRemovedVoucher && newBest?.voucher) {
-    if (currentOrder.value.selectedVoucher?.id !== newBest.voucher.id) {
+    // Nếu trước đó là tự động áp dụng, nâng cấp lên voucher tốt hơn nếu đạt mốc mới
+    if (currentOrder.value.selectedVoucher.id !== newBest.voucher.id) {
       currentOrder.value.selectedVoucher = newBest.voucher
     }
   }
@@ -2647,15 +2691,15 @@ const getVoucherIneligibilityReason = (v) => {
   if (v.trangThai === false) {
     return 'Phiếu giảm giá tạm thời bị khóa'
   }
-  const custId = currentOrder.value?.customer?.id || null
+  const custId = currentOrder.value?.customer?.id ? Number(currentOrder.value.customer.id) : null
   const isCaNhan = v.phamVi === 'CA_NHAN' || v.scope === 'CA_NHAN'
   if (isCaNhan && !custId) {
     return 'Chỉ áp dụng cho khách hàng được cấp phiếu cá nhân'
   }
-  if (custId && Array.isArray(v.idKhachHangsDaDung) && v.idKhachHangsDaDung.includes(custId)) {
+  if (custId && hasCustomerUsedVoucher(v, custId)) {
     return 'Khách hàng đã dùng hết lượt phiếu giảm giá này'
   }
-  if (isCaNhan && custId && Array.isArray(v.idKhachHangsChuaDung) && !v.idKhachHangsChuaDung.includes(custId)) {
+  if (isCaNhan && custId && !isVoucherAssignedToCustomer(v, custId)) {
     return 'Phiếu giảm giá cá nhân không được cấp cho khách hàng này'
   }
   const now = new Date()
@@ -2942,9 +2986,9 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
         const oldDiscAmt = calculateVoucherDiscount(oldV, oldOrderSubTotal)
 
         const isCaNhan = freshV.phamVi === 'CA_NHAN' || freshV.scope === 'CA_NHAN'
-        const custId = order.customer?.id
-        const alreadyUsed = custId && Array.isArray(freshV.idKhachHangsDaDung) && freshV.idKhachHangsDaDung.includes(custId)
-        const notAssigned = isCaNhan && (!custId || (Array.isArray(freshV.idKhachHangsChuaDung) && !freshV.idKhachHangsChuaDung.includes(custId)))
+        const custId = order.customer?.id ? Number(order.customer.id) : null
+        const alreadyUsed = custId && hasCustomerUsedVoucher(freshV, custId)
+        const notAssigned = isCaNhan && (!custId || !isVoucherAssignedToCustomer(freshV, custId))
 
         if (!freshV || freshV.trangThai === false) {
           order.selectedVoucher = null
@@ -3033,6 +3077,8 @@ const applyVoucher = (voucher) => {
     return
   }
   currentOrder.value.selectedVoucher = voucher
+  currentOrder.value.userSelectedVoucherManually = true
+  currentOrder.value.userRemovedVoucher = false
   voucherInputCode.value = ''
   isVoucherModalOpen.value = false
   notifySuccess('Đã áp dụng voucher', `Đã áp dụng mã "${voucher.ma || voucher.maPhieuGiamGia}" (${voucher.ten})!`)
@@ -3042,6 +3088,8 @@ const removeVoucher = () => {
   if (!kiemTraQuyenBanHang('hủy voucher')) return
   if (currentOrder.value) {
     currentOrder.value.selectedVoucher = null
+    currentOrder.value.userSelectedVoucherManually = false
+    currentOrder.value.userRemovedVoucher = true
     voucherInputCode.value = ''
     notifySuccess('Đã hủy voucher', 'Đã hủy áp dụng phiếu giảm giá cho đơn hàng!')
   }
@@ -3260,12 +3308,15 @@ const handleCheckout = async (options = {}) => {
     if (currentOrder.value.selectedVoucher && !isVoucherEligible(currentOrder.value.selectedVoucher)) {
       const fallbackBest = getBestVoucherForOrder(currentOrder.value)
       currentOrder.value.selectedVoucher = fallbackBest?.voucher || null
+      currentOrder.value.userSelectedVoucherManually = false
       payload.idPhieuGiamGia = fallbackBest?.voucher ? fallbackBest.voucher.id : null
       if (fallbackBest?.voucher) {
         notifyWarning('Đổi voucher tốt nhất', `Mã giảm giá đã chọn không còn khả dụng, hệ thống tự động chuyển sang mã tốt nhất tiếp theo "${fallbackBest.voucher.ma}"!`)
       } else {
         notifyWarning('Bỏ mã giảm giá', 'Mã giảm giá đã chọn không còn khả dụng cho khách hàng này.')
       }
+    } else {
+      payload.idPhieuGiamGia = currentOrder.value.selectedVoucher ? currentOrder.value.selectedVoucher.id : null
     }
 
     const soldCartSnapshot = currentOrder.value.cart.map(item => ({ ...item }))
@@ -3273,31 +3324,38 @@ const handleCheckout = async (options = {}) => {
     try {
       invoiceRes = await http.post('/hoa-don', payload)
     } catch (checkoutErr) {
-      const errMsg = checkoutErr?.response?.data?.message || checkoutErr?.message || ''
+      const errMsg = checkoutErr?.message || checkoutErr?.response?.data?.message || ''
+      console.warn('Checkout error caught:', errMsg)
       if (payload.idPhieuGiamGia && (
         errMsg.includes('đã dùng phiếu') ||
         errMsg.includes('không được cấp') ||
         errMsg.includes('giới hạn') ||
         errMsg.includes('không hoạt động') ||
-        errMsg.includes('hóa đơn tối thiểu')
+        errMsg.includes('hóa đơn tối thiểu') ||
+        errMsg.includes('Phiếu giảm giá') ||
+        errMsg.includes('phiếu giảm giá')
       )) {
         console.warn('Voucher rejected by backend, falling back to next best voucher:', errMsg)
-        const rejectedVoucherId = payload.idPhieuGiamGia
-        const custId = payload.idKhachHang
+        const rejectedVoucherId = Number(payload.idPhieuGiamGia)
+        const custId = payload.idKhachHang ? Number(payload.idKhachHang) : null
         if (custId) {
-          const vObj = allVouchers.value.find(v => v.id === rejectedVoucherId)
+          const vObj = allVouchers.value.find(v => Number(v.id) === rejectedVoucherId)
           if (vObj) {
-            vObj.idKhachHangsDaDung = [...(vObj.idKhachHangsDaDung || []), custId]
+            const daDung = Array.isArray(vObj.idKhachHangsDaDung) ? vObj.idKhachHangsDaDung : []
+            if (!daDung.some(id => Number(id) === custId)) {
+              vObj.idKhachHangsDaDung = [...daDung, custId]
+            }
             if (Array.isArray(vObj.idKhachHangsChuaDung)) {
-              vObj.idKhachHangsChuaDung = vObj.idKhachHangsChuaDung.filter(id => id !== custId)
+              vObj.idKhachHangsChuaDung = vObj.idKhachHangsChuaDung.filter(id => Number(id) !== custId)
             }
           }
         }
         const nextBest = getBestVoucherForOrder(currentOrder.value)
         currentOrder.value.selectedVoucher = nextBest?.voucher || null
+        currentOrder.value.userSelectedVoucherManually = false
         payload.idPhieuGiamGia = nextBest?.voucher ? nextBest.voucher.id : null
 
-        notifyWarning('Tự động đổi voucher', `Khách hàng đã dùng phiếu này. Hệ thống tự động chọn mã tốt nhất tiếp theo ${nextBest?.voucher ? `"${nextBest.voucher.ma}"` : ''} và hoàn tất thanh toán!`)
+        notifyWarning('Tự động đổi voucher', `Mã vừa chọn không hợp lệ với khách hàng. Hệ thống tự động chuyển sang ${nextBest?.voucher ? `mã tốt nhất tiếp theo "${nextBest.voucher.ma}"` : 'không dùng voucher'} và hoàn tất thanh toán!`)
 
         invoiceRes = await http.post('/hoa-don', payload)
       } else {
@@ -4491,10 +4549,10 @@ onUnmounted(() => {
           <div class="checkout-voucher-section" v-if="currentOrder">
             <div class="voucher-section-header">
               <span class="voucher-section-title">Phiếu giảm giá / Voucher</span>
-              <button v-if="!currentOrder.selectedVoucher" type="button" class="btn-browse-vouchers"
+              <button type="button" class="btn-browse-vouchers"
                 @click="openVoucherModal">
-                Danh sách
-                <span class="voucher-badge-num" v-if="allVouchers.length > 0">({{ allVouchers.length }})</span>
+                {{ currentOrder.selectedVoucher ? 'Đổi mã' : 'Danh sách' }}
+                <span class="voucher-badge-num" v-if="allVouchers.length > 0">({{ availableEligibleVouchersCount }}/{{ allVouchers.length }})</span>
               </button>
             </div>
 
