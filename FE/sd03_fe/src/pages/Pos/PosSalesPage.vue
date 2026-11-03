@@ -1603,6 +1603,57 @@ const scannedProductName = ref('')
 const scannedCodeInput = ref('')
 let html5QrScanner = null
 
+// Chế độ quét liên tục nhiều mã
+const lastScannedTimeMap = new Map()
+const scannedSessionList = ref([])
+const scanNotificationToast = ref('')
+let scanToastTimer = null
+
+const totalScannedSessionItems = computed(() => {
+  return scannedSessionList.value.reduce((sum, item) => sum + (Number(item.count) || 0), 0)
+})
+
+const parseScannedCodes = (rawText) => {
+  if (!rawText) return []
+  const text = String(rawText).trim()
+
+  // 1. JSON Array: e.g. ["SP01", "SP02"]
+  if (text.startsWith('[') && text.endsWith(']')) {
+    try {
+      const arr = JSON.parse(text)
+      if (Array.isArray(arr)) {
+        return arr.map(item => {
+          if (typeof item === 'string') return item.trim()
+          if (item && typeof item === 'object') return item.maCtsp || item.ma || item.id || ''
+          return String(item).trim()
+        }).filter(Boolean)
+      }
+    } catch { }
+  }
+
+  // 2. JSON Object with array
+  if (text.startsWith('{') && text.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(text)
+      if (Array.isArray(parsed.items || parsed.codes || parsed.list)) {
+        const list = parsed.items || parsed.codes || parsed.list
+        return list.map(x => typeof x === 'string' ? x.trim() : (x?.maCtsp || x?.ma || String(x?.id || ''))).filter(Boolean)
+      }
+      return [text]
+    } catch { }
+  }
+
+  // 3. Phân tách bằng dấu phẩy, chấm phẩy, xuống dòng
+  if (text.includes('\n') || text.includes(',') || text.includes(';')) {
+    const rawTokens = text.split(/[\n,;]+/).map(t => t.trim()).filter(Boolean)
+    if (rawTokens.length > 1) {
+      return rawTokens
+    }
+  }
+
+  return [text]
+}
+
 const playScannerBeep = () => {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)()
@@ -1662,58 +1713,100 @@ const findProductByScannedCode = (rawCode) => {
 }
 
 const handleScannedResult = async (decodedText) => {
-  if (!decodedText || isProcessingScan.value) return
-  isProcessingScan.value = true
+  if (!decodedText) return
 
-  let found = findProductByScannedCode(decodedText)
+  const codes = parseScannedCodes(decodedText)
+  if (codes.length === 0) return
 
-  if (!found) {
-    try {
-      const trimmed = String(decodedText).trim()
-      let searchKey = trimmed
-      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-        try {
-          const parsed = JSON.parse(trimmed)
-          searchKey = parsed.maCtsp || parsed.ma || parsed.id || trimmed
-        } catch { }
-      }
-      const res = await fetch(`${API_BASE}/san-pham-chi-tiet?search=${encodeURIComponent(searchKey)}&size=5`)
-      if (res.ok) {
-        const data = await res.json()
-        if (data && data.content && data.content.length > 0) {
-          found = ensureProductInCatalog(data.content[0]) || data.content[0]
-        }
-      }
-    } catch (err) {
-      console.warn('Tra cứu backend theo mã quét thất bại:', err)
+  // Chống lặp quét cùng 1 mã trong thời gian ngắn (cooldown 1.2s)
+  const now = Date.now()
+  const validCodes = []
+  for (const c of codes) {
+    const key = String(c).trim().toLowerCase()
+    const lastTime = lastScannedTimeMap.get(key) || 0
+    if (now - lastTime >= 1200) {
+      lastScannedTimeMap.set(key, now)
+      validCodes.push(c)
     }
   }
 
-  if (found) {
+  if (validCodes.length === 0) return
+
+  let newlyAddedCount = 0
+  let lastProduct = null
+
+  for (const code of validCodes) {
+    let found = findProductByScannedCode(code)
+
+    if (!found) {
+      try {
+        const trimmed = String(code).trim()
+        let searchKey = trimmed
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+          try {
+            const parsed = JSON.parse(trimmed)
+            searchKey = parsed.maCtsp || parsed.ma || parsed.id || trimmed
+          } catch { }
+        }
+        const res = await fetch(`${API_BASE}/san-pham-chi-tiet?search=${encodeURIComponent(searchKey)}&size=5`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data && data.content && data.content.length > 0) {
+            found = ensureProductInCatalog(data.content[0]) || data.content[0]
+          }
+        }
+      } catch (err) {
+        console.warn('Tra cứu backend theo mã quét thất bại:', err)
+      }
+    }
+
+    if (found) {
+      const stock = getRemainingStock(found.id)
+      if (stock <= 0) {
+        notifyWarning('Hết hàng', `Sản phẩm "${found.tenSp || found.tenSanPham}" đã hết tồn kho khả dụng!`)
+        continue
+      }
+
+      addToCart(found, 1)
+      newlyAddedCount++
+      lastProduct = found
+
+      // Cập nhật danh sách các sản phẩm quét trong phiên
+      const existing = scannedSessionList.value.find(item => item.id === found.id)
+      if (existing) {
+        existing.count += 1
+      } else {
+        scannedSessionList.value.unshift({
+          id: found.id,
+          maCtsp: found.maCtsp || found.maChiTietSanPham || found.ma,
+          tenSp: found.tenSp || found.tenSanPham,
+          size: found.size || found.tenKichCo,
+          color: found.color || found.tenMau,
+          price: found.giaBan || 0,
+          count: 1
+        })
+      }
+    } else {
+      notifyWarning('Không tìm thấy', `Không tìm thấy sản phẩm có mã: "${code}"`)
+    }
+  }
+
+  if (newlyAddedCount > 0 && lastProduct) {
     playScannerBeep()
     scanSuccessAnim.value = true
-    scannedProductName.value = `${found.tenSp || found.tenSanPham || 'Sản phẩm'} (${found.color || found.tenMau || ''} - Size ${found.size || found.tenKichCo || ''})`
+    setTimeout(() => { scanSuccessAnim.value = false }, 350)
 
-    const stock = getRemainingStock(found.id)
-    if (stock <= 0) {
-      notifyWarning('Hết hàng', `Sản phẩm "${found.tenSp || found.tenSanPham}" đã hết tồn kho khả dụng!`)
-      isProcessingScan.value = false
-      scanSuccessAnim.value = false
-      return
-    }
+    const prodName = `${lastProduct.tenSp || lastProduct.tenSanPham} (${lastProduct.color || lastProduct.tenMau || ''} - Size ${lastProduct.size || lastProduct.tenKichCo || ''})`
+    scanNotificationToast.value = newlyAddedCount === 1
+      ? `+1 ${prodName}`
+      : `Đã thêm ${newlyAddedCount} sản phẩm vào giỏ`
 
-    addToCart(found, 1)
-    await new Promise((resolve) => setTimeout(resolve, 600))
-    await closeQrScanner()
-    notifySuccess('Đã thêm sản phẩm', `Đã thêm "${found.tenSp || found.tenSanPham}" vào giỏ hàng`, 1500)
-  } else {
-    notifyError('Không tìm thấy', `Không tìm thấy sản phẩm có mã: "${decodedText}"`)
+    if (scanToastTimer) clearTimeout(scanToastTimer)
+    scanToastTimer = setTimeout(() => {
+      scanNotificationToast.value = ''
+    }, 2200)
   }
-
-  isProcessingScan.value = false
-  scanSuccessAnim.value = false
 }
-
 const startCameraScanner = async () => {
   cameraError.value = ''
   scanSuccessAnim.value = false
@@ -1816,14 +1909,15 @@ const stopCameraScanner = async () => {
 }
 
 const openQrScanner = async () => {
-  if (!currentOrder.value) createNewOrder()
-  scannedCodeInput.value = ''
-  cameraError.value = ''
+  if (!kiemTraQuyenBanHang('quét mã')) return
   isQrModalOpen.value = true
-  await nextTick()
+  cameraError.value = ''
+  scannedCodeInput.value = ''
+  scannedSessionList.value = []
+  scanNotificationToast.value = ''
+  lastScannedTimeMap.clear()
   await startCameraScanner()
 }
-
 const closeQrScanner = async () => {
   await stopCameraScanner()
   isQrModalOpen.value = false
@@ -5118,7 +5212,7 @@ onUnmounted(() => {
               </div>
               <div class="modal-title-text-group">
                 <h3>Quét Camera thêm sản phẩm</h3>
-                <span class="modal-badge-count">Nhận diện QR & Barcode</span>
+                <span class="modal-badge-count">Chế độ quét liên tục nhiều mã QR & Barcode</span>
               </div>
             </div>
             <button class="pos-modal-close" @click="closeQrScanner" title="Đóng (Esc)">×</button>
@@ -5129,32 +5223,57 @@ onUnmounted(() => {
               <div class="pos-camera-viewport">
                 <div id="pos-camera-scanner-view" class="pos-camera-stream-el"></div>
                 <div v-if="isCameraRunning && !scanSuccessAnim" class="pos-scanner-laser-line"></div>
-                <div class="pos-scanner-frame-overlay">
+                <div class="pos-scanner-frame-overlay" :class="{ 'flash-success': scanSuccessAnim }">
                   <span class="corner top-left"></span>
                   <span class="corner top-right"></span>
                   <span class="corner bottom-left"></span>
                   <span class="corner bottom-right"></span>
                 </div>
 
-                <div v-if="scanSuccessAnim" class="pos-scan-success-overlay">
-                  <div class="success-icon-badge">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3">
+                <!-- Toast nổi góc trên camera khi thêm thành công sản phẩm -->
+                <transition name="fade">
+                  <div v-if="scanNotificationToast" class="pos-scan-notification-pill">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                       <polyline points="20 6 9 17 4 12"></polyline>
                     </svg>
+                    <span>{{ scanNotificationToast }}</span>
                   </div>
-                  <span class="success-text-title">Quét thành công!</span>
-                  <span class="success-product-sub">{{ scannedProductName }}</span>
-                </div>
+                </transition>
               </div>
 
+              <!-- Gợi ý hướng dẫn -->
               <p class="camera-guide-hint">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="10"></circle>
                   <line x1="12" y1="16" x2="12" y2="12"></line>
                   <line x1="12" y1="8" x2="12.01" y2="8"></line>
                 </svg>
-                <span>Hướng camera vào <b>mã QR / Barcode</b> trên tem giày hoặc hộp để tự động nhận diện.</span>
+                <span>Hướng camera vào lần lượt các <b>mã QR / Barcode</b> để quét liên tục nhiều sản phẩm. Bấm <b>Hoàn tất</b> khi quét xong.</span>
               </p>
+
+              <!-- Danh sách các sản phẩm đã quét trong phiên -->
+              <div v-if="scannedSessionList.length > 0" class="pos-scanned-session-box">
+                <div class="scanned-session-header">
+                  <span class="session-header-title">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2">
+                      <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                      <line x1="3" y1="6" x2="21" y2="6"></line>
+                      <path d="M16 10a4 4 0 0 1-8 0"></path>
+                    </svg>
+                    Đã quét được: <strong>{{ totalScannedSessionItems }} sản phẩm</strong>
+                  </span>
+                  <button type="button" class="btn-clear-scanned-session" @click="scannedSessionList = []">Làm mới danh sách</button>
+                </div>
+                <div class="scanned-session-items-list">
+                  <div v-for="item in scannedSessionList" :key="item.id" class="scanned-session-item">
+                    <div class="scanned-item-info">
+                      <span class="scanned-item-name">{{ item.tenSp }}</span>
+                      <span class="scanned-item-meta">Size {{ item.size }} • {{ item.color }} • {{ formatVnd(item.price) }}</span>
+                    </div>
+                    <span class="scanned-item-qty">x{{ item.count }}</span>
+                  </div>
+                </div>
+              </div>
 
               <div v-if="cameraError" class="pos-camera-error-banner">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -5167,10 +5286,19 @@ onUnmounted(() => {
 
               <div class="pos-manual-code-row">
                 <input v-model="scannedCodeInput" type="text" class="pos-manual-code-inp"
-                  placeholder="Hoặc nhập mã CTSP / Barcode thủ công rồi bấm Thêm..."
+                  placeholder="Nhập mã CTSP hoặc nhiều mã phân cách bằng dấu phẩy (VD: SP01, SP02)..."
                   @keyup.enter="handleManualCodeSubmit" />
                 <button class="btn-pos-manual-add" @click="handleManualCodeSubmit">
                   Thêm
+                </button>
+              </div>
+
+              <div class="pos-camera-footer-actions">
+                <button type="button" class="btn-complete-scan" @click="closeQrScanner">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  <span>Hoàn tất quét{{ totalScannedSessionItems > 0 ? ` (${totalScannedSessionItems} sản phẩm)` : '' }}</span>
                 </button>
               </div>
             </div>

@@ -7347,3 +7347,163 @@ input:checked + .toggle-slider:before {
 .upsell-benefit {
   color: #ea580c;
 }
+
+/* Hiệu ứng flash viền xanh khi quét thành công */
+.pos-scanner-frame-overlay.flash-success .corner {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 10px #10b981;
+}
+
+/* Toast nổi thông báo ngay trên Camera khi quét sản phẩm */
+.pos-scan-notification-pill {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  background: rgba(16, 185, 129, 0.95);
+  color: #ffffff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  z-index: 30;
+  animation: slideDownToast 0.2s ease-out;
+}
+
+.pos-scan-notification-pill svg {
+  flex-shrink: 0;
+}
+
+@keyframes slideDownToast {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Bảng hiển thị danh sách sản phẩm đã quét trong phiên */
+.pos-scanned-session-box {
+  width: 100%;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+}
+
+.scanned-session-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: #334155;
+}
+
+.session-header-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.btn-clear-scanned-session {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.btn-clear-scanned-session:hover {
+  color: #ef4444;
+}
+
+.scanned-session-items-list {
+  max-height: 130px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.scanned-session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  border: 1px solid #edf2f7;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.scanned-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  max-width: 80%;
+}
+
+.scanned-item-name {
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scanned-item-meta {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.scanned-item-qty {
+  font-weight: 700;
+  color: #2563eb;
+  background: #eff6ff;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.pos-camera-footer-actions {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.btn-complete-scan {
+  width: 100%;
+  height: 42px;
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
+  transition: all 0.15s ease;
+}
+
+.btn-complete-scan:hover {
+  background: #15803d;
+}
