@@ -94,7 +94,7 @@ public class HoaDonController {
 
     @PutMapping("/{id}/trang-thai")
     public HoaDonDTO doiTrangThai(@PathVariable Long id, @RequestBody TrangThaiHoaDonRequest request) {
-        return hoaDonService.doiTrangThai(id, request.getTrangThai(), request.getGhiChu());
+        return hoaDonService.doiTrangThai(id, request.getTrangThai(), request.getGhiChu(), request.getNguoiThaoTac());
     }
 
     @GetMapping("/{id}/lich-su")

@@ -42,4 +42,7 @@ public class LichSuHoaDon {
 
     @Column(name = "hanh_dong", length = 100)
     private String hanhDong;
+
+    @Column(name = "nguoi_thao_tac", length = 150)
+    private String nguoiThaoTac;
 }

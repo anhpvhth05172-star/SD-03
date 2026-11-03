@@ -44,6 +44,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
@@ -561,11 +562,16 @@ public class HoaDonService {
 
     @Transactional
     public HoaDonDTO doiTrangThai(Long id, String trangThaiMoi) {
-        return doiTrangThai(id, trangThaiMoi, null);
+        return doiTrangThai(id, trangThaiMoi, null, null);
     }
 
     @Transactional
     public HoaDonDTO doiTrangThai(Long id, String trangThaiMoi, String ghiChu) {
+        return doiTrangThai(id, trangThaiMoi, ghiChu, null);
+    }
+
+    @Transactional
+    public HoaDonDTO doiTrangThai(Long id, String trangThaiMoi, String ghiChu, String nguoiThaoTac) {
         HoaDon hoaDon = findForUpdateOrThrow(id);
         if (isBlank(trangThaiMoi)) {
             throw new IllegalArgumentException("Trạng thái mới không được để trống");
@@ -603,7 +609,8 @@ public class HoaDonService {
         hoaDon.setNguoiCapNhat(nguoiCapNhatHienTai());
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         HoaDon saved = hoaDonRepository.save(hoaDon);
-        ghiLichSuTrangThai(saved, maHienTai, maMoi, ghiChuHopLe);
+        String nguoiThucHien = !isBlank(nguoiThaoTac) ? nguoiThaoTac.trim() : tenNguoiThaoTacHienTai();
+        ghiLichSuTrangThai(saved, maHienTai, maMoi, ghiChuHopLe, nguoiThucHien);
         if ("DA_HUY".equals(maMoi)) {
             hoanTonKho(id);
             if (hoaDon.getPhieuGiamGia() != null && hoaDon.getKhachHang() != null) {
@@ -629,7 +636,8 @@ public class HoaDonService {
                 saved,
                 "GIAO_HANG_THAT_BAI",
                 "DA_HUY",
-                "Tự động hủy sau " + SO_LAN_GIAO_THAT_BAI_TU_DONG_HUY + " lần giao hàng thất bại"
+                "Tự động hủy sau " + SO_LAN_GIAO_THAT_BAI_TU_DONG_HUY + " lần giao hàng thất bại",
+                "Hệ thống"
             );
         }
         return toFullDTO(saved);
@@ -675,7 +683,38 @@ public class HoaDonService {
         return auth != null && auth.getPrincipal() instanceof Long id ? String.valueOf(id) : "KHACH_AN_DANH";
     }
 
+    private String tenNguoiThaoTacHienTai() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return "Hệ thống";
+        }
+        Object principal = auth.getPrincipal();
+        if (principal instanceof Long id) {
+            Optional<NhanVien> nvOpt = nhanVienRepository.findById(id);
+            if (nvOpt.isPresent()) {
+                NhanVien nv = nvOpt.get();
+                String ten = nv.getTenTaiKhoan();
+                String role = (nv.getVaiTro() != null && !isBlank(nv.getVaiTro().getTenVaiTro()))
+                    ? nv.getVaiTro().getTenVaiTro() : null;
+                return role != null ? ten + " (" + role + ")" : ten;
+            }
+            Optional<KhachHang> khOpt = khachHangRepository.findById(id);
+            if (khOpt.isPresent()) {
+                KhachHang kh = khOpt.get();
+                return !isBlank(kh.getTenKhachHang()) ? kh.getTenKhachHang() : "Khách hàng #" + id;
+            }
+            return "Người dùng #" + id;
+        } else if (principal instanceof String str && !"anonymousUser".equalsIgnoreCase(str)) {
+            return str;
+        }
+        return "Hệ thống";
+    }
+
     private void ghiLichSuTrangThai(HoaDon hoaDon, String tuMa, String denMa, String ghiChu) {
+        ghiLichSuTrangThai(hoaDon, tuMa, denMa, ghiChu, null);
+    }
+
+    private void ghiLichSuTrangThai(HoaDon hoaDon, String tuMa, String denMa, String ghiChu, String nguoiThaoTac) {
         LichSuHoaDon lichSu = new LichSuHoaDon();
         lichSu.setHoaDon(hoaDon);
         lichSu.setTrangThai(denMa);
@@ -685,6 +724,7 @@ public class HoaDonService {
             noiDung += ". " + ghiChu;
         }
         lichSu.setGhiChu(noiDung);
+        lichSu.setNguoiThaoTac(!isBlank(nguoiThaoTac) ? nguoiThaoTac.trim() : tenNguoiThaoTacHienTai());
         lichSuHoaDonRepository.save(lichSu);
     }
 
@@ -713,6 +753,10 @@ public class HoaDonService {
                 }
             }
         }
+        String nguoiThaoTac = e.getNguoiThaoTac();
+        if (isBlank(nguoiThaoTac)) {
+            nguoiThaoTac = "Hệ thống";
+        }
         return LichSuHoaDonDTO.builder()
             .id(e.getId())
             .idHoaDon(h != null ? h.getId() : null)
@@ -723,6 +767,7 @@ public class HoaDonService {
             .maTrangThaiSau(e.getTrangThai())
             .ghiChu(ghiChuNguoiDung)
             .hanhDong(e.getHanhDong())
+            .nguoiThaoTac(nguoiThaoTac)
             .build();
     }
 
@@ -1497,7 +1542,7 @@ private NhanVien timNhanVien(Long id) {
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         hoaDon.setNguoiCapNhat("VNPAY");
         HoaDon saved = hoaDonRepository.save(hoaDon);
-        ghiLichSuTrangThai(saved, tu, "DA_XAC_NHAN", "Khách hàng thanh toán qua VNPAY thành công");
+        ghiLichSuTrangThai(saved, tu, "DA_XAC_NHAN", "Khách hàng thanh toán qua VNPAY thành công", "VNPAY (Hệ thống)");
         return toFullDTO(saved);
     }
 

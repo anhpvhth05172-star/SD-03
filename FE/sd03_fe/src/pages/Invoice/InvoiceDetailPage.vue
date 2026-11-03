@@ -20,6 +20,7 @@ import {
   loaiDonMeta,
 } from '@/constants/invoiceStatus'
 import { updateInvoiceStatus, resendInvoiceEmail } from '@/api/invoice'
+import { getUser } from '@/utils/auth'
 import { notifyError, notifyConfirm, notifySuccess, notifyWarning } from '@/utils/notify'
 import { taoVaTaiPdf } from '@/utils/pdf'
 import SearchableSelect from '@/components/SearchableSelect.vue'
@@ -193,7 +194,7 @@ const chuyenTrangThai = async (ten) => {
   if (!ok) return
   updatingStatus.value = true
   try {
-    const ketQua = await updateInvoiceStatus(data.value.id, code)
+    const ketQua = await updateInvoiceStatus(data.value.id, code, '', layTenNguoiThaoTac())
     if (code === 'GIAO_HANG_THAT_BAI' && ketQua?.maTrangThai === 'DA_HUY') {
       notifySuccess('Giao hàng thất bại lần 3 — đơn hàng đã tự động hủy', `${hienTai} → Đã hủy`)
     } else {
@@ -224,7 +225,7 @@ const huyDon = async () => {
   if (!ok) return
   updatingStatus.value = true
   try {
-    await updateInvoiceStatus(data.value.id, 'DA_HUY')
+    await updateInvoiceStatus(data.value.id, 'DA_HUY', 'Hủy đơn từ trang chi tiết', layTenNguoiThaoTac())
     notifySuccess('Đã hủy đơn', `Hóa đơn ${ma} → Đã hủy`)
     await load(true)
   } catch (e) {
@@ -1295,9 +1296,16 @@ onBeforeUnmount(() => {
                   <span class="history-arrow">→</span>
                   <strong>{{ row.trangThaiSau }}</strong>
                 </p>
-                <p class="history-meta">
-                  <time>{{ formatDateTime(row.thoiGian) }}</time>
-                </p>
+                <div class="history-meta">
+                  <span class="history-time">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="history-meta-icon"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <time>{{ formatDateTime(row.thoiGian) }}</time>
+                  </span>
+                  <span class="history-actor">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="history-meta-icon"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span>Người thao tác: <strong>{{ row.nguoiThaoTac || 'Hệ thống' }}</strong></span>
+                  </span>
+                </div>
                 <p v-if="row.ghiChu" class="history-note">{{ row.ghiChu }}</p>
               </div>
             </li>
@@ -2268,9 +2276,32 @@ onBeforeUnmount(() => {
 }
 
 .history-meta {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: 11.5px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.history-time,
+.history-actor {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.history-meta-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
   color: #94a3b8;
+}
+
+.history-actor strong {
+  color: #1e293b;
+  font-weight: 600;
 }
 
 .history-note {

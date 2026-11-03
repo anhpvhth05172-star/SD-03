@@ -13,4 +13,5 @@ public class TrangThaiHoaDonRequest {
 
     private String trangThai;
     private String ghiChu;
+    private String nguoiThaoTac;
 }
