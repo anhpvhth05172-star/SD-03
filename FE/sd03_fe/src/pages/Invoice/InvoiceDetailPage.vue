@@ -172,6 +172,14 @@ const handleStepClick = (s) => {
   }
 }
 
+const layTenNguoiThaoTac = () => {
+  const u = getUser()
+  if (!u) return ''
+  const ten = u.tenTaiKhoan || u.tenKhachHang || ''
+  const role = u.vaiTro || (u.loaiTaiKhoan === 'NHAN_VIEN' ? 'Nhân viên' : '')
+  return role ? `${ten} (${role})` : ten
+}
+
 const chuyenTrangThai = async (ten) => {
   if (!data.value || updatingStatus.value) return
   if (!laTrangThaiTiepTheo(ten)) {
