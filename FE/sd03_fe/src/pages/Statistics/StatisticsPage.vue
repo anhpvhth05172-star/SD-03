@@ -2,12 +2,11 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
-import { listEmployees } from '@/api/employee'
 import { API_BASE } from '@/api/http'
 import { formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
 import { notifySuccess, notifyError } from '@/utils/notify'
-import { fetchTongQuan, fetchTrangThaiDon, fetchEmailMacDinh, guiMailTongKet, fetchSoSanh } from '@/api/statistics'
+import { fetchTongQuan, fetchEmailMacDinh, guiMailTongKet, fetchSoSanh } from '@/api/statistics'
 import BarLineChart from '@/components/charts/BarLineChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
 import {
@@ -18,12 +17,9 @@ import {
   khoangNhanh,
   taoBangNgay,
   tinhBangThuongHieu,
-  tinhChuKy,
   tinhChuoiBanHang,
   tinhKhoang,
-  tinhNhanVien,
   tinhSanPham,
-  tinhTrangThaiDon,
 } from './statisticsData'
 
 const pad2 = (x) => String(x).padStart(2, '0')
@@ -56,13 +52,11 @@ const thuongHieuChon = ref('')
 const timThuongHieu = ref('')
 
 const thuongHieus = ref([])
-const nhanViens = ref([])
 const sanPhams = ref([])
 const bang = ref(new Map())
 const capNhatLuc = ref(gioHienTai())
 
 const tongQuanData = ref(null)
-const trangThaiData = ref([])
 const dangTai = ref(false)
 
 /* ---------------------------------- Gửi mail tổng kết + so sánh ---------------------------------- */
@@ -295,11 +289,6 @@ const chartMode = ref('cot')
 const thMode = ref('tron')
 const thTheo = ref('doanhThu')
 
-const kwNv = ref('')
-const sortNv = ref('doanhThuCao')
-const pageNv = ref(0)
-const sizeNv = ref(5)
-
 const kwSp = ref('')
 const tonKhoSp = ref('')
 const sortSp = ref('banChay')
@@ -344,9 +333,6 @@ const datLaiBoLoc = () => {
   kieuTongQuan.value = 'ngay'
   thuongHieuChon.value = ''
   timThuongHieu.value = ''
-  kwNv.value = ''
-  sortNv.value = 'doanhThuCao'
-  pageNv.value = 0
   kwSp.value = ''
   tonKhoSp.value = ''
   sortSp.value = 'banChay'
@@ -361,7 +347,6 @@ const denDate = computed(() => docInputDate(denNgay.value) || new Date())
 const sanPhamHienTai = computed(() =>
   sanPhams.value.length ? sanPhams.value : SAN_PHAM_MAU
 )
-const nhanVienHienTai = computed(() => nhanViens.value)
 
 const dongSanPhamAll = computed(() =>
   tinhSanPham(sanPhamHienTai.value, tuDate.value, denDate.value)
@@ -438,60 +423,6 @@ const seriesTH = computed(() =>
   })
 )
 
-const chuKy = computed(() => tinhChuKy(bang.value))
-const trangThai = computed(() => {
-  if (trangThaiData.value.length) {
-    return trangThaiData.value.map((x) => ({ ...x, mau: mauTrangThai(x.ten) }))
-  }
-  return tinhTrangThaiDon(bang.value, tuDate.value, denDate.value, tyLeChon.value)
-})
-const slicesTrangThai = computed(() =>
-  trangThai.value.map((x) => ({ label: x.ten, value: x.soLuong, color: x.mau }))
-)
-
-const mauTrangThai = (ten) => {
-  const map = {
-    'Chờ xác nhận': '#f43f5e',
-    'Đã xác nhận': '#f59e0b',
-    'Chờ giao hàng': '#eab308',
-    'Đang giao hàng': '#14b8a6',
-    'Đã giao hàng': '#3b82f6',
-    'Đã hoàn thành': '#22c55e',
-    'Đã hủy': '#ef4444',
-    'Đã hoàn tiền': '#8b5cf6',
-  }
-  return map[ten] || '#94a3b8'
-}
-
-/* ------------------------------- Bảng doanh thu nhân viên ------------------------------- */
-const nhanVienDayDu = computed(() => tinhNhanVien(nhanVienHienTai.value, khoang.value))
-
-const nhanVienLoc = computed(() => {
-  const kw = kwNv.value.trim().toLowerCase()
-  let rows = nhanVienDayDu.value
-  if (kw) {
-    rows = rows.filter(
-      (r) =>
-        String(r.maNhanVien).toLowerCase().includes(kw) ||
-        String(r.ten).toLowerCase().includes(kw)
-    )
-  }
-  const sorted = [...rows]
-  if (sortNv.value === 'doanhThuThap') sorted.sort((a, b) => a.doanhThu - b.doanhThu)
-  else if (sortNv.value === 'donNhieu') sorted.sort((a, b) => b.don - a.don)
-  else sorted.sort((a, b) => b.doanhThu - a.doanhThu)
-  return sorted
-})
-
-const tongTrangNv = computed(() => Math.max(1, Math.ceil(nhanVienLoc.value.length / sizeNv.value)))
-const dongNv = computed(() => {
-  const start = pageNv.value * sizeNv.value
-  return nhanVienLoc.value.slice(start, start + sizeNv.value)
-})
-watch(nhanVienLoc, () => {
-  if (pageNv.value >= tongTrangNv.value) pageNv.value = 0
-})
-
 /* ---------------------------------- Bảng tổng quan sản phẩm ---------------------------------- */
 const sanPhamLoc = computed(() => {
   const kw = kwSp.value.trim().toLowerCase()
@@ -528,65 +459,14 @@ watch(sanPhamLoc, () => {
 })
 
 const khoMauTon = (ton) => (ton === 0 ? 'is-empty' : ton <= 50 ? 'is-low' : 'is-ok')
-const initialsOf = (name) => {
-  if (!name) return 'NV'
-  const parts = String(name).trim().split(/\s+/)
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
-const mauAvarta = (id) => {
-  const colors = ['#cc0000', '#f59e0b', '#8b5cf6', '#14b8a6', '#3b82f6', '#22c55e', '#ec4899', '#6366f1']
-  return colors[Math.abs(Number(id) || 0) % colors.length]
-}
 
 /* ---------------------------------- Phân trang ---------------------------------- */
-const datTrangNv = (p) => {
-  if (p < 0 || p >= tongTrangNv.value || p === pageNv.value) return
-  pageNv.value = p
-}
 const datTrangSp = (p) => {
   if (p < 0 || p >= tongTrangSp.value || p === pageSp.value) return
   pageSp.value = p
 }
 
 /* ---------------------------------- Xuất Excel ---------------------------------- */
-const xuatChuKy = async () => {
-  const rows = chuKy.value.map((r, i) => [
-    i + 1,
-    r.nhan,
-    r.doanhThu,
-    r.soDon,
-    r.aov,
-    layTangTruongLabel(r.tangTruong),
-  ])
-  await exportExcel(
-    'tong-quan-chu-ky-thoi-gian.xlsx',
-    ['STT', 'Thời gian', 'Doanh thu', 'Số đơn', 'AOV (Trung bình/đơn)', 'Tăng trưởng'],
-    rows,
-    { sheetName: 'Chu kỳ thời gian' }
-  )
-  notifySuccess('Đã xuất Excel', 'Tệp Excel (.xlsx) đã được tải xuống')
-}
-
-const xuatNhanVien = async () => {
-  const rows = nhanVienLoc.value.map((r, i) => [
-    i + 1,
-    r.maNhanVien,
-    r.ten,
-    r.vaiTro,
-    r.don,
-    r.spBan,
-    r.doanhThu,
-  ])
-  await exportExcel(
-    'tong-quan-doanh-thu-nhan-vien.xlsx',
-    ['STT', 'Mã nhân viên', 'Nhân viên', 'Vai trò', 'Đơn hàng', 'Sản phẩm bán', 'Doanh thu'],
-    rows,
-    { sheetName: 'Doanh thu nhân viên' }
-  )
-  notifySuccess('Đã xuất Excel', 'Tệp Excel (.xlsx) đã được tải xuống')
-}
-
 const xuatSanPham = async () => {
   const rows = sanPhamLoc.value.map((r, i) => [
     i + 1,
@@ -619,17 +499,12 @@ const napThongKe = async () => {
   dangTai.value = true
   try {
     const thuongHieu = thuongHieuChon.value || null
-    const [tong, trangThai] = await Promise.all([
-      fetchTongQuan(tuNgay.value, denNgay.value, thuongHieu),
-      fetchTrangThaiDon(tuNgay.value, denNgay.value, thuongHieu),
-    ])
+    const tong = await fetchTongQuan(tuNgay.value, denNgay.value, thuongHieu)
     tongQuanData.value = tong
-    trangThaiData.value = trangThai
     capNhatLuc.value = gioHienTai()
   } catch (e) {
     console.error('Lỗi tải thống kê:', e)
     tongQuanData.value = null
-    trangThaiData.value = []
     notifyError('Không tải được dữ liệu thống kê')
   } finally {
     dangTai.value = false
@@ -671,13 +546,6 @@ onMounted(async () => {
   bang.value = taoBangNgay()
   capNhatLuc.value = gioHienTai()
   napThongKe()
-
-  try {
-    const d = await listEmployees({ page: 0, size: 500 })
-    nhanViens.value = d.content || []
-  } catch {
-    nhanViens.value = []
-  }
 
   try {
     const res = await fetch(`${API_BASE}/attributes/all-filter-options`)
@@ -1009,202 +877,6 @@ onMounted(async () => {
         <template v-else>
           <BarLineChart :labels="chartLabels" :series="seriesTH" mode="duong" :height="300" />
         </template>
-      </div>
-    </div>
-
-    <!-- HÀNG: CHU KỲ + TRẠNG THÁI ĐƠN -->
-    <div class="charts-grid">
-      <div class="filter-card chart-card">
-        <div class="card-title-row space-between">
-          <div class="title-with-icon">
-            <div class="icon-circle icon-cycle">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2"></rect>
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
-              </svg>
-            </div>
-            <span class="card-title-text">Tổng quan theo chu kỳ thời gian</span>
-          </div>
-          <button class="btn-action-outline" type="button" @click="xuatChuKy">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-            </svg>
-            Xuất Excel
-          </button>
-        </div>
-
-        <div class="table-container">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Thời gian</th>
-                <th class="text-right">Doanh thu</th>
-                <th class="text-center">Số đơn</th>
-                <th class="text-right">AOV (Trung bình/đơn)</th>
-                <th class="text-center">Tăng trưởng</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in chuKy" :key="r.nhan" class="row-alt">
-                <td class="cell-strong">{{ r.nhan }}</td>
-                <td class="text-right">{{ formatVnd(r.doanhThu) }}</td>
-                <td class="text-center">{{ new Intl.NumberFormat('vi-VN').format(r.soDon) }}</td>
-                <td class="text-right">{{ formatVnd(r.aov) }}</td>
-                <td class="text-center">
-                  <span class="growth-pill" :class="r.tangTruong >= 0 ? 'is-up' : 'is-down'">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                      <template v-if="r.tangTruong >= 0">
-                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                        <polyline points="17 6 23 6 23 12"></polyline>
-                      </template>
-                      <template v-else>
-                        <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline>
-                        <polyline points="17 18 23 18 23 12"></polyline>
-                      </template>
-                    </svg>
-                    {{ layTangTruongLabel(r.tangTruong) }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="filter-card chart-card">
-        <div class="card-title-row">
-          <div class="icon-circle icon-status">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-            </svg>
-          </div>
-          <span class="card-title-text">Cơ cấu trạng thái đơn hàng</span>
-        </div>
-
-        <PieChart :slices="slicesTrangThai" :size="195" />
-        <div class="status-legend">
-          <div v-for="s in slicesTrangThai" :key="s.label" class="status-row">
-            <span class="brand-dot" :style="{ background: mauTrangThai(s.label) }"></span>
-            <span class="status-name">{{ s.label }}</span>
-            <span class="status-count">{{ new Intl.NumberFormat('vi-VN').format(s.value) }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- TỔNG QUAN DOANH THU NHÂN VIÊN -->
-    <div class="table-card">
-      <div class="card-title-row space-between">
-        <div class="title-with-icon">
-          <div class="icon-circle icon-users">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
-          </div>
-          <span class="card-title-text">Tổng quan doanh thu nhân viên</span>
-          <span class="count-pill">{{ nhanVienLoc.length }} nhân viên</span>
-        </div>
-        <button class="btn-action-outline" type="button" @click="xuatNhanVien">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-          </svg>
-          Xuất Excel
-        </button>
-      </div>
-
-      <div class="filter-controls-row">
-        <div class="field-block grow">
-          <label class="field-label">Tìm nhân viên</label>
-          <div class="search-input-wrap">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input v-model="kwNv" type="text" class="input-search" placeholder="Mã hoặc tên nhân viên" @input="pageNv = 0" />
-          </div>
-        </div>
-        <div class="field-block">
-          <label class="field-label">Sắp xếp</label>
-          <SearchableSelect
-            v-model="sortNv"
-            :options="[
-              { value: 'doanhThuCao', label: 'Doanh thu cao nhất' },
-              { value: 'doanhThuThap', label: 'Doanh thu thấp nhất' },
-              { value: 'donNhieu', label: 'Đơn hàng nhiều nhất' }
-            ]"
-            label-key="label"
-            value-key="value"
-            :allow-clear="false"
-            placeholder="Doanh thu cao nhất"
-          />
-        </div>
-        <div class="field-block field-reset">
-          <label class="field-label">&nbsp;</label>
-          <button class="btn-action-outline" type="button" @click="kwNv = ''; sortNv = 'doanhThuCao'; pageNv = 0">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-            </svg>
-            Reset
-          </button>
-        </div>
-      </div>
-
-      <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th style="width: 50px">STT</th>
-              <th style="width: 120px">Mã nhân viên</th>
-              <th>Nhân viên</th>
-              <th class="text-center" style="width: 110px">Đơn hàng</th>
-              <th class="text-center" style="width: 130px">Sản phẩm bán</th>
-              <th class="text-right" style="width: 150px">Doanh thu</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="nhanVienLoc.length === 0">
-              <td colspan="6" class="text-center empty-row">Không tìm thấy nhân viên nào</td>
-            </tr>
-            <tr v-for="(r, i) in dongNv" :key="r.id ?? r.maNhanVien" class="row-alt">
-              <td class="cell-stt">{{ pageNv * sizeNv + i + 1 }}</td>
-              <td class="cell-code"><span class="code-chip">{{ r.maNhanVien }}</span></td>
-              <td>
-                <div class="entity-cell">
-                  <span class="avatar-dot" :style="{ background: mauAvarta(r.id) }">{{ initialsOf(r.ten) }}</span>
-                  <div class="entity-meta">
-                    <span class="entity-name">{{ r.ten }}</span>
-                    <span class="entity-sub">{{ r.vaiTro || 'Nhân viên bán hàng' }}</span>
-                  </div>
-                </div>
-              </td>
-              <td class="text-center">{{ new Intl.NumberFormat('vi-VN').format(r.don) }}</td>
-              <td class="text-center">{{ new Intl.NumberFormat('vi-VN').format(r.spBan) }}</td>
-              <td class="text-right cell-money">{{ formatVnd(r.doanhThu) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div v-if="tongTrangNv > 1" class="table-card-foot">
-        <PaginationBar
-          :page="pageNv"
-          :total-pages="tongTrangNv"
-          :total-elements="nhanVienLoc.length"
-          :page-size="sizeNv"
-          :from="dongNv.length ? pageNv * sizeNv + 1 : 0"
-          :to="pageNv * sizeNv + dongNv.length"
-          :sizes="[5, 10, 20]"
-          label="nhân viên"
-          @change="datTrangNv"
-          @size-change="(s) => { sizeNv = s; pageNv = 0 }"
-        />
       </div>
     </div>
 
