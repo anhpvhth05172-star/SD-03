@@ -880,7 +880,7 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 3 THẺ SỐ LIỆU LỚN -->
+    <!-- THẺ SỐ LIỆU LỚN -->
     <div class="stat-grid stat-grid-3">
       <div class="stat-card">
         <div class="stat-icon is-emerald">
@@ -891,27 +891,6 @@ onMounted(async () => {
         </div>
         <div class="stat-value">{{ formatVnd(khoang.doanhThu) }}</div>
         <div class="stat-label">Tổng doanh thu</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon is-green">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="6" width="20" height="12" rx="2"></rect>
-            <circle cx="12" cy="12" r="2"></circle>
-            <path d="M6 12h.01M18 12h.01"></path>
-          </svg>
-        </div>
-        <div class="stat-value">{{ formatVnd(khoang.tienMat) }}</div>
-        <div class="stat-label">Tổng tiền mặt</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon is-blue">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-            <line x1="2" y1="10" x2="22" y2="10"></line>
-          </svg>
-        </div>
-        <div class="stat-value">{{ formatVnd(khoang.tienChuyenKhoan) }}</div>
-        <div class="stat-label">Tổng tiền chuyển khoản</div>
       </div>
     </div>
 
@@ -1471,7 +1450,7 @@ onMounted(async () => {
       <div v-else-if="!ssKy.length" class="ss-empty">Không có dữ liệu trong khoảng này</div>
 
       <template v-if="!ssDangTai && !ssErr && ssKy.length">
-        <!-- 6 THẺ KPI -->
+        <!-- 4 THẺ KPI -->
         <div class="stat-grid stat-grid-3">
           <div class="stat-card">
             <div class="stat-icon is-emerald">
@@ -1483,29 +1462,6 @@ onMounted(async () => {
             <div class="stat-value">{{ formatVnd(ssTong.tongDt) }}</div>
             <div class="stat-label">Tổng doanh thu</div>
           </div>
-          <div class="stat-card">
-            <div class="stat-icon is-green">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="2" y="6" width="20" height="12" rx="2"></rect>
-                <circle cx="12" cy="12" r="2"></circle>
-                <path d="M6 12h.01M18 12h.01"></path>
-              </svg>
-            </div>
-            <div class="stat-value">{{ formatVnd(ssTong.tongTm) }}</div>
-            <div class="stat-label">Tổng tiền mặt</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon is-blue">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-                <line x1="2" y1="10" x2="22" y2="10"></line>
-              </svg>
-            </div>
-            <div class="stat-value">{{ formatVnd(ssTong.tongCk) }}</div>
-            <div class="stat-label">Tổng tiền chuyển khoản</div>
-          </div>
-        </div>
-        <div class="stat-grid stat-grid-3">
           <div class="stat-card">
             <div class="stat-icon is-cyan">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
