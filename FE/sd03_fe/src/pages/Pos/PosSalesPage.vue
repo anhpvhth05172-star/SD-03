@@ -2451,6 +2451,10 @@ const filteredVouchers = computed(() => {
         return false
       }
     }
+    // Ẩn nếu khách hàng đã dùng hết lượt phiếu này
+    if (custId && Array.isArray(v.idKhachHangsDaDung) && v.idKhachHangsDaDung.includes(custId)) {
+      return false
+    }
     if (!q) return true
     return (
       (v.ma && v.ma.toLowerCase().includes(q)) ||
@@ -2478,17 +2482,22 @@ const calculateVoucherDiscount = (voucher, currentSubTotal) => {
   return Math.min(discount, sub)
 }
 
-const isVoucherEligible = (v) => {
-  if (!currentOrder.value) return false
+const isVoucherEligible = (v, order = currentOrder.value) => {
+  if (!v || !order) return false
   if (v.trangThai === false) return false
 
+  const custId = order.customer?.id || null
   const isCaNhan = v.phamVi === 'CA_NHAN' || v.scope === 'CA_NHAN'
   if (isCaNhan) {
-    const custId = currentOrder.value?.customer?.id
     if (!custId) return false
     if (Array.isArray(v.idKhachHangsChuaDung) && !v.idKhachHangsChuaDung.includes(custId)) {
       return false
     }
+  }
+
+  // Khách hàng đã dùng hết lượt phiếu này (dù là công khai hay cá nhân)
+  if (custId && Array.isArray(v.idKhachHangsDaDung) && v.idKhachHangsDaDung.includes(custId)) {
+    return false
   }
 
   const now = new Date()
@@ -2497,51 +2506,55 @@ const isVoucherEligible = (v) => {
   if (v.soLuong && v.soLuongDaSuDung !== undefined && v.soLuongDaSuDung >= v.soLuong) return false
 
   const minRequired = Number(v.hoaDonToiThieu || 0)
-  return subTotal.value >= minRequired
+  const currentSub = order.cart ? order.cart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 0)), 0) : subTotal.value
+  return currentSub >= minRequired
 }
 
 const availableEligibleVouchersCount = computed(() => {
   return allVouchers.value.filter(v => isVoucherEligible(v)).length
 })
 
-const bestVoucherSuggestion = computed(() => {
-  if (!currentOrder.value || subTotal.value <= 0 || allVouchers.value.length === 0) return null
+const getBestVoucherForOrder = (order = currentOrder.value) => {
+  if (!order || !order.cart || order.cart.length === 0) return null
+  const currentSub = order.cart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 0)), 0)
+  if (currentSub <= 0 || allVouchers.value.length === 0) return null
 
-  const now = new Date()
-  const validVouchers = allVouchers.value.filter(v => {
-    if (v.trangThai === false) return false
-    if (v.ngayBatDau && new Date(v.ngayBatDau) > now) return false
-    if (v.ngayKetThuc && new Date(v.ngayKetThuc) < now) return false
-    if (v.soLuong && v.soLuongDaSuDung !== undefined && v.soLuongDaSuDung >= v.soLuong) return false
-    const minRequired = Number(v.hoaDonToiThieu || 0)
-    return subTotal.value >= minRequired
-  })
-
+  const validVouchers = allVouchers.value.filter(v => isVoucherEligible(v, order))
   if (validVouchers.length === 0) return null
 
   const sorted = [...validVouchers].sort((a, b) => {
-    const discA = calculateVoucherDiscount(a, subTotal.value)
-    const discB = calculateVoucherDiscount(b, subTotal.value)
+    const discA = calculateVoucherDiscount(a, currentSub)
+    const discB = calculateVoucherDiscount(b, currentSub)
     if (discB !== discA) return discB - discA
     return (Number(a.hoaDonToiThieu || 0)) - (Number(b.hoaDonToiThieu || 0))
   })
 
   const best = sorted[0]
-  const discountVal = calculateVoucherDiscount(best, subTotal.value)
+  const discountVal = calculateVoucherDiscount(best, currentSub)
   if (discountVal <= 0) return null
 
   return {
     voucher: best,
     discount: discountVal
   }
-})
+}
 
+const bestVoucherSuggestion = computed(() => {
+  return getBestVoucherForOrder(currentOrder.value)
+})
 
 const nextVoucherSuggestion = computed(() => {
   if (!currentOrder.value || subTotal.value <= 0 || allVouchers.value.length === 0) return null
   const now = new Date()
+  const custId = currentOrder.value?.customer?.id || null
   const eligibleHigher = allVouchers.value.filter(v => {
     if (v.trangThai === false) return false
+    const isCaNhan = v.phamVi === 'CA_NHAN' || v.scope === 'CA_NHAN'
+    if (isCaNhan) {
+      if (!custId) return false
+      if (Array.isArray(v.idKhachHangsChuaDung) && !v.idKhachHangsChuaDung.includes(custId)) return false
+    }
+    if (custId && Array.isArray(v.idKhachHangsDaDung) && v.idKhachHangsDaDung.includes(custId)) return false
     if (v.ngayBatDau && new Date(v.ngayBatDau) > now) return false
     if (v.ngayKetThuc && new Date(v.ngayKetThuc) < now) return false
     if (v.soLuong && v.soLuongDaSuDung !== undefined && v.soLuongDaSuDung >= v.soLuong) return false
@@ -2580,17 +2593,13 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
     currentOrder.value.userRemovedVoucher = false
     return
   }
-  if (!currentOrder.value.userRemovedVoucher && newBest?.voucher) {
+  // Nếu chưa chọn voucher hoặc voucher đang chọn không còn hợp lệ (ví dụ: đã dùng rồi, không đủ điều kiện...)
+  if (!currentOrder.value.selectedVoucher || !isVoucherEligible(currentOrder.value.selectedVoucher)) {
+    currentOrder.value.selectedVoucher = newBest?.voucher || null
+    currentOrder.value.userRemovedVoucher = false
+  } else if (!currentOrder.value.userRemovedVoucher && newBest?.voucher) {
     if (currentOrder.value.selectedVoucher?.id !== newBest.voucher.id) {
       currentOrder.value.selectedVoucher = newBest.voucher
-    }
-  } else if (currentOrder.value.selectedVoucher) {
-    if (!isVoucherEligible(currentOrder.value.selectedVoucher)) {
-      if (newBest?.voucher) {
-        currentOrder.value.selectedVoucher = newBest.voucher
-      } else {
-        currentOrder.value.selectedVoucher = null
-      }
     }
   }
 }, { immediate: true })
@@ -2637,6 +2646,17 @@ const applyBestVoucher = () => {
 const getVoucherIneligibilityReason = (v) => {
   if (v.trangThai === false) {
     return 'Phiếu giảm giá tạm thời bị khóa'
+  }
+  const custId = currentOrder.value?.customer?.id || null
+  const isCaNhan = v.phamVi === 'CA_NHAN' || v.scope === 'CA_NHAN'
+  if (isCaNhan && !custId) {
+    return 'Chỉ áp dụng cho khách hàng được cấp phiếu cá nhân'
+  }
+  if (custId && Array.isArray(v.idKhachHangsDaDung) && v.idKhachHangsDaDung.includes(custId)) {
+    return 'Khách hàng đã dùng hết lượt phiếu giảm giá này'
+  }
+  if (isCaNhan && custId && Array.isArray(v.idKhachHangsChuaDung) && !v.idKhachHangsChuaDung.includes(custId)) {
+    return 'Phiếu giảm giá cá nhân không được cấp cho khách hàng này'
   }
   const now = new Date()
   if (v.ngayBatDau && new Date(v.ngayBatDau) > now) {
@@ -2921,9 +2941,20 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
         const oldOrderSubTotal = oldSubTotalsMap.get(order.id) ?? newOrderSubTotal
         const oldDiscAmt = calculateVoucherDiscount(oldV, oldOrderSubTotal)
 
+        const isCaNhan = freshV.phamVi === 'CA_NHAN' || freshV.scope === 'CA_NHAN'
+        const custId = order.customer?.id
+        const alreadyUsed = custId && Array.isArray(freshV.idKhachHangsDaDung) && freshV.idKhachHangsDaDung.includes(custId)
+        const notAssigned = isCaNhan && (!custId || (Array.isArray(freshV.idKhachHangsChuaDung) && !freshV.idKhachHangsChuaDung.includes(custId)))
+
         if (!freshV || freshV.trangThai === false) {
           order.selectedVoucher = null
           changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} đã bị khóa hoặc ngừng hoạt động và được tự động gỡ`)
+        } else if (alreadyUsed) {
+          order.selectedVoucher = null
+          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} khách hàng đã dùng hết lượt và được tự động gỡ`)
+        } else if (notAssigned) {
+          order.selectedVoucher = null
+          changes.push(`Sửa voucher: Phiếu giảm giá cá nhân "${vCode}"${orderLabel} không được cấp cho khách hàng này và được tự động gỡ`)
         } else if (freshV.ngayKetThuc && new Date(freshV.ngayKetThuc) < now) {
           order.selectedVoucher = null
           changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} đã hết hạn sử dụng (${formatDateVn(freshV.ngayKetThuc)}) và được tự động gỡ`)
@@ -3225,8 +3256,54 @@ const handleCheckout = async (options = {}) => {
       }))
     }
 
+    // Kiểm tra tính hợp lệ của voucher trước khi checkout
+    if (currentOrder.value.selectedVoucher && !isVoucherEligible(currentOrder.value.selectedVoucher)) {
+      const fallbackBest = getBestVoucherForOrder(currentOrder.value)
+      currentOrder.value.selectedVoucher = fallbackBest?.voucher || null
+      payload.idPhieuGiamGia = fallbackBest?.voucher ? fallbackBest.voucher.id : null
+      if (fallbackBest?.voucher) {
+        notifyWarning('Đổi voucher tốt nhất', `Mã giảm giá đã chọn không còn khả dụng, hệ thống tự động chuyển sang mã tốt nhất tiếp theo "${fallbackBest.voucher.ma}"!`)
+      } else {
+        notifyWarning('Bỏ mã giảm giá', 'Mã giảm giá đã chọn không còn khả dụng cho khách hàng này.')
+      }
+    }
+
     const soldCartSnapshot = currentOrder.value.cart.map(item => ({ ...item }))
-    const invoiceRes = await http.post('/hoa-don', payload)
+    let invoiceRes
+    try {
+      invoiceRes = await http.post('/hoa-don', payload)
+    } catch (checkoutErr) {
+      const errMsg = checkoutErr?.response?.data?.message || checkoutErr?.message || ''
+      if (payload.idPhieuGiamGia && (
+        errMsg.includes('đã dùng phiếu') ||
+        errMsg.includes('không được cấp') ||
+        errMsg.includes('giới hạn') ||
+        errMsg.includes('không hoạt động') ||
+        errMsg.includes('hóa đơn tối thiểu')
+      )) {
+        console.warn('Voucher rejected by backend, falling back to next best voucher:', errMsg)
+        const rejectedVoucherId = payload.idPhieuGiamGia
+        const custId = payload.idKhachHang
+        if (custId) {
+          const vObj = allVouchers.value.find(v => v.id === rejectedVoucherId)
+          if (vObj) {
+            vObj.idKhachHangsDaDung = [...(vObj.idKhachHangsDaDung || []), custId]
+            if (Array.isArray(vObj.idKhachHangsChuaDung)) {
+              vObj.idKhachHangsChuaDung = vObj.idKhachHangsChuaDung.filter(id => id !== custId)
+            }
+          }
+        }
+        const nextBest = getBestVoucherForOrder(currentOrder.value)
+        currentOrder.value.selectedVoucher = nextBest?.voucher || null
+        payload.idPhieuGiamGia = nextBest?.voucher ? nextBest.voucher.id : null
+
+        notifyWarning('Tự động đổi voucher', `Khách hàng đã dùng phiếu này. Hệ thống tự động chọn mã tốt nhất tiếp theo ${nextBest?.voucher ? `"${nextBest.voucher.ma}"` : ''} và hoàn tất thanh toán!`)
+
+        invoiceRes = await http.post('/hoa-don', payload)
+      } else {
+        throw checkoutErr
+      }
+    }
     const savedDto = invoiceRes?.data || null
 
     if (

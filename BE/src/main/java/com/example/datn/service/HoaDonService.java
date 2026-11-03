@@ -740,6 +740,18 @@ public class HoaDonService {
             .map(p -> new FormDataResponse.PhuongThucOption(p.getId(), p.getTenPhuongThuc()))
             .toList();
         List<KhachHangPhieuGiamGia> allKhPg = khachHangPhieuGiamGiaRepository.findAll();
+        List<LichSuSuDungPhieuGiamGia> allLichSu = lichSuSuDungRepository.findAll();
+
+        java.util.Map<Long, java.util.Map<Long, Long>> usageByPhieuAndKhach = allLichSu.stream()
+            .filter(l -> l.getPhieuGiamGia() != null && l.getKhachHang() != null && l.getPhieuGiamGia().getId() != null && l.getKhachHang().getId() != null)
+            .collect(java.util.stream.Collectors.groupingBy(
+                l -> l.getPhieuGiamGia().getId(),
+                java.util.stream.Collectors.groupingBy(
+                    l -> l.getKhachHang().getId(),
+                    java.util.stream.Collectors.counting()
+                )
+            ));
+
         java.util.Map<Long, List<Long>> khChuaDungMap = allKhPg.stream()
             .filter(r -> Boolean.TRUE.equals(r.getTrangThai()) && r.getNgaySuDung() == null && r.getPhieuGiamGia() != null && r.getKhachHang() != null)
             .collect(java.util.stream.Collectors.groupingBy(
@@ -748,16 +760,43 @@ public class HoaDonService {
             ));
 
         List<FormDataResponse.PhieuGiamGiaOption> phieuGiamGias = phieuGiamGiaRepository.findAll().stream()
-            .map(p -> new FormDataResponse.PhieuGiamGiaOption(
-                p.getId(), p.getMaPhieuGiamGia(),
-                PhieuGiamGiaUtil.tenHienThi(p.getLoaiGiamGia(), p.getGiaTriGiam()),
-                p.getLoaiGiamGia(),
-                p.getGiaTriGiam(), p.getGiamToiDa(), p.getHoaDonToiThieu(),
-                p.getNgayBatDau(), p.getNgayKetThuc(), p.getSoLuong(), p.getSoLuongDaSuDung(),
-                p.getGioiHanMoiTaiKhoan(), p.getTrangThai(),
-                p.getPhamVi(),
-                khChuaDungMap.getOrDefault(p.getId(), List.of())
-            ))
+            .map(p -> {
+                int limit = p.getGioiHanMoiTaiKhoan() != null && p.getGioiHanMoiTaiKhoan() > 0 ? p.getGioiHanMoiTaiKhoan() : 1;
+                java.util.Map<Long, Long> khUsage = usageByPhieuAndKhach.getOrDefault(p.getId(), java.util.Map.of());
+
+                java.util.Set<Long> daDungSet = new java.util.HashSet<>();
+                khUsage.forEach((khId, count) -> {
+                    if (count >= limit) {
+                        daDungSet.add(khId);
+                    }
+                });
+
+                if ("CA_NHAN".equalsIgnoreCase(p.getPhamVi())) {
+                    allKhPg.stream()
+                        .filter(r -> r.getPhieuGiamGia() != null && p.getId().equals(r.getPhieuGiamGia().getId()) && r.getKhachHang() != null)
+                        .forEach(r -> {
+                            if (Boolean.FALSE.equals(r.getTrangThai()) || r.getNgaySuDung() != null) {
+                                daDungSet.add(r.getKhachHang().getId());
+                            }
+                        });
+                }
+
+                List<Long> chuaDung = khChuaDungMap.getOrDefault(p.getId(), List.of()).stream()
+                    .filter(khId -> !daDungSet.contains(khId))
+                    .toList();
+
+                return new FormDataResponse.PhieuGiamGiaOption(
+                    p.getId(), p.getMaPhieuGiamGia(),
+                    PhieuGiamGiaUtil.tenHienThi(p.getLoaiGiamGia(), p.getGiaTriGiam()),
+                    p.getLoaiGiamGia(),
+                    p.getGiaTriGiam(), p.getGiamToiDa(), p.getHoaDonToiThieu(),
+                    p.getNgayBatDau(), p.getNgayKetThuc(), p.getSoLuong(), p.getSoLuongDaSuDung(),
+                    p.getGioiHanMoiTaiKhoan(), p.getTrangThai(),
+                    p.getPhamVi(),
+                    chuaDung,
+                    new java.util.ArrayList<>(daDungSet)
+                );
+            })
             .toList();
         List<FormDataResponse.SanPhamChiTietOption> spcts = sanPhamChiTietRepository.findAll().stream()
             .map(s -> new FormDataResponse.SanPhamChiTietOption(
