@@ -316,7 +316,10 @@ public class SanPhamServiceImpl implements SanPhamService {
         LoaiGiay loaiGiay = loaiGiayRepository.findById(request.getIdLoaiGiay())
                 .orElseThrow(() -> new IllegalArgumentException("Vui lòng chọn Loại giày hợp lệ"));
 
-        // Validate hình ảnh (Magic Bytes, dung lượng tối đa 5MB)
+        // Validate hình ảnh (Magic Bytes, dung lượng tối đa 10MB)
+        if (request.getHinhAnhDaiDien() != null && !request.getHinhAnhDaiDien().trim().isEmpty()) {
+            com.example.datn.util.ImageValidator.validateBase64Image(request.getHinhAnhDaiDien());
+        }
         if (request.getBienThes() != null) {
             for (BienTheItem item : request.getBienThes()) {
                 if (item.getHinhAnh() != null && !item.getHinhAnh().trim().isEmpty()) {
@@ -391,6 +394,7 @@ public class SanPhamServiceImpl implements SanPhamService {
             existingSp.setNgayCapNhat(LocalDateTime.now());
             sanPhamRepository.save(existingSp);
 
+            saveHinhAnhDaiDien(existingSp, request.getHinhAnhDaiDien());
             processSaveVariants(existingSp, request.getBienThes());
 
             return SmartProductSaveResponse.builder()
@@ -419,6 +423,7 @@ public class SanPhamServiceImpl implements SanPhamService {
         newSp.setNgayCapNhat(LocalDateTime.now());
 
         SanPham savedSp = sanPhamRepository.save(newSp);
+        saveHinhAnhDaiDien(savedSp, request.getHinhAnhDaiDien());
         processSaveVariants(savedSp, request.getBienThes());
 
         return SmartProductSaveResponse.builder()
@@ -519,6 +524,23 @@ public class SanPhamServiceImpl implements SanPhamService {
                 }
             }
         }
+
+    }
+
+    private void saveHinhAnhDaiDien(SanPham sp, String hinhAnhDaiDien) {
+        if (hinhAnhDaiDien == null || hinhAnhDaiDien.trim().isEmpty()) return;
+        try {
+            List<com.example.datn.entity.HinhAnhSanPham> existingImages = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
+            boolean imgExists = existingImages != null && existingImages.stream()
+                    .anyMatch(img -> hinhAnhDaiDien.equals(img.getDuongDan()));
+            if (!imgExists) {
+                com.example.datn.entity.HinhAnhSanPham hasp = new com.example.datn.entity.HinhAnhSanPham();
+                hasp.setSanPham(sp);
+                hasp.setDuongDan(hinhAnhDaiDien.trim());
+                hasp.setTenAnh(sp.getTenSanPham() + " - Đại diện");
+                hinhAnhSanPhamRepository.save(hasp);
+            }
+        } catch (Exception ignored) {}
     }
 
     @Override

@@ -8,10 +8,21 @@ import CurrencyInput from '@/components/CurrencyInput.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
+import { API_ORIGIN } from '@/api/http'
+import { getToken } from '@/utils/auth'
+import { checkImageMagicBytes, compressImageToBase64 } from '@/utils/imageCompressor'
 
 const router = useRouter()
 const route = useRoute()
-const API_BASE = 'http://localhost:8080/api/v1'
+const API_BASE = `${API_ORIGIN}/api/v1`
+
+const getAuthHeaders = () => {
+  const token = getToken()
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  }
+}
 
 const isLoading = ref(false)
 
@@ -191,6 +202,7 @@ const fetchVariants = async (useCache = true) => {
   try {
     const params = buildParams(currentPage.value)
     const res = await fetch(`${API_BASE}/san-pham-chi-tiet?${params.toString()}`, {
+      headers: getAuthHeaders(),
       signal: currentAbortController.signal
     })
 
@@ -304,7 +316,10 @@ const toggleStatus = async (item) => {
   const itemCode = item.maCtsp || item.maSp || `SKU-${item.id}`
 
   try {
-    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/${item.id}/toggle-status`, { method: 'PATCH' })
+    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/${item.id}/toggle-status`, {
+      method: 'PATCH',
+      headers: getAuthHeaders()
+    })
     if (res.ok) {
       try { localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now())) } catch {}
       showToastNotice(
@@ -709,29 +724,6 @@ const applyMatchedVariant = (item) => {
   showToastNotice('Đã chọn', `Đang lọc danh sách theo biến thể "${item.maCtsp || item.color}"`, 'success')
 }
 
-const checkImageMagicBytes = async (file) => {
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onloadend = (e) => {
-      const arr = new Uint8Array(e.target.result).subarray(0, 12)
-      if (arr.length < 4) return resolve(false)
-
-      // JPEG: FF D8 FF
-      if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) return resolve(true)
-      // PNG: 89 50 4E 47
-      if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) return resolve(true)
-      // WEBP: 52 49 46 46 (RIFF) ... 57 45 42 50 (WEBP)
-      if (arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 &&
-        arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50) return resolve(true)
-      // GIF: 47 49 46 38
-      if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x38) return resolve(true)
-
-      resolve(false)
-    }
-    reader.readAsArrayBuffer(file.slice(0, 12))
-  })
-}
-
 const isAddModalOpen = ref(false)
 const isSubmittingAdd = ref(false)
 const addFormError = ref('')
@@ -826,28 +818,29 @@ const onAddColorChange = () => {
 const triggerAddImageUpload = () => {
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+  input.accept = 'image/*,.jpg,.jpeg,.png,.webp,.gif,.avif,.jfif,.bmp'
   input.onchange = async (e) => {
     const file = e.target.files[0]
     if (!file) return
 
-    const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+    const MAX_SIZE = 10 * 1024 * 1024 // 10MB
     if (file.size > MAX_SIZE) {
-      notifyWarning('Ảnh quá lớn', `Ảnh "${file.name}" vượt quá dung lượng tối đa 5MB!`)
+      notifyWarning('Ảnh quá lớn', `Ảnh "${file.name}" vượt quá dung lượng tối đa 10MB!`)
       return
     }
 
     const isValid = await checkImageMagicBytes(file)
     if (!isValid) {
-      notifyError('Tệp không hợp lệ', `Tệp "${file.name}" không phải là ảnh hợp lệ (chỉ hỗ trợ JPG, PNG, WEBP)!`)
+      notifyError('Tệp không hợp lệ', `Tệp "${file.name}" không phải là ảnh hợp lệ!`)
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      addForm.imagePreview = ev.target.result
+    try {
+      const compressed = await compressImageToBase64(file)
+      addForm.imagePreview = compressed
+    } catch (err) {
+      notifyError('Lỗi xử lý ảnh', 'Không thể đọc và tối ưu hóa tệp ảnh này')
     }
-    reader.readAsDataURL(file)
   }
   input.click()
 }
@@ -904,7 +897,7 @@ const saveAddVariant = async () => {
 
     const res = await fetch(`${API_BASE}/san-pham-chi-tiet/batch`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(payload)
     })
 
@@ -1143,28 +1136,29 @@ const saveAddVariant = async () => {
   const triggerEditImageUpload = () => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+    input.accept = 'image/*,.jpg,.jpeg,.png,.webp,.gif,.avif,.jfif,.bmp'
     input.onchange = async (e) => {
       const file = e.target.files[0]
       if (!file) return
 
-      const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+      const MAX_SIZE = 10 * 1024 * 1024 // 10MB
       if (file.size > MAX_SIZE) {
-        notifyWarning('Ảnh quá lớn', `Ảnh "${file.name}" vượt quá dung lượng tối đa 5MB!`)
+        notifyWarning('Ảnh quá lớn', `Ảnh "${file.name}" vượt quá dung lượng tối đa 10MB!`)
         return
       }
 
       const isValid = await checkImageMagicBytes(file)
       if (!isValid) {
-        notifyError('Tệp không hợp lệ', `Tệp "${file.name}" không phải là ảnh hợp lệ (chỉ hỗ trợ JPG, PNG, WEBP)!`)
+        notifyError('Tệp không hợp lệ', `Tệp "${file.name}" không phải là ảnh hợp lệ!`)
         return
       }
 
-      const reader = new FileReader()
-      reader.onload = (ev) => {
-        editForm.imagePreview = ev.target.result
+      try {
+        const compressed = await compressImageToBase64(file)
+        editForm.imagePreview = compressed
+      } catch (err) {
+        notifyError('Lỗi xử lý ảnh', 'Không thể đọc và tối ưu hóa tệp ảnh này')
       }
-      reader.readAsDataURL(file)
     }
     input.click()
   }
@@ -1200,7 +1194,7 @@ const saveAddVariant = async () => {
 
       const res = await fetch(`${API_BASE}/san-pham-chi-tiet/${currentId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       })
 

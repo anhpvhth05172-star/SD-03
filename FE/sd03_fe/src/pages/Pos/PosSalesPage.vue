@@ -3418,7 +3418,10 @@ const handleCheckout = async (options = {}) => {
     try {
       invoiceRes = await http.post('/hoa-don', payload)
     } catch (checkoutErr) {
-      const errMsg = checkoutErr?.message || checkoutErr?.response?.data?.message || ''
+      const errMsg = checkoutErr?.response?.data?.message ||
+        checkoutErr?.response?.data?.error ||
+        (typeof checkoutErr?.response?.data === 'string' ? checkoutErr?.response?.data : '') ||
+        checkoutErr?.message || ''
       console.warn('Checkout error caught:', errMsg)
       if (payload.idPhieuGiamGia && (
         errMsg.includes('đã dùng phiếu') ||

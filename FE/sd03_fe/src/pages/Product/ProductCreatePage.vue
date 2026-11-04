@@ -7,6 +7,8 @@ import CurrencyInput from '@/components/CurrencyInput.vue'
 import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 import { API_ORIGIN } from '@/api/http'
+import { getToken } from '@/utils/auth'
+import { checkImageMagicBytes, compressImageToBase64 } from '@/utils/imageCompressor'
 
 const router = useRouter()
 const API_BASE = `${API_ORIGIN}/api/v1`
@@ -21,7 +23,8 @@ const form = reactive({
   style: '',
   origin: '',
   feature: '',
-  description: ''
+  description: '',
+  mainImage: null
 })
 
 const errors = reactive({
@@ -241,41 +244,17 @@ const removeItem = (groupIndex, itemIndex) => {
   }
 }
 
-// Kiểm tra Magic Bytes client-side (JPEG: FF D8 FF, PNG: 89 50 4E 47, WEBP: RIFF...WEBP)
-const checkImageMagicBytes = async (file) => {
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onloadend = (e) => {
-      const arr = new Uint8Array(e.target.result).subarray(0, 12)
-      if (arr.length < 4) return resolve(false)
-      
-      // JPEG: FF D8 FF
-      if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) return resolve(true)
-      // PNG: 89 50 4E 47
-      if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) return resolve(true)
-      // WEBP: 52 49 46 46 (RIFF) ... 57 45 42 50 (WEBP)
-      if (arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 &&
-          arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50) return resolve(true)
-      // GIF: 47 49 46 38
-      if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x38) return resolve(true)
-      
-      resolve(false)
-    }
-    reader.readAsArrayBuffer(file.slice(0, 12))
-  })
-}
-
 const triggerImageUpload = (colorId) => {
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+  input.accept = 'image/*,.jpg,.jpeg,.png,.webp,.gif,.avif,.jfif,.bmp'
   input.multiple = true
   input.onchange = async (e) => {
     const files = Array.from(e.target.files)
     if (!colorImages[colorId]) colorImages[colorId] = []
     const currentList = colorImages[colorId]
 
-    const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+    const MAX_SIZE = 10 * 1024 * 1024 // 10MB
     const MAX_IMAGES_PER_COLOR = 4
 
     let addedCount = 0
@@ -285,33 +264,68 @@ const triggerImageUpload = (colorId) => {
         break
       }
 
-      // 1. Kiểm tra dung lượng 5MB
+      // 1. Kiểm tra dung lượng 10MB
       if (file.size > MAX_SIZE) {
-        showToast(`Ảnh "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) vượt quá dung lượng tối đa 5MB!`, 'warning')
+        showToast(`Ảnh "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) vượt quá dung lượng tối đa 10MB!`, 'warning')
         continue
       }
 
       // 2. Kiểm tra định dạng & Magic Bytes
       const isValidRealImage = await checkImageMagicBytes(file)
       if (!isValidRealImage) {
-        showToast(`Tệp "${file.name}" không phải là ảnh hợp lệ (chỉ hỗ trợ JPG, PNG, WEBP)!`, 'error')
+        showToast(`Tệp "${file.name}" không phải là ảnh hợp lệ!`, 'error')
         continue
       }
 
-      const reader = new FileReader()
-      reader.onload = (uploadEvent) => {
-        const base64Url = uploadEvent.target.result
-        currentList.push(base64Url)
+      try {
+        const compressedBase64 = await compressImageToBase64(file)
+        currentList.push(compressedBase64)
+        addedCount++
+      } catch (err) {
+        console.error('Lỗi xử lý nén ảnh:', err)
       }
-      reader.readAsDataURL(file)
-      addedCount++
     }
 
     if (addedCount > 0) {
-      showToast(`Đã tải lên ${addedCount} ảnh hợp lệ!`)
+      showToast(`Đã tải lên và tối ưu ${addedCount} ảnh hợp lệ!`)
     }
   }
   input.click()
+}
+
+const triggerMainImageUpload = () => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*,.jpg,.jpeg,.png,.webp,.gif,.avif,.jfif,.bmp'
+  input.onchange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    const MAX_SIZE = 10 * 1024 * 1024 // 10MB
+    if (file.size > MAX_SIZE) {
+      showToast(`Ảnh "${file.name}" vượt quá dung lượng tối đa 10MB!`, 'warning')
+      return
+    }
+
+    const isValid = await checkImageMagicBytes(file)
+    if (!isValid) {
+      showToast(`Tệp "${file.name}" không phải là ảnh hợp lệ!`, 'error')
+      return
+    }
+
+    try {
+      const compressed = await compressImageToBase64(file)
+      form.mainImage = compressed
+      showToast('Đã tải ảnh đại diện sản phẩm!')
+    } catch (err) {
+      showToast('Không thể xử lý ảnh này', 'error')
+    }
+  }
+  input.click()
+}
+
+const removeMainImage = () => {
+  form.mainImage = null
 }
 
 const removeImage = (colorId, index, event) => {
@@ -499,6 +513,7 @@ const saveProduct = async (confirmMerge = false) => {
     doiTuong: form.gender,
     tinhNang: form.feature ? form.feature.trim() : '',
     moTa: form.description ? form.description.trim() : '',
+    hinhAnhDaiDien: form.mainImage || null,
     trangThai: true,
     confirmMerge: Boolean(confirmMerge),
     bienThes: bienThes
@@ -506,9 +521,13 @@ const saveProduct = async (confirmMerge = false) => {
 
   try {
     isSubmitting.value = true
+    const token = getToken()
     const res = await fetch(`${API_BASE}/san-pham/smart-save`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
       body: JSON.stringify(payload)
     })
 
@@ -681,6 +700,28 @@ onMounted(() => {
           <label class="form-label">Tính năng sản phẩm</label>
           <input v-model="form.feature" type="text" class="form-input"
             placeholder="Mô tả các tính năng nổi bật (vd: Êm chân, thoáng khí...)" />
+        </div>
+
+        <div class="form-field full-row">
+          <label class="form-label">Ảnh đại diện sản phẩm (Tùy chọn)</label>
+          <div v-if="form.mainImage" class="main-image-preview-card">
+            <img :src="form.mainImage" class="main-image-thumb" alt="Ảnh đại diện sản phẩm" />
+            <div class="main-image-meta">
+              <span class="badge-main-img">📷 Ảnh đại diện chính</span>
+              <p class="main-image-hint">Ảnh này sẽ làm hình ảnh đại diện hiển thị cho sản phẩm trên hệ thống.</p>
+              <div class="main-image-btn-row">
+                <button type="button" class="btn btn-outline-secondary btn-sm" @click="triggerMainImageUpload">Đổi ảnh khác</button>
+                <button type="button" class="btn btn-outline-danger btn-sm" @click="removeMainImage">Xóa ảnh</button>
+              </div>
+            </div>
+          </div>
+          <div v-else class="main-image-dropzone-box" @click="triggerMainImageUpload">
+            <div class="dropzone-icon">📷</div>
+            <div class="dropzone-text-group">
+              <span class="dropzone-main-txt">Tải lên ảnh đại diện sản phẩm</span>
+              <span class="dropzone-sub-txt">Nhấn để chọn ảnh đại diện từ máy tính (JPG, PNG, WEBP, AVIF... Tối đa 10MB)</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -956,3 +997,78 @@ onMounted(() => {
 </template>
 
 <style scoped src="@/assets/styles/ProductCreatePage.css"></style>
+
+<style scoped>
+.main-image-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.main-image-thumb {
+  width: 90px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+}
+
+.main-image-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.main-image-hint {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+}
+
+.main-image-btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.main-image-dropzone-box {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.main-image-dropzone-box:hover {
+  border-color: #ef4444;
+  background: #fff1f2;
+}
+
+.dropzone-icon {
+  font-size: 28px;
+}
+
+.dropzone-text-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.dropzone-main-txt {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.dropzone-sub-txt {
+  font-size: 12px;
+  color: #94a3b8;
+}
+</style>
