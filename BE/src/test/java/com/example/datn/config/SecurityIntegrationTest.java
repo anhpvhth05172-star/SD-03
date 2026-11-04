@@ -33,7 +33,7 @@ class SecurityIntegrationTest {
             .perform(
                 post("/api/auth/nhan-vien/dang-nhap")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content("{\"taiKhoan\":\"admin\",\"matKhau\":\"admin123\"}")
+                    .content("{\"taiKhoan\":\"anhpvhth05172@gmail.com\",\"matKhau\":\"jacksonks@0104\"}")
             )
             .andExpect(status().isOk())
             .andReturn();

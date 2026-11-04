@@ -1,24 +1,34 @@
 <script setup>
-import { reactive, ref, computed, watch, onMounted, unref } from "vue";
+import { reactive, ref, computed, watch, onMounted } from "vue";
 import * as store from "../store";
 import { createInvoice } from "@/api/invoice";
 import { listVouchers } from "@/api/voucher";
+import { getProvinces, getWards, getServices, tinhPhi } from "@/api/shipping";
 import { notifyConfirm } from "@/utils/notify";
+import { getUser, isKhachHangDangNhap } from "@/utils/auth";
 
 const { cart, cartTotal, money } = store;
 
 // Phí vận chuyển đơn online (back-end yêu cầu > 1.000đ). Đổi theo chính sách của shop.
 const SHIP_FEE = 30000;
-
-/* ================= CẤU HÌNH API ================= */
-const API = "/api/khach-hang";
+const shippingFee = ref(SHIP_FEE);
+const provinces = ref([]);
+const wards = ref([]);
+const provinceId = ref("");
+const wardId = ref("");
+const toProvinceId = ref(null);
+const toDistrictId = ref(null);
+const toWardCode = ref("");
+const serviceTypeId = ref(null);
+const shippingLoading = ref(false);
+const shippingError = ref("");
+const savedAddressToRestore = ref(null);
+let shippingRequestId = 0;
 
 const getToken = () => {
-  const a = unref(store.auth);
-  if (a?.token) return a.token;
   for (const area of [localStorage, sessionStorage]) {
-    const t = area.getItem("token") || area.getItem("accessToken");
-    if (t) return t;
+    const token = area.getItem("polyshoes_token") || area.getItem("token") || area.getItem("accessToken");
+    if (token) return token;
   }
   return "";
 };
@@ -34,59 +44,10 @@ async function getJson(url) {
   return res.json();
 }
 
-// Giải mã JWT -> lấy username / id
-function decodeJwt(token) {
-  try {
-    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(decodeURIComponent(escape(atob(payload))));
-  } catch (e) {
-    return null;
-  }
-}
-
 function getLoggedInUser() {
-  // 1) store.auth (nếu có)
-  const a = unref(store.auth);
-  if (a) {
-    const u = unref(a.user) || a;
-    if (u && (u.id || u.tenTaiKhoan || u.username || u.email)) return u;
-  }
-
-  // 2) quét toàn bộ localStorage + sessionStorage
-  for (const area of [localStorage, sessionStorage]) {
-    for (let i = 0; i < area.length; i++) {
-      const key = area.key(i);
-      const raw = area.getItem(key);
-      if (!raw) continue;
-
-      // Chuỗi là JWT
-      if (raw.split(".").length === 3) {
-        const p = decodeJwt(raw);
-        if (p)
-          return { tenTaiKhoan: p.sub || p.username, id: p.id || p.userId };
-      }
-      // Chuỗi là JSON
-      try {
-        const obj = JSON.parse(raw);
-        const u = obj.user || obj.khachHang || obj.data || obj;
-        if (
-          u &&
-          typeof u === "object" &&
-          (u.id || u.tenTaiKhoan || u.username || u.email)
-        ) {
-          return u;
-        }
-        if (obj.token) {
-          const p = decodeJwt(obj.token);
-          if (p)
-            return { tenTaiKhoan: p.sub || p.username, id: p.id || p.userId };
-        }
-      } catch (e) {
-        /* không phải JSON */
-      }
-    }
-  }
-  return null;
+  const user = getUser();
+  if (!user || !isKhachHangDangNhap()) return null;
+  return { ...user, id: user.idKhachHang ?? user.id };
 }
 
 async function fetchCustomer() {
@@ -99,52 +60,24 @@ async function fetchCustomer() {
     return null;
   }
 
-  const username = u.tenTaiKhoan || u.username;
-  const matches = (k) =>
-    (u.id && k.id === u.id) ||
-    (username && k.tenTaiKhoan === username) ||
-    (u.email && k.email === u.email);
-
-  // 1) API chi tiết theo id
-  if (u.id) {
-    try {
-      const c = await getJson(`${API}/${u.id}`);
-      console.log("[Checkout] khách hàng (chi tiết):", c);
-      return c;
-    } catch (e) {
-      console.warn("[Checkout] API chi tiết lỗi:", e.message);
-    }
-  }
-
-  // 2) Tìm trong danh sách
+  // API thông tin phiên trả đúng hồ sơ khách hàng mà không cần gọi danh sách quản trị.
   try {
-    const page = await getJson(`${API}?size=1000`);
-    const list = page.content || page;
-    const c = list.find(matches) || null;
-    console.log("[Checkout] khách hàng (từ danh sách):", c);
-    return c;
+    const profile = await getJson("/api/auth/thong-tin");
+    return { ...u, ...profile, id: profile.id ?? u.idKhachHang ?? u.id };
   } catch (e) {
-    console.warn("[Checkout] API danh sách lỗi (401/CORS?):", e.message);
-    return u.tenKhachHang ? u : null;
+    console.warn("[Checkout] Không tải được thông tin phiên:", e.message);
+    return u;
   }
 }
 
 const customer = ref(null);
 onMounted(async () => {
-  try {
-    customer.value = await fetchCustomer();
-  } catch (e) {
-    console.error("Không tải được khách hàng:", e);
-  }
-  vouchersLoading.value = true;
-  try {
-    const response = await listVouchers();
-    availableVouchers.value = Array.isArray(response) ? response : [];
-  } catch {
-    voucherMsg.text = "Không tải được danh sách voucher.";
-  } finally {
-    vouchersLoading.value = false;
-  }
+  const [, shippingResult] = await Promise.allSettled([
+    fetchCustomer().then((result) => { customer.value = result; }),
+    loadProvinces(),
+  ]);
+  if (shippingResult.status === "rejected") shippingError.value = "Không tải được danh sách tỉnh/thành phố.";
+  await loadVouchers();
 });
 
 /* ============== ADAPTER theo JSON thực tế ============== */
@@ -174,6 +107,9 @@ const savedAddresses = computed(() => {
       name: a.tenChiChi || c.tenKhachHang || "",
       phone: c.soDienThoai || "",
       address: fullAddress(a),
+      street: a.diaChiCuThe || "",
+      ward: a.phuong || "",
+      province: a.thanhPho || a.tinhThanhPho || "",
       isDefault: !!a.macDinh,
     }))
     .sort((x, y) => Number(y.isDefault) - Number(x.isDefault)); // mặc định lên đầu
@@ -193,9 +129,7 @@ const totalQty = computed(() =>
 /* ================= PHIẾU GIẢM GIÁ (gọi API thật) ================= */
 const availableVouchers = ref([]);
 const selectedVoucherId = ref("");
-const vouchersLoading = ref(false);
 const voucherCode = ref("");
-const VOUCHER_API = "/admin/phieu-giam-gia";
 
 /* >>> ADAPTER: đổi tên field cho khớp entity/DTO PhieuGiamGia của bạn <<< */
 const VF = {
@@ -291,37 +225,16 @@ function calcDiscount(v, total) {
   return Math.max(0, Math.min(Math.floor(d), total));
 }
 
-// Lấy chi tiết 1 phiếu (có danh sách khách hàng được gắn)
-async function getVoucherDetail(v) {
-  try {
-    return { ...v, ...(await getJson(`${VOUCHER_API}/detail/${VF.id(v)}`)) };
-  } catch (e) {
-    return v; // dùng dữ liệu từ danh sách
-  }
-}
-
 // Trả về { ok: true, voucher } hoặc { ok: false, message }  (nhập mã tay)
 async function fetchVoucher(code) {
-  // Back-end chỉ cho dùng phiếu giảm giá khi có khách hàng
-  if (!customer.value?.id)
-    return { ok: false, message: "Vui lòng đăng nhập để dùng phiếu giảm giá." };
-
-  // 1) Tìm phiếu theo mã
-  let found = null;
-  try {
-    const list = availableVouchers.value;
-    found = list.find((v) => String(VF.code(v)).toUpperCase() === code);
-  } catch (e) {
-    return { ok: false, message: "Không kiểm tra được mã, vui lòng thử lại." };
-  }
+  const found = availableVouchers.value.find((v) => String(VF.code(v)).toUpperCase() === code);
   if (!found) return { ok: false, message: "Mã giảm giá không tồn tại." };
 
   // 2) Lấy chi tiết + 3) Kiểm tra điều kiện
-  const detail = await getVoucherDetail(found);
-  const msg = checkVoucher(detail);
+  const msg = checkVoucher(found);
   if (msg) return { ok: false, message: msg };
 
-  return { ok: true, voucher: toVoucher(detail) };
+  return { ok: true, voucher: toVoucher(found) };
 }
 /* ======================================================= */
 
@@ -342,14 +255,102 @@ function chooseAddress(id) {
     f.name = base.name;
     f.phone = base.phone;
     f.address = "";
+    provinceId.value = "";
+    wardId.value = "";
+    savedAddressToRestore.value = null;
     return;
   }
   const a = savedAddresses.value.find((x) => x.id === id);
   if (!a) return;
   f.name = a.name || base.name;
   f.phone = a.phone || base.phone;
-  f.address = a.address;
+  f.address = a.street;
+  savedAddressToRestore.value = a;
+  restoreSavedAddressRegion();
 }
+
+const selectedProvince = computed(() => provinces.value.find((p) => String(p.id) === String(provinceId.value)) || null);
+const selectedWard = computed(() => wards.value.find((w) => String(w.id) === String(wardId.value)) || null);
+const fullDeliveryAddress = computed(() =>
+  [f.address.trim(), selectedWard.value?.name, selectedProvince.value?.name].filter(Boolean).join(", "),
+);
+
+function normalizePlace(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim().toLowerCase();
+}
+
+function restoreSavedAddressRegion() {
+  const address = savedAddressToRestore.value;
+  if (!address || !provinces.value.length) return;
+  const province = provinces.value.find((p) => normalizePlace(p.name) === normalizePlace(address.province));
+  if (province) provinceId.value = String(province.id);
+  else shippingError.value = "Không nhận diện được tỉnh/thành trong địa chỉ đã lưu. Vui lòng chọn lại.";
+  savedAddressToRestore.value = null;
+  if (province && address.ward) savedWardToRestore.value = address.ward;
+}
+
+const savedWardToRestore = ref("");
+
+async function loadProvinces() {
+  provinces.value = await getProvinces();
+  restoreSavedAddressRegion();
+}
+
+watch(provinceId, async (id) => {
+  wards.value = [];
+  wardId.value = "";
+  shippingError.value = "";
+  if (!id) return;
+  try {
+    wards.value = await getWards(Number(id));
+    if (savedWardToRestore.value) {
+      const savedWard = savedWardToRestore.value;
+      const match = wards.value.find((w) => normalizePlace(w.name) === normalizePlace(savedWard)
+        || normalizePlace(w.name).startsWith(`${normalizePlace(savedWard)} `));
+      if (match) wardId.value = String(match.id);
+      else shippingError.value = "Không nhận diện được phường/xã trong địa chỉ đã lưu. Vui lòng chọn lại.";
+      savedWardToRestore.value = "";
+    }
+  } catch {
+    shippingError.value = "Không tải được danh sách phường/xã.";
+  }
+});
+
+watch([provinceId, wardId, serviceTypeId], async ([province, ward]) => {
+  const requestId = ++shippingRequestId;
+  if (!province || !ward || !selectedProvince.value || !selectedWard.value) {
+    shippingFee.value = SHIP_FEE;
+    toProvinceId.value = null;
+    toDistrictId.value = null;
+    toWardCode.value = "";
+    shippingLoading.value = false;
+    return;
+  }
+  shippingLoading.value = true;
+  shippingError.value = "";
+  try {
+    const result = await tinhPhi({
+      toProvinceName: selectedProvince.value.name,
+      toWardName: selectedWard.value.name,
+      serviceTypeId: serviceTypeId.value || undefined,
+    });
+    if (requestId !== shippingRequestId) return;
+    shippingFee.value = Number(result.shippingFee || SHIP_FEE);
+    toProvinceId.value = Number(result.toProvinceId || selectedProvince.value.id);
+    toDistrictId.value = Number(result.toDistrictId || 0) || null;
+    toWardCode.value = String(result.toWardCode || "");
+    if (result.toDistrictId) {
+      const services = await getServices(result.toDistrictId);
+      if (requestId !== shippingRequestId) return;
+      if (!serviceTypeId.value && services.length) serviceTypeId.value = services[0].serviceTypeId;
+    }
+  } catch (error) {
+    if (requestId !== shippingRequestId) return;
+    shippingError.value = error.message || "Không tính được phí vận chuyển GHN.";
+  } finally {
+    if (requestId === shippingRequestId) shippingLoading.value = false;
+  }
+});
 
 /* ---------- Khóa ô nhập khi đã tự điền ---------- */
 // Họ tên, SĐT: khóa nếu thông tin lấy được từ tài khoản (SĐT trống thì vẫn cho nhập)
@@ -361,7 +362,8 @@ const lockPhone = computed(
 );
 // Địa chỉ: khóa khi đang dùng địa chỉ đã lưu, chỉ nhập được khi chọn "Nhập địa chỉ mới"
 const lockAddress = computed(
-  () => isLoggedIn.value && selectedAddr.value !== "new",
+  () => isLoggedIn.value && selectedAddr.value !== "new"
+    && !!savedAddresses.value.find((a) => a.id === selectedAddr.value)?.street,
 );
 
 // Chạy khi dữ liệu khách hàng tải xong
@@ -381,7 +383,7 @@ const voucherMsg = reactive({ text: "", ok: false });
 const manualRemoved = ref(false); // khách chủ động gỡ mã -> không tự áp lại
 
 // Tổng trước giảm = tiền hàng + phí vận chuyển (khớp cách tính của back-end)
-const orderTotal = computed(() => cartTotal.value + SHIP_FEE);
+const orderTotal = computed(() => cartTotal.value + shippingFee.value);
 const voucherIsAvailable = (v) => {
   const now = new Date();
   const end = v.ngayKetThuc ? new Date(v.ngayKetThuc) : null;
@@ -446,28 +448,23 @@ watch(orderTotal, () => {
 });
 
 /* ---------- Danh sách phiếu gợi ý theo giá trị đơn hàng ---------- */
-const allVouchers = ref([]); // chi tiết các phiếu tải từ API
+const allVouchers = ref([]); // voucher công khai đang còn hiệu lực
 const loadingVouchers = ref(false);
 
 async function loadVouchers() {
-  if (!customer.value?.id) {
-    allVouchers.value = [];
-    return;
-  }
   loadingVouchers.value = true;
   try {
-    const page = await getJson(`${VOUCHER_API}?size=100`);
-    const list = page.content || page;
-    allVouchers.value = await Promise.all(list.map(getVoucherDetail));
+    const list = await listVouchers();
+    availableVouchers.value = Array.isArray(list) ? list : [];
+    allVouchers.value = availableVouchers.value;
   } catch (e) {
     console.warn("[Checkout] Không tải được danh sách phiếu:", e.message);
+    availableVouchers.value = [];
     allVouchers.value = [];
   } finally {
     loadingVouchers.value = false;
   }
 }
-// Tải lại khi đã có thông tin khách hàng
-watch(() => customer.value?.id, loadVouchers, { immediate: true });
 
 // Phiếu còn hiệu lực VÀ còn lượt sử dụng (phiếu hết lượt bị ẩn hoàn toàn)
 const voucherOptions = computed(() => {
@@ -502,6 +499,24 @@ const voucherOptions = computed(() => {
 
 const bestVoucher = computed(() => voucherOptions.value.find((o) => o.best));
 
+// Tự chọn voucher có mức giảm lớn nhất, trừ khi khách chủ động gỡ mã.
+watch([bestVoucher, orderTotal], ([best]) => {
+  if (manualRemoved.value) return;
+  const current = voucher.value;
+  const next = best?.v || null;
+  if (current?.id === next?.id) return;
+  voucher.value = next;
+  if (next) {
+    voucherCode.value = "";
+    selectedVoucherId.value = String(next.id);
+    voucherMsg.text = `Tự áp dụng mã tốt nhất ${next.code}.`;
+    voucherMsg.ok = true;
+  } else if (current) {
+    voucherMsg.text = "Không còn mã giảm giá phù hợp; mã đã được gỡ.";
+    voucherMsg.ok = false;
+  }
+}, { immediate: true });
+
 // Voucher đang áp dụng mà bị hết lượt (sau khi tải lại danh sách) -> gỡ
 watch(allVouchers, () => {
   if (!voucher.value) return;
@@ -512,21 +527,6 @@ watch(allVouchers, () => {
     voucherMsg.ok = false;
   }
 });
-
-// Tự động áp dụng mã giảm giá tốt nhất cho khách hàng
-watch(
-  [bestVoucher, () => cart.items.length],
-  ([best]) => {
-    if (manualRemoved.value) return;
-    if (best && (!voucher.value || voucher.value.id !== best.v.id)) {
-      voucher.value = best.v;
-      voucherCode.value = "";
-      voucherMsg.text = `Đã tự động áp dụng mã ưu đãi tốt nhất (${best.v.code})!`;
-      voucherMsg.ok = true;
-    }
-  },
-  { immediate: true },
-);
 
 const voucherLabel = (v) =>
   v.type === "percent"
@@ -587,7 +587,7 @@ function buildHoaDonRequest() {
     idKhachHang: customer.value?.id ?? null,
     tenKhachHang: f.name.trim(),
     soDienThoaiKhachHang: f.phone.trim(),
-    diaChiNhanHang: f.address.trim(),
+    diaChiNhanHang: fullDeliveryAddress.value,
     ghiChu: f.note.trim(),
 
     // Đơn online không có nhân viên (cần back-end cho phép null)
@@ -595,7 +595,10 @@ function buildHoaDonRequest() {
 
     ...phuongThucFields(f.pay),
     idPhieuGiamGia: voucher.value?.id ?? null,
-    phiVanChuyen: SHIP_FEE,
+    phiVanChuyen: shippingFee.value,
+    toProvinceId: toProvinceId.value,
+    toDistrictId: toDistrictId.value,
+    toWardCode: toWardCode.value,
 
     chiTiet: cart.items.map((i) => ({
       idSanPhamChiTiet: i.idSanPhamChiTiet ?? i.spctId ?? i.id,
@@ -616,8 +619,10 @@ async function submit() {
   errors.phone = /^0\d{9}$/.test(f.phone)
     ? ""
     : "Số điện thoại gồm 10 số, bắt đầu bằng 0.";
-  errors.address = f.address.trim() ? "" : "Vui lòng nhập địa chỉ nhận hàng.";
-  if (errors.name || errors.phone || errors.address) return;
+  errors.address = f.address.trim() && provinceId.value && wardId.value
+    ? ""
+    : "Vui lòng nhập địa chỉ cụ thể và chọn tỉnh/thành phố, phường/xã.";
+  if (errors.name || errors.phone || errors.address || shippingLoading.value || shippingError.value) return;
 
   submitting.value = true;
 
@@ -641,7 +646,7 @@ async function submit() {
         let errJson = {};
         try {
           errJson = await res.json();
-        } catch (e) {}
+        } catch { /* Response có thể không phải JSON. */ }
         throw new Error(
           errJson.message || `Lỗi tạo thanh toán VNPAY (mã lỗi ${res.status}).`,
         );
@@ -689,7 +694,7 @@ async function submit() {
         info: {
           name: f.name,
           phone: f.phone,
-          address: f.address,
+          address: fullDeliveryAddress.value,
           note: f.note,
           pay: f.pay,
         },
@@ -698,7 +703,7 @@ async function submit() {
         date: new Date().toLocaleString("vi-VN"),
       });
       localStorage.setItem("ps_orders", JSON.stringify(orders.slice(0, 20)));
-    } catch (e) {}
+    } catch { /* Lưu lịch sử đơn hàng ở localStorage là tùy chọn. */ }
 
     done.value = true;
     clearCart();
@@ -814,7 +819,7 @@ async function copyOrderCode() {
             >
           </div>
           <RouterLink
-            to="/dang-nhap"
+            to="/khach-hang"
             class="btn btn-sm btn-dark rounded-pill px-3 fw-bold"
           >
             Đăng nhập
@@ -905,10 +910,22 @@ async function copyOrderCode() {
               />
               <div class="invalid-feedback">{{ errors.phone }}</div>
             </div>
+            <div class="col-md-6">
+              <label class="co-label">Tỉnh / Thành phố <span class="text-danger">*</span></label>
+              <select v-model="provinceId" class="form-select co-input" :disabled="!provinces.length">
+                <option value="">Chọn tỉnh / thành phố</option>
+                <option v-for="p in provinces" :key="p.id" :value="String(p.id)">{{ p.name }}</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="co-label">Phường / Xã <span class="text-danger">*</span></label>
+              <select v-model="wardId" class="form-select co-input" :disabled="!provinceId || !wards.length">
+                <option value="">Chọn phường / xã</option>
+                <option v-for="w in wards" :key="w.id" :value="String(w.id)">{{ w.name }}</option>
+              </select>
+            </div>
             <div class="col-12">
-              <label class="co-label"
-                >Địa chỉ nhận hàng <span class="text-danger">*</span></label
-              >
+              <label class="co-label">Địa chỉ cụ thể (số nhà, tên đường) <span class="text-danger">*</span></label>
               <input
                 v-model="f.address"
                 class="form-control co-input"
@@ -917,10 +934,11 @@ async function copyOrderCode() {
                   'is-invalid': errors.address,
                   'bg-light': lockAddress,
                 }"
-                placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
+                placeholder="Ví dụ: 123 Nguyễn Trãi"
               />
               <div class="invalid-feedback">{{ errors.address }}</div>
             </div>
+            <div v-if="shippingError" class="col-12 small text-danger">{{ shippingError }}</div>
             <div class="col-12">
               <label class="co-label">Ghi chú (không bắt buộc)</label>
               <textarea
@@ -956,7 +974,7 @@ async function copyOrderCode() {
                 >Nhận hàng trong 1-3 ngày làm việc</span
               >
             </span>
-            <span class="small fw-bold">{{ money(SHIP_FEE) }}</span>
+            <span class="small fw-bold">{{ shippingLoading ? 'Đang tính...' : money(shippingFee) }}</span>
           </label>
         </section>
 
@@ -1139,15 +1157,12 @@ async function copyOrderCode() {
             </div>
 
             <!-- Danh sách phiếu -->
-            <div v-if="!isLoggedIn" class="small text-muted mt-3">
-              Đăng nhập để xem các phiếu giảm giá dành cho bạn.
-            </div>
-            <div v-else-if="loadingVouchers" class="small text-muted mt-3">
+            <div v-if="loadingVouchers" class="small text-muted mt-3">
               <span class="spinner-border spinner-border-sm me-1"></span>Đang
               tải phiếu giảm giá...
             </div>
             <div v-else-if="voucherOptions.length" class="mt-3">
-              <div class="co-label">Phiếu phù hợp với đơn hàng</div>
+              <div class="co-label">Tất cả phiếu giảm giá</div>
               <div class="co-voucher-list">
                 <div
                   v-for="o in voucherOptions"
@@ -1221,7 +1236,7 @@ async function copyOrderCode() {
             </div>
             <div class="co-row">
               <span>Phí vận chuyển</span>
-              <span class="fw-semibold">{{ money(SHIP_FEE) }}</span>
+              <span class="fw-semibold">{{ money(shippingFee) }}</span>
             </div>
             <div v-if="discount" class="co-row text-success">
               <span

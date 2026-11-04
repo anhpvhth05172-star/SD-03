@@ -16,10 +16,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -156,21 +154,31 @@ public class GiaoCaService {
 
     @Transactional
     public CaLamViecDto ketCa(Long id, Long tienThucTe, String lyDoLech, String ghiChu) {
+        return ketCa(id, tienThucTe, 0L, lyDoLech, ghiChu);
+    }
+
+    @Transactional
+    public CaLamViecDto ketCa(Long id, Long tienThucTe, Long tienChi, String lyDoLech, String ghiChu) {
         CaLamViec ca = timVaKiemQuyen(id);
         TongKetDto tongKet = toTongKet(ca);
         kiemTraHoaDonDangXuLy(id);
 
-        if (tienThucTe == null || tienThucTe < 0) {
+        if (tienThucTe == null || tienThucTe < 0 || tienChi == null || tienChi < 0) {
             throw bad("TIEN_THUC_TE", "Tiền thực tế không được âm");
         }
+        BigDecimal tienChiDec = BigDecimal.valueOf(tienChi);
+        if (tienChiDec.compareTo(tongKet.getTienDuKien()) > 0) {
+            throw bad("TIEN_CHI_VUOT_DU_KIEN", "Tiền chi trong ca không được vượt tiền mặt dự kiến");
+        }
+        BigDecimal tienDuKienSauChi = tongKet.getTienDuKien().subtract(tienChiDec);
         BigDecimal tienThucTeDec = BigDecimal.valueOf(tienThucTe);
-        BigDecimal chenhLech = tienThucTeDec.subtract(tongKet.getTienDuKien());
+        BigDecimal chenhLech = tienThucTeDec.subtract(tienDuKienSauChi);
+        LocalDateTime thoiGianKet = LocalDateTime.now();
         String lyDoChuan = chuanHoaGhiChu(lyDoLech);
         if (chenhLech.compareTo(BigDecimal.ZERO) != 0 && lyDoChuan == null) {
             throw bad("LY_DO_LECH_THIEU", "Chênh lệch khác 0, bắt buộc nhập lý do");
         }
 
-        LocalDateTime thoiGianKet = LocalDateTime.now();
         String nguoiCapNhat = String.valueOf(idNhanVienHienTai());
         int affected = caLamViecRepository.ketCaConditional(
             id,
@@ -180,7 +188,7 @@ public class GiaoCaService {
             tongKet.getTienMatThu(),
             tongKet.getTienKhongMat(),
             tongKet.getTienHoanMat(),
-            tongKet.getTienDuKien(),
+            tienDuKienSauChi,
             tienThucTeDec,
             chenhLech,
             lyDoChuan,
@@ -192,6 +200,7 @@ public class GiaoCaService {
         }
         CaLamViec daKet = caLamViecRepository.findByIdAndDaXoaFalse(id)
             .orElseThrow(() -> bad("CA_KHONG_TON_TAI", "Không tìm thấy ca làm việc"));
+        daKet.setTienChi(tienChiDec);
         Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
         snapshot.put("id", daKet.getId());
         snapshot.put("maCa", daKet.getMaCa());
@@ -204,6 +213,7 @@ public class GiaoCaService {
         snapshot.put("tienHoanMat", String.valueOf(daKet.getTienHoanMat()));
         snapshot.put("tienDuKien", String.valueOf(daKet.getTienDuKien()));
         snapshot.put("tienThucTe", String.valueOf(daKet.getTienThucTe()));
+        snapshot.put("tienChi", String.valueOf(daKet.getTienChi()));
         snapshot.put("chenhLech", String.valueOf(daKet.getChenhLech()));
         snapshot.put("lyDoLech", daKet.getLyDoLech());
         ghiLichSu(daKet, "KET_CA", chuanHoaGhiChu(ghiChu), snapshot);
@@ -224,7 +234,25 @@ public class GiaoCaService {
             dto.setTienDuKien(tongKet.getTienDuKien());
         }
         dto.setLichSu(lichSuCuaCa(id));
+        if (!TRANG_THAI_DANG_MO.equals(ca.getTrangThai())) {
+            dto.setTienChi(tienChiTuLichSu(id));
+        }
         return dto;
+    }
+
+    private BigDecimal tienChiTuLichSu(Long idCa) {
+        return lichSuCaRepository.findByCaLamViecId(idCa).stream()
+            .filter(l -> "KET_CA".equals(l.getHanhDong()) && l.getTruocSau() != null)
+            .findFirst()
+            .map(l -> {
+                try {
+                    String value = objectMapper.readTree(l.getTruocSau()).path("tienChi").asText("0");
+                    return new BigDecimal(value);
+                } catch (RuntimeException ex) {
+                    return BigDecimal.ZERO;
+                }
+            })
+            .orElse(BigDecimal.ZERO);
     }
 
     @Transactional(readOnly = true)
@@ -239,44 +267,20 @@ public class GiaoCaService {
         PageRequest pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
         Page<CaLamViec> trang = caLamViecRepository.lichSu(idLoc, trangThai, tu, den, tuKhoa, pageable);
 
-        // Batch load ten nhan vien cho nguoi ket ca (chuoi ID trong nguoiCapNhat)
-        Set<Long> idNguoi = new HashSet<>();
-        for (CaLamViec ca : trang.getContent()) {
-            if (TRANG_THAI_DA_KET_CA.equals(ca.getTrangThai())) {
-                Long id = parseId(ca.getNguoiCapNhat());
-                if (id != null) {
-                    idNguoi.add(id);
-                }
-            }
-        }
-        Map<Long, String> tenNguoi = idNguoi.isEmpty()
-            ? Map.of()
-            : nhanVienRepository.findAllById(idNguoi).stream()
-                .collect(java.util.stream.Collectors.toMap(NhanVien::getId, NhanVien::getTenTaiKhoan));
-
-        List<CaLamViecDto> noiDung = trang.getContent().stream().map(ca -> {
-            CaLamViecDto dto = toDto(ca);
-            if (TRANG_THAI_DA_KET_CA.equals(ca.getTrangThai())) {
-                Long id = parseId(ca.getNguoiCapNhat());
-                if (id != null) {
-                    // nhan vien khong con -> tenNguoiNhan van null
-                    dto.setTenNguoiNhan(tenNguoi.get(id));
-                }
-            }
-            return dto;
-        }).toList();
+        List<CaLamViecDto> noiDung = trang.getContent().stream().map(this::toDto).toList();
         return new PageImpl<>(noiDung, trang.getPageable(), trang.getTotalElements());
     }
 
-    private static Long parseId(String giaTri) {
-        if (giaTri == null) {
-            return null;
-        }
-        try {
-            return Long.parseLong(giaTri.trim());
-        } catch (NumberFormatException ex) {
-            return null;
-        }
+    private String timNguoiNhanTiepTheo(CaLamViec ca, LocalDateTime thoiGianKet) {
+        if (ca.getCaTheoLich() == null) return "Cuối ngày";
+        return lichLamViecRepository.findByNgayLamBetween(thoiGianKet.toLocalDate(), thoiGianKet.toLocalDate()).stream()
+            .filter(l -> Boolean.TRUE.equals(l.getCaLam().getDangBat()))
+            .filter(l -> l.getCaLam().getBatDau() != null && ca.getCaTheoLich().getKetThuc() != null
+                && !l.getCaLam().getBatDau().isBefore(ca.getCaTheoLich().getKetThuc()))
+            .sorted(java.util.Comparator.comparing(l -> l.getCaLam().getBatDau()))
+            .map(l -> l.getNhanVien().getTenTaiKhoan())
+            .findFirst()
+            .orElse("Cuối ngày");
     }
 
     // ---- helpers ----
@@ -332,6 +336,7 @@ public class GiaoCaService {
             .tenCaLich(ca.getCaTheoLich() != null ? ca.getCaTheoLich().getTenCa() : null)
             .idNhanVien(nv.getId())
             .tenNhanVien(nv.getTenTaiKhoan())
+            .tenNguoiNhan(timNguoiNhanTiepTheo(ca, LocalDateTime.now()))
             .tenQuy(ca.getTenQuy())
             .thoiGianMo(ca.getThoiGianMo())
             .trangThai(ca.getTrangThai())
@@ -393,6 +398,9 @@ public class GiaoCaService {
             .tienHoanMat(ca.getTienHoanMat())
             .tienDuKien(ca.getTienDuKien())
             .tienThucTe(ca.getTienThucTe())
+            .tienChi(ca.getTienChi())
+            .tenNguoiNhan(timNguoiNhanTiepTheo(ca,
+                ca.getThoiGianKet() != null ? ca.getThoiGianKet() : LocalDateTime.now()))
             .chenhLech(ca.getChenhLech())
             .lyDoLech(ca.getLyDoLech())
             .ghiChuMo(ca.getGhiChuMo())

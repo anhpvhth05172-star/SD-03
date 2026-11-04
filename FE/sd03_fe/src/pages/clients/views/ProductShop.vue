@@ -181,7 +181,7 @@ const reset = () => {
       <div class="hero-blob hero-blob-2"></div>
 
       <div class="row align-items-center g-4 position-relative">
-        <div class="col-lg-7">
+        <div class="col-12">
           <span class="hero-tag">🔥 BỘ SƯU TẬP 2026</span>
           <h1 class="hero-title">
             Sneaker chính hãng,<br />phong cách của riêng bạn
@@ -190,32 +190,6 @@ const reset = () => {
             Khám phá những mẫu giày hot trend từ Nike, Adidas, Jordan, Puma… Đảm
             bảo 100% chính hãng, đổi size 7 ngày miễn phí.
           </p>
-        </div>
-
-        <div class="col-lg-5 d-none d-lg-block">
-          <div class="hero-perks">
-            <div class="hero-perk">
-              <i class="bi bi-shield-fill-check"></i>
-              <div>
-                <b>Chính hãng 100%</b>
-                <span>Bảo hành keo chỉ 12 tháng</span>
-              </div>
-            </div>
-            <div class="hero-perk">
-              <i class="bi bi-arrow-repeat"></i>
-              <div>
-                <b>Đổi size 7 ngày</b>
-                <span>Miễn phí đổi tận nhà</span>
-              </div>
-            </div>
-            <div class="hero-perk">
-              <i class="bi bi-truck"></i>
-              <div>
-                <b>Giao hàng nhanh</b>
-                <span>Nhận hàng trong 1-3 ngày</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </section>
@@ -513,37 +487,6 @@ const reset = () => {
   color: #64748b;
   max-width: 540px;
   margin-bottom: 0;
-}
-
-.hero-perks {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.hero-perk {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(6px);
-  border: 1px solid #ffffff;
-  border-radius: 16px;
-  padding: 12px 16px;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
-}
-.hero-perk i {
-  font-size: 1.6rem;
-  color: #dc2626;
-}
-.hero-perk b {
-  display: block;
-  font-size: 0.95rem;
-  color: #111827;
-}
-.hero-perk span {
-  font-size: 0.78rem;
-  color: #64748b;
 }
 
 /* ===== Brand pills ===== */

@@ -6,10 +6,30 @@ import SearchableSelect from '@/components/SearchableSelect.vue'
 import CurrencyInput from '@/components/CurrencyInput.vue'
 import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
-import { API_ORIGIN } from '@/api/http'
+import http, { API_ORIGIN } from '@/api/http'
 
 const router = useRouter()
 const API_BASE = `${API_ORIGIN}/api/v1`
+
+const apiFetch = async (url, options = {}) => {
+  const parsed = new URL(url, window.location.origin)
+  const apiPath = `${parsed.pathname.replace(/^\/api/, '')}${parsed.search}`
+  try {
+    const response = await http.request({
+      url: apiPath,
+      method: options.method || 'GET',
+      data: options.body ? JSON.parse(options.body) : undefined,
+      signal: options.signal,
+    })
+    return { ok: true, status: response.status, json: async () => response.data }
+  } catch (error) {
+    return {
+      ok: false,
+      status: error.status || error.response?.status || 500,
+      json: async () => error.response?.data || { message: error.message },
+    }
+  }
+}
 
 const form = reactive({
   code: '',
@@ -86,13 +106,13 @@ const showToast = (message, type = 'success') => {
 const fetchOptions = async () => {
   try {
     const [bRes, cRes, mRes, sRes, oRes, colRes, szRes] = await Promise.all([
-      fetch(`${API_BASE}/attributes/thuong_hieu`),
-      fetch(`${API_BASE}/attributes/loai_giay`),
-      fetch(`${API_BASE}/attributes/chat_lieu`),
-      fetch(`${API_BASE}/attributes/kieu_dang`),
-      fetch(`${API_BASE}/attributes/xuat_xu`),
-      fetch(`${API_BASE}/attributes/mau_sac`),
-      fetch(`${API_BASE}/attributes/kich_co`)
+      apiFetch(`${API_BASE}/attributes/thuong_hieu`),
+      apiFetch(`${API_BASE}/attributes/loai_giay`),
+      apiFetch(`${API_BASE}/attributes/chat_lieu`),
+      apiFetch(`${API_BASE}/attributes/kieu_dang`),
+      apiFetch(`${API_BASE}/attributes/xuat_xu`),
+      apiFetch(`${API_BASE}/attributes/mau_sac`),
+      apiFetch(`${API_BASE}/attributes/kich_co`)
     ])
 
     if (bRes.ok) brandOptions.value = await bRes.json()
@@ -344,7 +364,7 @@ const handleAttributeAdded = async (item) => {
       trangThai: true
     }
 
-    const res = await fetch(`${API_BASE}/attributes/${endpoint}`, {
+    const res = await apiFetch(`${API_BASE}/attributes/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -506,7 +526,7 @@ const saveProduct = async (confirmMerge = false) => {
 
   try {
     isSubmitting.value = true
-    const res = await fetch(`${API_BASE}/san-pham/smart-save`, {
+    const res = await apiFetch(`${API_BASE}/san-pham/smart-save`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -520,7 +540,7 @@ const saveProduct = async (confirmMerge = false) => {
       } catch (e) {
         if (errorText.includes('tồn tại')) {
           errors.name = 'Tên sản phẩm đã tồn tại trong cơ sở dữ liệu'
-          throw new Error('Tên sản phẩm đã tồn tại')
+          throw new Error('Tên sản phẩm đã tồn tại', { cause: e })
         }
       }
       throw new Error('Thao tác thất bại, vui lòng kiểm tra lại dữ liệu')

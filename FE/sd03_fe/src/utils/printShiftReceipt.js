@@ -15,7 +15,8 @@ export const inBienLaiDoiSoatK80 = (caData, tongKetData) => {
   const tienMatThu = Number(ca.tienMatThu ?? tk.tienMatThu ?? 0)
   const tienKhongMat = Number(ca.tienKhongMat ?? tk.tienKhongMat ?? 0)
   const tienHoanMat = Number(ca.tienHoanMat ?? tk.tienHoanMat ?? 0)
-  const tienDuKien = Number(ca.tienDuKien ?? tk.tienDuKien ?? (tienDauCa + tienMatThu - tienHoanMat))
+  const tienChi = Number(ca.tienChi ?? 0)
+  const tienDuKien = Number(ca.tienDuKien ?? (tk.tienDuKien ?? (tienDauCa + tienMatThu - tienHoanMat)) - tienChi)
   const tienThucTe = Number(ca.tienThucTe ?? tk.tienThucTe ?? tienDuKien)
   const chenhLech = Number(ca.chenhLech ?? (tienThucTe - tienDuKien))
   const lyDoLech = ca.lyDoLech || ''
@@ -291,6 +292,10 @@ export const inBienLaiDoiSoatK80 = (caData, tongKetData) => {
           <span>Chuyển khoản (VietQR):</span>
           <span>${formatVnd(tienKhongMat)}</span>
         </div>
+        <div class="row">
+          <span>Tiền chi trong ca:</span>
+          <span>-${formatVnd(tienChi)}</span>
+        </div>
         <div class="row highlight">
           <span>TỔNG DOANH THU CA:</span>
           <span>${formatVnd(tongDoanhThu)}</span>
@@ -337,7 +342,7 @@ export const inBienLaiDoiSoatK80 = (caData, tongKetData) => {
             <div class="sign-title">Người nhận ca</div>
             <div class="sign-note">(Ký & ghi họ tên)</div>
             <div class="sign-space"></div>
-            <div class="sign-name">........................</div>
+            <div class="sign-name">${ca.tenNguoiNhan || 'Cuối ngày'}</div>
           </div>
         </div>
 
@@ -615,6 +620,10 @@ export const inBienBanDoiSoatA4 = (caData, tongKetData) => {
       <div class="info-row">
         <span class="info-k">Thu ngân bàn giao:</span>
         <strong class="info-v">${tenNhanVien}</strong>
+      </div>
+      <div class="info-row">
+        <span class="info-k">Người nhận bàn giao:</span>
+        <strong class="info-v">${ca.tenNguoiNhan || 'Cuối ngày'}</strong>
       </div>
       <div class="info-row">
         <span class="info-k">Thời gian mở ca:</span>

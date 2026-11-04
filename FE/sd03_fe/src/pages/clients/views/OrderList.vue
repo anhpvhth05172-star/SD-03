@@ -1,8 +1,8 @@
 <script setup>
-import { ref, computed, unref, watch } from "vue";
+import { ref, computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import * as store from "../store";
-import { getUser } from "@/utils/auth";
+import { getToken as getSessionToken, getUser } from "@/utils/auth";
 
 const { money } = store;
 const route = useRoute();
@@ -14,8 +14,8 @@ const LOOKUP_ROUTE = "/tra-cuu";
 const HOA_DON_API = "http://localhost:8080/api/hoa-don";
 
 const getToken = () => {
-  const a = unref(store.auth);
-  if (a?.token) return a.token;
+  const sessionToken = getSessionToken();
+  if (sessionToken) return sessionToken;
   for (const area of [localStorage, sessionStorage]) {
     const t = area.getItem("token") || area.getItem("accessToken");
     if (t) return t;
@@ -162,21 +162,17 @@ const KHACH_HANG_API = "http://localhost:8080/api/khach-hang";
 // Thông tin đăng nhập hiện có (id có thể chưa có, chỉ có tên đăng nhập)
 function getLoginInfo() {
   const u = getUser();
-  const a = unref(store.auth);
-  const au = unref(a?.user) || a;
   const p = decodeJwt(getToken());
   return {
     loggedIn: !!(u || getToken()),
-    id: u?.id ?? au?.id ?? p?.id ?? p?.userId ?? null,
+    id: u?.idKhachHang ?? u?.id ?? p?.idKhachHang ?? p?.id ?? p?.userId ?? null,
     username:
       u?.tenTaiKhoan ??
       u?.username ??
-      au?.tenTaiKhoan ??
-      au?.username ??
       p?.sub ??
       p?.username ??
       null,
-    email: u?.email ?? au?.email ?? null,
+    email: u?.email ?? null,
   };
 }
 

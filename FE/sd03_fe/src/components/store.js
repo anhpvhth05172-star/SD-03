@@ -14,14 +14,8 @@ export const money = (n) => {
 };
 
 // ===== Cart State =====
-// [SỬA] Chỉ khôi phục giỏ hàng local khi đang đăng nhập.
-// Chưa đăng nhập thì giỏ hàng luôn rỗng, tránh hiện dữ liệu của tài khoản cũ.
 const saved = (() => {
   try {
-    if (!getUser()) {
-      localStorage.removeItem("ps_cart");
-      return [];
-    }
     return JSON.parse(localStorage.getItem("ps_cart")) || [];
   } catch {
     return [];
@@ -90,8 +84,8 @@ const mapServerItem = (item) => ({
 export async function fetchCart() {
   const user = getUser();
   if (!user || !user.idKhachHang) {
-    // [SỬA] Chưa đăng nhập -> xóa sạch giỏ hàng local
-    resetCartLocal();
+    // Giỏ của khách vãng lai được lưu cục bộ để có thể đặt hàng không cần tài khoản.
+    cart.serverCart = null;
     return cart.items;
   }
 
@@ -118,10 +112,30 @@ export async function fetchCart() {
 export async function addToCart(p, variantId, size, qty = 1, color = "") {
   const user = getUser();
   if (!user || !user.idKhachHang) {
+    const existing = cart.items.find((item) => Number(item.idSanPhamChiTiet ?? item.variantId) === Number(variantId));
+    const available = Number(p.stock ?? p.tonKho ?? 999);
+    if (existing) {
+      existing.qty = Math.min(Number(existing.qty || 0) + Number(qty || 1), available);
+    } else {
+      cart.items.push({
+        id: p.id,
+        variantId,
+        idSanPhamChiTiet: variantId,
+        name: p.tenSanPham || p.name || "Sản phẩm",
+        brand: p.tenThuongHieu || p.brand || "",
+        color,
+        size,
+        price: Number(p.giaBan ?? p.giaBanMin ?? p.price ?? 0),
+        img: p.img || null,
+        qty: Math.min(Number(qty || 1), available),
+        stock: available,
+        conHang: available > 0,
+      });
+    }
     return {
-      success: false,
-      needLogin: true,
-      message: "Vui lòng đăng nhập để thêm sản phẩm vào giỏ hàng",
+      success: true,
+      local: true,
+      message: "Đã thêm sản phẩm vào giỏ hàng",
     };
   }
 
@@ -143,7 +157,7 @@ export async function addToCart(p, variantId, size, qty = 1, color = "") {
   } catch (err) {
     const msg = err.message || "Không thể thêm vào giỏ hàng";
     cart.error = msg;
-    throw new Error(msg);
+    throw new Error(msg, { cause: err });
   } finally {
     cart.loading = false;
   }
@@ -171,7 +185,7 @@ export async function updateCartItemQty(idGioHangChiTiet, qty) {
   } catch (err) {
     const msg = err.message || "Không thể cập nhật số lượng";
     cart.error = msg;
-    throw new Error(msg);
+    throw new Error(msg, { cause: err });
   } finally {
     cart.loading = false;
   }
@@ -180,11 +194,10 @@ export async function updateCartItemQty(idGioHangChiTiet, qty) {
 // Xóa 1 item khỏi giỏ
 export async function removeItem(target) {
   const user = getUser();
-  let item = null;
+  let item;
   let idToDelete = null;
 
   if (typeof target === "object" && target !== null) {
-    item = target;
     idToDelete = target.idGioHangChiTiet;
   } else if (typeof target === "number") {
     // Có thể là idGioHangChiTiet hoặc index

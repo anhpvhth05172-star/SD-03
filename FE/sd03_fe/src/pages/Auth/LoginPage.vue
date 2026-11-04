@@ -60,8 +60,11 @@ const duongDanSauDangNhap = (macDinh) => {
 </script>
 
 <template>
-  <div class="auth-screen">
-    <div class="auth-card">
+  <div class="auth-screen" :class="{ 'auth-screen-customer': cheDo === 'khach' }">
+    <div class="auth-card" :class="{ 'auth-card-customer': cheDo === 'khach' }">
+      <router-link v-if="cheDo === 'khach'" to="/trang-chu" class="auth-back-link">
+        <i class="bi bi-arrow-left me-1"></i>Quay lại cửa hàng
+      </router-link>
       <div class="auth-brand">
         <img src="/images/logo_polyshoes_final.png" alt="PolyShoes" />
       </div>
@@ -119,6 +122,19 @@ const duongDanSauDangNhap = (macDinh) => {
   box-sizing: border-box;
   background: #f5f5f5;
   padding: 20px;
+}
+.auth-screen-customer {
+  background: linear-gradient(135deg, #fff7f7, #f8fafc);
+}
+.auth-card-customer {
+  border-color: #fecaca;
+}
+.auth-back-link {
+  display: inline-block;
+  margin-bottom: 14px;
+  color: #b91c1c;
+  font-size: 13px;
+  text-decoration: none;
 }
 .auth-card {
   width: 100%;

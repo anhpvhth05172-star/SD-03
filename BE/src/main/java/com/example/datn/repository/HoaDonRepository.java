@@ -41,6 +41,20 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
 
     boolean existsByMaHoaDonAndIdNot(String maHoaDon, Long id);
 
+    @Query("""
+        SELECT h FROM HoaDon h
+        WHERE h.khachHang.id = :idKhachHang
+          AND h.daXoa = false
+          AND (:keyword IS NULL OR LOWER(h.maHoaDon) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR h.soDienThoaiKhachHang LIKE CONCAT('%', :keyword, '%'))
+        ORDER BY h.ngayTao DESC, h.id DESC
+        """)
+    Page<HoaDon> findOrdersForCustomer(
+        @Param("idKhachHang") Long idKhachHang,
+        @Param("keyword") String keyword,
+        Pageable pageable
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT h FROM HoaDon h WHERE h.id = :id")
     Optional<HoaDon> findByIdForUpdate(@Param("id") Long id);
@@ -54,7 +68,8 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
               AND (:loaiDon IS NULL OR
           (:loaiDon = 'ONLINE' AND (h.loai_don = 'ONLINE' OR h.loai_don = N'Online')) OR
           (:loaiDon = 'TAI_QUAY_GIAO_HANG' AND (h.loai_don = 'TAI_QUAY_GIAO_HANG' OR (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND h.dia_chi_nhan_hang IS NOT NULL AND TRIM(h.dia_chi_nhan_hang) <> ''))) OR
-          (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))))
+          (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))) OR
+          (:loaiDon = 'TAI_QUAY_TAT_CA' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy', 'TAI_QUAY_GIAO_HANG'))))
               AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
               AND h.da_xoa = :daXoa
             ORDER BY CASE WHEN h.trang_thai IN ('DA_HOAN_THANH', 'DA_HOAN_TIEN') THEN 1 ELSE 0 END ASC,
@@ -80,7 +95,8 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
               AND (:loaiDon IS NULL OR
           (:loaiDon = 'ONLINE' AND (h.loai_don = 'ONLINE' OR h.loai_don = N'Online')) OR
           (:loaiDon = 'TAI_QUAY_GIAO_HANG' AND (h.loai_don = 'TAI_QUAY_GIAO_HANG' OR (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND h.dia_chi_nhan_hang IS NOT NULL AND TRIM(h.dia_chi_nhan_hang) <> ''))) OR
-          (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))))
+          (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))) OR
+          (:loaiDon = 'TAI_QUAY_TAT_CA' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy', 'TAI_QUAY_GIAO_HANG'))))
               AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
               AND h.da_xoa = :daXoa
             ORDER BY CASE WHEN h.trang_thai IN ('DA_HOAN_THANH', 'DA_HOAN_TIEN') THEN 1 ELSE 0 END ASC,
@@ -94,7 +110,8 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
               AND (:loaiDon IS NULL OR
           (:loaiDon = 'ONLINE' AND (h.loai_don = 'ONLINE' OR h.loai_don = N'Online')) OR
           (:loaiDon = 'TAI_QUAY_GIAO_HANG' AND (h.loai_don = 'TAI_QUAY_GIAO_HANG' OR (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND h.dia_chi_nhan_hang IS NOT NULL AND TRIM(h.dia_chi_nhan_hang) <> ''))) OR
-          (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))))
+          (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))) OR
+          (:loaiDon = 'TAI_QUAY_TAT_CA' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy', 'TAI_QUAY_GIAO_HANG'))))
               AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
               AND h.da_xoa = :daXoa
             """,

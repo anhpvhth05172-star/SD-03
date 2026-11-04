@@ -259,9 +259,9 @@ export const tinhChuKy = (bang, hienTai = new Date()) => {
   const tinhMoc = (nhan, tu, den, tuTruoc, denTruoc) => {
     const cur = tinhKhoang(bang, tu, den)
     const prev = tinhKhoang(bang, tuTruoc, denTruoc)
-    let tang = 0
-    if (prev.doanhThu <= 0) tang = cur.doanhThu > 0 ? 100 : 0
-    else tang = Math.round(((cur.doanhThu - prev.doanhThu) / prev.doanhThu) * 100)
+    const tang = prev.doanhThu <= 0
+      ? (cur.doanhThu > 0 ? 100 : 0)
+      : Math.round(((cur.doanhThu - prev.doanhThu) / prev.doanhThu) * 100)
     return {
       nhan,
       doanhThu: cur.doanhThu,

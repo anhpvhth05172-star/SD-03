@@ -443,47 +443,6 @@ h6 {
   position: relative;
 }
 
-.client-footer-perks {
-  background: #ffffff;
-  border-bottom: 1px solid #f1f5f9;
-  border-top: 1px solid #f1f5f9;
-  padding: 1.75rem 0;
-}
-
-.client-footer-perk-item {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.client-footer-perk-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: #fef2f2;
-  color: #d32f2f;
-  display: grid;
-  place-items: center;
-  font-size: 1.4rem;
-  flex-shrink: 0;
-  border: 1px solid #fee2e2;
-  transition: all 0.3s ease;
-}
-
-.client-footer-perk-title {
-  color: #0f172a;
-  font-weight: 750;
-  font-size: 0.9rem;
-  margin-bottom: 0.15rem;
-}
-
-.client-footer-perk-desc {
-  color: #64748b;
-  font-size: 0.78rem;
-  margin-bottom: 0;
-  line-height: 1.35;
-}
-
 .client-footer-main {
   padding: 3.5rem 0 2.5rem;
   background: #111827;
@@ -570,25 +529,6 @@ h6 {
   color: #ffffff !important;
   border-color: #d32f2f;
   transform: translateY(-2px);
-}
-
-.footer-newsletter-group {
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid #374151;
-  background: #1f2937;
-}
-
-.client-footer-newsletter-input {
-  background: transparent !important;
-  border: none !important;
-  color: #ffffff !important;
-  padding: 0.65rem 0.85rem;
-  font-size: 0.85rem;
-}
-
-.client-footer-newsletter-input::placeholder {
-  color: #64748b;
 }
 
 .payment-badge-dark {

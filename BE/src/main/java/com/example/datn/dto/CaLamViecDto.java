@@ -35,6 +35,7 @@ public class CaLamViecDto {
     private BigDecimal tienHoanMat;
     private BigDecimal tienDuKien;
     private BigDecimal tienThucTe;
+    private BigDecimal tienChi;
     private BigDecimal chenhLech;
     private String lyDoLech;
     private String ghiChuMo;

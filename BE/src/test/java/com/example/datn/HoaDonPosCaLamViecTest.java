@@ -159,15 +159,16 @@ class HoaDonPosCaLamViecTest {
     }
 
     @Test
-    void taoHdPos_khongDangNhap_khongChan_khongStamp() {
+    void taoHdPos_khongDangNhap_bi403() {
+        // Hien tai bat buoc dang nhap nhan vien de tao HD tai quay (guard cua Hawk 41fac9b)
         CaLamViecDto ca = giaoCaService.moCa(100000L, null);
         idCaTao.add(ca.getId());
         SecurityContextHolder.clearContext();
 
-        HoaDonDTO dto = hoaDonService.create(yeuCauTaiQuay());
-
-        assertThat(idCaLamViecCua(dto.getId())).isNull();
-        assertThat(idNhanVienCua(dto.getId())).isEqualTo(nv.getId());
+        assertThatThrownBy(() -> hoaDonService.create(yeuCauTaiQuay()))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN));
     }
 
     // ---- helpers ----

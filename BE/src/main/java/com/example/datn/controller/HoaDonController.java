@@ -71,6 +71,25 @@ public class HoaDonController {
         return hoaDonService.get(id);
     }
 
+    @GetMapping("/cua-toi")
+    public PageResponse<HoaDonDTO> listCuaToi(
+        @RequestParam(required = false) String keyword,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "50") int size
+    ) {
+        return hoaDonService.listCuaToi(keyword, page, size);
+    }
+
+    @GetMapping("/cua-toi/{id}")
+    public HoaDonDTO getCuaToi(@PathVariable Long id) {
+        return hoaDonService.getCuaToi(id);
+    }
+
+    @GetMapping("/cua-toi/{id}/lich-su")
+    public List<com.example.datn.dto.HoaDon.LichSuHoaDonDTO> lichSuCuaToi(@PathVariable Long id) {
+        return hoaDonService.lichSuHoaDonCuaToi(id);
+    }
+
     @PostMapping
     public ResponseEntity<HoaDonDTO> create(@RequestBody HoaDonRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(hoaDonService.create(request));

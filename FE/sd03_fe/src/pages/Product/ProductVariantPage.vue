@@ -8,10 +8,31 @@ import CurrencyInput from '@/components/CurrencyInput.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
+import http, { API_ORIGIN } from '@/api/http'
 
 const router = useRouter()
 const route = useRoute()
-const API_BASE = 'http://localhost:8080/api/v1'
+const API_BASE = `${API_ORIGIN}/api/v1`
+
+const apiFetch = async (url, options = {}) => {
+  const parsed = new URL(url, window.location.origin)
+  const apiPath = `${parsed.pathname.replace(/^\/api/, '')}${parsed.search}`
+  try {
+    const response = await http.request({
+      url: apiPath,
+      method: options.method || 'GET',
+      data: options.body ? JSON.parse(options.body) : undefined,
+      signal: options.signal,
+    })
+    return { ok: true, status: response.status, json: async () => response.data }
+  } catch (error) {
+    return {
+      ok: false,
+      status: error.status || error.response?.status || 500,
+      json: async () => error.response?.data || { message: error.message },
+    }
+  }
+}
 
 const isLoading = ref(false)
 
@@ -139,9 +160,9 @@ watch(() => filters.idSanPham, (newVal) => {
 const fetchFilterOptions = async () => {
   try {
     const [resColor, resSize, resProd] = await Promise.all([
-      fetch(`${API_BASE}/attributes/mau_sac`),
-      fetch(`${API_BASE}/attributes/kich_co`),
-      fetch(`${API_BASE}/san-pham?page=0&size=1000`)
+      apiFetch(`${API_BASE}/attributes/mau_sac`),
+      apiFetch(`${API_BASE}/attributes/kich_co`),
+      apiFetch(`${API_BASE}/san-pham?page=0&size=1000`)
     ])
     if (resColor.ok) colorsList.value = await resColor.json()
     if (resSize.ok) sizesList.value = await resSize.json()
@@ -190,7 +211,7 @@ const fetchVariants = async (useCache = true) => {
 
   try {
     const params = buildParams(currentPage.value)
-    const res = await fetch(`${API_BASE}/san-pham-chi-tiet?${params.toString()}`, {
+    const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet?${params.toString()}`, {
       signal: currentAbortController.signal
     })
 
@@ -304,9 +325,13 @@ const toggleStatus = async (item) => {
   const itemCode = item.maCtsp || item.maSp || `SKU-${item.id}`
 
   try {
-    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/${item.id}/toggle-status`, { method: 'PATCH' })
+    const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet/${item.id}/toggle-status`, { method: 'PATCH' })
     if (res.ok) {
-      try { localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now())) } catch {}
+      try {
+        localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()))
+      } catch {
+        // Tín hiệu đồng bộ POS liên tab là tùy chọn.
+      }
       showToastNotice(
         'Cập nhật trạng thái thành công',
         `Đã chuyển trạng thái biến thể (${itemCode}) sang "${statusLabel}"`,
@@ -336,7 +361,7 @@ const exportVariantsToExcel = async () => {
     } else {
       const params = buildParams(0)
       params.set('size', '10000')
-      const res = await fetch(`${API_BASE}/san-pham-chi-tiet?${params.toString()}`)
+      const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet?${params.toString()}`)
       if (res.ok) {
         const data = await res.json()
         itemsToExport = data.content || variants.value
@@ -406,7 +431,7 @@ const exportVariantsToExcel = async () => {
   </Style>
   <Style ss:ID="PriceCell">
    <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
-   <NumberFormat ss:Format="#,##0\ &quot;₫&quot;"/>
+   <NumberFormat ss:Format="#,##0 &quot;₫&quot;"/>
    <Borders>
     <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
     <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
@@ -565,12 +590,9 @@ const openSingleQrModal = async (item) => {
 }
 
 const openBatchQrModal = async () => {
-  let targetItems = []
-  if (selectedIds.value.length > 0) {
-    targetItems = variants.value.filter(v => selectedIds.value.includes(v.id))
-  } else {
-    targetItems = variants.value
-  }
+  const targetItems = selectedIds.value.length > 0
+    ? variants.value.filter(v => selectedIds.value.includes(v.id))
+    : variants.value
 
   if (targetItems.length === 0) {
     showToastNotice('Thông báo', 'Không có biến thể nào trong danh sách để tạo QR', 'warning')
@@ -675,7 +697,7 @@ const executeVisualSearch = async (base64, mimeType) => {
   visualSearchResult.value = null
 
   try {
-    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/ai-visual-search`, {
+    const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet/ai-visual-search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -763,7 +785,7 @@ const handleQuickAttributeAdded = async (item) => {
       trangThai: true
     }
 
-    const res = await fetch(`${API_BASE}/attributes/${endpoint}`, {
+    const res = await apiFetch(`${API_BASE}/attributes/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -902,7 +924,7 @@ const saveAddVariant = async () => {
       hinhAnh: addForm.imagePreview || addForm.existingColorImage || null
     }]
 
-    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/batch`, {
+    const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet/batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -1198,14 +1220,18 @@ const saveAddVariant = async () => {
         hinhAnh: editForm.imagePreview || editForm.existingColorImage || null
       }
 
-      const res = await fetch(`${API_BASE}/san-pham-chi-tiet/${currentId}`, {
+      const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet/${currentId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
 
       if (res.ok) {
-        try { localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now())) } catch {}
+        try {
+          localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()))
+        } catch {
+          // Tín hiệu đồng bộ POS liên tab là tùy chọn.
+        }
         isEditModalOpen.value = false
         notifySuccess('Thành công', `Đã cập nhật biến thể "${editForm.maCtsp}" thành công!`)
         fetchVariants(false)

@@ -466,9 +466,11 @@ const mauTrangThai = (ten) => {
     'Chờ giao hàng': '#eab308',
     'Đang giao hàng': '#14b8a6',
     'Đã giao hàng': '#3b82f6',
+    'Giao hàng thất bại': '#f97316',
     'Đã hoàn thành': '#22c55e',
     'Đã hủy': '#ef4444',
     'Đã hoàn tiền': '#8b5cf6',
+    'Chờ thanh toán': '#64748b',
   }
   return map[ten] || '#94a3b8'
 }
@@ -805,27 +807,6 @@ onMounted(async () => {
           <i class="bi bi-envelope"></i>
           Gửi mail tổng kết
         </button>
-        <button v-if="soSanhMode" type="button" class="btn-action-outline" @click="xuatSoSanh">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-          Xuất Excel So sánh
-        </button>
-        <button
-          v-if="!soSanhMode"
-          type="button"
-          class="btn-action-outline"
-          @click="chuyenCheDoSoSanh"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="20" x2="18" y2="10"></line>
-            <line x1="12" y1="20" x2="12" y2="4"></line>
-            <line x1="6" y1="20" x2="6" y2="14"></line>
-          </svg>
-          So sánh doanh thu
-        </button>
       </div>
     </div>
 
@@ -858,19 +839,6 @@ onMounted(async () => {
           <button type="button" class="btn-mail-outline btn-mail-sm" @click="moGuiMail">
             <i class="bi bi-envelope"></i>
             Gửi mail tổng kết
-          </button>
-          <button
-            type="button"
-            class="btn-action-outline btn-compare-sm"
-            :class="{ 'is-active': soSanhMode }"
-            @click="chuyenCheDoSoSanh"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="20" x2="18" y2="10"></line>
-              <line x1="12" y1="20" x2="12" y2="4"></line>
-              <line x1="6" y1="20" x2="6" y2="14"></line>
-            </svg>
-            So sánh doanh thu
           </button>
         </div>
       </div>
@@ -927,7 +895,7 @@ onMounted(async () => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
             </svg>
-            Reset
+            Đặt lại
           </button>
         </div>
       </div>
@@ -965,27 +933,8 @@ onMounted(async () => {
         <div class="stat-value">{{ formatVnd(khoang.doanhThu) }}</div>
         <div class="stat-label">Tổng doanh thu</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-icon is-green">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="6" width="20" height="12" rx="2"></rect>
-            <circle cx="12" cy="12" r="2"></circle>
-            <path d="M6 12h.01M18 12h.01"></path>
-          </svg>
-        </div>
-        <div class="stat-value">{{ formatVnd(khoang.tienMat) }}</div>
-        <div class="stat-label">Tổng tiền mặt</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon is-blue">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-            <line x1="2" y1="10" x2="22" y2="10"></line>
-          </svg>
-        </div>
-        <div class="stat-value">{{ formatVnd(khoang.tienChuyenKhoan) }}</div>
-        <div class="stat-label">Tổng tiền chuyển khoản</div>
-      </div>
+
+
     </div>
 
     <!-- 4 THẺ SỐ LIỆU NHỎ -->
@@ -1035,6 +984,23 @@ onMounted(async () => {
         </div>
         <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.khachMoi) }}</div>
         <div class="stat-label">Khách mới</div>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="card-title-row space-between">
+        <div class="title-with-icon">
+          <div class="icon-circle icon-status"><i class="bi bi-receipt"></i></div>
+          <span class="card-title-text">Chi tiết đơn hàng theo trạng thái</span>
+        </div>
+        <span class="count-pill">{{ trangThai.reduce((sum, item) => sum + item.soLuong, 0) }} đơn</span>
+      </div>
+      <div class="status-legend">
+        <div v-for="item in trangThai" :key="item.ten" class="status-row">
+          <span class="brand-dot" :style="{ background: item.mau }"></span>
+          <span class="status-name">{{ item.ten }}</span>
+          <strong class="status-count">{{ new Intl.NumberFormat('vi-VN').format(item.soLuong) }}</strong>
+        </div>
       </div>
     </div>
 
@@ -1106,178 +1072,6 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div class="filter-card chart-card comparison-card">
-      <div class="card-title-row space-between">
-        <div class="title-with-icon">
-          <div class="icon-circle icon-chart">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="11" width="4" height="10" rx="1"></rect>
-              <rect x="10" y="5" width="4" height="16" rx="1"></rect>
-              <rect x="17" y="8" width="4" height="13" rx="1"></rect>
-              <path d="m3 7 6-4 5 3 7-4"></path>
-            </svg>
-          </div>
-          <span class="card-title-text">So sánh tăng trưởng doanh thu</span>
-        </div>
-        <span class="comparison-unit">Doanh thu (VND)</span>
-      </div>
-
-      <div class="comparison-controls">
-        <div class="field-block comparison-type">
-          <label class="field-label">So sánh theo</label>
-          <SearchableSelect
-            v-model="loaiSoSanh"
-            :options="[
-              { value: 'thang', label: 'Tháng' },
-              { value: 'quy', label: 'Quý' },
-              { value: 'nam', label: 'Năm' },
-            ]"
-            label-key="label"
-            value-key="value"
-            :allow-clear="false"
-            @change="doiLoaiSoSanh"
-          />
-        </div>
-        <div v-if="loaiSoSanh === 'thang'" class="field-block">
-          <label class="field-label">Tháng muốn thêm</label>
-          <input v-model="thangSoSanh" type="month" class="input-date" />
-        </div>
-        <template v-else-if="loaiSoSanh === 'quy'">
-          <div class="field-block">
-            <label class="field-label">Năm</label>
-            <input v-model.number="namQuySoSanh" type="number" min="2000" class="input-date" />
-          </div>
-          <div class="field-block">
-            <label class="field-label">Quý</label>
-            <SearchableSelect
-              v-model="quySoSanh"
-              :options="[
-                { value: 'Q1', label: 'Quý 1' },
-                { value: 'Q2', label: 'Quý 2' },
-                { value: 'Q3', label: 'Quý 3' },
-                { value: 'Q4', label: 'Quý 4' },
-              ]"
-              label-key="label"
-              value-key="value"
-              :allow-clear="false"
-            />
-          </div>
-        </template>
-        <div v-else class="field-block">
-          <label class="field-label">Năm muốn thêm</label>
-          <input v-model.number="namSoSanh" type="number" min="2000" class="input-date" />
-        </div>
-        <button class="btn-action-outline comparison-add" type="button" :disabled="cacKySoSanh.length >= 4" @click="themKySoSanh">
-          Thêm kỳ
-        </button>
-      </div>
-
-      <div class="comparison-periods" aria-label="Các kỳ đang so sánh">
-        <span v-for="key in cacKySoSanh" :key="key" class="comparison-period">
-          {{ nhanKySoSanh(key) }}
-          <button
-            type="button"
-            :aria-label="`Bỏ kỳ ${nhanKySoSanh(key)}`"
-            :disabled="cacKySoSanh.length <= 1"
-            @click="xoaKySoSanh(key)"
-          >×</button>
-        </span>
-        <span class="comparison-hint">Chọn tối đa 4 kỳ để đối chiếu.</span>
-      </div>
-
-      <BarLineChart
-        :labels="duLieuSoSanh.labels"
-        :values="duLieuSoSanh.values"
-        mode="ket-hop"
-        :currency="true"
-        color="#d92d20"
-        :height="290"
-      />
-    </div>
-
-    <!-- HÀNG: CHU KỲ + TRẠNG THÁI ĐƠN -->
-    <div class="charts-grid">
-      <div class="filter-card chart-card">
-        <div class="card-title-row space-between">
-          <div class="title-with-icon">
-            <div class="icon-circle icon-cycle">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2"></rect>
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
-              </svg>
-            </div>
-            <span class="card-title-text">Tổng quan theo chu kỳ thời gian</span>
-          </div>
-          <button class="btn-action-outline" type="button" @click="xuatChuKy">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-            </svg>
-            Xuất Excel
-          </button>
-        </div>
-
-        <div class="table-container">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Thời gian</th>
-                <th class="text-right">Doanh thu</th>
-                <th class="text-center">Số đơn</th>
-                <th class="text-right">AOV (Trung bình/đơn)</th>
-                <th class="text-center">Tăng trưởng</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in chuKy" :key="r.nhan" class="row-alt">
-                <td class="cell-strong">{{ r.nhan }}</td>
-                <td class="text-right">{{ formatVnd(r.doanhThu) }}</td>
-                <td class="text-center">{{ new Intl.NumberFormat('vi-VN').format(r.soDon) }}</td>
-                <td class="text-right">{{ formatVnd(r.aov) }}</td>
-                <td class="text-center">
-                  <span class="growth-pill" :class="r.tangTruong >= 0 ? 'is-up' : 'is-down'">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                      <template v-if="r.tangTruong >= 0">
-                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                        <polyline points="17 6 23 6 23 12"></polyline>
-                      </template>
-                      <template v-else>
-                        <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline>
-                        <polyline points="17 18 23 18 23 12"></polyline>
-                      </template>
-                    </svg>
-                    {{ layTangTruongLabel(r.tangTruong) }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="filter-card chart-card">
-        <div class="card-title-row">
-          <div class="icon-circle icon-status">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-            </svg>
-          </div>
-          <span class="card-title-text">Cơ cấu trạng thái đơn hàng</span>
-        </div>
-
-        <PieChart :slices="slicesTrangThai" :size="195" />
-        <div class="status-legend">
-          <div v-for="s in slicesTrangThai" :key="s.label" class="status-row">
-            <span class="brand-dot" :style="{ background: mauTrangThai(s.label) }"></span>
-            <span class="status-name">{{ s.label }}</span>
-            <span class="status-count">{{ new Intl.NumberFormat('vi-VN').format(s.value) }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- TỔNG QUAN DOANH THU NHÂN VIÊN -->
     <div class="table-card">
       <div class="card-title-row space-between">
@@ -1345,7 +1139,7 @@ onMounted(async () => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
             </svg>
-            Reset
+            Đặt lại
           </button>
         </div>
       </div>
@@ -1475,7 +1269,7 @@ onMounted(async () => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
             </svg>
-            Reset
+            Đặt lại
           </button>
         </div>
       </div>
@@ -1656,27 +1450,8 @@ onMounted(async () => {
             <div class="stat-value">{{ formatVnd(ssTong.tongDt) }}</div>
             <div class="stat-label">Tổng doanh thu</div>
           </div>
-          <div class="stat-card">
-            <div class="stat-icon is-green">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="2" y="6" width="20" height="12" rx="2"></rect>
-                <circle cx="12" cy="12" r="2"></circle>
-                <path d="M6 12h.01M18 12h.01"></path>
-              </svg>
-            </div>
-            <div class="stat-value">{{ formatVnd(ssTong.tongTm) }}</div>
-            <div class="stat-label">Tổng tiền mặt</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon is-blue">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-                <line x1="2" y1="10" x2="22" y2="10"></line>
-              </svg>
-            </div>
-            <div class="stat-value">{{ formatVnd(ssTong.tongCk) }}</div>
-            <div class="stat-label">Tổng tiền chuyển khoản</div>
-          </div>
+
+
         </div>
         <div class="stat-grid stat-grid-3">
           <div class="stat-card">
@@ -1768,7 +1543,7 @@ onMounted(async () => {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(k, i) in ssKy" :key="k.maKy" class="row-alt">
+                <tr v-for="k in ssKy" :key="k.maKy" class="row-alt">
                   <td class="cell-code">
                     {{ k.tenKy }}
                     <span v-if="k.laCaoNhat" class="badge-best">Cao nhất</span>

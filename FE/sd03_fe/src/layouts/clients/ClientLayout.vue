@@ -75,17 +75,6 @@ const handleLogout = () => {
 };
 
 // Newsletter
-const newsletterEmail = ref("");
-const newsletterSubscribed = ref(false);
-const handleSubscribe = () => {
-  if (newsletterEmail.value.trim()) {
-    newsletterSubscribed.value = true;
-    newsletterEmail.value = "";
-    setTimeout(() => {
-      newsletterSubscribed.value = false;
-    }, 4000);
-  }
-};
 </script>
 
 <template>
@@ -354,72 +343,6 @@ const handleSubscribe = () => {
 
     <!-- Beautiful Modern Footer -->
     <footer class="client-footer">
-      <!-- Perks Strip -->
-      <div class="client-footer-perks">
-        <div class="container">
-          <div class="row g-4">
-            <div class="col-6 col-lg-3">
-              <div class="client-footer-perk-item">
-                <div class="client-footer-perk-icon">
-                  <i class="bi bi-truck"></i>
-                </div>
-                <div>
-                  <div class="client-footer-perk-title">
-                    Giao hàng toàn quốc
-                  </div>
-                  <p class="client-footer-perk-desc">
-                    Nhận hàng trong 1–3 ngày, kiểm tra trước khi trả tiền
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div class="col-6 col-lg-3">
-              <div class="client-footer-perk-item">
-                <div class="client-footer-perk-icon">
-                  <i class="bi bi-arrow-repeat"></i>
-                </div>
-                <div>
-                  <div class="client-footer-perk-title">
-                    Đổi size trong 7 ngày
-                  </div>
-                  <p class="client-footer-perk-desc">
-                    Hỗ trợ đổi miễn phí tận nơi lần đầu tiên cực nhanh
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div class="col-6 col-lg-3">
-              <div class="client-footer-perk-item">
-                <div class="client-footer-perk-icon">
-                  <i class="bi bi-shield-check"></i>
-                </div>
-                <div>
-                  <div class="client-footer-perk-title">Chính hãng 100%</div>
-                  <p class="client-footer-perk-desc">
-                    Cam kết sneaker chuẩn authentic, đền gấp đôi nếu phát hiện
-                    giả
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div class="col-6 col-lg-3">
-              <div class="client-footer-perk-item">
-                <div class="client-footer-perk-icon">
-                  <i class="bi bi-headset"></i>
-                </div>
-                <div>
-                  <div class="client-footer-perk-title">Hotline CSKH 24/7</div>
-                  <p class="client-footer-perk-desc">
-                    Tư vấn chọn size tận tâm:
-                    <strong class="text-white">1900 1234</strong>
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- Main Footer Columns (Exact Matching User Screenshot) -->
       <div class="client-footer-main">
         <div class="container">
@@ -579,49 +502,12 @@ const handleSubscribe = () => {
               </ul>
             </div>
 
-            <!-- Col 4: Newsletter & Payments -->
+            <!-- Col 4: Payment methods -->
             <div class="col-lg-3 col-md-6">
-              <div class="client-footer-title text-white">
-                ĐĂNG KÝ NHẬN ƯU ĐÃI
-              </div>
-              <p class="small mb-3 footer-about-text text-white-50">
-                Nhận voucher giảm
-                <strong class="text-danger">50.000₫</strong> cho đơn hàng đầu
-                tiên cùng nhiều ưu đãi hấp dẫn khác.
-              </p>
-
-              <!-- Newsletter Form -->
-              <div class="mb-4">
-                <div class="input-group footer-newsletter-group">
-                  <input
-                    v-model="newsletterEmail"
-                    type="email"
-                    class="form-control client-footer-newsletter-input shadow-none"
-                    placeholder="Nhập email của bạn..."
-                    @keyup.enter="handleSubscribe"
-                  />
-                  <button
-                    type="button"
-                    class="btn btn-danger px-3 fw-bold"
-                    style="background-color: #ef4444; border-color: #ef4444"
-                    @click="handleSubscribe"
-                  >
-                    Đăng ký
-                  </button>
-                </div>
-                <div
-                  v-if="newsletterSubscribed"
-                  class="alert alert-success border-0 py-2 px-3 small mt-2 d-flex align-items-center gap-2 rounded-3"
-                >
-                  <i class="bi bi-check-circle-fill text-success"></i>
-                  <span>Cảm ơn bạn! Mã ưu đãi đã gửi tới hòm thư.</span>
-                </div>
-              </div>
-
               <!-- Payment Partners -->
               <div>
                 <span class="small fw-semibold text-white-50 d-block mb-2"
-                  >Phương thức thanh toán tiện lợi:</span
+                  >Phương thức thanh toán:</span
                 >
                 <div class="d-flex flex-wrap gap-2 align-items-center">
                   <div class="payment-badge-dark">

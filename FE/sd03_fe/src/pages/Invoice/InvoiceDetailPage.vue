@@ -559,14 +559,18 @@ const enrichInvoiceLinesWithVariantData = async (lines) => {
                 if (withImg) variant.img = withImg.img
               }
             }
-          } catch {}
+          } catch {
+            // Ảnh biến thể là dữ liệu bổ sung; vẫn hiển thị dòng hóa đơn hiện có.
+          }
         }
 
         if (variant) {
           if (line.idSanPhamChiTiet) map[line.idSanPhamChiTiet] = variant
           if (line.maSanPhamChiTiet) map[line.maSanPhamChiTiet] = variant
         }
-      } catch {}
+      } catch {
+        // Tiếp tục dựng hóa đơn nếu một biến thể không tải được dữ liệu bổ sung.
+      }
     })
   )
 
@@ -1238,7 +1242,7 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <button
-              v-if="coTheHuy"
+              v-if="coTheHuy && !isTerminal"
               class="btn btn-outline btn-huy-don"
               type="button"
               :disabled="updatingStatus"
@@ -1250,7 +1254,7 @@ onBeforeUnmount(() => {
               </svg>
               {{ updatingStatus ? 'Đang xử lý...' : 'Hủy đơn' }}
             </button>
-            <button class="btn btn-outline" type="button" @click="router.push('/hoa-don')">
+            <button v-if="!isTerminal" class="btn btn-outline" type="button" @click="router.push('/hoa-don')">
               Quay lại danh sách
             </button>
           </div>

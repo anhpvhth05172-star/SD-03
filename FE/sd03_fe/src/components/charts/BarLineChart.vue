@@ -272,19 +272,20 @@ const isEmpty = computed(() => {
             stroke-linecap="round"
             stroke-linejoin="round"
           />
-          <circle
-            v-if="mode === 'ket-hop'"
-            v-for="(v, i) in values"
-            :key="'combo-dot' + i"
-            :cx="xCenter(i)"
-            :cy="yOf(v)"
-            r="3.5"
-            fill="#fff"
-            stroke="#2563eb"
-            stroke-width="2"
-          >
-            <title>{{ labels[i] }}: {{ fmtValue(v) }}</title>
-          </circle>
+          <g v-if="mode === 'ket-hop'">
+            <circle
+              v-for="(v, i) in values"
+              :key="'combo-dot' + i"
+              :cx="xCenter(i)"
+              :cy="yOf(v)"
+              r="3.5"
+              fill="#fff"
+              stroke="#2563eb"
+              stroke-width="2"
+            >
+              <title>{{ labels[i] }}: {{ fmtValue(v) }}</title>
+            </circle>
+          </g>
         </g>
 
         <g v-else>

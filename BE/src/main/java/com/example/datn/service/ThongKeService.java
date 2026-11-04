@@ -34,16 +34,18 @@ public class ThongKeService {
     private static final Set<String> MA_HINH_THUC_TIEN_MAT = Set.of("TM", "CASH");
 
     private static final List<String> THU_TU_TRANG_THAI = List.of(
-        "CHO_XAC_NHAN", "DA_XAC_NHAN", "CHO_GIAO_HANG", "DANG_GIAO_HANG",
-        "DA_GIAO_HANG", "DA_HOAN_THANH", "DA_HUY", "DA_HOAN_TIEN"
+        "CHO_THANH_TOAN", "CHO_XAC_NHAN", "DA_XAC_NHAN", "CHO_GIAO_HANG", "DANG_GIAO_HANG",
+        "GIAO_HANG_THAT_BAI", "DA_GIAO_HANG", "DA_HOAN_THANH", "DA_HUY", "DA_HOAN_TIEN"
     );
 
     private static final Map<String, String> NHAN_TRANG_THAI = Map.of(
+        "CHO_THANH_TOAN", "Chờ thanh toán",
         "CHO_XAC_NHAN", "Chờ xác nhận",
         "DA_XAC_NHAN", "Đã xác nhận",
         "CHO_GIAO_HANG", "Chờ giao hàng",
         "DANG_GIAO_HANG", "Đang giao hàng",
         "DA_GIAO_HANG", "Đã giao hàng",
+        "GIAO_HANG_THAT_BAI", "Giao hàng thất bại",
         "DA_HOAN_THANH", "Đã hoàn thành",
         "DA_HUY", "Đã hủy",
         "DA_HOAN_TIEN", "Đã hoàn tiền"

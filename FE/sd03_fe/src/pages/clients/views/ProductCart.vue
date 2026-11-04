@@ -1,6 +1,5 @@
 <script setup>
 import { onMounted, ref, computed, watch } from "vue";
-import { useRouter } from "vue-router";
 import {
   cart,
   cartTotal,
@@ -13,7 +12,6 @@ import {
 } from "../store";
 import { getUser } from "@/utils/auth";
 
-const router = useRouter();
 const user = ref(getUser());
 const actionLoadingId = ref(null);
 const actionError = ref("");
@@ -195,15 +193,8 @@ const LOW_STOCK = 5;
 // Ảnh lỗi -> hiện emoji thay thế
 const imgFailed = ref({});
 
-// ===== Bắt buộc đăng nhập để xem giỏ hàng =====
-const LOGIN_URL = "/dang-nhap?redirect=/gio-hang";
-
+// Giỏ hàng dùng dữ liệu local với khách vãng lai, đồng bộ API khi có tài khoản.
 onMounted(() => {
-  // Chưa đăng nhập -> chuyển sang trang đăng nhập, không tải dữ liệu giỏ hàng
-  if (!user.value) {
-    router.replace(LOGIN_URL);
-    return;
-  }
   fetchCart();
   loadVouchers();
 });
@@ -269,25 +260,7 @@ const handleClear = async () => {
       <span class="text-dark fw-semibold">Giỏ hàng của tôi</span>
     </nav>
 
-    <!-- Chưa đăng nhập: bắt buộc đăng nhập mới xem được giỏ hàng -->
-    <div v-if="!user" class="login-required">
-      <div class="login-ico"><i class="bi bi-lock-fill"></i></div>
-      <h4 class="fw-bold">Vui lòng đăng nhập để xem giỏ hàng</h4>
-      <p class="text-muted-ps mb-4 mx-auto" style="max-width: 420px">
-        Bạn cần đăng nhập để xem, chỉnh sửa giỏ hàng và nhận các mã giảm giá
-        dành riêng cho thành viên.
-      </p>
-      <RouterLink
-        to="/khach-hang?redirect=/gio-hang"
-        class="btn btn-primary rounded-pill px-4 py-2 fw-bold"
-      >
-        <i class="bi bi-box-arrow-in-right me-1"></i> Đăng nhập ngay
-      </RouterLink>
-    </div>
-
-
-    <!-- Đã đăng nhập -->
-    <template v-else>
+    <div>
       <!-- Header -->
       <div class="cart-header mb-4">
         <div class="d-flex align-items-center gap-3">
@@ -588,7 +561,7 @@ const handleClear = async () => {
           <i class="bi bi-shop me-1"></i> Mua sắm ngay
         </RouterLink>
       </div>
-    </template>
+    </div>
   </div>
 </template>
 

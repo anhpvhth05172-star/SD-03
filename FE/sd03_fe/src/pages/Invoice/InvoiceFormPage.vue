@@ -203,7 +203,7 @@ const validate = () => {
   } else if (diaChi) {
     if (diaChi.length > 500) {
       e.diaChiNhanHang = 'Địa chỉ nhận hàng quá độ dài tối đa (500 ký tự)'
-    } else if (!/^[\p{L}\p{N}\s.,\/-]+$/u.test(diaChi)) {
+    } else if (!/^[\p{L}\p{N}\s.,\x2f-]+$/u.test(diaChi)) {
       e.diaChiNhanHang = 'Địa chỉ nhận hàng chứa ký tự không hợp lệ'
     }
   }

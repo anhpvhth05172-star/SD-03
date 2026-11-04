@@ -23,7 +23,9 @@ export const cleanupSwalResidualDom = () => {
         }
       })
     }
-  } catch {}
+  } catch {
+    // Dọn DOM thông báo là best-effort để không che mất lỗi nghiệp vụ chính.
+  }
 }
 
 /**

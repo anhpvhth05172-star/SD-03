@@ -47,9 +47,10 @@ const fLoaiDon = ref('')
 
 const loaiDonOptions = [
   { id: '', ten: 'Tất cả loại đơn' },
+  { id: 'ONLINE', ten: 'Hóa đơn online' },
+  { id: 'TAI_QUAY_TAT_CA', ten: 'Hóa đơn tại quầy' },
   { id: 'TAI_QUAY', ten: 'Tại quầy (Nhận ngay)' },
   { id: 'TAI_QUAY_GIAO_HANG', ten: 'Tại quầy (Giao hàng)' },
-  { id: 'ONLINE', ten: 'Online' },
 ]
 
 const trangThaiOptions = computed(() => tabs.map((t) => ({ id: t.key, ten: t.label })))

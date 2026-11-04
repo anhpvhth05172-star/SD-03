@@ -39,8 +39,8 @@ class BaoCaoHangNgayServiceTest {
         service.guiBaoCao(ngay);
 
         verify(emailService).guiMailCustom(
-            "admin@example.com",
-            "Báo cáo kinh doanh PolyShoes - 27/10/2026",
+            org.mockito.ArgumentMatchers.eq("admin@example.com"),
+            org.mockito.ArgumentMatchers.eq("Báo cáo kinh doanh PolyShoes - 27/10/2026"),
             org.mockito.ArgumentMatchers.contains("1.200.000")
         );
     }

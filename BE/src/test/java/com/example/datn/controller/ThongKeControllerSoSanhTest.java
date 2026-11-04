@@ -18,8 +18,12 @@ import com.example.datn.service.BaoCaoTongKetService;
 import com.example.datn.service.ThongKeService;
 import java.time.LocalDate;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -37,6 +41,14 @@ class ThongKeControllerSoSanhTest {
             .standaloneSetup(new ThongKeController(service, quyenGuard, mock(BaoCaoTongKetService.class)))
             .setControllerAdvice(new ApiExceptionHandler())
             .build();
+        // canQuanLyKhachHang doc quyen tu SecurityContext (khong tin header X-Vai-Tro)
+        SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(
+            1L, "n/a", List.of(new SimpleGrantedAuthority("ROLE_NHAN_VIEN"))));
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     private static KySoSanhDTO ky(String ma) {

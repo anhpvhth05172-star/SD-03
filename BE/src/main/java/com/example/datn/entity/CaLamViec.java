@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
@@ -74,6 +75,9 @@ public class CaLamViec {
 
     @Column(name = "tien_thuc_te")
     private BigDecimal tienThucTe;
+
+    @Transient
+    private BigDecimal tienChi = BigDecimal.ZERO;
 
     @Column(name = "chenh_lech")
     private BigDecimal chenhLech;

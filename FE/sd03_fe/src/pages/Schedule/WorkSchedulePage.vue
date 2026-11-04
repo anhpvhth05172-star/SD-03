@@ -34,6 +34,7 @@ const pad2 = (x) => String(x).padStart(2, '0')
 const nhanViens = ref([])
 const cas = ref([])
 const lichs = ref([])
+const loadError = ref('')
 const dsNhanVien = computed(() => nhanViens.value)
 const caDangBat = computed(() => cas.value.filter((c) => c.dangBat))
 const caHienThi = computed(() => {
@@ -73,6 +74,13 @@ const taiDuLieu = async () => {
     if (nvRes.status === 'fulfilled') nhanViens.value = nvRes.value?.content || []
     if (caRes.status === 'fulfilled') cas.value = caRes.value || []
     if (lichRes.status === 'fulfilled') lichs.value = lichRes.value || []
+    const errors = [nvRes, caRes, lichRes]
+      .filter((result) => result.status === 'rejected')
+      .map((result) => result.reason?.message)
+      .filter(Boolean)
+    loadError.value = errors.length
+      ? `Không tải đủ dữ liệu lịch làm việc: ${errors.join(' · ')}`
+      : ''
   } catch (err) {
     console.error('Lỗi khi tải dữ liệu lịch:', err)
   }
@@ -757,6 +765,10 @@ onMounted(() => {
 
 <template>
   <div class="schedule-page-container">
+    <div v-if="loadError" class="schedule-load-error" role="alert">
+      <span>{{ loadError }}</span>
+      <button type="button" @click="taiDuLieu">Thử tải lại</button>
+    </div>
     <!-- 1. BREADCRUMBS -->
     <div class="schedule-breadcrumbs">
       <span class="crumb-parent">Lịch làm việc</span>
@@ -2897,9 +2909,17 @@ onMounted(() => {
 .modal-card.modal-card-auto-schedule {
   max-width: 680px;
   width: 95%;
-  max-height: 90vh;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-card.modal-card-auto-schedule .modal-banner,
+.modal-card.modal-card-auto-schedule .modal-footer {
+  flex: 0 0 auto;
 }
 
 .auto-banner-icon {
@@ -2924,12 +2944,18 @@ onMounted(() => {
 }
 
 .auto-modal-body {
-  overflow-y: auto;
-  max-height: calc(90vh - 160px);
   padding: 18px 22px;
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.modal-card.modal-card-auto-schedule .auto-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  max-height: none;
+  overscroll-behavior: contain;
 }
 
 .auto-section {
@@ -3352,6 +3378,27 @@ onMounted(() => {
 .auto-schedule-trigger-btn:hover {
   background: linear-gradient(135deg, #1d4ed8, #1e40af) !important;
   box-shadow: 0 4px 10px rgba(37, 99, 235, 0.35);
+}
+
+.schedule-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.schedule-load-error button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: #1d4ed8;
+  font-weight: 700;
 }
 
 </style>

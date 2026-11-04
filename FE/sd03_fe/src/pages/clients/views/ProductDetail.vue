@@ -81,10 +81,9 @@ function stockOfColor(idMauSac) {
     .reduce((s, v) => s + Number(v.stock || 0), 0);
 }
 
-// Size của màu đang chọn
-const sizesOfColor = computed(() =>
-  variants.value.filter((v) => v.idMauSac === selectedColor.value),
-);
+// Hiện đủ size; vô hiệu hóa size không có ở màu đang chọn.
+const allSizes = computed(() => [...new Set(variants.value.map((v) => v.size))].sort((a, b) => String(a).localeCompare(String(b), 'vi', { numeric: true })));
+const variantForSize = (size) => variants.value.find((v) => v.idMauSac === selectedColor.value && v.size === size);
 
 // Số size duy nhất
 const sizeCount = computed(
@@ -287,6 +286,7 @@ async function add(goCart = false) {
         tenThuongHieu: product.value.tenThuongHieu,
         giaBan: displayPrice.value,
         giaBanMin: displayPrice.value,
+        stock: selectedVariant.value.stock,
         img:
           selectedVariant.value.img ||
           displayImg.value ||
@@ -451,7 +451,7 @@ async function add(goCart = false) {
               >Thương hiệu: <b>{{ product.tenThuongHieu }}</b></span
             >
             <span v-if="variants.length"
-              >Tồn kho: <b>{{ currentStock }}</b></span
+              >Còn lại: <b>{{ currentStock }}</b></span
             >
           </div>
 
@@ -522,31 +522,21 @@ async function add(goCart = false) {
               >
             </label>
             <div class="d-flex flex-wrap gap-2">
-              <template v-if="selectedColor">
-                <button
-                  v-for="v in sizesOfColor"
-                  :key="v.id"
-                  type="button"
-                  class="btn size-box-btn"
-                  :class="[
-                    selectedVariant?.id === v.id
-                      ? 'size-btn-active'
-                      : 'size-btn-normal',
-                    { 'size-btn-disabled': v.stock <= 0 },
-                  ]"
-                  :disabled="v.stock <= 0"
-                  :title="v.stock <= 0 ? 'Hết hàng' : `Còn ${v.stock} sản phẩm`"
-                  @click="selectVariant(v)"
-                >
-                  {{ v.size }}
-                </button>
-                <div v-if="!sizesOfColor.length" class="text-muted small">
-                  Màu này hiện tại đã hết size.
-                </div>
-              </template>
-              <div v-else class="text-muted small fst-italic">
-                👉 Vui lòng chọn màu sắc ở trên để xem các kích cỡ có sẵn.
-              </div>
+              <button
+                v-for="size in allSizes"
+                :key="size"
+                type="button"
+                class="btn size-box-btn"
+                :class="[
+                  selectedVariant?.size === size ? 'size-btn-active' : 'size-btn-normal',
+                  { 'size-btn-disabled': !variantForSize(size) || variantForSize(size).stock <= 0 },
+                ]"
+                :disabled="!variantForSize(size) || variantForSize(size).stock <= 0"
+                :title="variantForSize(size) ? (variantForSize(size).stock > 0 ? `Còn ${variantForSize(size).stock} sản phẩm` : 'Hết hàng') : 'Không có ở màu này'"
+                @click="selectVariant(variantForSize(size))"
+              >
+                {{ size }}
+              </button>
             </div>
           </div>
 

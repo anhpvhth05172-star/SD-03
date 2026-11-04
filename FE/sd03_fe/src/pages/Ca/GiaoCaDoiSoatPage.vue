@@ -45,10 +45,12 @@ onMounted(async () => {
         <article class="reconcile-card"><span>Tiền mặt thu</span><strong>{{ formatVnd(ca.tienMatThu) }}</strong></article>
         <article class="reconcile-card"><span>Thanh toán không tiền mặt</span><strong>{{ formatVnd(ca.tienKhongMat) }}</strong></article>
         <article class="reconcile-card"><span>Tiền mặt hoàn</span><strong>{{ formatVnd(ca.tienHoanMat) }}</strong></article>
+        <article class="reconcile-card"><span>Tiền chi trong ca</span><strong>{{ formatVnd(ca.tienChi || 0) }}</strong></article>
         <article class="reconcile-card"><span>Tiền dự kiến trong quỹ</span><strong>{{ formatVnd(ca.tienDuKien) }}</strong></article>
         <article class="reconcile-card"><span>Tiền thực tế</span><strong>{{ ca.tienThucTe == null ? '—' : formatVnd(ca.tienThucTe) }}</strong></article>
         <article class="reconcile-card"><span>Chênh lệch</span><strong>{{ ca.chenhLech == null ? '—' : formatVnd(ca.chenhLech) }}</strong><small v-if="ca.lyDoLech">{{ ca.lyDoLech }}</small></article>
         <article class="reconcile-card"><span>Ghi chú mở ca</span><strong>{{ ca.ghiChuMo || '—' }}</strong></article>
+        <article class="reconcile-card"><span>Người nhận bàn giao</span><strong>{{ ca.tenNguoiNhan || 'Cuối ngày' }}</strong></article>
       </section>
 
       <section class="reconcile-card history-card">

@@ -386,6 +386,37 @@ public class HoaDonService {
         return toFullDTO(findOrThrow(id));
     }
 
+    @Transactional(readOnly = true)
+    public PageResponse<HoaDonDTO> listCuaToi(String keyword, int page, int size) {
+        Long idKhachHang = idKhachHangDangNhap();
+        String tuKhoa = isBlank(keyword) ? null : keyword.trim();
+        var result = hoaDonRepository.findOrdersForCustomer(
+            idKhachHang,
+            tuKhoa,
+            PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 50))
+        );
+        return PageResponse.from(result.map(this::toDTO));
+    }
+
+    @Transactional(readOnly = true)
+    public HoaDonDTO getCuaToi(Long id) {
+        Long idKhachHang = idKhachHangDangNhap();
+        HoaDon hoaDon = hoaDonRepository.findById(id)
+            .filter(h -> !h.isDaXoa() && h.getKhachHang() != null
+                && idKhachHang.equals(h.getKhachHang().getId()))
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng"));
+        return toFullDTO(hoaDon);
+    }
+
+    private Long idKhachHangDangNhap() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof Long id)
+            || auth.getAuthorities().stream().noneMatch(a -> "ROLE_KHACH_HANG".equals(a.getAuthority()))) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Vui lòng đăng nhập tài khoản khách hàng");
+        }
+        return id;
+    }
+
     @Transactional
     public HoaDonDTO create(HoaDonRequest req) {
         kiemTraNguoiTaoHoaDon(req);
@@ -416,7 +447,9 @@ public class HoaDonService {
         if (!"ONLINE".equals(toMaLoaiDon(req.getLoaiDon()))) return;
         List<NhanVien> nhanViens = nhanVienRepository.findActiveOrderAssignees();
         if (nhanViens.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không có nhân viên hoạt động để nhận đơn online");
+            // Đơn online vẫn được phép đặt; để trống nhân viên để cửa hàng phân công sau.
+            req.setIdNhanVien(null);
+            return;
         }
         Map<Long, Long> soDonDangXuLy = new HashMap<>();
         for (Object[] row : hoaDonRepository.countOpenOrdersByEmployee()) {
@@ -584,34 +617,38 @@ public class HoaDonService {
                 "Không được chuyển từ " + toTenTrangThai(maHienTai) + " sang " + toTenTrangThai(maMoi)
             );
         }
-        boolean laDonGiao = "ONLINE".equalsIgnoreCase(hoaDon.getLoaiDon()) 
-            || "TAI_QUAY_GIAO_HANG".equalsIgnoreCase(hoaDon.getLoaiDon())
-            || !isBlank(hoaDon.getDiaChiNhanHang());
-        if ("DA_XAC_NHAN".equals(maMoi) && laDonGiao) {
-            if (isBlank(hoaDon.getDiaChiNhanHang())) {
-                throw new IllegalArgumentException("Đơn giao hàng cần có địa chỉ nhận hàng hợp lệ để xác nhận");
+        if ("DA_XAC_NHAN".equals(maMoi) && "ONLINE".equalsIgnoreCase(hoaDon.getLoaiDon())) {
+            boolean duDiaChi = !isBlank(hoaDon.getDiaChiNhanHang())
+                && hoaDon.getToDistrictId() != null
+                && !isBlank(hoaDon.getToWardCode());
+            boolean duPhi = hoaDon.getPhiVanChuyen() != null
+                && hoaDon.getPhiVanChuyen().compareTo(BigDecimal.ZERO) > 0;
+            if (!duDiaChi || !duPhi) {
+                throw new IllegalArgumentException(
+                    "Đơn online chưa đủ địa chỉ nhận hàng/phí vận chuyển để xác nhận");
             }
+        } else if ("DA_XAC_NHAN".equals(maMoi)
+            && "TAI_QUAY_GIAO_HANG".equalsIgnoreCase(hoaDon.getLoaiDon())
+            && isBlank(hoaDon.getDiaChiNhanHang())) {
+            throw new IllegalArgumentException("Đơn giao hàng cần có địa chỉ nhận hàng hợp lệ để xác nhận");
         }
         boolean laLanThatBaiThuBa = "GIAO_HANG_THAT_BAI".equals(maMoi)
             && lichSuHoaDonRepository.countByHoaDonIdAndTrangThai(id, "GIAO_HANG_THAT_BAI")
                 >= SO_LAN_GIAO_THAT_BAI_TU_DONG_HUY - 1;
         if ("DA_HUY".equals(maMoi) || "DA_HOAN_TIEN".equals(maMoi)) {
-            hoanTraTonKho(hoaDon);
+            hoanTonKho(id);
         }
         hoaDon.setTrangThai(maMoi);
         hoaDon.setNguoiCapNhat(nguoiCapNhatHienTai());
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         HoaDon saved = hoaDonRepository.save(hoaDon);
         ghiLichSuTrangThai(saved, maHienTai, maMoi, ghiChuHopLe);
-        if ("DA_HUY".equals(maMoi)) {
-            hoanTonKho(id);
-        }
         if (laLanThatBaiThuBa) {
-            hoanTraTonKho(hoaDon);
             hoaDon.setTrangThai("DA_HUY");
             hoaDon.setNguoiCapNhat(nguoiCapNhatHienTai());
             hoaDon.setNgayCapNhat(LocalDateTime.now());
             saved = hoaDonRepository.save(hoaDon);
+            // Giao thất bại lần thứ ba tự hủy đơn; hoàn tồn đúng một lần.
             hoanTonKho(id);
             ghiLichSuTrangThai(
                 saved,
@@ -625,15 +662,19 @@ public class HoaDonService {
 
     private Map<String, List<String>> chonBangChuyenTrangThai(HoaDon hoaDon) {
         String loaiDon = hoaDon.getLoaiDon();
-        boolean coGiaoHang = !isBlank(hoaDon.getDiaChiNhanHang())
-            || "TAI_QUAY_GIAO_HANG".equalsIgnoreCase(loaiDon)
-            || (hoaDon.getPhiVanChuyen() != null && hoaDon.getPhiVanChuyen().compareTo(BigDecimal.ZERO) > 0);
         boolean laOnline = "ONLINE".equalsIgnoreCase(loaiDon) || "Online".equalsIgnoreCase(loaiDon);
-
-        if (laOnline || coGiaoHang) {
+        if (laOnline) {
             return TRANSITION_MAP;
         }
-        return TRANSITION_MAP_POS;
+        boolean laPos = "TAI_QUAY".equalsIgnoreCase(loaiDon) || "Tại quầy".equalsIgnoreCase(loaiDon)
+            || "TAI_QUAY_GIAO_HANG".equalsIgnoreCase(loaiDon);
+        if (laPos) {
+            boolean coGiaoHang = !isBlank(hoaDon.getDiaChiNhanHang())
+                || (hoaDon.getPhiVanChuyen() != null && hoaDon.getPhiVanChuyen().compareTo(BigDecimal.ZERO) > 0);
+            return coGiaoHang ? TRANSITION_MAP : TRANSITION_MAP_POS;
+        }
+        throw new IllegalArgumentException(
+            "Không xác định được loại hóa đơn để đổi trạng thái (loại đơn hiện tại: " + loaiDon + ")");
     }
 
     private boolean laLoaiDonHopLe(HoaDon hoaDon) {
@@ -684,6 +725,12 @@ public class HoaDonService {
         return lichSuHoaDonRepository.findByIdHoaDonOrderByThoiGianDescIdDesc(idHoaDon).stream()
             .map(this::toLichSuDTO)
             .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<LichSuHoaDonDTO> lichSuHoaDonCuaToi(Long idHoaDon) {
+        getCuaToi(idHoaDon); // xác thực đơn thuộc khách đang đăng nhập trước khi trả lịch sử
+        return lichSuHoaDon(idHoaDon);
     }
 
     private LichSuHoaDonDTO toLichSuDTO(LichSuHoaDon e) {
