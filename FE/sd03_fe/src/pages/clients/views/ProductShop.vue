@@ -45,6 +45,37 @@ const types = computed(() => [
   ...new Set(allProducts.value.map((p) => p.tenLoaiGiay).filter(Boolean)),
 ]);
 
+// ===== Banner: giày nổi bật (lấy từ dữ liệu thật) =====
+const featured = computed(() =>
+  allProducts.value.filter((p) => p.img).slice(0, 4),
+);
+const featuredIndex = ref(0);
+const currentFeatured = computed(
+  () => featured.value[featuredIndex.value] || null,
+);
+
+const formatVnd = (n) => Number(n || 0).toLocaleString("vi-VN") + "₫";
+
+let bannerTimer = null;
+function startBannerTimer() {
+  clearInterval(bannerTimer);
+  bannerTimer = setInterval(() => {
+    if (featured.value.length > 1) {
+      featuredIndex.value = (featuredIndex.value + 1) % featured.value.length;
+    }
+  }, 3500);
+}
+
+function pickFeatured(i) {
+  featuredIndex.value = i;
+  startBannerTimer();
+}
+
+// Nếu danh sách nổi bật thay đổi (vd: sau khi tìm kiếm) thì về ảnh đầu
+watch(featured, () => {
+  featuredIndex.value = 0;
+});
+
 // ===== Fetch sản phẩm =====
 async function fetchProducts() {
   loading.value = true;
@@ -59,7 +90,10 @@ async function fetchProducts() {
   }
 }
 
-onMounted(fetchProducts);
+onMounted(() => {
+  fetchProducts();
+  startBannerTimer();
+});
 
 // Debounce khi gõ tìm kiếm
 let searchTimer = null;
@@ -67,7 +101,10 @@ watch(q, () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(fetchProducts, 400);
 });
-onBeforeUnmount(() => clearTimeout(searchTimer));
+onBeforeUnmount(() => {
+  clearTimeout(searchTimer);
+  clearInterval(bannerTimer);
+});
 
 // Đồng bộ brand từ query string
 watch(
@@ -156,6 +193,11 @@ async function goToPage(p) {
   gridTop.value?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+// Cuộn xuống lưới sản phẩm (nút trên banner)
+function scrollToGrid() {
+  gridTop.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 const reset = () => {
   q.value = "";
   brand.value = "";
@@ -175,46 +217,73 @@ const reset = () => {
       <span class="text-dark fw-semibold">Cửa hàng sneaker</span>
     </nav>
 
-    <!-- ===== Hero banner ===== -->
-    <section class="shop-hero mb-4">
-      <div class="hero-blob hero-blob-1"></div>
-      <div class="hero-blob hero-blob-2"></div>
+    <!-- ===== Banner giày mới về ===== -->
+    <section class="shop-banner mb-4">
+      <div class="banner-glow banner-glow-1"></div>
+      <div class="banner-glow banner-glow-2"></div>
 
       <div class="row align-items-center g-4 position-relative">
-        <div class="col-lg-7">
-          <span class="hero-tag">🔥 BỘ SƯU TẬP 2026</span>
-          <h1 class="hero-title">
-            Sneaker chính hãng,<br />phong cách của riêng bạn
+        <div class="col-lg-6">
+          <span class="banner-tag">
+            <span class="banner-tag-dot"></span> NEW ARRIVALS
+          </span>
+          <h1 class="banner-title">
+            Sneaker mới về,<br />
+            <span class="banner-title-accent">chạm đất là mê</span>
           </h1>
-          <p class="hero-sub">
-            Khám phá những mẫu giày hot trend từ Nike, Adidas, Jordan, Puma… Đảm
-            bảo 100% chính hãng, đổi size 7 ngày miễn phí.
+          <p class="banner-sub">
+            Cập nhật liên tục các mẫu giày hot trend từ Nike, Adidas, Jordan,
+            Puma… Nhập mã <b class="banner-code">POLY2026</b> giảm ngay 10%.
           </p>
+          <div class="d-flex flex-wrap align-items-center gap-3">
+            <button type="button" class="banner-btn" @click="scrollToGrid">
+              Mua ngay <i class="bi bi-arrow-right ms-1"></i>
+            </button>
+            <span class="banner-note">
+              <i class="bi bi-truck me-1"></i> Miễn phí ship từ 500.000đ
+            </span>
+          </div>
         </div>
 
-        <div class="col-lg-5 d-none d-lg-block">
-          <div class="hero-perks">
-            <div class="hero-perk">
-              <i class="bi bi-shield-fill-check"></i>
-              <div>
-                <b>Chính hãng 100%</b>
-                <span>Bảo hành keo chỉ 12 tháng</span>
+        <!-- Sân khấu giày -->
+        <div class="col-lg-6 d-none d-lg-block">
+          <div class="shoe-stage">
+            <div class="shoe-ring"></div>
+            <div class="shoe-circle"></div>
+
+            <template v-if="currentFeatured">
+              <img
+                :key="currentFeatured.id"
+                :src="currentFeatured.img"
+                :alt="currentFeatured.tenSanPham"
+                class="shoe-img"
+              />
+
+              <div class="shoe-info">
+                <div class="shoe-info-brand">
+                  {{ currentFeatured.tenThuongHieu || "Sneaker" }}
+                </div>
+                <div class="shoe-info-name">
+                  {{ currentFeatured.tenSanPham }}
+                </div>
+                <div class="shoe-info-price">
+                  Từ {{ formatVnd(priceOf(currentFeatured)) }}
+                </div>
               </div>
-            </div>
-            <div class="hero-perk">
-              <i class="bi bi-arrow-repeat"></i>
-              <div>
-                <b>Đổi size 7 ngày</b>
-                <span>Miễn phí đổi tận nhà</span>
+
+              <div v-if="featured.length > 1" class="shoe-dots">
+                <button
+                  v-for="(f, i) in featured"
+                  :key="f.id"
+                  type="button"
+                  class="shoe-dot"
+                  :class="{ active: i === featuredIndex }"
+                  :title="f.tenSanPham"
+                  @click="pickFeatured(i)"
+                ></button>
               </div>
-            </div>
-            <div class="hero-perk">
-              <i class="bi bi-truck"></i>
-              <div>
-                <b>Giao hàng nhanh</b>
-                <span>Nhận hàng trong 1-3 ngày</span>
-              </div>
-            </div>
+            </template>
+            <div v-else class="shoe-placeholder">👟</div>
           </div>
         </div>
       </div>
@@ -267,7 +336,7 @@ const reset = () => {
           </div>
         </div>
 
-        <!-- [SỬA] Loại giày: select có ô tìm kiếm -->
+        <!-- Loại giày: select có ô tìm kiếm -->
         <div class="col-6 col-md-3">
           <SearchSelect
             v-model="type"
@@ -388,55 +457,48 @@ const reset = () => {
         </div>
       </div>
 
-      <!-- ===== Pagination ===== -->
-      <nav
-        v-if="totalPages > 1"
-        class="pagination-wrap"
-        aria-label="Phân trang sản phẩm"
-      >
-        <button
-          type="button"
-          class="page-btn page-nav"
-          :disabled="currentPage === 1"
-          title="Trang trước"
-          @click="goToPage(currentPage - 1)"
+      <!-- ===== Pagination (góc phải, nhỏ gọn) ===== -->
+      <div v-if="totalPages > 1" class="pagination-row">
+        <span class="page-info"
+          >Trang {{ currentPage }} / {{ totalPages }}</span
         >
-          <i class="bi bi-chevron-left"></i>
-          <span class="d-none d-sm-inline">Trước</span>
-        </button>
 
-        <template v-for="(it, i) in pageItems" :key="`${it}-${i}`">
-          <span v-if="it === '...'" class="page-dots">…</span>
+        <nav class="pagination-wrap" aria-label="Phân trang sản phẩm">
           <button
-            v-else
             type="button"
             class="page-btn"
-            :class="{ active: it === currentPage }"
-            :aria-current="it === currentPage ? 'page' : undefined"
-            @click="goToPage(it)"
+            :disabled="currentPage === 1"
+            title="Trang trước"
+            @click="goToPage(currentPage - 1)"
           >
-            {{ it }}
+            <i class="bi bi-chevron-left"></i>
           </button>
-        </template>
 
-        <button
-          type="button"
-          class="page-btn page-nav"
-          :disabled="currentPage === totalPages"
-          title="Trang sau"
-          @click="goToPage(currentPage + 1)"
-        >
-          <span class="d-none d-sm-inline">Sau</span>
-          <i class="bi bi-chevron-right"></i>
-        </button>
-      </nav>
+          <template v-for="(it, i) in pageItems" :key="`${it}-${i}`">
+            <span v-if="it === '...'" class="page-dots">…</span>
+            <button
+              v-else
+              type="button"
+              class="page-btn"
+              :class="{ active: it === currentPage }"
+              :aria-current="it === currentPage ? 'page' : undefined"
+              @click="goToPage(it)"
+            >
+              {{ it }}
+            </button>
+          </template>
 
-      <p
-        v-if="totalPages > 1"
-        class="text-center small text-muted-ps mt-2 mb-0"
-      >
-        Trang {{ currentPage }} / {{ totalPages }}
-      </p>
+          <button
+            type="button"
+            class="page-btn"
+            :disabled="currentPage === totalPages"
+            title="Trang sau"
+            @click="goToPage(currentPage + 1)"
+          >
+            <i class="bi bi-chevron-right"></i>
+          </button>
+        </nav>
+      </div>
 
       <!-- Empty -->
       <div v-if="!list.length" class="state-card">
@@ -455,95 +517,235 @@ const reset = () => {
 </template>
 
 <style scoped>
-/* ===== Hero ===== */
-.shop-hero {
+/* ===== Banner giày mới về ===== */
+.shop-banner {
   position: relative;
   overflow: hidden;
   border-radius: 24px;
-  padding: 40px 36px;
-  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 45%, #fdf2f8 100%);
-  border: 1px solid #fecdd3;
-  box-shadow: 0 8px 32px rgba(220, 38, 38, 0.08);
+  padding: 40px 44px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #111827 100%);
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.3);
+  color: #ffffff;
 }
 
-.hero-blob {
+.banner-glow {
   position: absolute;
   border-radius: 50%;
-  filter: blur(50px);
-  opacity: 0.55;
+  filter: blur(70px);
   pointer-events: none;
 }
-.hero-blob-1 {
+.banner-glow-1 {
+  width: 340px;
+  height: 340px;
+  background: rgba(239, 68, 68, 0.45);
+  top: -120px;
+  right: 8%;
+}
+.banner-glow-2 {
   width: 240px;
   height: 240px;
-  background: #fda4af;
-  top: -80px;
-  right: -40px;
-}
-.hero-blob-2 {
-  width: 200px;
-  height: 200px;
-  background: #fbcfe8;
-  bottom: -90px;
-  left: 30%;
+  background: rgba(59, 130, 246, 0.25);
+  bottom: -110px;
+  left: -40px;
 }
 
-.hero-tag {
-  display: inline-block;
-  background: #ffffff;
-  color: #dc2626;
+.banner-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
   font-weight: 700;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
   padding: 6px 14px;
   border-radius: 999px;
-  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.12);
+  margin-bottom: 18px;
+}
+.banner-tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25);
+  animation: pulseDot 1.6s ease-in-out infinite;
+}
+@keyframes pulseDot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(239, 68, 68, 0.08);
+  }
+}
+
+.banner-title {
+  font-size: 2.6rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #ffffff;
   margin-bottom: 14px;
 }
+.banner-title-accent {
+  background: linear-gradient(90deg, #f87171, #fbbf24);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 
-.hero-title {
-  font-size: 2.2rem;
-  font-weight: 800;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
+.banner-sub {
+  color: rgba(255, 255, 255, 0.75);
+  max-width: 480px;
+  margin-bottom: 24px;
+}
+.banner-code {
+  background: #fbbf24;
   color: #111827;
-  margin-bottom: 12px;
+  padding: 1px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.03em;
 }
 
-.hero-sub {
-  color: #64748b;
-  max-width: 540px;
-  margin-bottom: 0;
+.banner-btn {
+  border: none;
+  background: #ef4444;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 12px 30px;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(239, 68, 68, 0.4);
+  transition: all 0.2s ease;
+}
+.banner-btn:hover {
+  background: #dc2626;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(239, 68, 68, 0.5);
+}
+.banner-note {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
 }
 
-.hero-perks {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.hero-perk {
+/* ----- Sân khấu giày ----- */
+.shoe-stage {
+  position: relative;
+  height: 320px;
   display: flex;
   align-items: center;
-  gap: 14px;
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(6px);
-  border: 1px solid #ffffff;
-  border-radius: 16px;
-  padding: 12px 16px;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+  justify-content: center;
 }
-.hero-perk i {
-  font-size: 1.6rem;
-  color: #dc2626;
+
+.shoe-circle {
+  position: absolute;
+  width: 270px;
+  height: 270px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #f87171, #b91c1c 70%);
+  box-shadow: 0 20px 50px rgba(185, 28, 28, 0.45);
 }
-.hero-perk b {
-  display: block;
-  font-size: 0.95rem;
-  color: #111827;
+.shoe-ring {
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  animation: spinRing 28s linear infinite;
 }
-.hero-perk span {
-  font-size: 0.78rem;
-  color: #64748b;
+@keyframes spinRing {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.shoe-img {
+  position: relative;
+  z-index: 2;
+  max-width: 78%;
+  max-height: 230px;
+  object-fit: contain;
+  transform: rotate(-14deg);
+  filter: drop-shadow(0 24px 22px rgba(0, 0, 0, 0.45));
+  animation: shoeIn 0.6s ease both;
+}
+@keyframes shoeIn {
+  from {
+    opacity: 0;
+    transform: translateX(40px) rotate(-4deg) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) rotate(-14deg) scale(1);
+  }
+}
+
+.shoe-placeholder {
+  position: relative;
+  z-index: 2;
+  font-size: 7rem;
+}
+
+.shoe-info {
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  bottom: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(8px);
+  border-radius: 14px;
+  padding: 10px 14px;
+  max-width: 220px;
+}
+.shoe-info-brand {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fca5a5;
+}
+.shoe-info-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.shoe-info-price {
+  font-size: 0.82rem;
+  color: #fde68a;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.shoe-dots {
+  position: absolute;
+  z-index: 3;
+  right: 4px;
+  bottom: 14px;
+  display: flex;
+  gap: 8px;
+}
+.shoe-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: none;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+.shoe-dot.active {
+  width: 26px;
+  background: #ef4444;
 }
 
 /* ===== Brand pills ===== */
@@ -792,30 +994,42 @@ const reset = () => {
   }
 }
 
-/* ===== Pagination ===== */
+/* ===== Pagination (góc phải, nhỏ gọn) ===== */
+.pagination-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.page-info {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
 .pagination-wrap {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-end;
   align-items: center;
-  gap: 8px;
-  margin-top: 32px;
+  gap: 4px;
 }
 
 .page-btn {
-  min-width: 42px;
-  height: 42px;
-  padding: 0 12px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
   background: #ffffff;
   border: 1.5px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 8px;
   color: #475569;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -824,14 +1038,13 @@ const reset = () => {
   border-color: #fca5a5;
   color: #dc2626;
   background: #fff5f5;
-  transform: translateY(-1px);
 }
 
 .page-btn.active {
   background: #dc2626;
   border-color: #dc2626;
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
   cursor: default;
 }
 
@@ -840,15 +1053,12 @@ const reset = () => {
   cursor: not-allowed;
 }
 
-.page-nav {
-  padding: 0 16px;
-}
-
 .page-dots {
-  min-width: 24px;
+  min-width: 18px;
   text-align: center;
   color: #94a3b8;
   font-weight: 700;
+  font-size: 0.8rem;
   user-select: none;
 }
 
@@ -901,23 +1111,18 @@ const reset = () => {
 }
 
 @media (max-width: 767px) {
-  .shop-hero {
-    padding: 26px 20px;
+  .shop-banner {
+    padding: 28px 20px;
     border-radius: 20px;
   }
-  .hero-title {
-    font-size: 1.6rem;
+  .banner-title {
+    font-size: 1.8rem;
   }
   .filter-bar {
     top: 56px;
   }
   .grid-anchor {
     scroll-margin-top: 130px;
-  }
-  .page-btn {
-    min-width: 38px;
-    height: 38px;
-    padding: 0 10px;
   }
 }
 </style>

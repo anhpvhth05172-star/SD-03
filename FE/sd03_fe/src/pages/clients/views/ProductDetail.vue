@@ -15,7 +15,7 @@ const error = ref("");
 
 // Lựa chọn người dùng
 const selectedColor = ref(null); // idMauSac
-const selectedVariant = ref(null); // SanPhamChiTietResponse được chọn
+const selectedSize = ref(null); // size
 const qty = ref(1);
 const addError = ref("");
 const added = ref(false);
@@ -39,7 +39,7 @@ async function fetchData() {
   product.value = null;
   variants.value = [];
   selectedColor.value = null;
-  selectedVariant.value = null;
+  selectedSize.value = null;
   currentImageIndex.value = 0;
   qty.value = 1;
 
@@ -74,6 +74,25 @@ const colors = computed(() => {
   });
 });
 
+// Danh sách size duy nhất (sắp xếp tăng dần)
+const allSizes = computed(() => {
+  const list = [...new Set(variants.value.map((v) => v.size))];
+  return list.sort((a, b) =>
+    String(a).localeCompare(String(b), undefined, { numeric: true }),
+  );
+});
+
+// Biến thể theo màu + size
+function variantOf(idMauSac, size) {
+  return variants.value.find((v) => v.idMauSac === idMauSac && v.size === size);
+}
+
+// Biến thể đang được chọn (có đủ màu + size)
+const selectedVariant = computed(() => {
+  if (selectedColor.value == null || selectedSize.value == null) return null;
+  return variantOf(selectedColor.value, selectedSize.value) || null;
+});
+
 // Tổng tồn kho của một màu
 function stockOfColor(idMauSac) {
   return variants.value
@@ -81,15 +100,30 @@ function stockOfColor(idMauSac) {
     .reduce((s, v) => s + Number(v.stock || 0), 0);
 }
 
-// Size của màu đang chọn
-const sizesOfColor = computed(() =>
-  variants.value.filter((v) => v.idMauSac === selectedColor.value),
-);
+// Tổng tồn kho của một size
+function stockOfSize(size) {
+  return variants.value
+    .filter((v) => v.size === size)
+    .reduce((s, v) => s + Number(v.stock || 0), 0);
+}
 
-// Số size duy nhất
-const sizeCount = computed(
-  () => new Set(variants.value.map((v) => v.size)).size,
-);
+// Màu bị vô hiệu hóa?
+function isColorDisabled(c) {
+  if (selectedSize.value != null) {
+    const v = variantOf(c.idMauSac, selectedSize.value);
+    return !v || Number(v.stock || 0) <= 0;
+  }
+  return stockOfColor(c.idMauSac) <= 0;
+}
+
+// Size bị vô hiệu hóa?
+function isSizeDisabled(size) {
+  if (selectedColor.value != null) {
+    const v = variantOf(selectedColor.value, size);
+    return !v || Number(v.stock || 0) <= 0;
+  }
+  return stockOfSize(size) <= 0;
+}
 
 // Tổng tồn kho
 const totalStock = computed(() =>
@@ -202,7 +236,6 @@ const selectedColorName = computed(
 );
 
 // Bảng thông tin chi tiết: trường nào không có sẽ tự ẩn
-// (đổi/thêm key cho khớp với SanPhamResponse của bạn)
 const specs = computed(() => {
   const p = product.value;
   if (!p) return [];
@@ -216,11 +249,7 @@ const specs = computed(() => {
     { label: "Giới tính", value: p.tenGioiTinh || p.gioiTinh },
     { label: "Kiểu dáng", value: p.tenKieuDang },
     { label: "Số màu sắc", value: colors.value.length || null },
-    { label: "Số kích cỡ", value: sizeCount.value || null },
-    // {
-    //   label: "Tồn kho",
-    //   value: variants.value.length ? `${totalStock.value} sản phẩm` : null,
-    // },
+    { label: "Số kích cỡ", value: allSizes.value.length || null },
   ];
   return rows.filter(
     (r) => r.value !== null && r.value !== undefined && r.value !== "",
@@ -228,15 +257,30 @@ const specs = computed(() => {
 });
 
 // ===== Watch =====
-watch(selectedColor, () => {
-  selectedVariant.value = null;
-  qty.value = 1;
+// Khi biến thể thay đổi: reset lỗi và giới hạn số lượng theo tồn kho
+watch(selectedVariant, (v) => {
   addError.value = "";
+  if (v) {
+    const stock = Number(v.stock || 0);
+    if (qty.value > stock) qty.value = Math.max(1, stock);
+  } else {
+    qty.value = 1;
+  }
 });
 
 // ===== Actions =====
 function selectColor(c) {
+  if (isColorDisabled(c)) return;
+
+  // Bấm lại màu đang chọn => bỏ chọn
+  if (selectedColor.value === c.idMauSac) {
+    selectedColor.value = null;
+    return;
+  }
+
   selectedColor.value = c.idMauSac;
+  addError.value = "";
+
   // Chuyển ảnh chính sang ảnh của màu vừa chọn
   if (c.img) {
     const idx = allImages.value.indexOf(c.img);
@@ -244,10 +288,17 @@ function selectColor(c) {
   }
 }
 
-function selectVariant(v) {
-  selectedVariant.value = v;
+function selectSize(size) {
+  if (isSizeDisabled(size)) return;
+
+  // Bấm lại size đang chọn => bỏ chọn
+  if (selectedSize.value === size) {
+    selectedSize.value = null;
+    return;
+  }
+
+  selectedSize.value = size;
   addError.value = "";
-  if (qty.value > v.stock) qty.value = Math.max(1, v.stock);
 }
 
 function incQty() {
@@ -264,7 +315,7 @@ function decQty() {
 }
 
 async function add(goCart = false) {
-  if (colors.value.length > 0 && !selectedColor.value) {
+  if (colors.value.length > 0 && selectedColor.value == null) {
     addError.value = "Vui lòng chọn màu sắc trước.";
     return;
   }
@@ -272,7 +323,7 @@ async function add(goCart = false) {
     addError.value = "Vui lòng chọn size trước khi thêm vào giỏ.";
     return;
   }
-  if (selectedVariant.value.stock <= 0) {
+  if (Number(selectedVariant.value.stock || 0) <= 0) {
     addError.value = "Sản phẩm này đã hết hàng.";
     return;
   }
@@ -483,11 +534,11 @@ async function add(goCart = false) {
             </div>
           </div>
 
-          <!-- Chọn màu -->
+          <!-- Chọn màu: hiển thị tất cả, hết hàng thì làm mờ + không cho chọn -->
           <div v-if="colors.length > 0" class="mb-3">
             <label class="option-label">
               Màu sắc
-              <span v-if="selectedColor" class="text-dark fw-bold ms-1"
+              <span v-if="selectedColor != null" class="text-dark fw-bold ms-1"
                 >: {{ selectedColorName }}</span
               >
               <span v-else class="text-danger fw-normal ms-1">(Chưa chọn)</span>
@@ -502,8 +553,10 @@ async function add(goCart = false) {
                   selectedColor === c.idMauSac
                     ? 'size-btn-active'
                     : 'size-btn-normal',
-                  { 'opacity-50': stockOfColor(c.idMauSac) <= 0 },
+                  { 'option-disabled': isColorDisabled(c) },
                 ]"
+                :disabled="isColorDisabled(c)"
+                :title="isColorDisabled(c) ? 'Hết hàng' : c.color"
                 @click="selectColor(c)"
               >
                 <span
@@ -516,40 +569,31 @@ async function add(goCart = false) {
             </div>
           </div>
 
-          <!-- Chọn size -->
-          <div class="mb-3">
+          <!-- Chọn size: hiển thị tất cả, hết hàng thì làm mờ + không cho chọn -->
+          <div v-if="allSizes.length > 0" class="mb-3">
             <label class="option-label">
               Kích cỡ
-              <span v-if="selectedVariant" class="text-dark fw-bold ms-1"
-                >: {{ selectedVariant.size }}</span
+              <span v-if="selectedSize != null" class="text-dark fw-bold ms-1"
+                >: {{ selectedSize }}</span
               >
+              <span v-else class="text-danger fw-normal ms-1">(Chưa chọn)</span>
             </label>
             <div class="d-flex flex-wrap gap-2">
-              <template v-if="selectedColor">
-                <button
-                  v-for="v in sizesOfColor"
-                  :key="v.id"
-                  type="button"
-                  class="btn size-box-btn"
-                  :class="[
-                    selectedVariant?.id === v.id
-                      ? 'size-btn-active'
-                      : 'size-btn-normal',
-                    { 'size-btn-disabled': v.stock <= 0 },
-                  ]"
-                  :disabled="v.stock <= 0"
-                  :title="v.stock <= 0 ? 'Hết hàng' : `Còn ${v.stock} sản phẩm`"
-                  @click="selectVariant(v)"
-                >
-                  {{ v.size }}
-                </button>
-                <div v-if="!sizesOfColor.length" class="text-muted small">
-                  Màu này hiện tại đã hết size.
-                </div>
-              </template>
-              <div v-else class="text-muted small fst-italic">
-                👉 Vui lòng chọn màu sắc ở trên để xem các kích cỡ có sẵn.
-              </div>
+              <button
+                v-for="size in allSizes"
+                :key="size"
+                type="button"
+                class="btn size-box-btn"
+                :class="[
+                  selectedSize === size ? 'size-btn-active' : 'size-btn-normal',
+                  { 'option-disabled': isSizeDisabled(size) },
+                ]"
+                :disabled="isSizeDisabled(size)"
+                :title="isSizeDisabled(size) ? 'Hết hàng' : `Size ${size}`"
+                @click="selectSize(size)"
+              >
+                {{ size }}
+              </button>
             </div>
           </div>
 
@@ -571,7 +615,6 @@ async function add(goCart = false) {
                 <input
                   class="qty-input text-center border-0 fw-semibold"
                   :value="qty"
-                  readonly
                 />
                 <button
                   type="button"
@@ -632,7 +675,7 @@ async function add(goCart = false) {
           </div>
 
           <!-- Perks -->
-          <div class="product-perks-box p-3 rounded-4">
+          <!-- <div class="product-perks-box p-3 rounded-4">
             <div class="row g-2 text-center text-md-start">
               <div class="col-12 col-md-4 d-flex align-items-center gap-2">
                 <i class="bi bi-shield-check text-danger fs-4"></i>
@@ -658,7 +701,7 @@ async function add(goCart = false) {
                 </div>
               </div>
             </div>
-          </div>
+          </div> -->
         </div>
       </div>
     </div>
@@ -695,45 +738,6 @@ async function add(goCart = false) {
         <p v-else class="text-muted mb-0">
           Chưa có thông tin chi tiết cho sản phẩm này.
         </p>
-
-        <!-- Bảng biến thể -->
-        <!-- <div v-if="variants.length" class="mt-4">
-          <div class="fw-bold mb-2">Các phiên bản có sẵn</div>
-          <div class="table-responsive">
-            <table class="table table-sm align-middle variant-table mb-0">
-              <thead>
-                <tr>
-                  <th>Màu</th>
-                  <th>Size</th>
-                  <th class="text-end">Giá</th>
-                  <th class="text-end">Tồn kho</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="v in variants" :key="v.id">
-                  <td>
-                    <span
-                      v-if="v.colorHex"
-                      class="color-dot me-2"
-                      :style="{ backgroundColor: v.colorHex }"
-                    ></span>
-                    {{ v.color }}
-                  </td>
-                  <td>{{ v.size }}</td>
-                  <td class="text-end fw-semibold">
-                    {{ money(Number(v.giaSauGiam || v.price || 0)) }}
-                  </td>
-                  <td class="text-end">
-                    <span v-if="v.stock > 0" class="text-success">{{
-                      v.stock
-                    }}</span>
-                    <span v-else class="text-danger">Hết hàng</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div> -->
       </div>
 
       <!-- Mô tả -->
@@ -1046,12 +1050,18 @@ async function add(goCart = false) {
   box-shadow: 0 4px 10px rgba(30, 41, 59, 0.25);
 }
 
-.size-btn-disabled {
+/* Hết hàng / không khả dụng: làm mờ + không cho chọn */
+.option-disabled,
+.option-disabled:disabled {
   background: #f8fafc !important;
-  color: #cbd5e1 !important;
+  color: #94a3b8 !important;
   border: 1.5px dashed #e2e8f0 !important;
+  opacity: 0.45;
   text-decoration: line-through;
-  cursor: not-allowed;
+  cursor: not-allowed !important;
+  pointer-events: none;
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 /* Số lượng */
@@ -1196,13 +1206,5 @@ async function add(goCart = false) {
   color: #0f172a;
   font-weight: 600;
   text-align: right;
-}
-
-.variant-table thead th {
-  background: #f8fafc;
-  color: #475569;
-  font-size: 0.82rem;
-  font-weight: 600;
-  border-bottom: 1px solid #e2e8f0;
 }
 </style>

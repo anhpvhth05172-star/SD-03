@@ -1,10 +1,60 @@
 <script setup>
-import { computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { getOrder, money } from "../store";
 
 const route = useRoute();
-const order = computed(() => getOrder(route.params.id));
+const localOrder = computed(() => getOrder(route.params.id));
+const apiOrder = ref(null);
+const loading = ref(false);
+
+const order = computed(() => {
+  if (apiOrder.value) return apiOrder.value;
+  return localOrder.value;
+});
+
+onMounted(async () => {
+  const idParam = route.params.id;
+  if (!idParam) return;
+  // Thử gọi API backend để lấy thông tin đơn hàng mới nhất
+  loading.value = true;
+  try {
+    const res = await fetch(`http://localhost:8080/api/hoa-don/${idParam}`);
+    if (res.ok) {
+      const data = await res.json();
+      apiOrder.value = {
+        id: data.maHoaDon || data.id,
+        date: data.ngayTao || new Date().toLocaleString("vi-VN"),
+        items: (data.chiTiet || []).map((d) => ({
+          id: d.id,
+          name: d.tenSanPham || "Giày thể thao",
+          brand: d.maChiTietSanPham || "",
+          size: d.tenKichCo || d.kichCo || "",
+          color: d.tenMau || d.mauSac || "",
+          qty: d.soLuong,
+          price: d.donGia,
+          emoji: "👟",
+        })),
+        info: {
+          name: data.tenKhachHang,
+          phone: data.soDienThoaiKhachHang,
+          address: data.diaChiNhanHang,
+          note: data.ghiChu,
+          pay: data.phuongThucThanhToan?.tenPhuongThuc?.toLowerCase().includes("vnpay")
+            ? "vnpay"
+            : data.phuongThucThanhToan?.tenPhuongThuc?.toLowerCase().includes("khoản")
+            ? "bank"
+            : "cod",
+        },
+        total: data.tienSauGiamGia || data.tongTien,
+      };
+    }
+  } catch (err) {
+    console.warn("Không gọi được API chi tiết đơn:", err);
+  } finally {
+    loading.value = false;
+  }
+});
 </script>
 
 <template>

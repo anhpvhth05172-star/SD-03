@@ -14,14 +14,9 @@ export const money = (n) => {
 };
 
 // ===== Cart State =====
-// [SỬA] Chỉ khôi phục giỏ hàng local khi đang đăng nhập.
-// Chưa đăng nhập thì giỏ hàng luôn rỗng, tránh hiện dữ liệu của tài khoản cũ.
+// Cho phép cả khách vãng lai (lưu local) và khách đã đăng nhập (đồng bộ BE)
 const saved = (() => {
   try {
-    if (!getUser()) {
-      localStorage.removeItem("ps_cart");
-      return [];
-    }
     return JSON.parse(localStorage.getItem("ps_cart")) || [];
   } catch {
     return [];
@@ -41,14 +36,16 @@ watch(
   { deep: true },
 );
 
+// [SỬA] Giỏ trống thì luôn là 0, bất kể server trả gì.
+// Tính từ danh sách thực tế để badge luôn khớp với những gì đang hiển thị.
 export const cartCount = computed(() => {
-  if (cart.serverCart && cart.serverCart.tongSoLuong != null) {
-    return Number(cart.serverCart.tongSoLuong);
-  }
+  if (!cart.items.length) return 0;
   return cart.items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
 });
 
+// [SỬA] Giỏ trống thì tổng tiền = 0.
 export const cartTotal = computed(() => {
+  if (!cart.items.length) return 0;
   if (cart.serverCart && cart.serverCart.tongTien != null) {
     return Number(cart.serverCart.tongTien);
   }
@@ -58,7 +55,7 @@ export const cartTotal = computed(() => {
   );
 });
 
-// [SỬA] Xóa giỏ hàng ở phía client (dùng khi đăng xuất).
+// Xóa giỏ hàng ở phía client (dùng khi đăng xuất).
 // KHÔNG gọi API nên giỏ hàng trên server vẫn còn cho lần đăng nhập sau.
 export function resetCartLocal() {
   cart.items = [];
@@ -85,12 +82,18 @@ const mapServerItem = (item) => ({
   canhBao: item.canhBao || null,
 });
 
-// Lấy giỏ hàng từ BE khi đã đăng nhập
+// Lấy giỏ hàng: nếu đã đăng nhập thì đồng bộ với BE, nếu chưa đăng nhập thì giữ giỏ hàng local
 export async function fetchCart() {
   const user = getUser();
   if (!user || !user.idKhachHang) {
-    // [SỬA] Chưa đăng nhập -> xóa sạch giỏ hàng local
-    resetCartLocal();
+    // Chưa đăng nhập -> đọc từ local
+    try {
+      const localItems = JSON.parse(localStorage.getItem("ps_cart")) || [];
+      cart.items = localItems;
+    } catch {
+      cart.items = [];
+    }
+    cart.serverCart = null;
     return cart.items;
   }
 
@@ -98,10 +101,12 @@ export async function fetchCart() {
   cart.error = null;
   try {
     const res = await layGioHangApi(user.idKhachHang);
-    cart.serverCart = res;
-    if (res && Array.isArray(res.items)) {
+    // [SỬA] Server trả giỏ rỗng thì bỏ luôn serverCart để không giữ số cũ
+    if (res && Array.isArray(res.items) && res.items.length) {
+      cart.serverCart = res;
       cart.items = res.items.map(mapServerItem);
     } else {
+      cart.serverCart = null;
       cart.items = [];
     }
     return cart.items;
@@ -113,14 +118,38 @@ export async function fetchCart() {
   }
 }
 
-// Thêm sản phẩm vào giỏ hàng (kết nối BE)
+// Thêm sản phẩm vào giỏ hàng (kết nối BE nếu đã login, local nếu vãng lai)
 export async function addToCart(p, variantId, size, qty = 1, color = "") {
   const user = getUser();
   if (!user || !user.idKhachHang) {
+    // Khách vãng lai: Lưu vào cart local
+    const existingIndex = cart.items.findIndex(
+      (item) => (item.variantId === variantId || item.idSanPhamChiTiet === variantId) && item.size === size,
+    );
+    if (existingIndex > -1) {
+      cart.items[existingIndex].qty += qty;
+    } else {
+      cart.items.push({
+        id: p.id,
+        idSanPhamChiTiet: variantId,
+        variantId: variantId,
+        idGioHangChiTiet: Date.now() + Math.floor(Math.random() * 1000),
+        name: p.tenSanPham || p.name || "",
+        brand: p.tenThuongHieu || p.brand || "",
+        color: color || "",
+        size: size || "",
+        price: Number(p.giaBan ?? p.price ?? 0),
+        donGia: Number(p.giaBan ?? p.price ?? 0),
+        img: p.img || null,
+        qty: qty,
+        stock: p.stock ?? 999,
+        conHang: true,
+      });
+    }
     return {
-      success: false,
-      needLogin: true,
-      message: "Vui lòng đăng nhập để thêm sản phẩm vào giỏ hàng",
+      success: true,
+      needLogin: false,
+      message: "Đã thêm sản phẩm vào giỏ hàng",
     };
   }
 

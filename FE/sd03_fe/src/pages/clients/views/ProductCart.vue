@@ -195,17 +195,14 @@ const LOW_STOCK = 5;
 // Ảnh lỗi -> hiện emoji thay thế
 const imgFailed = ref({});
 
-// ===== Bắt buộc đăng nhập để xem giỏ hàng =====
+// ===== Không bắt buộc đăng nhập để xem giỏ hàng =====
 const LOGIN_URL = "/dang-nhap?redirect=/gio-hang";
 
 onMounted(() => {
-  // Chưa đăng nhập -> chuyển sang trang đăng nhập, không tải dữ liệu giỏ hàng
-  if (!user.value) {
-    router.replace(LOGIN_URL);
-    return;
-  }
   fetchCart();
-  loadVouchers();
+  if (user.value) {
+    loadVouchers();
+  }
 });
 
 const handleQtyChange = async (item, delta) => {
@@ -269,49 +266,39 @@ const handleClear = async () => {
       <span class="text-dark fw-semibold">Giỏ hàng của tôi</span>
     </nav>
 
-    <!-- Chưa đăng nhập: bắt buộc đăng nhập mới xem được giỏ hàng -->
-    <div v-if="!user" class="login-required">
-      <div class="login-ico"><i class="bi bi-lock-fill"></i></div>
-      <h4 class="fw-bold">Vui lòng đăng nhập để xem giỏ hàng</h4>
-      <p class="text-muted-ps mb-4 mx-auto" style="max-width: 420px">
-        Bạn cần đăng nhập để xem, chỉnh sửa giỏ hàng và nhận các mã giảm giá
-        dành riêng cho thành viên.
-      </p>
-      <RouterLink
-        to="/dang-nhap?redirect=/gio-hang"
-        class="btn btn-primary rounded-pill px-4 py-2 fw-bold"
+    <!-- Header -->
+    <div class="cart-header mb-4">
+      <div class="d-flex align-items-center gap-3">
+        <div class="cart-header-ico">
+          <i class="bi bi-bag-heart-fill"></i>
+        </div>
+        <div>
+          <h2 class="cart-title mb-0">Giỏ hàng của bạn</h2>
+          <p v-if="cart.items.length" class="text-muted-ps mb-0 small">
+            <strong>{{ cart.items.length }}</strong> sản phẩm ·
+            <strong>{{ totalQty }}</strong> đôi/chiếc trong giỏ
+          </p>
+        </div>
+      </div>
+      <div v-if="!user" class="small text-muted-ps mt-2">
+        <i class="bi bi-info-circle me-1"></i>
+        Bạn đang mua hàng với tư cách khách vãng lai.
+        <RouterLink to="/dang-nhap?redirect=/gio-hang" class="text-primary fw-semibold text-decoration-none">
+          Đăng nhập
+        </RouterLink>
+        để lưu giỏ hàng lâu dài và nhận thêm ưu đãi.
+      </div>
+      <button
+        v-if="cart.items.length > 0"
+        class="btn btn-sm btn-outline-danger rounded-pill px-3 mt-2"
+        :disabled="cart.loading"
+        @click="handleClear"
       >
-        <i class="bi bi-box-arrow-in-right me-1"></i> Đăng nhập ngay
-      </RouterLink>
+        <i class="bi bi-trash me-1"></i> Xóa tất cả
+      </button>
     </div>
 
-    <!-- Đã đăng nhập -->
-    <template v-else>
-      <!-- Header -->
-      <div class="cart-header mb-4">
-        <div class="d-flex align-items-center gap-3">
-          <div class="cart-header-ico">
-            <i class="bi bi-bag-heart-fill"></i>
-          </div>
-          <div>
-            <h2 class="cart-title mb-0">Giỏ hàng của bạn</h2>
-            <p v-if="cart.items.length" class="text-muted-ps mb-0 small">
-              <strong>{{ cart.items.length }}</strong> sản phẩm ·
-              <strong>{{ totalQty }}</strong> đôi/chiếc trong giỏ
-            </p>
-          </div>
-        </div>
-        <button
-          v-if="cart.items.length > 0"
-          class="btn btn-sm btn-outline-danger rounded-pill px-3"
-          :disabled="cart.loading"
-          @click="handleClear"
-        >
-          <i class="bi bi-trash me-1"></i> Xóa tất cả
-        </button>
-      </div>
-
-      <!-- Lỗi thao tác -->
+    <!-- Lỗi thao tác -->
       <div v-if="actionError" class="notice notice-danger mb-3">
         <div class="small">
           <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ actionError }}
@@ -580,14 +567,13 @@ const handleClear = async () => {
           Hãy chọn một đôi giày bạn ưng ý nhất để tự tin sải bước cùng Poly
           Shoes nhé!
         </p>
-        <RouterLink
-          to="/cua-hang"
-          class="btn btn-primary rounded-pill px-4 py-2 fw-bold"
-        >
-          <i class="bi bi-shop me-1"></i> Mua sắm ngay
-        </RouterLink>
-      </div>
-    </template>
+      <RouterLink
+        to="/cua-hang"
+        class="btn btn-primary rounded-pill px-4 py-2 fw-bold"
+      >
+        <i class="bi bi-shop me-1"></i> Mua sắm ngay
+      </RouterLink>
+    </div>
   </div>
 </template>
 

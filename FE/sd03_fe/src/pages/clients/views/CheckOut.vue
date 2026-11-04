@@ -1,6 +1,8 @@
 <script setup>
 import { reactive, ref, computed, watch, onMounted, unref } from "vue";
 import * as store from "../store";
+import Select2 from "@/components/Select2.vue";
+import { layDiaGioi, layPhuongXa, timTinh } from "@/api/diaGioi";
 
 const { cart, cartTotal, money } = store;
 
@@ -20,6 +22,7 @@ const getToken = () => {
   return "";
 };
 
+// Khách vãng lai không có token -> không gửi header Authorization
 const authHeaders = () => {
   const t = getToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
@@ -90,9 +93,8 @@ async function fetchCustomer() {
   const u = getLoggedInUser();
   console.log("[Checkout] user đăng nhập:", u);
   if (!u) {
-    console.warn(
-      "[Checkout] Không tìm thấy user đăng nhập trong store/localStorage",
-    );
+    // Khách vãng lai: bình thường, không phải lỗi
+    console.info("[Checkout] Khách vãng lai (chưa đăng nhập)");
     return null;
   }
 
@@ -142,6 +144,7 @@ const isLoggedIn = computed(() => !!customer.value);
 const userInfo = (u) => ({
   name: u.tenKhachHang || "",
   phone: u.soDienThoai || "",
+  email: u.email || "",
 });
 
 const fullAddress = (a) =>
@@ -312,10 +315,67 @@ async function fetchVoucher(code) {
 }
 /* ======================================================= */
 
-const f = reactive({ name: "", phone: "", address: "", note: "", pay: "cod" });
+const f = reactive({
+  name: "",
+  phone: "",
+  email: "",
+  address: "",
+  note: "",
+  pay: "cod",
+});
 const errors = reactive({});
 const done = ref(false);
 const orderId = ref("");
+
+/* ---------- Địa giới hành chính (Tỉnh / Phường Xã) cho khách vãng lai ---------- */
+const tinhThanhList = ref([]);
+const phuongXaList = ref([]);
+const diaGioiLoading = ref(false);
+const selectedTinh = ref("");
+const selectedPhuong = ref("");
+const diaChiCuThe = ref("");
+
+// Tự động gộp địa chỉ cụ thể + phường/xã + tỉnh/thành phố vào f.address
+function capNhatDiaChi() {
+  if (selectedAddr.value === "new" || !isLoggedIn.value) {
+    const parts = [
+      diaChiCuThe.value.trim(),
+      selectedPhuong.value.trim(),
+      selectedTinh.value.trim(),
+    ].filter(Boolean);
+    f.address = parts.join(", ");
+  }
+}
+
+watch([selectedTinh, selectedPhuong, diaChiCuThe], capNhatDiaChi);
+
+// Tải danh sách tỉnh thành từ API open-api
+async function loadDiaGioi() {
+  diaGioiLoading.value = true;
+  try {
+    const ds = await layDiaGioi();
+    tinhThanhList.value = ds || [];
+  } catch (err) {
+    console.warn("Lỗi tải địa giới hành chính:", err);
+  } finally {
+    diaGioiLoading.value = false;
+  }
+}
+
+// Khi đổi tỉnh -> tự động cập nhật danh sách phường/xã (bằng watch)
+watch(selectedTinh, (tenTinh) => {
+  selectedPhuong.value = "";
+  if (!tenTinh) {
+    phuongXaList.value = [];
+    return;
+  }
+  const tinhObj = timTinh(tinhThanhList.value, tenTinh);
+  phuongXaList.value = layPhuongXa(tinhThanhList.value, tinhObj);
+});
+
+onMounted(() => {
+  loadDiaGioi();
+});
 
 /* ---------- Tự điền khi đã đăng nhập ---------- */
 const selectedAddr = ref("new");
@@ -325,6 +385,7 @@ function chooseAddress(id) {
   const u = currentUser.value;
   if (!u) return;
   const base = userInfo(u);
+  if (base.email) f.email = base.email;
   if (id === "new") {
     f.name = base.name;
     f.phone = base.phone;
@@ -339,12 +400,15 @@ function chooseAddress(id) {
 }
 
 /* ---------- Khóa ô nhập khi đã tự điền ---------- */
-// Họ tên, SĐT: khóa nếu thông tin lấy được từ tài khoản (SĐT trống thì vẫn cho nhập)
+// Họ tên, SĐT, email: khóa nếu thông tin lấy được từ tài khoản (trống thì vẫn cho nhập)
 const lockName = computed(
   () => isLoggedIn.value && !!userInfo(currentUser.value).name,
 );
 const lockPhone = computed(
   () => isLoggedIn.value && !!userInfo(currentUser.value).phone,
+);
+const lockEmail = computed(
+  () => isLoggedIn.value && !!userInfo(currentUser.value).email,
 );
 // Địa chỉ: khóa khi đang dùng địa chỉ đã lưu, chỉ nhập được khi chọn "Nhập địa chỉ mới"
 const lockAddress = computed(
@@ -555,9 +619,11 @@ function buildHoaDonRequest() {
     trangThai: "CHO_XAC_NHAN",
 
     // Khách hàng / thông tin nhận hàng
+    // Khách vãng lai: idKhachHang = null (cần back-end cho phép null)
     idKhachHang: customer.value?.id ?? null,
     tenKhachHang: f.name.trim(),
     soDienThoaiKhachHang: f.phone.trim(),
+    emailKhachHang: f.email.trim(), // dùng để gửi mail xác nhận đơn hàng
     diaChiNhanHang: f.address.trim(),
     ghiChu: f.note.trim(),
 
@@ -581,14 +647,28 @@ function clearCart() {
   if (Array.isArray(cart.items)) cart.items.splice(0);
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 async function submit() {
   submitError.value = "";
   errors.name = f.name.trim() ? "" : "Vui lòng nhập họ và tên.";
   errors.phone = /^0\d{9}$/.test(f.phone)
     ? ""
     : "Số điện thoại gồm 10 số, bắt đầu bằng 0.";
-  errors.address = f.address.trim() ? "" : "Vui lòng nhập địa chỉ nhận hàng.";
-  if (errors.name || errors.phone || errors.address) return;
+  errors.email = EMAIL_RE.test(f.email.trim())
+    ? ""
+    : "Vui lòng nhập email hợp lệ để nhận xác nhận đơn hàng.";
+
+  // Đồng bộ lại địa chỉ nếu là khách vãng lai hoặc chọn nhập địa chỉ mới
+  if (!isLoggedIn.value || selectedAddr.value === "new") {
+    errors.tinh = selectedTinh.value ? "" : "Vui lòng chọn Tỉnh/Thành phố.";
+    errors.phuong = selectedPhuong.value ? "" : "Vui lòng chọn Phường/Xã.";
+    errors.diaChiCuThe = diaChiCuThe.value.trim() ? "" : "Vui lòng nhập số nhà, tên đường cụ thể.";
+    capNhatDiaChi();
+  }
+
+  errors.address = f.address.trim() ? "" : "Vui lòng nhập đầy đủ địa chỉ nhận hàng.";
+  if (errors.name || errors.phone || errors.email || errors.address || errors.tinh || errors.phuong || errors.diaChiCuThe) return;
 
   submitting.value = true;
 
@@ -662,7 +742,7 @@ async function submit() {
     orderId.value = hd.id;
     orderCode.value = hd.maHoaDon ?? hd.ma ?? hd.id;
 
-    // Lưu vào danh sách đơn gần đây để tra cứu
+    // Lưu vào danh sách đơn gần đây để tra cứu (cả khách vãng lai)
     try {
       const orders = JSON.parse(localStorage.getItem("ps_orders") || "[]");
       orders.unshift({
@@ -671,6 +751,7 @@ async function submit() {
         info: {
           name: f.name,
           phone: f.phone,
+          email: f.email,
           address: f.address,
           note: f.note,
           pay: f.pay,
@@ -723,12 +804,18 @@ async function copyOrderCode() {
       </button>
     </div>
 
-    <p class="text-muted-ps mb-4">
+    <p class="text-muted-ps mb-2">
       Poly Shoes sẽ gọi xác nhận đơn qua số <strong>{{ f.phone }}</strong> trong
       ít phút.
     </p>
+    <p class="text-muted-ps mb-4 small">
+      <i class="bi bi-envelope-check me-1"></i>Email xác nhận đơn hàng đã được
+      gửi tới <strong>{{ f.email }}</strong
+      >.
+    </p>
     <div class="d-flex justify-content-center flex-wrap gap-2">
       <RouterLink
+        v-if="isLoggedIn"
         :to="`/don-hang/${orderId}`"
         class="btn btn-outline-primary rounded-pill px-4"
       >
@@ -788,17 +875,17 @@ async function copyOrderCode() {
     <div class="row g-4">
       <!-- ================= CỘT TRÁI ================= -->
       <div class="col-lg-7">
-        <!-- Gợi ý đăng nhập -->
+        <!-- Gợi ý đăng nhập (khách vãng lai vẫn đặt hàng được) -->
         <div v-if="!isLoggedIn" class="co-login mb-3">
           <div class="d-flex align-items-center gap-2 small">
             <i class="bi bi-person-circle fs-5"></i>
             <span
-              >Đã có tài khoản? Đăng nhập để tự điền thông tin và nhận mã giảm
-              giá.</span
+              >Bạn đang mua hàng với tư cách khách. Đăng nhập để tự điền thông
+              tin và nhận mã giảm giá dành riêng cho thành viên.</span
             >
           </div>
           <RouterLink
-            to="/dang-nhap"
+            to="/dang-nhap?redirect=/thanh-toan"
             class="btn btn-sm btn-dark rounded-pill px-3 fw-bold"
           >
             Đăng nhập
@@ -891,20 +978,90 @@ async function copyOrderCode() {
             </div>
             <div class="col-12">
               <label class="co-label"
+                >Email nhận xác nhận đơn hàng
+                <span class="text-danger">*</span></label
+              >
+              <input
+                v-model="f.email"
+                type="email"
+                class="form-control co-input"
+                :readonly="lockEmail"
+                :class="{ 'is-invalid': errors.email, 'bg-light': lockEmail }"
+                placeholder="Ví dụ: ten@gmail.com"
+              />
+              <div class="invalid-feedback">{{ errors.email }}</div>
+            </div>
+            <!-- Địa chỉ nhận hàng -->
+            <!-- Nếu đã đăng nhập và đang chọn địa chỉ đã lưu -->
+            <div v-if="isLoggedIn && selectedAddr !== 'new'" class="col-12">
+              <label class="co-label"
                 >Địa chỉ nhận hàng <span class="text-danger">*</span></label
               >
               <input
                 v-model="f.address"
-                class="form-control co-input"
-                :readonly="lockAddress"
-                :class="{
-                  'is-invalid': errors.address,
-                  'bg-light': lockAddress,
-                }"
+                class="form-control co-input bg-light"
+                readonly
                 placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
               />
-              <div class="invalid-feedback">{{ errors.address }}</div>
             </div>
+
+            <!-- Nếu là khách vãng lai hoặc tài khoản chọn 'Nhập địa chỉ mới' -> dùng Select2 tỉnh/phường và địa chỉ cụ thể -->
+            <template v-else>
+              <div class="col-md-6">
+                <label class="co-label"
+                  >Tỉnh / Thành phố <span class="text-danger">*</span></label
+                >
+                <Select2
+                  v-model="selectedTinh"
+                  :options="tinhThanhList"
+                  placeholder="Chọn Tỉnh / Thành phố"
+                  search-placeholder="Tìm tỉnh/thành..."
+                  :disabled="diaGioiLoading"
+                  :invalid="!!errors.tinh"
+                />
+                <div v-if="errors.tinh" class="text-danger small mt-1">
+                  {{ errors.tinh }}
+                </div>
+              </div>
+
+              <div class="col-md-6">
+                <label class="co-label"
+                  >Phường / Xã <span class="text-danger">*</span></label
+                >
+                <Select2
+                  v-model="selectedPhuong"
+                  :options="phuongXaList"
+                  :placeholder="selectedTinh ? 'Chọn Phường / Xã' : 'Vui lòng chọn Tỉnh trước'"
+                  search-placeholder="Tìm phường/xã..."
+                  :disabled="diaGioiLoading || !selectedTinh"
+                  :invalid="!!errors.phuong"
+                />
+                <div v-if="errors.phuong" class="text-danger small mt-1">
+                  {{ errors.phuong }}
+                </div>
+              </div>
+
+              <div class="col-12">
+                <label class="co-label"
+                  >Địa chỉ cụ thể (Số nhà, tên đường, ngõ...) <span class="text-danger">*</span></label
+                >
+                <input
+                  v-model="diaChiCuThe"
+                  class="form-control co-input"
+                  :class="{ 'is-invalid': errors.diaChiCuThe }"
+                  placeholder="Ví dụ: Số 20 ngõ 15 đường Cầu Diễn"
+                  @input="capNhatDiaChi"
+                />
+                <div class="invalid-feedback">{{ errors.diaChiCuThe }}</div>
+              </div>
+
+              <div v-if="f.address" class="col-12">
+                <div class="p-2 px-3 bg-light rounded-3 border small text-muted">
+                  <i class="bi bi-geo-alt-fill text-danger me-1"></i>
+                  <strong>Địa chỉ đầy đủ:</strong> {{ f.address }}
+                </div>
+              </div>
+            </template>
             <div class="col-12">
               <label class="co-label">Ghi chú (không bắt buộc)</label>
               <textarea
@@ -970,10 +1127,6 @@ async function copyOrderCode() {
               <span class="d-block fw-semibold"
                 >Thanh toán khi nhận hàng (COD)</span
               >
-              <!-- <span class="d-block small text-muted">
-                Thanh toán tiền mặt trực tiếp cho nhân viên giao hàng khi nhận
-                hàng.
-              </span> -->
             </span>
           </label>
 
@@ -1002,16 +1155,7 @@ async function copyOrderCode() {
             <span class="flex-grow-1">
               <span class="d-flex align-items-center gap-2 flex-wrap">
                 <span class="fw-semibold">Thanh toán qua VNPAY</span>
-                <!-- <span
-                  class="badge bg-danger-subtle text-danger"
-                  style="font-size: 0.7rem"
-                  >Khuyên dùng</span
-                > -->
               </span>
-              <!-- <span class="d-block small text-muted">
-                Thanh toán bảo mật qua VNPAY QR, 40+ ngân hàng nội địa hoặc thẻ
-                Visa/Mastercard.
-              </span> -->
             </span>
           </label>
         </section>

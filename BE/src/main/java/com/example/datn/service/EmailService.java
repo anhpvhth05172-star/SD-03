@@ -8,19 +8,21 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class EmailService {
 
-    /** Loại thông báo phiếu giảm giá cá nhân */
     public enum LoaiThongBao { MOI, CAP_NHAT, BAT, TAT }
 
     private final JavaMailSender mailSender;
 
     @Value("${spring.mail.username:lehuynhduc150303@gmail.com}")
     private String fromEmail;
+
+    // ======================= ĐĂNG KÝ KHÁCH HÀNG =======================
 
     @Async
     public void guiMailDangKyThanhCong(
@@ -58,6 +60,8 @@ public class EmailService {
             log.error("Lỗi khi gửi email đến {}: {}", toEmail, e.getMessage());
         }
     }
+
+    // ======================= NHÂN VIÊN MỚI =======================
 
     @Async
     public void guiMailNhanVienMoi(
@@ -136,7 +140,7 @@ public class EmailService {
                 <div class="email-body">
                   <div class="greeting">Xin chào <b>%s</b>,</div>
                   <p>Chào mừng bạn đã gia nhập đội ngũ <b>PolyShoes</b>. Tài khoản nhân viên của bạn đã được khởi tạo thành công với thông tin dưới đây:</p>
-                  
+
                   <div class="card-info">
                     <div class="info-row">
                       <span class="info-label">Mã nhân viên:</span>
@@ -210,7 +214,7 @@ public class EmailService {
                 <div class="email-body">
                   <div class="greeting">Xin chào <b>%s</b>,</div>
                   <p>Chúc mừng quý khách đã đăng ký tài khoản thành công tại <b>PolyShoes</b>. Dưới đây là thông tin tài khoản đăng nhập của quý khách:</p>
-                  
+
                   <div class="card-info">
                     <div class="info-row">
                       <span class="info-label">Mã khách hàng:</span>
@@ -405,8 +409,12 @@ public class EmailService {
                 tenPhieu, giaTriGiam, maPhieu,
                 dieuKienApDung, ngayBatDau, ngayKetThuc);
     }
+
+    // ======================= ĐẶT HÀNG ONLINE THÀNH CÔNG =======================
+
     /**
-     * Gui email xac nhan dat hang thanh cong (VNPay hoac COD).
+     * Gửi email xác nhận đặt hàng online thành công (COD, VNPay, chuyển khoản...).
+     * Được gọi từ DonHangMailListener sau khi transaction commit.
      */
     @Async
     public void guiMailDatHangThanhCong(
@@ -418,7 +426,7 @@ public class EmailService {
             String diaChiNhanHang
     ) {
         if (toEmail == null || toEmail.trim().isEmpty()) {
-            log.warn("Khong the gui email dat hang: email trong");
+            log.warn("Không thể gửi email đặt hàng: Địa chỉ email trống");
             return;
         }
         try {
@@ -426,20 +434,26 @@ public class EmailService {
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             helper.setFrom(fromEmail, "PolyShoes Shop");
             helper.setTo(toEmail.trim());
-            helper.setSubject("[PolyShoes] Dat hang thanh cong - " + maHoaDon);
+            helper.setSubject("[PolyShoes] Đặt hàng thành công - " + (maHoaDon != null ? maHoaDon : ""));
+
             String html = buildOrderSuccessTemplate(
-                tenKhachHang != null ? tenKhachHang : "Quy khach",
-                maHoaDon != null ? maHoaDon : "",
-                soTien != null ? soTien : "0",
-                phuongThucThanhToan != null ? phuongThucThanhToan : "",
-                diaChiNhanHang != null ? diaChiNhanHang : ""
+                    esc(tenKhachHang, "Quý khách"),
+                    esc(maHoaDon, ""),
+                    esc(soTien, "0"),
+                    esc(phuongThucThanhToan, ""),
+                    esc(diaChiNhanHang, "")
             );
             helper.setText(html, true);
             mailSender.send(message);
-            log.info("Da gui email dat hang {} den {}", maHoaDon, toEmail);
+            log.info("Đã gửi email đặt hàng {} đến {}", maHoaDon, toEmail);
         } catch (Exception e) {
-            log.error("Loi gui email dat hang den {}: {}", toEmail, e.getMessage());
+            log.error("Lỗi gửi email đặt hàng đến {}: {}", toEmail, e.getMessage());
         }
+    }
+
+    /** Escape HTML cho dữ liệu người dùng nhập (tên, địa chỉ...) để tránh chèn HTML vào mail. */
+    private String esc(String s, String def) {
+        return (s == null || s.isBlank()) ? def : HtmlUtils.htmlEscape(s.trim());
     }
 
     private String buildOrderSuccessTemplate(
@@ -462,10 +476,9 @@ public class EmailService {
                 .email-header p { margin: 8px 0 0; opacity: 0.9; font-size: 14px; }
                 .email-body { padding: 32px 28px; line-height: 1.6; }
                 .greeting { font-size: 16px; margin-bottom: 16px; }
-                .success-badge { display: inline-block; background: #d1fae5; color: #065f46; padding: 6px 16px; border-radius: 20px; font-weight: 700; font-size: 14px; margin-bottom: 20px; }
                 .card-info { background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 8px; padding: 18px 20px; margin: 24px 0; }
                 .info-row { display: flex; margin-bottom: 10px; font-size: 14.5px; }
-                .info-label { font-weight: 600; width: 180px; color: #475569; }
+                .info-label { font-weight: 600; width: 190px; min-width: 190px; color: #475569; }
                 .info-value { font-weight: 700; color: #0f172a; }
                 .amount-highlight { color: #059669; font-size: 18px; }
                 .email-footer { background: #f8fafc; padding: 20px 24px; text-align: center; font-size: 12.5px; color: #64748b; border-top: 1px solid #e2e8f0; }
@@ -474,37 +487,37 @@ public class EmailService {
             <body>
               <div class="email-container">
                 <div class="email-header">
-                  <h1>&#x2705; Don hang da dat thanh cong!</h1>
-                  <p>Cam on quy khach da tin tuong mua sam tai PolyShoes</p>
+                  <h1>&#x2705; Đặt hàng thành công!</h1>
+                  <p>Cảm ơn quý khách đã tin tưởng mua sắm tại PolyShoes</p>
                 </div>
                 <div class="email-body">
-                  <div class="greeting">Xin chao <b>%s</b>,</div>
-                  <p>Don hang cua quy khach da duoc dat thanh cong. Chung toi se xu ly va giao hang som nhat co the. Duoi day la thong tin chi tiet don hang:</p>
+                  <div class="greeting">Xin chào <b>%s</b>,</div>
+                  <p>Đơn hàng của quý khách đã được đặt thành công. Chúng tôi sẽ xử lý và giao hàng sớm nhất có thể. Dưới đây là thông tin chi tiết đơn hàng:</p>
 
                   <div class="card-info">
                     <div class="info-row">
-                      <span class="info-label">Ma don hang:</span>
+                      <span class="info-label">Mã đơn hàng:</span>
                       <span class="info-value">%s</span>
                     </div>
                     <div class="info-row">
-                      <span class="info-label">Tong thanh toan:</span>
+                      <span class="info-label">Tổng thanh toán:</span>
                       <span class="info-value amount-highlight">%s VND</span>
                     </div>
                     <div class="info-row">
-                      <span class="info-label">Phuong thuc thanh toan:</span>
+                      <span class="info-label">Phương thức thanh toán:</span>
                       <span class="info-value">%s</span>
                     </div>
                     <div class="info-row" style="margin-bottom: 0;">
-                      <span class="info-label">Dia chi nhan hang:</span>
+                      <span class="info-label">Địa chỉ nhận hàng:</span>
                       <span class="info-value">%s</span>
                     </div>
                   </div>
 
-                  <p>Neu quy khach co bat ky thac mac nao, vui long lien he hotline hoac phan hoi email nay.</p>
-                  <p style="margin-top: 24px;">Tran trong,<br/><b>Doi ngu PolyShoes</b></p>
+                  <p>Nếu quý khách có bất kỳ thắc mắc nào, vui lòng liên hệ hotline hoặc phản hồi email này.</p>
+                  <p style="margin-top: 24px;">Trân trọng,<br/><b>Đội ngũ PolyShoes</b></p>
                 </div>
                 <div class="email-footer">
-                  <p>&copy; 2026 PolyShoes. Moi quyen duoc bao luu.</p>
+                  <p>&copy; 2026 PolyShoes. Mọi quyền được bảo lưu.</p>
                 </div>
               </div>
             </body>

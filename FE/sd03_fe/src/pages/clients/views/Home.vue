@@ -19,9 +19,11 @@ const banners = [
     btnPrimaryLink: "/cua-hang?brand=Nike",
     btnSecondary: "Xem tất cả",
     btnSecondaryLink: "/cua-hang",
-    image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1000&q=80",
-    gradient: "linear-gradient(105deg, #0a0102 0%, #1a0407 35%, #50080f 70%, #880e18 100%)",
-    subLabels: ["NIKE", "JORDAN", "AIR MAX", "JUST DO IT"]
+    image:
+      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1000&q=80",
+    gradient:
+      "linear-gradient(105deg, #0a0102 0%, #1a0407 35%, #50080f 70%, #880e18 100%)",
+    subLabels: ["NIKE", "JORDAN", "AIR MAX", "JUST DO IT"],
   },
   {
     tag: "SPECIAL EDITION",
@@ -33,10 +35,12 @@ const banners = [
     btnPrimaryLink: "/cua-hang?brand=Adidas",
     btnSecondary: "Xem tất cả",
     btnSecondaryLink: "/cua-hang",
-    image: "https://images.unsplash.com/photo-1552346154-21d32810aba3?auto=format&fit=crop&w=1000&q=80",
-    gradient: "linear-gradient(105deg, #030712 0%, #111827 40%, #1f293d 75%, #374151 100%)",
-    subLabels: ["ADIDAS", "ULTRABOOST", "ORIGINALS", "SUPERSTAR"]
-  }
+    image:
+      "https://images.unsplash.com/photo-1552346154-21d32810aba3?auto=format&fit=crop&w=1000&q=80",
+    gradient:
+      "linear-gradient(105deg, #030712 0%, #111827 40%, #1f293d 75%, #374151 100%)",
+    subLabels: ["ADIDAS", "ULTRABOOST", "ORIGINALS", "SUPERSTAR"],
+  },
 ];
 
 const nextSlide = () => {
@@ -44,7 +48,8 @@ const nextSlide = () => {
 };
 
 const prevSlide = () => {
-  currentSlide.value = (currentSlide.value - 1 + banners.length) % banners.length;
+  currentSlide.value =
+    (currentSlide.value - 1 + banners.length) % banners.length;
 };
 
 const goToSlide = (index) => {
@@ -59,13 +64,38 @@ const resetTimer = () => {
 
 // 7 thương hiệu nổi bật có logo/icon hiển thị dạng card trắng như ảnh mẫu
 const featuredBrands = [
-  { name: "Nike", icon: "bi-check2", link: "/cua-hang?brand=Nike", isNike: true },
-  { name: "Jordan", icon: "bi-person-arms-up", link: "/cua-hang?brand=Jordan", isJumpman: true },
+  {
+    name: "Nike",
+    icon: "bi-check2",
+    link: "/cua-hang?brand=Nike",
+    isNike: true,
+  },
+  {
+    name: "Jordan",
+    icon: "bi-person-arms-up",
+    link: "/cua-hang?brand=Jordan",
+    isJumpman: true,
+  },
   { name: "MLB", text: "⚾ MLB", link: "/cua-hang?brand=MLB" },
   { name: "Lacoste", text: "🐊", link: "/cua-hang?brand=Lacoste" },
-  { name: "Salomon", iconText: "S", nameText: "Salomon", link: "/cua-hang?brand=Salomon" },
-  { name: "On Running", text: "8", nameText: "On Running", link: "/cua-hang?brand=On" },
-  { name: "Under Armour", iconText: "X", nameText: "Under Armour", link: "/cua-hang?brand=Under Armour" },
+  {
+    name: "Salomon",
+    iconText: "S",
+    nameText: "Salomon",
+    link: "/cua-hang?brand=Salomon",
+  },
+  {
+    name: "On Running",
+    text: "8",
+    nameText: "On Running",
+    link: "/cua-hang?brand=On",
+  },
+  {
+    name: "Under Armour",
+    iconText: "X",
+    nameText: "Under Armour",
+    link: "/cua-hang?brand=Under Armour",
+  },
 ];
 
 onMounted(async () => {
@@ -88,13 +118,13 @@ onUnmounted(() => {
   <div class="ps-home-container">
     <!-- 1. BANNER HERO SLIDER ĐÚNG MẪU -->
     <section class="banner-carousel position-relative mb-5 overflow-hidden">
-      <div 
-        class="banner-slides-wrapper" 
+      <div
+        class="banner-slides-wrapper"
         :style="{ transform: `translateX(-${currentSlide * 100}%)` }"
       >
-        <div 
-          v-for="(banner, idx) in banners" 
-          :key="idx" 
+        <div
+          v-for="(banner, idx) in banners"
+          :key="idx"
           class="banner-slide"
           :style="{ background: banner.gradient }"
         >
@@ -102,31 +132,42 @@ onUnmounted(() => {
             <div class="row h-100 align-items-center g-4 py-4 py-lg-5">
               <!-- Cột trái: Văn bản -->
               <div class="col-lg-6 text-white text-content z-2 ps-lg-4">
-                <div class="banner-top-tag mb-2 d-flex align-items-center gap-2">
-                  <span class="text-white-50 small fw-bold tracking-widest">{{ banner.tag }}</span>
+                <div
+                  class="banner-top-tag mb-2 d-flex align-items-center gap-2"
+                >
+                  <span class="text-white-50 small fw-bold tracking-widest">{{
+                    banner.tag
+                  }}</span>
                   <span class="tag-dash"></span>
                 </div>
-                
+
                 <h1 class="banner-title text-white mb-3">
                   {{ banner.titleStart }}<br />
-                  <span class="text-white fw-bold">{{ banner.titleHighlight }}</span>
-                  <span class="text-danger fw-black ms-2">{{ banner.brandHighlight }}</span>
+                  <span class="text-white fw-bold">{{
+                    banner.titleHighlight
+                  }}</span>
+                  <span class="text-danger fw-black ms-2">{{
+                    banner.brandHighlight
+                  }}</span>
                 </h1>
 
-                <p class="banner-desc text-white-50 mb-4" style="white-space: pre-line;">
+                <p
+                  class="banner-desc text-white-50 mb-4"
+                  style="white-space: pre-line"
+                >
                   {{ banner.desc }}
                 </p>
 
                 <div class="d-flex flex-wrap gap-3 align-items-center">
-                  <RouterLink 
-                    :to="banner.btnPrimaryLink" 
+                  <RouterLink
+                    :to="banner.btnPrimaryLink"
                     class="btn btn-danger banner-btn-primary rounded-pill px-4 py-2 d-inline-flex align-items-center gap-2 fw-bold"
                   >
                     <span>{{ banner.btnPrimary }}</span>
                     <i class="bi bi-arrow-right"></i>
                   </RouterLink>
-                  <RouterLink 
-                    :to="banner.btnSecondaryLink" 
+                  <RouterLink
+                    :to="banner.btnSecondaryLink"
                     class="btn btn-outline-light banner-btn-secondary rounded-pill px-4 py-2 fw-semibold"
                   >
                     {{ banner.btnSecondary }}
@@ -135,18 +176,26 @@ onUnmounted(() => {
               </div>
 
               <!-- Cột phải: Ảnh giày đỏ nổi bật và nhãn thương hiệu -->
-              <div class="col-lg-6 text-center position-relative banner-img-wrap">
+              <div
+                class="col-lg-6 text-center position-relative banner-img-wrap"
+              >
                 <div class="glow-radial"></div>
-                <img 
-                  :src="banner.image" 
-                  :alt="banner.brandHighlight" 
+                <img
+                  :src="banner.image"
+                  :alt="banner.brandHighlight"
                   class="banner-hero-img img-fluid"
                   loading="lazy"
                 />
 
                 <!-- Text nhãn dọc bên phải theo thiết kế ảnh mẫu -->
-                <div class="banner-right-labels d-none d-lg-flex flex-column text-white-50">
-                  <span v-for="lbl in banner.subLabels" :key="lbl" class="banner-sub-lbl">
+                <div
+                  class="banner-right-labels d-none d-lg-flex flex-column text-white-50"
+                >
+                  <span
+                    v-for="lbl in banner.subLabels"
+                    :key="lbl"
+                    class="banner-sub-lbl"
+                  >
                     {{ lbl }}
                   </span>
                 </div>
@@ -157,16 +206,16 @@ onUnmounted(() => {
       </div>
 
       <!-- Nút tròn chuyển slide mũi tên trái/phải -->
-      <button 
-        class="banner-nav-btn prev-btn" 
-        @click="prevSlide" 
+      <button
+        class="banner-nav-btn prev-btn"
+        @click="prevSlide"
         aria-label="Slide trước"
       >
         <i class="bi bi-chevron-left"></i>
       </button>
-      <button 
-        class="banner-nav-btn next-btn" 
-        @click="nextSlide" 
+      <button
+        class="banner-nav-btn next-btn"
+        @click="nextSlide"
         aria-label="Slide sau"
       >
         <i class="bi bi-chevron-right"></i>
@@ -189,28 +238,51 @@ onUnmounted(() => {
     <section class="mb-5">
       <div class="d-flex align-items-center justify-content-between mb-3">
         <div>
-          <div class="section-tag small fw-bold text-danger d-flex align-items-center gap-1">
+          <div
+            class="section-tag small fw-bold text-danger d-flex align-items-center gap-1"
+          >
             <span class="slash-mark">/</span> THƯƠNG HIỆU ĐỒNG HÀNH
           </div>
-          <h4 class="fw-black text-dark mb-0 mt-1">Những thương hiệu hàng đầu</h4>
+          <h4 class="fw-black text-dark mb-0 mt-1">
+            Những thương hiệu hàng đầu
+          </h4>
         </div>
-        <RouterLink to="/cua-hang" class="text-danger fw-semibold small text-decoration-none">
+        <RouterLink
+          to="/cua-hang"
+          class="text-danger fw-semibold small text-decoration-none"
+        >
           Xem tất cả <i class="bi bi-arrow-right"></i>
         </RouterLink>
       </div>
 
       <div class="row g-2 g-md-3">
-        <div v-for="b in featuredBrands" :key="b.name" class="col-4 col-md-3 col-lg">
-          <RouterLink :to="b.link" class="brand-showcase-card text-decoration-none text-dark">
+        <div
+          v-for="b in featuredBrands"
+          :key="b.name"
+          class="col-4 col-md-3 col-lg"
+        >
+          <RouterLink
+            :to="b.link"
+            class="brand-showcase-card text-decoration-none text-dark"
+          >
             <div class="brand-logo-area">
               <!-- Nike Swoosh -->
-              <svg v-if="b.isNike" class="brand-svg-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M21.707 5.293c-.27-.27-.69-.33-1.02-.15l-14 8a1.002 1.002 0 0 0-.47.67c-.07.36.05.73.32.98l4 3.73c.18.17.43.27.67.27.18 0 .36-.05.52-.16l9.98-7.06c.35-.25.46-.73.27-1.11-.19-.38-.66-.54-1.05-.35l-9.17 6.49-2.73-2.55 12.68-7.77z"/>
+              <svg
+                v-if="b.isNike"
+                class="brand-svg-icon"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path
+                  d="M21.707 5.293c-.27-.27-.69-.33-1.02-.15l-14 8a1.002 1.002 0 0 0-.47.67c-.07.36.05.73.32.98l4 3.73c.18.17.43.27.67.27.18 0 .36-.05.52-.16l9.98-7.06c.35-.25.46-.73.27-1.11-.19-.38-.66-.54-1.05-.35l-9.17 6.49-2.73-2.55 12.68-7.77z"
+                />
               </svg>
               <!-- Jumpman Icon -->
               <i v-else-if="b.isJumpman" class="bi bi-person-walking fs-3"></i>
               <!-- Text brand -->
-              <span v-else class="fw-bold fs-6">{{ b.text || b.nameText }}</span>
+              <span v-else class="fw-bold fs-6">{{
+                b.text || b.nameText
+              }}</span>
             </div>
             <div v-if="b.nameText" class="brand-subtext">{{ b.nameText }}</div>
           </RouterLink>
@@ -222,19 +294,29 @@ onUnmounted(() => {
     <section class="row g-4 mb-5">
       <!-- Banner trái: Streetwear 2026 nền trắng -->
       <div class="col-md-6">
-        <div class="promo-card-custom promo-card-streetwear p-4 rounded-4 position-relative overflow-hidden d-flex align-items-center">
+        <div
+          class="promo-card-custom promo-card-streetwear p-4 rounded-4 position-relative overflow-hidden d-flex align-items-center"
+        >
           <div class="promo-text-col z-2">
-            <span class="badge bg-danger rounded-pill px-2 py-1 small fw-bold mb-2">HOT TREND</span>
+            <span
+              class="badge bg-danger rounded-pill px-2 py-1 small fw-bold mb-2"
+              >HOT TREND</span
+            >
             <h4 class="fw-black text-dark mb-1">Sneaker Streetwear 2026</h4>
-            <p class="text-muted-ps small mb-3">Thời trang hiện đại, phong cách trẻ trung năng động.</p>
-            <RouterLink to="/cua-hang" class="btn btn-danger btn-sm rounded-pill px-3 fw-bold">
+            <p class="text-muted-ps small mb-3">
+              Thời trang hiện đại, phong cách trẻ trung năng động.
+            </p>
+            <RouterLink
+              to="/cua-hang"
+              class="btn btn-danger btn-sm rounded-pill px-3 fw-bold"
+            >
               Mua Ngay <i class="bi bi-arrow-right"></i>
             </RouterLink>
           </div>
           <div class="promo-img-col">
-            <img 
-              src="https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=500&q=80" 
-              alt="Streetwear Sneaker" 
+            <img
+              src="https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=500&q=80"
+              alt="Streetwear Sneaker"
               class="promo-shoe-img"
             />
           </div>
@@ -243,19 +325,29 @@ onUnmounted(() => {
 
       <!-- Banner phải: Giày Chạy Bộ & Thể Thao nền tối đỏ -->
       <div class="col-md-6">
-        <div class="promo-card-custom promo-card-running p-4 rounded-4 position-relative overflow-hidden d-flex align-items-center">
+        <div
+          class="promo-card-custom promo-card-running p-4 rounded-4 position-relative overflow-hidden d-flex align-items-center"
+        >
           <div class="promo-text-col z-2">
-            <span class="badge bg-danger rounded-pill px-2 py-1 small fw-bold mb-2">GIẢM ĐẾN 30%</span>
+            <span
+              class="badge bg-danger rounded-pill px-2 py-1 small fw-bold mb-2"
+              >GIẢM ĐẾN 30%</span
+            >
             <h4 class="fw-black text-white mb-1">Giày Chạy Bộ & Thể Thao</h4>
-            <p class="text-white-50 small mb-3">Công nghệ tiên tiến, bứt phá từng bước chân.</p>
-            <RouterLink to="/cua-hang" class="btn btn-light btn-sm rounded-pill px-3 fw-bold text-dark">
+            <p class="text-white-50 small mb-3">
+              Công nghệ tiên tiến, bứt phá từng bước chân.
+            </p>
+            <RouterLink
+              to="/cua-hang"
+              class="btn btn-light btn-sm rounded-pill px-3 fw-bold text-dark"
+            >
               Xem Ngay <i class="bi bi-arrow-right"></i>
             </RouterLink>
           </div>
           <div class="promo-img-col">
-            <img 
-              src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=500&q=80" 
-              alt="Running Sneaker" 
+            <img
+              src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=500&q=80"
+              alt="Running Sneaker"
               class="promo-shoe-img"
             />
           </div>
@@ -267,13 +359,16 @@ onUnmounted(() => {
     <section class="mb-5">
       <div class="d-flex justify-content-between align-items-end mb-4">
         <div>
-          <div class="section-tag small fw-bold text-danger d-flex align-items-center gap-1">
-            <span class="slash-mark">/</span> TUYỂN CHỌN <span class="text-danger">HÀNG ĐẦU</span>
+          <div
+            class="section-tag small fw-bold text-danger d-flex align-items-center gap-1"
+          >
+            <span class="slash-mark">/</span> TUYỂN CHỌN
+            <span class="text-danger">HÀNG ĐẦU</span>
           </div>
           <h3 class="fw-black text-dark mb-0 mt-1">Sản phẩm nổi bật</h3>
         </div>
-        <RouterLink 
-          to="/cua-hang" 
+        <RouterLink
+          to="/cua-hang"
           class="text-danger fw-semibold small text-decoration-none"
         >
           Khám phá bộ sưu tập <i class="bi bi-arrow-right"></i>
@@ -288,75 +383,13 @@ onUnmounted(() => {
       <div v-else class="text-center py-5 ps-card">
         <div class="fs-1 mb-2">👟</div>
         <h5 class="fw-bold">Đang cập nhật sản phẩm...</h5>
-        <p class="text-muted small">Mời bạn quay lại danh mục sản phẩm sau nhé!</p>
+        <p class="text-muted small">
+          Mời bạn quay lại danh mục sản phẩm sau nhé!
+        </p>
       </div>
     </section>
 
     <!-- 5. KHỐI TRẢI NGHIỆM MUA SẮM (Banner đỏ nhỏ bên trái + 4 cam kết bên phải - Theo đúng ảnh) -->
-    <section class="mb-5">
-      <div class="experience-strip rounded-4 p-4 p-md-4 bg-white border">
-        <div class="row align-items-center g-4">
-          <!-- Cột đỏ nhỏ giày bên trái -->
-          <div class="col-lg-5 d-flex align-items-center gap-3">
-            <div class="experience-thumb-box rounded-3 overflow-hidden flex-shrink-0">
-              <img 
-                src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=300&q=80" 
-                alt="Sneaker Shoes" 
-                class="experience-thumb-img"
-              />
-            </div>
-            <div>
-              <div class="small fw-bold text-danger text-uppercase mb-1">/ VÌ SAO CHỌN POLY SHOES?</div>
-              <h4 class="fw-black text-dark mb-0 lh-sm">
-                Trải nghiệm mua sắm<br />sneaker đơn giản và an toàn
-              </h4>
-            </div>
-          </div>
-
-          <!-- 4 cột cam kết bên phải đúng ảnh -->
-          <div class="col-lg-7">
-            <div class="row g-3 text-start">
-              <div class="col-6 col-md-3">
-                <div class="exp-perk-item">
-                  <div class="exp-icon-shield text-danger mb-2">
-                    <i class="bi bi-shield-check fs-4"></i>
-                  </div>
-                  <div class="fw-bold small text-dark">Chính hãng 100%</div>
-                  <p class="text-muted-ps extra-small mb-0">Cam kết nguồn gốc, hoàn tiền nếu phát hiện hàng giả.</p>
-                </div>
-              </div>
-              <div class="col-6 col-md-3">
-                <div class="exp-perk-item">
-                  <div class="exp-icon-shield text-danger mb-2">
-                    <i class="bi bi-arrow-repeat fs-4"></i>
-                  </div>
-                  <div class="fw-bold small text-dark">Đổi size trong 7 ngày</div>
-                  <p class="text-muted-ps extra-small mb-0">Hỗ trợ đổi miễn phí lần đầu nếu không vừa.</p>
-                </div>
-              </div>
-              <div class="col-6 col-md-3">
-                <div class="exp-perk-item">
-                  <div class="exp-icon-shield text-danger mb-2">
-                    <i class="bi bi-credit-card-2-front fs-4"></i>
-                  </div>
-                  <div class="fw-bold small text-dark">Thanh toán an toàn</div>
-                  <p class="text-muted-ps extra-small mb-0">Đa dạng hình thức, bảo mật tuyệt đối.</p>
-                </div>
-              </div>
-              <div class="col-6 col-md-3">
-                <div class="exp-perk-item">
-                  <div class="exp-icon-shield text-danger mb-2">
-                    <i class="bi bi-headset fs-4"></i>
-                  </div>
-                  <div class="fw-bold small text-dark">Hỗ trợ 24/7</div>
-                  <p class="text-muted-ps extra-small mb-0">Tư vấn nhanh chóng, chuyên nghiệp.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
   </div>
 </template>
 
@@ -444,7 +477,11 @@ onUnmounted(() => {
   position: absolute;
   width: 380px;
   height: 380px;
-  background: radial-gradient(circle, rgba(239, 68, 68, 0.35) 0%, rgba(0, 0, 0, 0) 70%);
+  background: radial-gradient(
+    circle,
+    rgba(239, 68, 68, 0.35) 0%,
+    rgba(0, 0, 0, 0) 70%
+  );
   border-radius: 50%;
   pointer-events: none;
 }
@@ -498,8 +535,12 @@ onUnmounted(() => {
   border-color: #d32f2f;
 }
 
-.prev-btn { left: 16px; }
-.next-btn { right: 16px; }
+.prev-btn {
+  left: 16px;
+}
+.next-btn {
+  right: 16px;
+}
 
 .banner-dots {
   position: absolute;
