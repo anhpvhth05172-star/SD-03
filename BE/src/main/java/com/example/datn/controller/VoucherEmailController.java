@@ -16,16 +16,6 @@ public class VoucherEmailController {
 
     private final VoucherEmailService voucherEmailService;
 
-    /**
-     * Gửi email phiếu giảm giá cho 1 khách hàng
-     * POST /api/voucher-email/send
-     * Body:
-     * {
-     * "email": "khach@gmail.com",
-     * "tenKhachHang": "Nguyễn Văn A",
-     * "phieuGiamGia": { ... object PhieuGiamGia ... }
-     * }
-     */
     @PostMapping("/send")
     public ResponseEntity<?> sendVoucher(@RequestBody Map<String, Object> body) {
         try {
@@ -53,19 +43,6 @@ public class VoucherEmailController {
             ));
         }
     }
-
-    /**
-     * Gửi email hàng loạt cho nhiều khách hàng
-     * POST /api/voucher-email/send-batch
-     * Body:
-     * {
-     * "phieuGiamGia": { ... },
-     * "customers": [
-     * { "email": "...", "tenKhachHang": "..." },
-     * { "email": "...", "tenKhachHang": "..." }
-     * ]
-     * }
-     */
     @PostMapping("/send-batch")
     public ResponseEntity<?> sendVoucherBatch(@RequestBody Map<String, Object> body) {
         try {

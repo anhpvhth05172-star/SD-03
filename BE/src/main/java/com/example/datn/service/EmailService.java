@@ -57,7 +57,7 @@ public class EmailService {
             mailSender.send(message);
             log.info("Đã gửi email thông tin tài khoản thành công đến khách hàng: {}", toEmail);
         } catch (Exception e) {
-            log.error("Lỗi khi gửi email đến {}: {}", toEmail, e.getMessage());
+            log.error("Lỗi khi gửi email đến {}", toEmail, e);
         }
     }
 
@@ -98,7 +98,7 @@ public class EmailService {
             mailSender.send(message);
             log.info("Đã gửi email thông tin tài khoản thành công đến nhân viên: {}", toEmail);
         } catch (Exception e) {
-            log.error("Lỗi khi gửi email đến nhân viên {}: {}", toEmail, e.getMessage());
+            log.error("Lỗi khi gửi email đến nhân viên {}", toEmail, e);
         }
     }
 
@@ -296,7 +296,7 @@ public class EmailService {
             mailSender.send(message);
             log.info("Đã gửi email [{}] phiếu giảm giá {} đến khách hàng: {}", loai, maPhieu, toEmail);
         } catch (Exception e) {
-            log.error("Lỗi khi gửi email phiếu giảm giá đến {}: {}", toEmail, e.getMessage());
+            log.error("Lỗi khi gửi email phiếu giảm giá đến {}", toEmail, e);
         }
     }
 
@@ -425,8 +425,11 @@ public class EmailService {
             String phuongThucThanhToan,
             String diaChiNhanHang
     ) {
+        // Log đầu hàm: nếu KHÔNG thấy dòng này khi đặt hàng => listener/event chưa gọi tới đây
+        log.info("[MAIL-DATHANG] Bắt đầu xử lý gửi mail: to={}, maHoaDon={}", toEmail, maHoaDon);
+
         if (toEmail == null || toEmail.trim().isEmpty()) {
-            log.warn("Không thể gửi email đặt hàng: Địa chỉ email trống");
+            log.warn("[MAIL-DATHANG] Không thể gửi email đặt hàng {}: Địa chỉ email trống", maHoaDon);
             return;
         }
         try {
@@ -445,9 +448,10 @@ public class EmailService {
             );
             helper.setText(html, true);
             mailSender.send(message);
-            log.info("Đã gửi email đặt hàng {} đến {}", maHoaDon, toEmail);
+            log.info("[MAIL-DATHANG] Đã gửi email đặt hàng {} đến {}", maHoaDon, toEmail);
         } catch (Exception e) {
-            log.error("Lỗi gửi email đặt hàng đến {}: {}", toEmail, e.getMessage());
+            // Truyền cả exception để có stacktrace (lỗi auth, SMTP, timeout...)
+            log.error("[MAIL-DATHANG] Lỗi gửi email đặt hàng {} đến {}", maHoaDon, toEmail, e);
         }
     }
 

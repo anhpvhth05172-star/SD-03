@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { getSanPhamById, getBienTheBySanPham } from "@/api/product";
 import { money, addToCart } from "../store";
+import Swal from "sweetalert2";
 
 const route = useRoute();
 const router = useRouter();
@@ -17,10 +18,44 @@ const error = ref("");
 const selectedColor = ref(null); // idMauSac
 const selectedSize = ref(null); // size
 const qty = ref(1);
-const addError = ref("");
-const added = ref(false);
 const adding = ref(false);
-const addSuccessMessage = ref("");
+
+// ===== Thông báo (SweetAlert2) =====
+// Toast nhỏ góc phải: dùng cho thông báo nhanh (thành công, vượt tồn kho khi gõ)
+const Toast = Swal.mixin({
+  toast: true,
+  position: "top-end",
+  showConfirmButton: false,
+  timer: 2000,
+  timerProgressBar: true,
+  backdrop: false, // toast không dùng nền mờ
+  width: "auto", // co theo nội dung
+  customClass: {
+    container: "ps-toast-container",
+    popup: "ps-toast-popup",
+    title: "ps-toast-title",
+  },
+  didOpen: (toast) => {
+    // Dừng timer khi rê chuột vào
+    toast.addEventListener("mouseenter", Swal.stopTimer);
+    toast.addEventListener("mouseleave", Swal.resumeTimer);
+  },
+});
+
+function notify(icon, title) {
+  Toast.fire({ icon, title });
+}
+
+// Hộp thoại giữa màn hình: dùng cho lỗi cần người dùng đọc và xử lý
+function showAlert(icon, title, text) {
+  return Swal.fire({
+    icon,
+    title,
+    text,
+    confirmButtonText: "Đã hiểu",
+    confirmButtonColor: "#2563eb",
+  });
+}
 
 // Gallery
 const currentImageIndex = ref(0);
@@ -259,7 +294,6 @@ const specs = computed(() => {
 // ===== Watch =====
 // Khi biến thể thay đổi: reset lỗi và giới hạn số lượng theo tồn kho
 watch(selectedVariant, (v) => {
-  addError.value = "";
   if (v) {
     const stock = Number(v.stock || 0);
     if (qty.value > stock) qty.value = Math.max(1, stock);
@@ -279,7 +313,6 @@ function selectColor(c) {
   }
 
   selectedColor.value = c.idMauSac;
-  addError.value = "";
 
   // Chuyển ảnh chính sang ảnh của màu vừa chọn
   if (c.img) {
@@ -298,36 +331,87 @@ function selectSize(size) {
   }
 
   selectedSize.value = size;
-  addError.value = "";
+}
+
+// ===== Số lượng =====
+
+// Tồn kho tối đa cho phép nhập (Infinity nếu chưa chọn biến thể)
+function maxQty() {
+  return selectedVariant.value
+    ? Number(selectedVariant.value.stock || 0)
+    : Infinity;
 }
 
 function incQty() {
-  const max = selectedVariant.value
-    ? Number(selectedVariant.value.stock || 0)
-    : Infinity;
+  const max = maxQty();
   if (qty.value < max) qty.value++;
-  else addError.value = `Chỉ còn ${max} sản phẩm trong kho.`;
+  else notify("warning", `Chỉ còn ${max} sản phẩm trong kho.`);
 }
 
 function decQty() {
   qty.value = Math.max(1, qty.value - 1);
-  addError.value = "";
+}
+
+// Khi người dùng đang gõ: chỉ giữ lại chữ số, không ép về 1 ngay
+// để người dùng có thể xóa hết rồi gõ số mới
+function onQtyInput(e) {
+  const input = e.target;
+  const digits = input.value.replace(/\D/g, ""); // bỏ ký tự không phải số
+
+  // Ô trống: cho phép tạm thời (sẽ chuẩn hóa ở blur)
+  if (digits === "") {
+    input.value = "";
+    return;
+  }
+
+  let n = parseInt(digits, 10);
+  const max = maxQty();
+
+  if (n > max) {
+    n = max;
+    notify("warning", `Chỉ còn ${max} sản phẩm trong kho.`);
+  }
+
+  if (n < 1) n = 1;
+
+  qty.value = n;
+  input.value = String(n); // đồng bộ lại giá trị hiển thị
+}
+
+// Khi rời khỏi ô / nhấn Enter: nếu để trống hoặc không hợp lệ thì về 1
+function onQtyBlur(e) {
+  if (!qty.value || qty.value < 1) qty.value = 1;
+  e.target.value = String(qty.value);
 }
 
 async function add(goCart = false) {
+  // Chuẩn hóa số lượng trước khi validate
+  if (!qty.value || qty.value < 1) qty.value = 1;
+
   if (colors.value.length > 0 && selectedColor.value == null) {
-    addError.value = "Vui lòng chọn màu sắc trước.";
+    showAlert("warning", "Chưa chọn màu sắc", "Vui lòng chọn màu sắc trước.");
     return;
   }
   if (!selectedVariant.value) {
-    addError.value = "Vui lòng chọn size trước khi thêm vào giỏ.";
+    showAlert(
+      "warning",
+      "Chưa chọn kích cỡ",
+      "Vui lòng chọn size trước khi thêm vào giỏ.",
+    );
     return;
   }
   if (Number(selectedVariant.value.stock || 0) <= 0) {
-    addError.value = "Sản phẩm này đã hết hàng.";
+    showAlert("error", "Hết hàng", "Sản phẩm này đã hết hàng.");
     return;
   }
-  addError.value = "";
+  if (qty.value > Number(selectedVariant.value.stock || 0)) {
+    showAlert(
+      "warning",
+      "Vượt quá tồn kho",
+      `Chỉ còn ${selectedVariant.value.stock} sản phẩm trong kho.`,
+    );
+    return;
+  }
   adding.value = true;
 
   try {
@@ -351,29 +435,35 @@ async function add(goCart = false) {
     );
 
     if (res?.needLogin) {
-      addError.value =
-        res.message || "Vui lòng đăng nhập để thêm vào giỏ hàng.";
-      setTimeout(() => {
+      const result = await Swal.fire({
+        icon: "info",
+        title: "Cần đăng nhập",
+        text: res.message || "Vui lòng đăng nhập để thêm vào giỏ hàng.",
+        showCancelButton: true,
+        confirmButtonText: "Đăng nhập",
+        cancelButtonText: "Để sau",
+        confirmButtonColor: "#2563eb",
+      });
+      if (result.isConfirmed) {
         router.push({
           path: "/dang-nhap",
           query: { redirect: route.fullPath },
         });
-      }, 1500);
+      }
       return;
     }
 
     if (goCart) {
       router.push("/gio-hang");
     } else {
-      added.value = true;
-      addSuccessMessage.value = res?.message || "Đã thêm sản phẩm vào giỏ hàng";
-      setTimeout(() => {
-        added.value = false;
-        addSuccessMessage.value = "";
-      }, 2500);
+      notify("success", res?.message || "Đã thêm sản phẩm vào giỏ hàng");
     }
   } catch (err) {
-    addError.value = err.message || "Có lỗi xảy ra khi thêm vào giỏ hàng.";
+    showAlert(
+      "error",
+      "Không thể thêm vào giỏ",
+      err.message || "Có lỗi xảy ra khi thêm vào giỏ hàng.",
+    );
   } finally {
     adding.value = false;
   }
@@ -614,7 +704,16 @@ async function add(goCart = false) {
                 </button>
                 <input
                   class="qty-input text-center border-0 fw-semibold"
+                  type="text"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  maxlength="4"
                   :value="qty"
+                  :disabled="adding"
+                  @input="onQtyInput"
+                  @blur="onQtyBlur"
+                  @keydown.enter.prevent="$event.target.blur()"
+                  @focus="$event.target.select()"
                 />
                 <button
                   type="button"
@@ -629,23 +728,6 @@ async function add(goCart = false) {
                 (Còn {{ selectedVariant.stock }} sản phẩm)
               </span>
             </div>
-          </div>
-
-          <!-- Thông báo -->
-          <div
-            v-if="addError"
-            class="alert alert-danger py-2 px-3 small mb-3 rounded-3"
-          >
-            {{ addError }}
-          </div>
-          <div
-            v-if="added"
-            class="alert alert-success py-2 px-3 small mb-3 rounded-3"
-          >
-            ✓
-            {{
-              addSuccessMessage || "Đã thêm sản phẩm vào giỏ hàng thành công!"
-            }}
           </div>
 
           <!-- Nút hành động -->
@@ -762,6 +844,66 @@ async function add(goCart = false) {
     >
   </div>
 </template>
+
+<!-- ===== SweetAlert2 Toast (KHÔNG scoped vì Swal render ra <body>) ===== -->
+<style>
+.swal2-container.ps-toast-container {
+  background: transparent !important; /* bỏ nền xám */
+  width: auto !important;
+  max-width: 100vw;
+  padding: 16px !important;
+  pointer-events: none; /* không chặn click phía sau */
+}
+
+.swal2-popup.ps-toast-popup {
+  pointer-events: auto; /* riêng toast vẫn tương tác được */
+  width: auto !important;
+  min-width: 260px;
+  max-width: 380px;
+  padding: 12px 16px !important;
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15) !important;
+  font-size: 0.9rem !important;
+  letter-spacing: normal !important;
+}
+
+.swal2-popup.ps-toast-popup .swal2-icon {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px;
+  margin: 0 !important;
+  border-width: 2px !important;
+}
+
+.swal2-popup.ps-toast-popup .swal2-icon .swal2-icon-content {
+  font-size: 1.2rem !important;
+}
+
+.swal2-popup.ps-toast-popup .swal2-success-ring {
+  width: 28px !important;
+  height: 28px !important;
+  top: -2px !important;
+  left: -2px !important;
+}
+
+.swal2-popup.ps-toast-popup .swal2-title.ps-toast-title {
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 0.9rem !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+  letter-spacing: normal !important;
+  text-align: left !important;
+  color: #1e293b !important;
+}
+
+.swal2-popup.ps-toast-popup .swal2-timer-progress-bar {
+  background: rgba(37, 99, 235, 0.4);
+}
+</style>
 
 <style scoped>
 .detail-card {
@@ -1070,6 +1212,14 @@ async function add(goCart = false) {
   border-radius: 10px;
   overflow: hidden;
   border: 1.5px solid #cbd5e1;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.qty-pill-box:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
 .qty-btn {
@@ -1092,11 +1242,16 @@ async function add(goCart = false) {
 }
 
 .qty-input {
-  width: 44px;
+  width: 52px;
   height: 100%;
   font-size: 0.95rem;
   background: transparent;
   color: #1e293b;
+}
+
+.qty-input:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 /* Nút hành động */
