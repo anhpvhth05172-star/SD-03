@@ -2401,7 +2401,7 @@ input:checked + .toggle-slider:before {
 }
 
 .modal-xl {
-  width: 1080px;
+  width: 1140px;
   max-width: 96vw;
 }
 
@@ -2738,8 +2738,9 @@ input:checked + .toggle-slider:before {
 }
 
 .pos-prod-table {
-  min-width: 1080px;
-  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+  table-layout: auto;
 }
 
 .pos-prod-table th:first-child,
@@ -2773,7 +2774,7 @@ input:checked + .toggle-slider:before {
   font-size: 11.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 12px 14px;
+  padding: 10px 8px;
   border-bottom: 2px solid #e2e8f0;
   white-space: nowrap;
 }
@@ -2801,7 +2802,7 @@ input:checked + .toggle-slider:before {
 
 .pos-prod-table tbody td,
 .modal-prod-row td {
-  padding: 10px 14px;
+  padding: 8px 8px;
   vertical-align: middle;
   border-bottom: 1px solid #f1f5f9;
   color: #334155;
@@ -7260,4 +7261,250 @@ input:checked + .toggle-slider:before {
   margin-left: 5px;
   font-size: 11px;
   font-weight: 500;
+}
+
+
+/* Compact Cart Table Enhancements */
+.cart-table thead th {
+  padding: 8px 10px !important;
+  font-size: 11px !important;
+}
+
+.cart-table tbody td {
+  padding: 8px 10px !important;
+}
+
+.product-item-wrap {
+  gap: 8px !important;
+}
+
+.prod-thumb-mini {
+  width: 36px !important;
+  height: 36px !important;
+}
+
+.price-active,
+.price-strikethrough,
+.price-total {
+  white-space: nowrap !important;
+}
+
+/* Next Voucher Upsell Banner */
+.next-voucher-upsell-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-space, #eff6ff;
+  background-color: #f0f7ff;
+  border: 1px dashed #3b82f6;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  animation: fadeIn 0.2s ease-in;
+}
+
+.upsell-icon-col {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.upsell-body-col {
+  flex: 1;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: #1e3a8a;
+}
+
+.upsell-title {
+  font-weight: 500;
+  color: #1e40af;
+}
+
+.upsell-highlight-amt {
+  font-weight: 700;
+  color: #2563eb;
+}
+
+.upsell-code-badge {
+  display: inline-block;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #bfdbfe;
+  font-family: monospace;
+  margin: 0 2px;
+}
+
+.upsell-desc {
+  font-size: 11.5px;
+  color: #475569;
+  margin-top: 2px;
+}
+
+.upsell-benefit {
+  color: #ea580c;
+}
+
+/* Hiệu ứng flash viền xanh khi quét thành công */
+.pos-scanner-frame-overlay.flash-success .corner {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 10px #10b981;
+}
+
+/* Toast nổi thông báo ngay trên Camera khi quét sản phẩm */
+.pos-scan-notification-pill {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  background: rgba(16, 185, 129, 0.95);
+  color: #ffffff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  z-index: 30;
+  animation: slideDownToast 0.2s ease-out;
+}
+
+.pos-scan-notification-pill svg {
+  flex-shrink: 0;
+}
+
+@keyframes slideDownToast {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Bảng hiển thị danh sách sản phẩm đã quét trong phiên */
+.pos-scanned-session-box {
+  width: 100%;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+}
+
+.scanned-session-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: #334155;
+}
+
+.session-header-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.btn-clear-scanned-session {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.btn-clear-scanned-session:hover {
+  color: #ef4444;
+}
+
+.scanned-session-items-list {
+  max-height: 130px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.scanned-session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  border: 1px solid #edf2f7;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.scanned-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  max-width: 80%;
+}
+
+.scanned-item-name {
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scanned-item-meta {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.scanned-item-qty {
+  font-weight: 700;
+  color: #2563eb;
+  background: #eff6ff;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.pos-camera-footer-actions {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.btn-complete-scan {
+  width: 100%;
+  height: 42px;
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
+  transition: all 0.15s ease;
+}
+
+.btn-complete-scan:hover {
+  background: #15803d;
 }

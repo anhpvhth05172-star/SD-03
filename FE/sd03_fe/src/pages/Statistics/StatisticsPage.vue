@@ -395,12 +395,16 @@ const khoang = computed(() => {
       aov: t.aov || 0,
       sanPhamBan: t.sanPhamBan || 0,
       khachMoi: t.khachMoi || 0,
+      soDonOnline: t.soDonOnline || 0,
+      soDonTaiQuay: t.soDonTaiQuay || 0,
       soTra: 0,
       soNgay: 0,
     }
   }
   return tinhKhoang(bang.value, tuDate.value, denDate.value, tyLeChon.value)
 })
+
+const tyLeDon = (n) => (khoang.value.soDon > 0 ? `${Math.round(((n || 0) * 100) / khoang.value.soDon)}%` : '0%')
 
 const chuoiBanHang = computed(() =>
   tinhChuoiBanHang(bang.value, tuDate.value, denDate.value, kieuTongQuan.value, tyLeChon.value)
@@ -921,8 +925,8 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 3 THẺ SỐ LIỆU LỚN -->
-    <div class="stat-grid stat-grid-3">
+    <!-- 4 THẺ SỐ LIỆU NHỎ -->
+    <div class="stat-grid stat-grid-4">
       <div class="stat-card">
         <div class="stat-icon is-emerald">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -932,23 +936,6 @@ onMounted(async () => {
         </div>
         <div class="stat-value">{{ formatVnd(khoang.doanhThu) }}</div>
         <div class="stat-label">Tổng doanh thu</div>
-      </div>
-
-
-    </div>
-
-    <!-- 4 THẺ SỐ LIỆU NHỎ -->
-    <div class="stat-grid stat-grid-4">
-      <div class="stat-card">
-        <div class="stat-icon is-cyan">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="9" cy="21" r="1"></circle>
-            <circle cx="20" cy="21" r="1"></circle>
-            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-          </svg>
-        </div>
-        <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.soDon) }}</div>
-        <div class="stat-label">Tổng đơn hàng</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon is-indigo">
@@ -985,6 +972,32 @@ onMounted(async () => {
         <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.khachMoi) }}</div>
         <div class="stat-label">Khách mới</div>
       </div>
+    </div>
+
+    <!-- 3 THẺ SỐ ĐƠN: TỔNG / ONLINE / TẠI QUẦY -->
+    <div class="stat-grid stat-grid-3">
+      <div class="stat-card">
+        <div class="stat-icon is-cyan">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="21" r="1"></circle>
+            <circle cx="20" cy="21" r="1"></circle>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+          </svg>
+        </div>
+        <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.soDon) }}</div>
+        <div class="stat-label">Tổng đơn hàng</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon is-indigo"><i class="bi bi-globe2"></i></div>
+        <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.soDonOnline || 0) }}</div>
+        <div class="stat-label">Đơn online ({{ tyLeDon(khoang.soDonOnline) }})</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon is-amber"><i class="bi bi-shop"></i></div>
+        <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.soDonTaiQuay || 0) }}</div>
+        <div class="stat-label">Đơn tại quầy - offline ({{ tyLeDon(khoang.soDonTaiQuay) }})</div>
+      </div>
+
     </div>
 
     <div class="table-card">

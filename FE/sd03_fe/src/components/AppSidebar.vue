@@ -69,7 +69,7 @@ const menu = [
     iconType: 'schedule',
     children: [
       { label: 'Lịch làm việc', path: '/lich-lam-viec' },
-      { label: 'Lịch sử hoạt động', path: '/lich-su-hoat-dong' },
+      { label: 'Lịch sử hoạt động', path: '/lich-su-hoat-dong', adminOnly: true },
     ],
   },
   {
@@ -128,7 +128,15 @@ const toggle = (item) => {
   openState.value = { ...openState.value, [item.path]: !(openState.value[item.path] ?? auto) }
 }
 
-const visibleMenu = computed(() => menu.filter((item) => !item.adminOnly || laAdmin()))
+const visibleMenu = computed(() =>
+  menu
+    .filter((item) => !item.adminOnly || laAdmin())
+    .map((item) =>
+      item.children
+        ? { ...item, children: item.children.filter((c) => !c.adminOnly || laAdmin()) }
+        : item
+    )
+)
 </script>
 
 <template>

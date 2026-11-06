@@ -7,11 +7,16 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface KhachHangPhieuGiamGiaRepository extends JpaRepository<KhachHangPhieuGiamGia, Long> {
 
     boolean existsByPhieuGiamGia_IdAndKhachHang_IdAndTrangThaiTrue(Long idPhieu, Long idKhachHang);
+
+    Optional<KhachHangPhieuGiamGia> findByPhieuGiamGia_IdAndKhachHang_Id(Long idPhieu, Long idKhachHang);
+
+    List<KhachHangPhieuGiamGia> findByKhachHang_Id(Long idKhachHang);
 
     @Query("""
         select r from KhachHangPhieuGiamGia r
@@ -20,6 +25,5 @@ public interface KhachHangPhieuGiamGiaRepository extends JpaRepository<KhachHang
         order by kh.tenKhachHang asc
         """)
     List<KhachHangPhieuGiamGia> findByPhieuId(@Param("idPhieu") Long idPhieu);
-
 
 }

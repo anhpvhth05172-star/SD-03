@@ -2,7 +2,7 @@
 import { reactive, ref, computed, watch, onMounted } from "vue";
 import * as store from "../store";
 import { createInvoice } from "@/api/invoice";
-import { listVouchers } from "@/api/voucher";
+import { listVouchers, suDungCuaToi } from "@/api/voucher";
 import { getProvinces, getWards, getServices, tinhPhi } from "@/api/shipping";
 import { notifyConfirm } from "@/utils/notify";
 import { getUser, isKhachHangDangNhap } from "@/utils/auth";
@@ -157,13 +157,18 @@ const VF = {
   },
   active: (v) => v.trangThai,
   scope: (v) => String(v.phamVi ?? "").toUpperCase(), // chứa CA_NHAN/KHACH_HANG => riêng từng khách
-  // danh sách id khách được áp dụng (lấy từ API detail)
+  // danh sách id khách được áp dụng (lấy từ API detail hoặc DTO)
   customerIds: (d) =>
-    (d.danhSachKhachHang || d.khachHangIds || d.khachHang || []).map((k) =>
-      typeof k === "object" ? (k.id ?? k.idKhachHang) : k,
+    (d.idKhachHangsChuaDung || d.danhSachKhachHang || d.khachHangIds || d.khachHang || []).map((k) =>
+      typeof k === "object" ? (k.id ?? k.idKhachHang) : Number(k),
+    ),
+  usedCustomerIds: (d) =>
+    (d.idKhachHangsDaDung || []).map((k) =>
+      typeof k === "object" ? (k.id ?? k.idKhachHang) : Number(k),
     ),
 };
 
+const myVoucherUsage = ref({});
 const isPercent = (loai) => /PHAN_TRAM|PERCENT|%/.test(loai);
 const isPersonal = (scope) => /CA_NHAN|KHACH_HANG|RIENG|PRIVATE/.test(scope);
 
@@ -174,10 +179,23 @@ function isExhausted(detail) {
   return /HET_LUOT|HET_SO_LUONG|DA_HET|HET_SL/i.test(String(VF.active(detail)));
 }
 
-// Kiểm tra điều kiện của 1 phiếu. Trả về chuỗi lỗi, hoặc "" nếu hợp lệ.
-// ignoreMin = true: bỏ qua điều kiện "đơn tối thiểu" (dùng khi liệt kê phiếu gợi ý)
+function hasCustomerReachedLimit(detail, cid) {
+  if (!detail || !cid) return false;
+  const numCid = Number(cid);
+  if (VF.usedCustomerIds(detail).includes(numCid)) return true;
+  const usage = myVoucherUsage.value[VF.id(detail)];
+  if (usage) {
+    const limit = Number(detail.gioiHanMoiTaiKhoan || usage.gioiHanMoiTaiKhoan || 1);
+    if (Number(usage.daSuDung || 0) >= limit) return true;
+  }
+  return false;
+}
+
+// Kiểm tra điều kiện của 1 phiếu. Trả về chuỗi lỗi, hoặc "" nếu hợp lệ (dùng được).
+// ignoreMin = true: bỏ qua điều kiện "đơn tối thiểu" (dùng khi kiểm tra gợi ý mua thêm)
 function checkVoucher(detail, ignoreMin = false) {
-  if (isExhausted(detail)) return "Mã giảm giá đã hết lượt sử dụng.";
+  if (!detail) return "Mã giảm giá không tồn tại.";
+  if (isExhausted(detail)) return "Đã hết lượt sử dụng.";
 
   const act = VF.active(detail);
   if (act === false || /NGUNG|TAT|INACTIVE|HET_HAN/i.test(String(act)))
@@ -187,19 +205,31 @@ function checkVoucher(detail, ignoreMin = false) {
   const st = VF.start(detail);
   const en = VF.end(detail);
   if (st && now < new Date(st))
-    return "Mã giảm giá chưa đến thời gian áp dụng.";
+    return "Chưa đến thời gian áp dụng.";
   if (en && now > new Date(en)) return "Mã giảm giá đã hết hạn.";
 
+  const cid = customer.value?.id ? Number(customer.value.id) : null;
+  if (!cid) {
+    return "Cần đăng nhập tài khoản để dùng mã giảm giá.";
+  }
+
+  if (hasCustomerReachedLimit(detail, cid)) {
+    const usage = myVoucherUsage.value[VF.id(detail)];
+    const limit = Number(detail.gioiHanMoiTaiKhoan || usage?.gioiHanMoiTaiKhoan || 1);
+    const used = Number(usage?.daSuDung || limit);
+    return `Bạn đã dùng hết lượt mã này (${used}/${limit} lần).`;
+  }
+
   if (isPersonal(VF.scope(detail))) {
-    const cid = customer.value?.id;
-    if (!cid) return "Vui lòng đăng nhập để dùng mã này.";
-    if (!VF.customerIds(detail).includes(cid))
-      return "Mã này không áp dụng cho tài khoản của bạn.";
+    const allowedIds = VF.customerIds(detail);
+    if (!allowedIds.includes(cid)) {
+      return "Mã cá nhân không thuộc tài khoản của bạn.";
+    }
   }
 
   const min = VF.min(detail);
   if (!ignoreMin && orderTotal.value < min)
-    return `Đơn tối thiểu ${money(min)} để dùng mã này.`;
+    return `Mua thêm ${money(min - orderTotal.value)} để dùng mã này (Đơn từ ${money(min)}).`;
 
   return "";
 }
@@ -279,12 +309,18 @@ function normalizePlace(value) {
   return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim().toLowerCase();
 }
 
+function cleanPlaceName(v) {
+  return normalizePlace(v).replace(/^(thanh pho|tp\.?|tinh|quan|huyen|thi xa|phuong|xa|thi tran)\s+/i, "").trim();
+}
+
 function restoreSavedAddressRegion() {
   const address = savedAddressToRestore.value;
   if (!address || !provinces.value.length) return;
-  const province = provinces.value.find((p) => normalizePlace(p.name) === normalizePlace(address.province));
+  const targetProv = cleanPlaceName(address.province);
+  const province = targetProv
+    ? provinces.value.find((p) => cleanPlaceName(p.name) === targetProv || normalizePlace(p.name).includes(targetProv))
+    : null;
   if (province) provinceId.value = String(province.id);
-  else shippingError.value = "Không nhận diện được tỉnh/thành trong địa chỉ đã lưu. Vui lòng chọn lại.";
   savedAddressToRestore.value = null;
   if (province && address.ward) savedWardToRestore.value = address.ward;
 }
@@ -308,7 +344,6 @@ watch(provinceId, async (id) => {
       const match = wards.value.find((w) => normalizePlace(w.name) === normalizePlace(savedWard)
         || normalizePlace(w.name).startsWith(`${normalizePlace(savedWard)} `));
       if (match) wardId.value = String(match.id);
-      else shippingError.value = "Không nhận diện được phường/xã trong địa chỉ đã lưu. Vui lòng chọn lại.";
       savedWardToRestore.value = "";
     }
   } catch {
@@ -333,20 +368,33 @@ watch([provinceId, wardId, serviceTypeId], async ([province, ward]) => {
       toProvinceName: selectedProvince.value.name,
       toWardName: selectedWard.value.name,
       serviceTypeId: serviceTypeId.value || undefined,
+      items: cart.items.map((i) => ({
+        idSanPhamChiTiet: i.idSanPhamChiTiet ?? i.spctId ?? i.id,
+        soLuong: i.qty || 1,
+      })),
     });
     if (requestId !== shippingRequestId) return;
     shippingFee.value = Number(result.shippingFee || SHIP_FEE);
-    toProvinceId.value = Number(result.toProvinceId || selectedProvince.value.id);
-    toDistrictId.value = Number(result.toDistrictId || 0) || null;
-    toWardCode.value = String(result.toWardCode || "");
+    toProvinceId.value = Number(result.toProvinceId || selectedProvince.value.id) || 201;
+    toDistrictId.value = Number(result.toDistrictId || 0) || 1;
+    toWardCode.value = String(result.toWardCode || selectedWard.value.id || "001");
     if (result.toDistrictId) {
-      const services = await getServices(result.toDistrictId);
-      if (requestId !== shippingRequestId) return;
-      if (!serviceTypeId.value && services.length) serviceTypeId.value = services[0].serviceTypeId;
+      try {
+        const services = await getServices(result.toDistrictId);
+        if (requestId !== shippingRequestId) return;
+        if (!serviceTypeId.value && services.length) serviceTypeId.value = services[0].serviceTypeId;
+      } catch {
+        /* ignore service fetch error */
+      }
     }
   } catch (error) {
     if (requestId !== shippingRequestId) return;
-    shippingError.value = error.message || "Không tính được phí vận chuyển GHN.";
+    console.warn("[Checkout] Không tính được phí GHN tự động, dùng phí mặc định:", error.message);
+    shippingError.value = "";
+    shippingFee.value = SHIP_FEE;
+    toProvinceId.value = Number(selectedProvince.value.id) || 201;
+    toDistrictId.value = 1;
+    toWardCode.value = "001";
   } finally {
     if (requestId === shippingRequestId) shippingLoading.value = false;
   }
@@ -393,7 +441,7 @@ const voucherIsAvailable = (v) => {
     && (!end || now <= end);
 };
 const voucherSuggestion = computed(() => availableVouchers.value
-  .filter((v) => voucherIsAvailable(v) && Number(v.hoaDonToiThieu || 0) > orderTotal.value)
+  .filter((v) => !checkVoucher(v, true) && Number(v.hoaDonToiThieu || 0) > orderTotal.value)
   .sort((a, b) => Number(a.hoaDonToiThieu) - Number(b.hoaDonToiThieu))[0] || null);
 
 function formatVoucherValue(v) {
@@ -454,9 +502,24 @@ const loadingVouchers = ref(false);
 async function loadVouchers() {
   loadingVouchers.value = true;
   try {
-    const list = await listVouchers();
-    availableVouchers.value = Array.isArray(list) ? list : [];
-    allVouchers.value = availableVouchers.value;
+    const [listRes, usageRes] = await Promise.allSettled([
+      listVouchers(),
+      customer.value?.id ? suDungCuaToi() : Promise.resolve([]),
+    ]);
+    const list = listRes.status === "fulfilled" && Array.isArray(listRes.value) ? listRes.value : [];
+    const usageList = usageRes.status === "fulfilled" && Array.isArray(usageRes.value) ? usageRes.value : [];
+    const map = {};
+    for (const u of usageList) {
+      if (u && u.id != null) {
+        map[u.id] = {
+          daSuDung: Number(u.daSuDung || 0),
+          gioiHanMoiTaiKhoan: Number(u.gioiHanMoiTaiKhoan || 1),
+        };
+      }
+    }
+    myVoucherUsage.value = map;
+    availableVouchers.value = list;
+    allVouchers.value = list;
   } catch (e) {
     console.warn("[Checkout] Không tải được danh sách phiếu:", e.message);
     availableVouchers.value = [];
@@ -466,54 +529,82 @@ async function loadVouchers() {
   }
 }
 
-// Phiếu còn hiệu lực VÀ còn lượt sử dụng (phiếu hết lượt bị ẩn hoàn toàn)
+// Danh sách tất cả phiếu giảm giá kèm kiểm tra cái nào dùng được / không dùng được
 const voucherOptions = computed(() => {
   const total = orderTotal.value;
+  const cid = customer.value?.id ? Number(customer.value.id) : null;
   const list = allVouchers.value
-    .filter((d) => !isExhausted(d))
-    .filter((d) => !checkVoucher(d, true))
+    .filter((d) => {
+      // Với phiếu cá nhân, chỉ hiển thị nếu được cấp cho khách hàng hiện tại
+      if (isPersonal(VF.scope(d))) {
+        if (!cid) return false;
+        const assigned = VF.customerIds(d).includes(cid) || VF.usedCustomerIds(d).includes(cid);
+        if (!assigned) return false;
+      }
+      return true;
+    })
     .map((d) => {
       const v = toVoucher(d);
-      const eligible = total >= (v.min || 0);
+      const reason = checkVoucher(d, false);
+      const disc = calcDiscount(v, total);
+      const eligible = !reason && disc > 0;
       const end = VF.end(d);
       const left = VF.qty(d);
       return {
         v,
+        raw: d,
         eligible,
-        discount: eligible ? calcDiscount(v, total) : 0,
+        reason: reason || (disc <= 0 ? "Không đủ điều kiện giảm giá." : ""),
+        discount: eligible ? disc : 0,
         missing: Math.max(0, (v.min || 0) - total),
         expire: end ? new Date(end).toLocaleDateString("vi-VN") : "",
         left: left !== undefined && left !== null ? Number(left) : null,
         best: false,
       };
     });
-  // Đủ điều kiện lên trước, giảm nhiều nhất lên đầu
+  // Phiếu dùng được lên trước (giảm nhiều nhất lên đầu), phiếu không dùng được xuống dưới
   list.sort(
     (x, y) =>
-      Number(y.eligible) - Number(x.eligible) || y.discount - x.discount,
+      Number(y.eligible) - Number(x.eligible) ||
+      y.discount - x.discount ||
+      (x.v.min || 0) - (y.v.min || 0),
   );
   const best = list.find((o) => o.eligible && o.discount > 0);
   if (best) best.best = true;
   return list;
 });
 
-const bestVoucher = computed(() => voucherOptions.value.find((o) => o.best));
+const usableVoucherCount = computed(() => voucherOptions.value.filter((o) => o.eligible).length);
+const bestVoucher = computed(() => voucherOptions.value.find((o) => o.best && o.eligible) || null);
 
-// Tự chọn voucher có mức giảm lớn nhất, trừ khi khách chủ động gỡ mã.
-watch([bestVoucher, orderTotal], ([best]) => {
+// Tự động áp dụng duy nhất voucher tốt nhất VÀ dùng được; nếu không dùng được thì tuyệt đối không tự áp dụng.
+watch([bestVoucher, orderTotal, customer, myVoucherUsage], ([best]) => {
+  if (voucher.value) {
+    const raw = allVouchers.value.find((x) => VF.id(x) === voucher.value.id);
+    const err = raw ? checkVoucher(raw, false) : "Mã giảm giá không còn khả dụng.";
+    if (err || calcDiscount(voucher.value, orderTotal.value) <= 0) {
+      voucher.value = null;
+      selectedVoucherId.value = "";
+    }
+  }
   if (manualRemoved.value) return;
   const current = voucher.value;
-  const next = best?.v || null;
+  const next = best && best.eligible ? best.v : null;
   if (current?.id === next?.id) return;
   voucher.value = next;
   if (next) {
     voucherCode.value = "";
     selectedVoucherId.value = String(next.id);
-    voucherMsg.text = `Tự áp dụng mã tốt nhất ${next.code}.`;
+    voucherMsg.text = `Tự động áp dụng mã tốt nhất dùng được: ${next.code}.`;
     voucherMsg.ok = true;
-  } else if (current) {
-    voucherMsg.text = "Không còn mã giảm giá phù hợp; mã đã được gỡ.";
-    voucherMsg.ok = false;
+  } else {
+    selectedVoucherId.value = "";
+    if (current) {
+      voucherMsg.text = "Không có mã giảm giá nào dùng được cho đơn hàng này.";
+      voucherMsg.ok = false;
+    } else {
+      voucherMsg.text = "";
+    }
   }
 }, { immediate: true });
 
@@ -608,9 +699,18 @@ function buildHoaDonRequest() {
   };
 }
 
-function clearCart() {
-  if (typeof store.clearCart === "function") return store.clearCart();
+async function clearCart() {
+  if (typeof store.clearCart === "function") {
+    try {
+      await store.clearCart();
+    } catch (e) {
+      console.warn("[Checkout] clearCart server warn:", e);
+    }
+  }
   if (Array.isArray(cart.items)) cart.items.splice(0);
+  if (typeof store.resetCartLocal === "function") {
+    store.resetCartLocal();
+  }
 }
 
 async function submit() {
@@ -622,7 +722,19 @@ async function submit() {
   errors.address = f.address.trim() && provinceId.value && wardId.value
     ? ""
     : "Vui lòng nhập địa chỉ cụ thể và chọn tỉnh/thành phố, phường/xã.";
-  if (errors.name || errors.phone || errors.address || shippingLoading.value || shippingError.value) return;
+  if (errors.name || errors.phone || errors.address) {
+    submitError.value = errors.name || errors.phone || errors.address;
+    return;
+  }
+  if (shippingLoading.value) {
+    submitError.value = "Đang tính phí vận chuyển, vui lòng đợi trong giây lát.";
+    return;
+  }
+  if (!toProvinceId.value) toProvinceId.value = Number(selectedProvince.value?.id) || 201;
+  if (!toDistrictId.value || toDistrictId.value === 1) {
+    toDistrictId.value = 1;
+    toWardCode.value = "001";
+  }
 
   submitting.value = true;
 
@@ -706,7 +818,7 @@ async function submit() {
     } catch { /* Lưu lịch sử đơn hàng ở localStorage là tùy chọn. */ }
 
     done.value = true;
-    clearCart();
+    await clearCart();
   } catch (e) {
     console.error("[Checkout] Lỗi tạo hóa đơn:", e);
     submitError.value = e.response?.data?.message
@@ -1162,7 +1274,12 @@ async function copyOrderCode() {
               tải phiếu giảm giá...
             </div>
             <div v-else-if="voucherOptions.length" class="mt-3">
-              <div class="co-label">Tất cả phiếu giảm giá</div>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="co-label mb-0">Tất cả phiếu giảm giá</div>
+                <span class="badge bg-light text-dark border">
+                  {{ usableVoucherCount }}/{{ voucherOptions.length }} dùng được
+                </span>
+              </div>
               <div class="co-voucher-list">
                 <div
                   v-for="o in voucherOptions"
@@ -1175,11 +1292,17 @@ async function copyOrderCode() {
                 >
                   <div class="co-vleft"><i class="bi bi-percent"></i></div>
                   <div class="flex-grow-1 min-w-0">
-                    <div class="fw-bold small">
-                      {{ o.v.code }}
-                      <span v-if="o.best" class="badge bg-success ms-1"
-                        >Tốt nhất</span
-                      >
+                    <div class="fw-bold small d-flex align-items-center flex-wrap gap-1">
+                      <span>{{ o.v.code }}</span>
+                      <span v-if="o.eligible" class="badge bg-success-subtle text-success border border-success-subtle">
+                        Dùng được
+                      </span>
+                      <span v-else class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                        Không dùng được
+                      </span>
+                      <span v-if="o.best && o.eligible" class="badge bg-success">
+                        Tốt nhất
+                      </span>
                     </div>
                     <div class="small">
                       {{ voucherLabel(o.v) }} • Đơn từ {{ money(o.v.min) }}
@@ -1187,11 +1310,11 @@ async function copyOrderCode() {
                     <div class="co-vexp">
                       <span v-if="o.expire">HSD: {{ o.expire }}</span>
                       <span v-if="o.left !== null">
-                        · Còn {{ o.left }} lượt</span
+                        · Còn {{ Math.max(0, o.left) }} lượt</span
                       >
                     </div>
                     <div v-if="!o.eligible" class="co-vexp text-danger">
-                      Mua thêm {{ money(o.missing) }} để dùng mã này
+                      {{ o.reason || `Mua thêm ${money(o.missing)} để dùng mã này` }}
                     </div>
                     <div v-else class="co-vexp text-success">
                       Giảm được {{ money(o.discount) }}
@@ -1203,7 +1326,9 @@ async function copyOrderCode() {
                     :class="
                       voucher && voucher.id === o.v.id
                         ? 'btn-success'
-                        : 'btn-outline-primary'
+                        : o.eligible
+                          ? 'btn-outline-primary'
+                          : 'btn-outline-secondary'
                     "
                     :disabled="!o.eligible"
                     @click="toggleVoucher(o)"
@@ -1211,7 +1336,9 @@ async function copyOrderCode() {
                     {{
                       voucher && voucher.id === o.v.id
                         ? "✓ Đang dùng"
-                        : "Áp dụng"
+                        : o.eligible
+                          ? "Áp dụng"
+                          : "Không khả dụng"
                     }}
                   </button>
                 </div>
@@ -1280,20 +1407,6 @@ async function copyOrderCode() {
               <i v-if="!submitting" class="bi bi-arrow-right ms-1"></i>
             </button>
 
-            <div class="co-perks">
-              <span
-                ><i class="bi bi-shield-lock-fill text-success"></i>Bảo mật
-                thanh toán</span
-              >
-              <span
-                ><i class="bi bi-box-seam-fill text-danger"></i>Kiểm tra khi
-                nhận</span
-              >
-              <span
-                ><i class="bi bi-arrow-repeat text-primary"></i>Đổi size 7
-                ngày</span
-              >
-            </div>
           </section>
         </div>
       </div>

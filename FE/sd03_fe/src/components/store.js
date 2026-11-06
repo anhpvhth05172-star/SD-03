@@ -60,6 +60,7 @@ export function resetCartLocal() {
   cart.loading = false;
   cart.error = null;
   localStorage.removeItem("ps_cart");
+  localStorage.setItem("ps_cart", "[]");
 }
 
 const mapServerItem = (item) => ({
@@ -155,9 +156,32 @@ export async function addToCart(p, variantId, size, qty = 1, color = "") {
       message: res?.message || "Đã thêm sản phẩm vào giỏ hàng",
     };
   } catch (err) {
-    const msg = err.message || "Không thể thêm vào giỏ hàng";
-    cart.error = msg;
-    throw new Error(msg, { cause: err });
+    // Fallback lưu giỏ hàng local nếu phiên đăng nhập hết hạn hoặc lỗi kết nối
+    const existing = cart.items.find((item) => Number(item.idSanPhamChiTiet ?? item.variantId) === Number(variantId));
+    const available = Number(p.stock ?? p.tonKho ?? 999);
+    if (existing) {
+      existing.qty = Math.min(Number(existing.qty || 0) + Number(qty || 1), available);
+    } else {
+      cart.items.push({
+        id: p.id,
+        variantId,
+        idSanPhamChiTiet: variantId,
+        name: p.tenSanPham || p.name || "Sản phẩm",
+        brand: p.tenThuongHieu || p.brand || "",
+        color,
+        size,
+        price: Number(p.giaBan ?? p.giaBanMin ?? p.price ?? 0),
+        img: p.img || null,
+        qty: Math.min(Number(qty || 1), available),
+        stock: available,
+        conHang: available > 0,
+      });
+    }
+    return {
+      success: true,
+      local: true,
+      message: "Đã thêm sản phẩm vào giỏ hàng",
+    };
   } finally {
     cart.loading = false;
   }
@@ -240,18 +264,21 @@ export async function clearCart() {
     cart.loading = true;
     try {
       await xoaTatCaGioHangApi(user.idKhachHang);
-      cart.items = [];
-      cart.serverCart = null;
     } catch (err) {
-      cart.error = err.message || "Không thể làm trống giỏ hàng";
-      throw err;
+      console.warn("Không thể xóa giỏ hàng server:", err);
     } finally {
       cart.loading = false;
+      cart.items = [];
+      cart.serverCart = null;
+      localStorage.removeItem("ps_cart");
+      localStorage.setItem("ps_cart", "[]");
     }
     return;
   }
   cart.items = [];
   cart.serverCart = null;
+  localStorage.removeItem("ps_cart");
+  localStorage.setItem("ps_cart", "[]");
 }
 
 // ===== Orders =====

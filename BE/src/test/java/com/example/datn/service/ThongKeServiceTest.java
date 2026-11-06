@@ -79,6 +79,24 @@ class ThongKeServiceTest {
     }
 
     @Test
+    void tongQuan_demDonOnlineVaTaiQuay_boQuaDonHuy() {
+        mockRows(
+            List.of(
+                new HoaDonThongKeRow(1L, "DA_HOAN_THANH", new BigDecimal("100"), false, "TM", "ONLINE"),
+                new HoaDonThongKeRow(2L, "DA_HOAN_THANH", new BigDecimal("100"), false, "TM", "TAI_QUAY"),
+                new HoaDonThongKeRow(3L, "CHO_XAC_NHAN", new BigDecimal("100"), false, "TM", "TAI_QUAY_GIAO_HANG"),
+                new HoaDonThongKeRow(4L, "DA_HUY", new BigDecimal("100"), false, "TM", "ONLINE")
+            ),
+            List.of(),
+            0
+        );
+        TongQuanDTO r = service().tongQuan(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31), null);
+        assertEquals(3L, r.soDon());
+        assertEquals(1L, r.soDonOnline());
+        assertEquals(2L, r.soDonTaiQuay());
+    }
+
+    @Test
     void tongQuan_loaiDonHuyHoanTienVaDaXoa() {
         mockRows(
             List.of(

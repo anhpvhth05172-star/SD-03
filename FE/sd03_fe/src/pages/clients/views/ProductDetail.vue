@@ -15,6 +15,7 @@ const error = ref("");
 
 // Lựa chọn người dùng
 const selectedColor = ref(null); // idMauSac
+const selectedSize = ref(null); // tên size
 const selectedVariant = ref(null); // SanPhamChiTietResponse được chọn
 const qty = ref(1);
 const addError = ref("");
@@ -39,6 +40,7 @@ async function fetchData() {
   product.value = null;
   variants.value = [];
   selectedColor.value = null;
+  selectedSize.value = null;
   selectedVariant.value = null;
   currentImageIndex.value = 0;
   qty.value = 1;
@@ -81,9 +83,25 @@ function stockOfColor(idMauSac) {
     .reduce((s, v) => s + Number(v.stock || 0), 0);
 }
 
-// Hiện đủ size; vô hiệu hóa size không có ở màu đang chọn.
+// Hiện đủ size; ban đầu không xám ô nào, chỉ xám khi đã chọn chiều kia mà không có biến thể khả dụng.
 const allSizes = computed(() => [...new Set(variants.value.map((v) => v.size))].sort((a, b) => String(a).localeCompare(String(b), 'vi', { numeric: true })));
 const variantForSize = (size) => variants.value.find((v) => v.idMauSac === selectedColor.value && v.size === size);
+
+function hasAvailableVariant(idMauSac, size) {
+  return variants.value.some(
+    (v) => v.idMauSac === idMauSac && v.size === size && Number(v.stock || 0) > 0,
+  );
+}
+
+function isColorGray(idMauSac) {
+  if (!selectedSize.value) return false;
+  return !hasAvailableVariant(idMauSac, selectedSize.value);
+}
+
+function isSizeGray(size) {
+  if (!selectedColor.value) return false;
+  return !hasAvailableVariant(selectedColor.value, size);
+}
 
 // Số size duy nhất
 const sizeCount = computed(
@@ -226,16 +244,37 @@ const specs = computed(() => {
   );
 });
 
-// ===== Watch =====
-watch(selectedColor, () => {
-  selectedVariant.value = null;
-  qty.value = 1;
-  addError.value = "";
-});
-
 // ===== Actions =====
+function syncSelectedVariant() {
+  if (selectedColor.value && selectedSize.value) {
+    const matched = variants.value.find(
+      (v) =>
+        v.idMauSac === selectedColor.value &&
+        v.size === selectedSize.value &&
+        Number(v.stock || 0) > 0,
+    );
+    selectedVariant.value = matched || null;
+    if (matched && qty.value > matched.stock) {
+      qty.value = Math.max(1, matched.stock);
+    }
+  } else {
+    selectedVariant.value = null;
+  }
+  addError.value = "";
+}
+
 function selectColor(c) {
+  if (selectedColor.value === c.idMauSac) {
+    selectedColor.value = null;
+    syncSelectedVariant();
+    return;
+  }
   selectedColor.value = c.idMauSac;
+  // Nếu size đang chọn chuyển sang xám ở màu mới thì bỏ chọn size
+  if (selectedSize.value && isSizeGray(selectedSize.value)) {
+    selectedSize.value = null;
+  }
+  syncSelectedVariant();
   // Chuyển ảnh chính sang ảnh của màu vừa chọn
   if (c.img) {
     const idx = allImages.value.indexOf(c.img);
@@ -243,10 +282,18 @@ function selectColor(c) {
   }
 }
 
-function selectVariant(v) {
-  selectedVariant.value = v;
-  addError.value = "";
-  if (qty.value > v.stock) qty.value = Math.max(1, v.stock);
+function selectSize(size) {
+  if (selectedSize.value === size) {
+    selectedSize.value = null;
+    syncSelectedVariant();
+    return;
+  }
+  selectedSize.value = size;
+  // Nếu màu đang chọn chuyển sang xám ở kích cỡ mới thì bỏ chọn màu
+  if (selectedColor.value && isColorGray(selectedColor.value)) {
+    selectedColor.value = null;
+  }
+  syncSelectedVariant();
 }
 
 function incQty() {
@@ -499,7 +546,7 @@ async function add(goCart = false) {
                   selectedColor === c.idMauSac
                     ? 'size-btn-active'
                     : 'size-btn-normal',
-                  { 'opacity-50': stockOfColor(c.idMauSac) <= 0 },
+                  { 'size-btn-disabled': isColorGray(c.idMauSac) },
                 ]"
                 @click="selectColor(c)"
               >
@@ -517,9 +564,10 @@ async function add(goCart = false) {
           <div class="mb-3">
             <label class="option-label">
               Kích cỡ
-              <span v-if="selectedVariant" class="text-dark fw-bold ms-1"
-                >: {{ selectedVariant.size }}</span
+              <span v-if="selectedSize" class="text-dark fw-bold ms-1"
+                >: {{ selectedSize }}</span
               >
+              <span v-else class="text-danger fw-normal ms-1">(Chưa chọn)</span>
             </label>
             <div class="d-flex flex-wrap gap-2">
               <button
@@ -528,12 +576,17 @@ async function add(goCart = false) {
                 type="button"
                 class="btn size-box-btn"
                 :class="[
-                  selectedVariant?.size === size ? 'size-btn-active' : 'size-btn-normal',
-                  { 'size-btn-disabled': !variantForSize(size) || variantForSize(size).stock <= 0 },
+                  selectedSize === size ? 'size-btn-active' : 'size-btn-normal',
+                  { 'size-btn-disabled': isSizeGray(size) },
                 ]"
-                :disabled="!variantForSize(size) || variantForSize(size).stock <= 0"
-                :title="variantForSize(size) ? (variantForSize(size).stock > 0 ? `Còn ${variantForSize(size).stock} sản phẩm` : 'Hết hàng') : 'Không có ở màu này'"
-                @click="selectVariant(variantForSize(size))"
+                :title="
+                  selectedColor
+                    ? variantForSize(size) && variantForSize(size).stock > 0
+                      ? `Còn ${variantForSize(size).stock} sản phẩm`
+                      : 'Không có ở màu này'
+                    : ''
+                "
+                @click="selectSize(size)"
               >
                 {{ size }}
               </button>
@@ -616,35 +669,6 @@ async function add(goCart = false) {
               <i class="bi bi-lightning-charge-fill me-1"></i>
               <span>Mua ngay</span>
             </button>
-          </div>
-
-          <!-- Perks -->
-          <div class="product-perks-box p-3 rounded-4">
-            <div class="row g-2 text-center text-md-start">
-              <div class="col-12 col-md-4 d-flex align-items-center gap-2">
-                <i class="bi bi-shield-check text-danger fs-4"></i>
-                <div class="small lh-sm">
-                  <div class="fw-bold">100% Chính hãng</div>
-                  <span class="text-muted perk-sub">Kiểm tra hàng</span>
-                </div>
-              </div>
-              <div
-                class="col-12 col-md-4 d-flex align-items-center gap-2 perk-mid"
-              >
-                <i class="bi bi-arrow-repeat text-danger fs-4"></i>
-                <div class="small lh-sm">
-                  <div class="fw-bold">Đổi size 7 ngày</div>
-                  <span class="text-muted perk-sub">Miễn phí đổi</span>
-                </div>
-              </div>
-              <div class="col-12 col-md-4 d-flex align-items-center gap-2">
-                <i class="bi bi-truck text-danger fs-4"></i>
-                <div class="small lh-sm">
-                  <div class="fw-bold">Giao hàng nhanh</div>
-                  <span class="text-muted perk-sub">1-3 ngày nhận</span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -1038,7 +1062,7 @@ async function add(goCart = false) {
   color: #cbd5e1 !important;
   border: 1.5px dashed #e2e8f0 !important;
   text-decoration: line-through;
-  cursor: not-allowed;
+  cursor: pointer;
 }
 
 /* Số lượng */

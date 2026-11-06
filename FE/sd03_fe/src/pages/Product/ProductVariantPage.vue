@@ -845,12 +845,21 @@ const onAddColorChange = () => {
   }
 }
 
-const triggerAddImageUpload = () => {
+let activeVariantFileInput = null
+const pickVariantImageFile = (onDataUrl) => {
+  if (activeVariantFileInput && activeVariantFileInput.parentNode) {
+    activeVariantFileInput.parentNode.removeChild(activeVariantFileInput)
+  }
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+  input.style.display = 'none'
+  document.body.appendChild(input)
+  activeVariantFileInput = input
   input.onchange = async (e) => {
-    const file = e.target.files[0]
+    const file = e.target.files?.[0]
+    if (input.parentNode) input.parentNode.removeChild(input)
+    activeVariantFileInput = null
     if (!file) return
 
     const MAX_SIZE = 5 * 1024 * 1024 // 5MB
@@ -867,11 +876,17 @@ const triggerAddImageUpload = () => {
 
     const reader = new FileReader()
     reader.onload = (ev) => {
-      addForm.imagePreview = ev.target.result
+      onDataUrl(ev.target.result)
     }
     reader.readAsDataURL(file)
   }
   input.click()
+}
+
+const triggerAddImageUpload = () => {
+  pickVariantImageFile((dataUrl) => {
+    addForm.imagePreview = dataUrl
+  })
 }
 
 const saveAddVariant = async () => {
@@ -1163,32 +1178,9 @@ const saveAddVariant = async () => {
   }
 
   const triggerEditImageUpload = () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
-    input.onchange = async (e) => {
-      const file = e.target.files[0]
-      if (!file) return
-
-      const MAX_SIZE = 5 * 1024 * 1024 // 5MB
-      if (file.size > MAX_SIZE) {
-        notifyWarning('Ảnh quá lớn', `Ảnh "${file.name}" vượt quá dung lượng tối đa 5MB!`)
-        return
-      }
-
-      const isValid = await checkImageMagicBytes(file)
-      if (!isValid) {
-        notifyError('Tệp không hợp lệ', `Tệp "${file.name}" không phải là ảnh hợp lệ (chỉ hỗ trợ JPG, PNG, WEBP)!`)
-        return
-      }
-
-      const reader = new FileReader()
-      reader.onload = (ev) => {
-        editForm.imagePreview = ev.target.result
-      }
-      reader.readAsDataURL(file)
-    }
-    input.click()
+    pickVariantImageFile((dataUrl) => {
+      editForm.imagePreview = dataUrl
+    })
   }
 
   const closeEditModal = () => {
@@ -1836,7 +1828,8 @@ const saveAddVariant = async () => {
               <div class="form-group span-2">
                 <label class="form-lbl">Sản phẩm áp dụng biến thể <span class="required">*</span></label>
                 <SearchableSelect v-model="addForm.idSanPham" :options="formattedProductsOptions" label-key="ten"
-                  value-key="id" placeholder="-- Chọn sản phẩm --" search-placeholder="Tìm sản phẩm theo mã, tên..." />
+                  value-key="id" placeholder="-- Chọn sản phẩm --" search-placeholder="Tìm sản phẩm theo mã, tên..."
+                  @change="onAddColorChange" />
               </div>
 
               <div class="form-group">

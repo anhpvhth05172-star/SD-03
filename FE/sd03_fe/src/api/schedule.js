@@ -12,6 +12,8 @@ export const toggleCaLam = (id) => http.put(`/ca-lam/${id}/trang-thai`).then((r)
 export const deleteCaLam = (id) => http.delete(`/ca-lam/${id}`).then((r) => r.data)
 
 /* ---------------------------------- Lịch làm việc ---------------------------------- */
+export const listNhanVienLich = () => http.get('/lich-lam-viec/nhan-vien').then((r) => r.data)
+
 export const listLich = (params) => http.get('/lich-lam-viec', { params }).then((r) => r.data)
 
 export const createLich = (data) => http.post('/lich-lam-viec', data).then((r) => r.data)

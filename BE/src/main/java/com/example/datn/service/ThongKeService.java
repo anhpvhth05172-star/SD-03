@@ -94,7 +94,16 @@ public class ThongKeService {
             .mapToLong(c -> c.soLuong() != null ? c.soLuong() : 0)
             .sum();
 
-        return new TongQuanDTO(doanhThu, tienMat, tienChuyenKhoan, soDon, aov, sanPhamBan, khachMoi);
+        long soDonOnline = demDonOnline(hoaDons, idHopLe);
+        return new TongQuanDTO(doanhThu, tienMat, tienChuyenKhoan, soDon, aov, sanPhamBan, khachMoi,
+            soDonOnline, soDon - soDonOnline);
+    }
+
+    /** Dem don ONLINE trong tap id; con lai (TAI_QUAY, TAI_QUAY_GIAO_HANG) la don tai quay. */
+    private long demDonOnline(List<HoaDonThongKeRow> hoaDons, Set<Long> ids) {
+        return hoaDons.stream()
+            .filter(h -> ids.contains(h.id()) && "ONLINE".equalsIgnoreCase(h.loaiDon()))
+            .count();
     }
 
     private TongQuanDTO tongQuanLocThuongHieu(
@@ -157,7 +166,9 @@ public class ThongKeService {
         long aov = soDon > 0 ? Math.round((double) doanhThu / soDon) : 0;
         long tienChuyenKhoan = doanhThu - tienMat;
 
-        return new TongQuanDTO(doanhThu, tienMat, tienChuyenKhoan, soDon, aov, sanPhamBan, khachMoi);
+        long soDonOnline = demDonOnline(hoaDons, idDonChuaThuongHieu);
+        return new TongQuanDTO(doanhThu, tienMat, tienChuyenKhoan, soDon, aov, sanPhamBan, khachMoi,
+            soDonOnline, soDon - soDonOnline);
     }
 
     /**

@@ -6,10 +6,30 @@ import PaginationBar from '@/components/PaginationBar.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
-import { API_ORIGIN } from '@/api/http'
+import http, { API_ORIGIN } from '@/api/http'
 
 const router = useRouter()
 const API_BASE = `${API_ORIGIN}/api/v1`
+
+const apiFetch = async (url, options = {}) => {
+  const parsed = new URL(url, window.location.origin)
+  const apiPath = `${parsed.pathname.replace(/^\/api/, '')}${parsed.search}`
+  try {
+    const response = await http.request({
+      url: apiPath,
+      method: options.method || 'GET',
+      data: options.body ? JSON.parse(options.body) : undefined,
+      signal: options.signal,
+    })
+    return { ok: true, status: response.status, json: async () => response.data }
+  } catch (error) {
+    return {
+      ok: false,
+      status: error.status || error.response?.status || 500,
+      json: async () => error.response?.data || { message: error.message },
+    }
+  }
+}
 
 const navigateToAdd = () => {
   router.push('/san-pham/them')
@@ -99,6 +119,33 @@ const origins = ref([])
 let debounceTimer = null
 let currentAbortController = null
 
+const isEditModalOpen = ref(false)
+const isUpdating = ref(false)
+const editErrors = reactive({
+  tenSanPham: '',
+  idThuongHieu: '',
+  idLoaiGiay: '',
+  idChatLieu: '',
+  idKieuDang: '',
+  idXuatXu: ''
+})
+
+const editForm = reactive({
+  id: null,
+  maSanPham: '',
+  tenSanPham: '',
+  idThuongHieu: '',
+  idLoaiGiay: '',
+  idChatLieu: '',
+  idKieuDang: '',
+  idXuatXu: '',
+  doiTuong: 'Nam',
+  tinhNang: '',
+  moTa: '',
+  hinhAnh: null,
+  trangThai: true
+})
+
 const isQuickAddModalOpen = ref(false)
 const isSubmittingQuickAdd = ref(false)
 const quickAddErrors = reactive({
@@ -120,8 +167,38 @@ const quickAddForm = reactive({
   doiTuong: 'Nam',
   tinhNang: '',
   moTa: '',
+  hinhAnh: null,
   trangThai: true
 })
+
+let activeProductFileInput = null
+const triggerProductImageUpload = (targetForm) => {
+  if (activeProductFileInput && activeProductFileInput.parentNode) {
+    activeProductFileInput.parentNode.removeChild(activeProductFileInput)
+  }
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+  input.style.display = 'none'
+  document.body.appendChild(input)
+  activeProductFileInput = input
+  input.onchange = (e) => {
+    const file = e.target.files?.[0]
+    if (input.parentNode) input.parentNode.removeChild(input)
+    activeProductFileInput = null
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      showToastNotice('Ảnh quá lớn', `Ảnh "${file.name}" vượt quá dung lượng tối đa 5MB!`, 'warning')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      targetForm.hinhAnh = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+  input.click()
+}
 
 const showToastNotice = (title, message, type = 'success') => {
   const content = message || title
@@ -147,7 +224,7 @@ const normalizeAttributeList = (data) => {
 
 const fetchOptions = async () => {
   try {
-    const bulkRes = await fetch(`${API_BASE}/attributes/all-filter-options`)
+    const bulkRes = await apiFetch(`${API_BASE}/attributes/all-filter-options`)
     if (bulkRes.ok) {
       const data = await bulkRes.json()
       if (data && typeof data === 'object') {
@@ -167,11 +244,11 @@ const fetchOptions = async () => {
 
   try {
     const [resTH, resLG, resCL, resKD, resXX] = await Promise.allSettled([
-      fetch(`${API_BASE}/attributes/thuong_hieu`),
-      fetch(`${API_BASE}/attributes/loai_giay`),
-      fetch(`${API_BASE}/attributes/chat_lieu`),
-      fetch(`${API_BASE}/attributes/kieu_dang`),
-      fetch(`${API_BASE}/attributes/xuat_xu`)
+      apiFetch(`${API_BASE}/attributes/thuong_hieu`),
+      apiFetch(`${API_BASE}/attributes/loai_giay`),
+      apiFetch(`${API_BASE}/attributes/chat_lieu`),
+      apiFetch(`${API_BASE}/attributes/kieu_dang`),
+      apiFetch(`${API_BASE}/attributes/xuat_xu`)
     ])
 
     const parseRes = async (settledRes) => {
@@ -235,7 +312,7 @@ const fetchProducts = async () => {
 
   try {
     const params = buildQueryParams(currentPage.value)
-    const res = await fetch(`${API_BASE}/san-pham?${params.toString()}`, {
+    const res = await apiFetch(`${API_BASE}/san-pham?${params.toString()}`, {
       signal: currentAbortController.signal
     })
 
@@ -257,6 +334,19 @@ const fetchProducts = async () => {
 
 const reloadAllData = () => {
   fetchOptions()
+  fetchProducts()
+}
+
+const selectTab = (tab) => {
+  activeTab.value = tab || 'ALL'
+  if (activeTab.value === 'ACTIVE') {
+    filters.trangThai = true
+  } else if (activeTab.value === 'INACTIVE') {
+    filters.trangThai = false
+  } else {
+    filters.trangThai = ''
+  }
+  currentPage.value = 0
   fetchProducts()
 }
 
@@ -333,7 +423,7 @@ const toggleStatus = async (item) => {
   const code = item.maSanPham || `SP0${item.id}`
 
   try {
-    const res = await fetch(`${API_BASE}/san-pham/${item.id}/toggle-status`, { method: 'PATCH' })
+    const res = await apiFetch(`${API_BASE}/san-pham/${item.id}/toggle-status`, { method: 'PATCH' })
     if (res.ok) {
       showToastNotice(
         'Cập nhật trạng thái thành công',
@@ -351,7 +441,14 @@ const toggleStatus = async (item) => {
 }
 
 const viewProductDetails = (item) => {
-  router.push('/san-pham/bien-the')
+  router.push({
+    path: '/san-pham/bien-the',
+    query: {
+      idSanPham: item.id,
+      tenSanPham: item.tenSanPham,
+      maSanPham: item.maSanPham || `SP0${item.id}`
+    }
+  })
 }
 
 const isExporting = ref(false)
@@ -368,7 +465,7 @@ const exportToExcel = async () => {
     } else {
       const params = buildQueryParams(0)
       params.set('size', '10000')
-      const res = await fetch(`${API_BASE}/san-pham?${params.toString()}`)
+      const res = await apiFetch(`${API_BASE}/san-pham?${params.toString()}`)
       if (res.ok) {
         const data = await res.json()
         itemsToExport = data.content || products.value
@@ -412,6 +509,96 @@ const exportToExcel = async () => {
   }
 }
 
+const openQuickEdit = (item) => {
+  editForm.id = item.id
+  editForm.maSanPham = item.maSanPham || `SP0${item.id}`
+  editForm.tenSanPham = item.tenSanPham || ''
+  editForm.idThuongHieu = item.idThuongHieu || (brands.value.find(b => b.ten === item.tenThuongHieu)?.id || '')
+  editForm.idLoaiGiay = item.idLoaiGiay || (categories.value.find(c => c.ten === item.tenLoaiGiay)?.id || '')
+  editForm.idChatLieu = item.idChatLieu || (materials.value.find(m => m.ten === item.tenChatLieu)?.id || '')
+  editForm.idKieuDang = item.idKieuDang || (styles.value.find(s => s.ten === item.tenKieuDang)?.id || '')
+  editForm.idXuatXu = item.idXuatXu || (origins.value.find(o => o.ten === item.tenXuatXu)?.id || '')
+  editForm.doiTuong = item.doiTuong || 'Nam'
+  editForm.tinhNang = item.tinhNang || ''
+  editForm.moTa = item.moTa || ''
+  editForm.hinhAnh = item.hinhAnhDaiDien || null
+  editForm.trangThai = item.trangThai !== false
+
+  Object.keys(editErrors).forEach(k => (editErrors[k] = ''))
+  isEditModalOpen.value = true
+}
+
+const validateEditForm = () => {
+  let valid = true
+  Object.keys(editErrors).forEach(k => (editErrors[k] = ''))
+
+  if (!editForm.tenSanPham || !editForm.tenSanPham.trim()) {
+    editErrors.tenSanPham = 'Tên sản phẩm không được để trống'
+    valid = false
+  }
+  if (!editForm.idThuongHieu) {
+    editErrors.idThuongHieu = 'Vui lòng chọn Thương hiệu'
+    valid = false
+  }
+  if (!editForm.idLoaiGiay) {
+    editErrors.idLoaiGiay = 'Vui lòng chọn Loại giày'
+    valid = false
+  }
+  if (!editForm.idChatLieu) {
+    editErrors.idChatLieu = 'Vui lòng chọn Chất liệu'
+    valid = false
+  }
+  if (!editForm.idKieuDang) {
+    editErrors.idKieuDang = 'Vui lòng chọn Kiểu dáng'
+    valid = false
+  }
+  if (!editForm.idXuatXu) {
+    editErrors.idXuatXu = 'Vui lòng chọn Xuất xứ'
+    valid = false
+  }
+  return valid
+}
+
+const submitQuickEdit = async () => {
+  if (!validateEditForm()) return
+
+  isUpdating.value = true
+  const payload = {
+    tenSanPham: editForm.tenSanPham.trim(),
+    idThuongHieu: Number(editForm.idThuongHieu),
+    idLoaiGiay: Number(editForm.idLoaiGiay),
+    idChatLieu: Number(editForm.idChatLieu),
+    idKieuDang: Number(editForm.idKieuDang),
+    idXuatXu: Number(editForm.idXuatXu),
+    doiTuong: editForm.doiTuong,
+    tinhNang: editForm.tinhNang ? editForm.tinhNang.trim() : '',
+    moTa: editForm.moTa ? editForm.moTa.trim() : '',
+    hinhAnh: editForm.hinhAnh || null,
+    trangThai: editForm.trangThai
+  }
+
+  try {
+    const res = await apiFetch(`${API_BASE}/san-pham/${editForm.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    if (res.ok) {
+      showToastNotice('Thành công', `Đã cập nhật sản phẩm "${editForm.tenSanPham}" thành công!`, 'success')
+      isEditModalOpen.value = false
+      fetchProducts()
+    } else {
+      const errData = await res.json().catch(() => ({}))
+      showToastNotice('Lỗi cập nhật', errData.message || 'Không thể lưu thay đổi', 'danger')
+    }
+  } catch (err) {
+    showToastNotice('Lỗi kết nối', 'Không thể kết nối máy chủ', 'danger')
+  } finally {
+    isUpdating.value = false
+  }
+}
+
 const openQuickAdd = () => {
   quickAddForm.tenSanPham = ''
   quickAddForm.idThuongHieu = ''
@@ -422,6 +609,7 @@ const openQuickAdd = () => {
   quickAddForm.doiTuong = 'Nam'
   quickAddForm.tinhNang = ''
   quickAddForm.moTa = ''
+  quickAddForm.hinhAnh = null
   quickAddForm.trangThai = true
 
   Object.keys(quickAddErrors).forEach(k => (quickAddErrors[k] = ''))
@@ -473,11 +661,12 @@ const submitQuickAdd = async () => {
     doiTuong: quickAddForm.doiTuong,
     tinhNang: quickAddForm.tinhNang ? quickAddForm.tinhNang.trim() : '',
     moTa: quickAddForm.moTa ? quickAddForm.moTa.trim() : '',
+    hinhAnh: quickAddForm.hinhAnh || null,
     trangThai: quickAddForm.trangThai
   }
 
   try {
-    const res = await fetch(`${API_BASE}/san-pham`, {
+    const res = await apiFetch(`${API_BASE}/san-pham`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -522,7 +711,7 @@ const generateAiContent = async (targetForm) => {
       doiTuong: targetForm.doiTuong || 'Nam'
     }
 
-    const res = await fetch(`${API_BASE}/san-pham/ai-generate-content`, {
+    const res = await apiFetch(`${API_BASE}/san-pham/ai-generate-content`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -683,9 +872,14 @@ onUnmounted(() => {
               <td class="text-center text-muted">{{ currentPage * pageSize + idx + 1 }}</td>
               <td class="text-center code-plain-text">{{ item.maSanPham || `SP0${item.id}` }}</td>
               <td>
-                <div class="product-details-col">
-                  <span class="name-plain-text">{{ item.tenSanPham }}</span>
-                  <span v-if="item.doiTuong" class="target-badge">{{ item.doiTuong }}</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <img v-if="item.hinhAnhDaiDien" :src="item.hinhAnhDaiDien" alt="Ảnh SP"
+                    style="width: 40px; height: 40px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0; flex-shrink: 0;"
+                    @error="item.hinhAnhDaiDien = null" />
+                  <div class="product-details-col">
+                    <span class="name-plain-text">{{ item.tenSanPham }}</span>
+                    <span v-if="item.doiTuong" class="target-badge">{{ item.doiTuong }}</span>
+                  </div>
                 </div>
               </td>
               <td class="text-center attr-plain-text">{{ item.tenThuongHieu || '---' }}</td>
@@ -719,6 +913,12 @@ onUnmounted(() => {
                     <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
                     <span class="slider round"></span>
                   </label>
+                  <button class="act-btn edit-btn" title="Chỉnh sửa sản phẩm" @click="openQuickEdit(item)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                  </button>
                   <button class="act-btn view-btn" title="Xem chi tiết sản phẩm" @click="viewProductDetails(item)">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -884,6 +1084,22 @@ onUnmounted(() => {
                   placeholder="Nhập mô tả chi tiết sản phẩm..."></textarea>
               </div>
 
+              <div class="form-group span-2">
+                <label class="form-label">Hình ảnh đại diện sản phẩm</label>
+                <div v-if="editForm.hinhAnh" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f8fafc;">
+                  <img :src="editForm.hinhAnh" alt="Preview" style="width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0;" />
+                  <div style="flex: 1;">
+                    <div style="font-size: 13px; font-weight: 600; color: #0f172a;">Đã chọn ảnh đại diện</div>
+                    <div style="font-size: 12px; color: #64748b;">Nhấn Đổi ảnh để chọn ảnh khác (JPG, PNG, WEBP • Tối đa 5MB)</div>
+                  </div>
+                  <button type="button" class="btn btn-secondary" @click="triggerProductImageUpload(editForm)">Đổi ảnh</button>
+                </div>
+                <div v-else @click="triggerProductImageUpload(editForm)" style="cursor: pointer; padding: 14px; text-align: center; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f8fafc;">
+                  <div style="font-size: 13px; font-weight: 600; color: #334155;">+ Nhấn để tải ảnh đại diện cho sản phẩm</div>
+                  <div style="font-size: 12px; color: #64748b;">Hỗ trợ JPG, PNG, WEBP (Tối đa 5MB)</div>
+                </div>
+              </div>
+
               <div class="form-group span-2 switch-row">
                 <label class="form-label mb-0">Trạng thái (Bật: Đang kinh doanh / Tắt: Ngừng kinh doanh)</label>
                 <label class="switch-toggle">
@@ -1002,6 +1218,22 @@ onUnmounted(() => {
                 <label class="form-label">Mô tả sản phẩm</label>
                 <textarea v-model="quickAddForm.moTa" class="modal-textarea" rows="3"
                   placeholder="Nhập mô tả chi tiết sản phẩm..."></textarea>
+              </div>
+
+              <div class="form-group span-2">
+                <label class="form-label">Hình ảnh đại diện sản phẩm</label>
+                <div v-if="quickAddForm.hinhAnh" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f8fafc;">
+                  <img :src="quickAddForm.hinhAnh" alt="Preview" style="width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0;" />
+                  <div style="flex: 1;">
+                    <div style="font-size: 13px; font-weight: 600; color: #0f172a;">Đã chọn ảnh đại diện</div>
+                    <div style="font-size: 12px; color: #64748b;">Nhấn Đổi ảnh để chọn ảnh khác (JPG, PNG, WEBP • Tối đa 5MB)</div>
+                  </div>
+                  <button type="button" class="btn btn-secondary" @click="triggerProductImageUpload(quickAddForm)">Đổi ảnh</button>
+                </div>
+                <div v-else @click="triggerProductImageUpload(quickAddForm)" style="cursor: pointer; padding: 14px; text-align: center; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f8fafc;">
+                  <div style="font-size: 13px; font-weight: 600; color: #334155;">+ Nhấn để tải ảnh đại diện cho sản phẩm</div>
+                  <div style="font-size: 12px; color: #64748b;">Hỗ trợ JPG, PNG, WEBP (Tối đa 5MB)</div>
+                </div>
               </div>
 
               <div class="form-group span-2 switch-row">

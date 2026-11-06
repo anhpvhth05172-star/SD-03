@@ -10,14 +10,15 @@ import {
   clearCart,
   fetchCart,
 } from "../store";
-import { getUser } from "@/utils/auth";
+import { getUser, isKhachHangDangNhap } from "@/utils/auth";
+import { listVouchers, suDungCuaToi } from "@/api/voucher";
 
-const user = ref(getUser());
+const user = ref(isKhachHangDangNhap() ? getUser() : null);
+const myVoucherUsage = ref({});
 const actionLoadingId = ref(null);
 const actionError = ref("");
 
 // ===== Voucher Logic =====
-const VOUCHER_API = "http://localhost:8080/admin/phieu-giam-gia";
 const allVouchers = ref([]);
 const loadingVouchers = ref(false);
 const selectedVoucher = ref(null);
@@ -41,8 +42,12 @@ const VF = {
   active: (v) => v.trangThai,
   scope: (v) => String(v.phamVi ?? "").toUpperCase(),
   customerIds: (d) =>
-    (d.danhSachKhachHang || d.khachHangIds || d.khachHang || []).map((k) =>
-      typeof k === "object" ? (k.id ?? k.idKhachHang) : k,
+    (d.idKhachHangsChuaDung || d.danhSachKhachHang || d.khachHangIds || d.khachHang || []).map((k) =>
+      typeof k === "object" ? (k.id ?? k.idKhachHang) : Number(k),
+    ),
+  usedCustomerIds: (d) =>
+    (d.idKhachHangsDaDung || []).map((k) =>
+      typeof k === "object" ? (k.id ?? k.idKhachHang) : Number(k),
     ),
 };
 
@@ -61,9 +66,19 @@ function checkVoucher(detail, total, ignoreMin = false) {
   const qty = VF.qty(detail);
   if (qty !== undefined && qty !== null && Number(qty) <= 0) return false;
 
+  const rawCid = user.value?.idKhachHang ?? user.value?.id;
+  const cid = rawCid != null ? Number(rawCid) : null;
+  if (!cid) return false;
+
+  if (VF.usedCustomerIds(detail).includes(cid)) return false;
+  const usage = myVoucherUsage.value[VF.id(detail)];
+  if (usage) {
+    const limit = Number(detail.gioiHanMoiTaiKhoan || usage.gioiHanMoiTaiKhoan || 1);
+    if (Number(usage.daSuDung || 0) >= limit) return false;
+  }
+
   if (isPersonal(VF.scope(detail))) {
-    const cid = user.value?.idKhachHang || user.value?.id;
-    if (!cid || !VF.customerIds(detail).includes(cid)) return false;
+    if (!VF.customerIds(detail).includes(cid)) return false;
   }
 
   if (!ignoreMin) {
@@ -94,26 +109,25 @@ const toVoucher = (d) => ({
 async function loadVouchers() {
   loadingVouchers.value = true;
   try {
-    const res = await fetch(`${VOUCHER_API}?size=100`);
-    if (!res.ok) throw new Error("Không thể tải voucher");
-    const data = await res.json();
-    const list = data.content || data || [];
-
-    const detailedList = await Promise.all(
-      list.map(async (v) => {
-        try {
-          const dRes = await fetch(`${VOUCHER_API}/detail/${VF.id(v)}`);
-          if (dRes.ok) {
-            const dData = await dRes.json();
-            return { ...v, ...dData };
-          }
-        } catch {
-          // fallback
-        }
-        return v;
-      }),
-    );
-    allVouchers.value = detailedList;
+    user.value = isKhachHangDangNhap() ? getUser() : null;
+    const cid = user.value?.idKhachHang ?? user.value?.id;
+    const [listRes, usageRes] = await Promise.allSettled([
+      listVouchers(),
+      cid ? suDungCuaToi() : Promise.resolve([]),
+    ]);
+    const list = listRes.status === "fulfilled" && Array.isArray(listRes.value) ? listRes.value : [];
+    const usageList = usageRes.status === "fulfilled" && Array.isArray(usageRes.value) ? usageRes.value : [];
+    const map = {};
+    for (const u of usageList) {
+      if (u && u.id != null) {
+        map[u.id] = {
+          daSuDung: Number(u.daSuDung || 0),
+          gioiHanMoiTaiKhoan: Number(u.gioiHanMoiTaiKhoan || 1),
+        };
+      }
+    }
+    myVoucherUsage.value = map;
+    allVouchers.value = list;
   } catch (err) {
     allVouchers.value = [];
   } finally {
@@ -224,7 +238,6 @@ const handleQtyChange = async (item, delta) => {
 };
 
 const handleRemove = async (item, idx) => {
-  if (!confirm(`Bạn có chắc muốn xóa "${item.name}" khỏi giỏ hàng?`)) return;
   actionLoadingId.value = rowId(item);
   actionError.value = "";
   try {
@@ -529,19 +542,6 @@ const handleClear = async () => {
               Tiến hành đặt hàng <i class="bi bi-arrow-right ms-1"></i>
             </component>
 
-            <!-- Cam kết -->
-            <div class="perks">
-              <div class="perk">
-                <i class="bi bi-shield-lock-fill text-success"></i>Bảo mật thanh
-                toán
-              </div>
-              <div class="perk">
-                <i class="bi bi-box-seam-fill text-danger"></i>Kiểm tra khi nhận
-              </div>
-              <div class="perk">
-                <i class="bi bi-arrow-repeat text-primary"></i>Đổi size 7 ngày
-              </div>
-            </div>
           </aside>
         </div>
       </div>

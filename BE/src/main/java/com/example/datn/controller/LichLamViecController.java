@@ -30,6 +30,11 @@ public class LichLamViecController {
 
     private final LichLamViecService service;
 
+    @GetMapping("/nhan-vien")
+    public ResponseEntity<List<java.util.Map<String, Object>>> listNhanVien() {
+        return ResponseEntity.ok(service.listNhanVien());
+    }
+
     @GetMapping
     public ResponseEntity<List<LichLamViecDTO>> list(
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate tu,

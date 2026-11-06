@@ -28,7 +28,7 @@ const currentUser = computed(() => getUser())
 const currentStaffId = computed(() => currentUser.value?.idNhanVien)
 const caTruoc = computed(() => list.value.find((row) => row.trangThai === 'DA_KET_CA'))
 const caHienTai = ref(null)
-const moCaForm = reactive({ tienDauCa: 300000, ghiChu: '' })
+const moCaForm = reactive({ tienDauCa: '', ghiChu: '' })
 const moCaLoading = ref(false)
 const moCaError = ref('')
 

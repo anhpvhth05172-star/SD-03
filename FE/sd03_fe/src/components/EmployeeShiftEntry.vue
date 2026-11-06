@@ -13,7 +13,7 @@ const dangTai = ref(false)
 const moModal = ref(false)
 const dangMo = ref(false)
 const loi = ref('')
-const form = reactive({ tienDauCa: 500000, ghiChu: '' })
+const form = reactive({ tienDauCa: '', ghiChu: '' })
 
 const hienThi = computed(() => !laAdmin() && route.path !== '/ban-hang' && route.path !== '/admin/ban-hang')
 
@@ -31,7 +31,7 @@ const taiCa = async () => {
 
 const batDauMoCa = () => {
   loi.value = ''
-  form.tienDauCa = 500000
+  form.tienDauCa = ''
   form.ghiChu = ''
   moModal.value = true
 }

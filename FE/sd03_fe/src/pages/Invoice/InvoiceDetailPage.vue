@@ -20,6 +20,7 @@ import {
   loaiDonMeta,
 } from '@/constants/invoiceStatus'
 import { updateInvoiceStatus, resendInvoiceEmail } from '@/api/invoice'
+import { getUser } from '@/utils/auth'
 import { notifyError, notifyConfirm, notifySuccess, notifyWarning } from '@/utils/notify'
 import { taoVaTaiPdf } from '@/utils/pdf'
 import SearchableSelect from '@/components/SearchableSelect.vue'
@@ -130,6 +131,7 @@ const visibleSteps = computed(() => {
 })
 
 const isTerminal = computed(() => !!data.value && isTerminalOf(data.value))
+const isDaHoanThanh = computed(() => data.value?.trangThai === 'Đã hoàn thành' || data.value?.maTrangThai === 'DA_HOAN_THANH')
 
 const tiepTheoList = computed(() => trangThaiTiepTheoOf(data.value))
 
@@ -137,9 +139,10 @@ const tiepTheoMenuList = computed(() => tiepTheoList.value.filter((tt) => tt !==
 
 const laChoXacNhan = computed(() => data.value?.maTrangThai === 'CHO_XAC_NHAN')
 
-const coTheHuy = computed(
-  () => tiepTheoList.value.includes('Đã hủy'),
-)
+const coTheHuy = computed(() => {
+  const code = data.value?.maTrangThai || TRANG_THAI_CODE[data.value?.trangThai]
+  return code === 'CHO_XAC_NHAN' && tiepTheoList.value.includes('Đã hủy')
+})
 
 const laTrangThaiHienTai = (ten) => data.value?.trangThai === ten
 
@@ -170,6 +173,14 @@ const handleStepClick = (s) => {
   }
 }
 
+const layTenNguoiThaoTac = () => {
+  const u = getUser()
+  if (!u) return ''
+  const ten = u.tenTaiKhoan || u.tenKhachHang || ''
+  const role = u.vaiTro || (u.loaiTaiKhoan === 'NHAN_VIEN' ? 'Nhân viên' : '')
+  return role ? `${ten} (${role})` : ten
+}
+
 const chuyenTrangThai = async (ten) => {
   if (!data.value || updatingStatus.value) return
   if (!laTrangThaiTiepTheo(ten)) {
@@ -192,13 +203,18 @@ const chuyenTrangThai = async (ten) => {
   if (!ok) return
   updatingStatus.value = true
   try {
-    const ketQua = await updateInvoiceStatus(data.value.id, code)
+    const ketQua = await updateInvoiceStatus(data.value.id, code, '', layTenNguoiThaoTac())
     if (code === 'GIAO_HANG_THAT_BAI' && ketQua?.maTrangThai === 'DA_HUY') {
       notifySuccess('Giao hàng thất bại lần 3 — đơn hàng đã tự động hủy', `${hienTai} → Đã hủy`)
     } else {
       notifySuccess('Đã cập nhật trạng thái', `${hienTai} → ${ten}`)
     }
     await load(true)
+    if (code === 'DA_XAC_NHAN' || ten === 'Đã xác nhận') {
+      setTimeout(() => {
+        inHoaDon()
+      }, 400)
+    }
   } catch (e) {
     notifyError('Cập nhật thất bại', e.message || 'Không thể chuyển trạng thái')
   } finally {
@@ -223,7 +239,7 @@ const huyDon = async () => {
   if (!ok) return
   updatingStatus.value = true
   try {
-    await updateInvoiceStatus(data.value.id, 'DA_HUY')
+    await updateInvoiceStatus(data.value.id, 'DA_HUY', 'Hủy đơn từ trang chi tiết', layTenNguoiThaoTac())
     notifySuccess('Đã hủy đơn', `Hóa đơn ${ma} → Đã hủy`)
     await load(true)
   } catch (e) {
@@ -658,10 +674,15 @@ const taiPdfHienTai = async () => {
 }
 
 watch(() => route.params.id, load)
-onMounted(() => {
-  load()
+onMounted(async () => {
+  await load()
   document.addEventListener('click', onDocClick, true)
   document.addEventListener('keydown', onEscape)
+  if (route.query.autoPrint === 'true') {
+    setTimeout(() => {
+      inHoaDon()
+    }, 400)
+  }
 })
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocClick, true)
@@ -1218,7 +1239,7 @@ onBeforeUnmount(() => {
               </svg>
               In hóa đơn
             </button>
-            <div v-if="!isTerminal && tiepTheoMenuList.length" ref="statusMenuRef" class="status-menu-wrap">
+            <div v-if="!isTerminal && !isDaHoanThanh && tiepTheoMenuList.length" ref="statusMenuRef" class="status-menu-wrap">
               <button class="btn btn-outline" type="button" :disabled="updatingStatus" @click="toggleStatusMenu">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M5 12h14M12 5l7 7-7 7" />
@@ -1254,9 +1275,7 @@ onBeforeUnmount(() => {
               </svg>
               {{ updatingStatus ? 'Đang xử lý...' : 'Hủy đơn' }}
             </button>
-            <button v-if="!isTerminal" class="btn btn-outline" type="button" @click="router.push('/hoa-don')">
-              Quay lại danh sách
-            </button>
+
           </div>
         </div>
       </div>
@@ -1296,9 +1315,16 @@ onBeforeUnmount(() => {
                   <span class="history-arrow">→</span>
                   <strong>{{ row.trangThaiSau }}</strong>
                 </p>
-                <p class="history-meta">
-                  <time>{{ formatDateTime(row.thoiGian) }}</time>
-                </p>
+                <div class="history-meta">
+                  <span class="history-time">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="history-meta-icon"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <time>{{ formatDateTime(row.thoiGian) }}</time>
+                  </span>
+                  <span class="history-actor">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="history-meta-icon"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span>Người thao tác: <strong>{{ row.nguoiThaoTac || 'Hệ thống' }}</strong></span>
+                  </span>
+                </div>
                 <p v-if="row.ghiChu" class="history-note">{{ row.ghiChu }}</p>
               </div>
             </li>
@@ -2269,9 +2295,32 @@ onBeforeUnmount(() => {
 }
 
 .history-meta {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: 11.5px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.history-time,
+.history-actor {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.history-meta-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
   color: #94a3b8;
+}
+
+.history-actor strong {
+  color: #1e293b;
+  font-weight: 600;
 }
 
 .history-note {

@@ -37,4 +37,6 @@ public class SanPhamRequest {
     private String tinhNang;
     private String moTa;
     private Boolean trangThai = true;
+    private String hinhAnh;
+    private String hinhAnhDaiDien;
 }

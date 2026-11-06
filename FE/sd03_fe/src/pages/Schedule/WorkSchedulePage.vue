@@ -4,9 +4,12 @@ import { useRouter } from 'vue-router'
 import PaginationBar from '@/components/PaginationBar.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { listEmployees } from '@/api/employee'
+import { getUser } from '@/utils/auth'
+import { laAdmin } from '@/utils/session'
 // da bo phan giao ca o lich lam viec
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import {
+  listNhanVienLich,
   listLich,
   createLich,
   updateLich,
@@ -31,11 +34,29 @@ const pad2 = (x) => String(x).padStart(2, '0')
 /* ---------------------------------- Quản lý lịch làm việc ---------------------------------- */
 
 /* ---------------------------------- Dữ liệu nhân viên + ca + lịch ---------------------------------- */
+const isAdmin = computed(() => laAdmin())
+const currentUser = computed(() => getUser())
 const nhanViens = ref([])
 const cas = ref([])
 const lichs = ref([])
 const loadError = ref('')
 const dsNhanVien = computed(() => nhanViens.value)
+const maNhanVienHienTai = computed(() => {
+  const u = currentUser.value
+  if (!u) return ''
+  if (u.maNhanVien) return u.maNhanVien
+  const found = dsNhanVien.value.find(
+    (nv) =>
+      (u.idNhanVien && Number(nv.id) === Number(u.idNhanVien)) ||
+      (u.tenTaiKhoan && String(nv.tenTaiKhoan || '').toLowerCase() === String(u.tenTaiKhoan).toLowerCase())
+  )
+  return found?.maNhanVien || ''
+})
+const laLichCuaMinh = (row) => {
+  if (isAdmin.value) return true
+  if (!row || !maNhanVienHienTai.value) return false
+  return String(row.maNhanVien) === String(maNhanVienHienTai.value)
+}
 const caDangBat = computed(() => cas.value.filter((c) => c.dangBat))
 const caHienThi = computed(() => {
   const active = cas.value.filter((c) => c.dangBat)
@@ -67,11 +88,13 @@ const timCa = (id) => cas.value.find((c) => c.id === Number(id))
 const taiDuLieu = async () => {
   try {
     const [nvRes, caRes, lichRes] = await Promise.allSettled([
-      listEmployees({ page: 0, size: 1000 }),
+      isAdmin.value ? listEmployees({ page: 0, size: 1000 }) : listNhanVienLich(),
       listCaLam(),
       listLich({}),
     ])
-    if (nvRes.status === 'fulfilled') nhanViens.value = nvRes.value?.content || []
+    if (nvRes.status === 'fulfilled') {
+      nhanViens.value = Array.isArray(nvRes.value) ? nvRes.value : (nvRes.value?.content || [])
+    }
     if (caRes.status === 'fulfilled') cas.value = caRes.value || []
     if (lichRes.status === 'fulfilled') lichs.value = lichRes.value || []
     const errors = [nvRes, caRes, lichRes]
@@ -522,12 +545,15 @@ const formMode = ref('them')
 const form = ref({ id: null, maNhanVien: '', idCa: '', ngay: '' })
 const formError = ref('')
 
-const nvFormOptions = computed(() =>
-  dsNhanVien.value.map((nv) => ({
+const nvFormOptions = computed(() => {
+  const list = isAdmin.value
+    ? dsNhanVien.value
+    : dsNhanVien.value.filter((nv) => String(nv.maNhanVien) === String(maNhanVienHienTai.value))
+  return list.map((nv) => ({
     value: nv.maNhanVien,
     label: `${nv.maNhanVien} — ${nv.tenTaiKhoan || nv.ten || nv.maNhanVien}`
   }))
-)
+})
 
 const caFormOptions = computed(() =>
   caDangBat.value.map((ca) => ({
@@ -545,10 +571,14 @@ const onFormCaChange = (val) => {
 }
 
 const moFormThem = () => {
+  if (!isAdmin.value) {
+    notifyWarning('Chỉ xem lịch làm việc', 'Nhân viên không được thêm lịch làm việc')
+    return
+  }
   formMode.value = 'them'
   form.value = {
     id: null,
-    maNhanVien: '',
+    maNhanVien: isAdmin.value ? '' : maNhanVienHienTai.value,
     idCa: caDangBat.value[0]?.id || '',
     ngay: fNgay.value || khoaNgay(new Date()),
   }
@@ -557,6 +587,10 @@ const moFormThem = () => {
 }
 
 const moFormSua = (row) => {
+  if (!laLichCuaMinh(row)) {
+    notifyWarning('Không có quyền', 'Bạn không được sửa lịch làm việc của nhân viên khác')
+    return
+  }
   formMode.value = 'sua'
   form.value = {
     id: row.id,
@@ -715,10 +749,11 @@ const rangeTuanText = computed(() => {
 })
 
 const onCellClick = (ca, khoa) => {
+  if (!isAdmin.value) return
   formMode.value = 'them'
   form.value = {
     id: null,
-    maNhanVien: '',
+    maNhanVien: isAdmin.value ? '' : maNhanVienHienTai.value,
     idCa: ca.id,
     ngay: khoa,
   }
@@ -893,7 +928,7 @@ onMounted(() => {
                 </div>
 
                 <div
-                  v-if="lichCuaCaNgay(ca.id, day.khoa).length === 0"
+                  v-if="isAdmin && lichCuaCaNgay(ca.id, day.khoa).length === 0"
                   class="cell-empty-hint"
                   title="Nhấp để thêm nhân viên vào ca này"
                 >
@@ -952,7 +987,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="filter-actions-row is-left">
+        <div v-if="isAdmin" class="filter-actions-row is-left">
           <button
             class="btn-action-primary auto-schedule-trigger-btn"
             type="button"
@@ -1033,7 +1068,7 @@ onMounted(() => {
                     <button class="btn-action-circle is-view" type="button" title="Xem chi tiết" @click="moChiTiet(row)">
                       <i class="bi bi-eye"></i>
                     </button>
-                    <button class="btn-action-circle is-delete" type="button" title="Xóa lịch" @click="moChiTiet(row)">
+                    <button v-if="isAdmin" class="btn-action-circle is-delete" type="button" title="Xóa lịch" @click="moChiTiet(row)">
                       <i class="bi bi-trash3"></i>
                     </button>
                   </div>
@@ -1150,12 +1185,12 @@ onMounted(() => {
         </div>
 
         <div class="modal-footer">
-          <button class="btn-danger-ghost" type="button" @click="xoaChiTiet">
+          <button v-if="isAdmin" class="btn-danger-ghost" type="button" @click="xoaChiTiet">
             <i class="bi bi-trash3"></i> Xóa
           </button>
           <div class="footer-spacer"></div>
           <button class="btn-ghost" type="button" @click="showDetail = false">Đóng</button>
-          <button class="btn-primary" type="button" @click="moFormSua(detailRow)">
+          <button v-if="isAdmin" class="btn-primary" type="button" @click="moFormSua(detailRow)">
             <i class="bi bi-pencil"></i> Chỉnh sửa
           </button>
         </div>

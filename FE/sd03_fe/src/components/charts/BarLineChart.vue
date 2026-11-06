@@ -231,7 +231,7 @@ const isEmpty = computed(() => {
       </g>
 
       <template v-if="!isEmpty">
-        <g v-if="mode === 'cot' && hasBarSeries">
+        <g v-if="['cot', 'ket-hop'].includes(mode) && hasBarSeries">
           <rect
             v-for="(b, i) in groupedBars"
             :key="'gb' + i"
@@ -244,7 +244,7 @@ const isEmpty = computed(() => {
             :fill="b.color"
             class="blc-bar"
           >
-            <title>{{ b.cat }} — {{ b.label }}: {{ fmt(b.v) }}</title>
+            <title>{{ b.cat }} — {{ b.label }}: {{ fmtValue(b.v) }}</title>
           </rect>
         </g>
 

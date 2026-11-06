@@ -30,4 +30,9 @@ public interface GioHangChiTietRepository extends JpaRepository<GioHangChiTiet, 
     @Modifying
     @Transactional
     void deleteByGioHang_KhachHang_IdAndSanPhamChiTiet_Id(Long khachHangId, Long sanPhamChiTietId);
+
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM GioHangChiTiet g WHERE g.gioHang.khachHang.id = :khachHangId AND g.sanPhamChiTiet.id = :sanPhamChiTietId")
+    void xoaTheoKhachHangVaSpct(@Param("khachHangId") Long khachHangId, @Param("sanPhamChiTietId") Long sanPhamChiTietId);
 }

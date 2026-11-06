@@ -7,5 +7,10 @@ public record HoaDonThongKeRow(
     String trangThai,
     BigDecimal tienSauGiamGia,
     boolean daXoa,
-    String maHinhThuc
-) {}
+    String maHinhThuc,
+    String loaiDon
+) {
+    public HoaDonThongKeRow(Long id, String trangThai, BigDecimal tienSauGiamGia, boolean daXoa, String maHinhThuc) {
+        this(id, trangThai, tienSauGiamGia, daXoa, maHinhThuc, null);
+    }
+}

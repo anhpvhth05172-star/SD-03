@@ -147,6 +147,13 @@ const toggleStatus = async (item) => {
       apiDiscountEvent + `admin/dot-giam-gia/change-status/${item.id}`,
       { trangThai: newStatus },
     );
+    try {
+      localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()));
+      localStorage.setItem('polyshoes_discount_updated', String(Date.now()));
+      window.dispatchEvent(new CustomEvent('polyshoes:discount-changed'));
+    } catch {
+      // Đồng bộ liên tab không khả dụng trong một số môi trường trình duyệt.
+    }
 
     // Lấy trạng thái thật từ back-end
     if (typeof res.data?.trangThai === "boolean") {

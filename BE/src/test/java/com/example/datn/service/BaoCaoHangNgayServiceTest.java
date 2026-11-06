@@ -1,6 +1,8 @@
 package com.example.datn.service;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -13,16 +15,23 @@ import com.example.datn.repository.NhanVienRepository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class BaoCaoHangNgayServiceTest {
 
-    private final NhanVienRepository nhanVienRepository = mock(NhanVienRepository.class);
-    private final ThongKeService thongKeService = mock(ThongKeService.class);
-    private final EmailService emailService = mock(EmailService.class);
-    private final BaoCaoHangNgayService service = new BaoCaoHangNgayService(
-        nhanVienRepository, thongKeService, emailService
-    );
+    private NhanVienRepository nhanVienRepository;
+    private ThongKeService thongKeService;
+    private EmailService emailService;
+    private BaoCaoHangNgayService service;
+
+    @BeforeEach
+    void setUp() {
+        nhanVienRepository = mock(NhanVienRepository.class);
+        thongKeService = mock(ThongKeService.class);
+        emailService = mock(EmailService.class);
+        service = new BaoCaoHangNgayService(nhanVienRepository, thongKeService, emailService);
+    }
 
     @Test
     void guiBaoCaoGuiThongKeNgayDuocChonDenEmailAdmin() {
@@ -39,9 +48,9 @@ class BaoCaoHangNgayServiceTest {
         service.guiBaoCao(ngay);
 
         verify(emailService).guiMailCustom(
-            org.mockito.ArgumentMatchers.eq("admin@example.com"),
-            org.mockito.ArgumentMatchers.eq("Báo cáo kinh doanh PolyShoes - 27/10/2026"),
-            org.mockito.ArgumentMatchers.contains("1.200.000")
+            eq("admin@example.com"),
+            eq("Báo cáo kinh doanh PolyShoes - 27/10/2026"),
+            contains("1.200.000")
         );
     }
 

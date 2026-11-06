@@ -42,6 +42,48 @@ public class LichLamViecService {
     private final NhanVienRepository nvRepo;
     private final CaLamRepository caRepo;
 
+    private Long idNhanVienKhongPhaiAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof Long id)) {
+            return null;
+        }
+        boolean laAdmin = auth.getAuthorities().stream()
+            .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        if (laAdmin) {
+            return null;
+        }
+        boolean laNhanVien = auth.getAuthorities().stream()
+            .anyMatch(a -> "ROLE_NHAN_VIEN".equals(a.getAuthority()));
+        return laNhanVien ? id : null;
+    }
+
+    private void kiemTraQuyenChinhSuaNhanVien(Long targetNhanVienId, String thongBao) {
+        Long idNv = idNhanVienKhongPhaiAdmin();
+        if (idNv != null && !idNv.equals(targetNhanVienId)) {
+            throw new com.example.datn.exception.KhongCoQuyenException(thongBao);
+        }
+    }
+
+    private void kiemTraQuyenAdmin(String thongBao) {
+        if (idNhanVienKhongPhaiAdmin() != null) {
+            throw new com.example.datn.exception.KhongCoQuyenException(thongBao);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> listNhanVien() {
+        return nvRepo.findByTrangThaiTrue().stream()
+            .map(nv -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("id", nv.getId());
+                m.put("maNhanVien", nv.getMaNhanVien());
+                m.put("tenTaiKhoan", nv.getTenTaiKhoan());
+                m.put("trangThai", nv.getTrangThai());
+                return m;
+            })
+            .toList();
+    }
+
     @Transactional(readOnly = true)
     public List<LichLamViecDTO> list(LocalDate tu, LocalDate den, String tim, Long idCa, LocalDate ngay) {
         return lichRepo.locLich(tu, den, ngay, idCa, tim).stream()
@@ -53,8 +95,9 @@ public class LichLamViecService {
     public LichLamViecDTO create(LichLamViecRequest req) {
         NhanVien nv = nvRepo.findByMaNhanVien(req.maNhanVien())
             .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhân viên " + req.maNhanVien()));
+        kiemTraQuyenChinhSuaNhanVien(nv.getId(), "Nhân viên không được thêm lịch làm việc cho nhân viên khác");
         CaLam ca = timCaBat(req.idCa());
-       kiemTraTrung(null, nv.getId(), req.ngay(), ca.getId());
+        kiemTraTrung(null, nv.getId(), req.ngay(), ca.getId());
         LichLamViec lich = new LichLamViec();
         lich.setNhanVien(nv);
         lich.setCaLam(ca);
@@ -67,8 +110,12 @@ public class LichLamViecService {
     public LichLamViecDTO update(Long id, LichLamViecRequest req) {
         LichLamViec existing = lichRepo.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lịch làm việc"));
+        if (existing.getNhanVien() != null) {
+            kiemTraQuyenChinhSuaNhanVien(existing.getNhanVien().getId(), "Nhân viên không được sửa lịch làm việc của nhân viên khác");
+        }
         NhanVien nv = nvRepo.findByMaNhanVien(req.maNhanVien())
             .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhân viên " + req.maNhanVien()));
+        kiemTraQuyenChinhSuaNhanVien(nv.getId(), "Nhân viên không được chuyển lịch làm việc sang nhân viên khác");
         CaLam ca = timCaBat(req.idCa());
         kiemTraTrung(id, nv.getId(), req.ngay(), ca.getId());
         existing.setNhanVien(nv);
@@ -80,6 +127,15 @@ public class LichLamViecService {
 
     @Transactional
     public void delete(Long id) {
+        if (idNhanVienKhongPhaiAdmin() != null) {
+            LichLamViec existing = lichRepo.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lịch làm việc"));
+            if (existing.getNhanVien() != null) {
+                kiemTraQuyenChinhSuaNhanVien(existing.getNhanVien().getId(), "Nhân viên không được xóa lịch làm việc của nhân viên khác");
+            }
+            lichRepo.delete(existing);
+            return;
+        }
         if (!lichRepo.existsById(id)) {
             throw new ResourceNotFoundException("Không tìm thấy lịch làm việc");
         }
@@ -88,6 +144,7 @@ public class LichLamViecService {
 
     @Transactional
     public void deleteTheoNgay(LocalDate ngay) {
+        kiemTraQuyenAdmin("Chỉ quản trị viên mới được đặt lại lịch làm việc");
         lichRepo.deleteByNgayLam(ngay);
     }
 
@@ -98,6 +155,7 @@ public class LichLamViecService {
 
     @Transactional
     public XepTuDongResponse xepTuDong(XepTuDongRequest req) {
+        kiemTraQuyenAdmin("Chỉ quản trị viên mới được xếp ca tự động");
         LocalDate tuNgay = req.tuNgay() != null ? req.tuNgay() : (req.ngay() != null ? req.ngay() : LocalDate.now());
         LocalDate denNgay = req.denNgay() != null ? req.denNgay() : (req.ngay() != null ? req.ngay() : tuNgay);
 
