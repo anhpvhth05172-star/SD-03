@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
+import Swal from "sweetalert2";
 import { getOrder, money } from "../store";
 
 const route = useRoute();
@@ -40,17 +41,38 @@ onMounted(async () => {
           phone: data.soDienThoaiKhachHang,
           address: data.diaChiNhanHang,
           note: data.ghiChu,
-          pay: data.phuongThucThanhToan?.tenPhuongThuc?.toLowerCase().includes("vnpay")
+          pay: data.phuongThucThanhToan?.tenPhuongThuc
+            ?.toLowerCase()
+            .includes("vnpay")
             ? "vnpay"
-            : data.phuongThucThanhToan?.tenPhuongThuc?.toLowerCase().includes("khoản")
-            ? "bank"
-            : "cod",
+            : data.phuongThucThanhToan?.tenPhuongThuc
+                  ?.toLowerCase()
+                  .includes("khoản")
+              ? "bank"
+              : "cod",
         },
         total: data.tienSauGiamGia || data.tongTien,
       };
+    } else if (!localOrder.value) {
+      // Không có dữ liệu local và API trả lỗi
+      Swal.fire({
+        icon: "error",
+        title: "Không tải được đơn hàng",
+        text: "Máy chủ không tìm thấy đơn hàng này.",
+        confirmButtonText: "Đóng",
+      });
     }
   } catch (err) {
     console.warn("Không gọi được API chi tiết đơn:", err);
+    // Chỉ báo lỗi khi cũng không có dữ liệu local để hiển thị
+    if (!localOrder.value) {
+      Swal.fire({
+        icon: "error",
+        title: "Lỗi kết nối",
+        text: "Không thể kết nối tới máy chủ, vui lòng thử lại sau.",
+        confirmButtonText: "Đóng",
+      });
+    }
   } finally {
     loading.value = false;
   }
@@ -60,20 +82,30 @@ onMounted(async () => {
 <template>
   <div v-if="order" class="ps-order-detail">
     <nav class="small mb-3 text-muted-ps">
-      <RouterLink to="/trang-chu" class="text-muted-ps text-decoration-none">Trang chủ</RouterLink>
+      <RouterLink to="/trang-chu" class="text-muted-ps text-decoration-none"
+        >Trang chủ</RouterLink
+      >
       /
-      <span class="text-dark fw-semibold">Chi tiết đơn hàng #{{ order.id }}</span>
+      <span class="text-dark fw-semibold"
+        >Chi tiết đơn hàng #{{ order.id }}</span
+      >
     </nav>
 
     <div class="row g-4">
       <div class="col-lg-8">
         <div class="ps-card p-4 mb-4">
-          <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-3">
+          <div
+            class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-3"
+          >
             <div>
               <h4 class="mb-1">Đơn hàng #{{ order.id }}</h4>
-              <div class="text-muted-ps small">Thời gian đặt: {{ order.date }}</div>
+              <div class="text-muted-ps small">
+                Thời gian đặt: {{ order.date }}
+              </div>
             </div>
-            <span class="badge bg-success-subtle text-success fs-6 px-3 py-2 rounded-pill">
+            <span
+              class="badge bg-success-subtle text-success fs-6 px-3 py-2 rounded-pill"
+            >
               Chờ xác nhận
             </span>
           </div>
@@ -125,9 +157,15 @@ onMounted(async () => {
             <span>{{ order.info?.note }}</span>
           </div>
           <div class="mb-3">
-            <span class="text-muted-ps small d-block">Hình thức thanh toán</span>
+            <span class="text-muted-ps small d-block"
+              >Hình thức thanh toán</span
+            >
             <span>
-              {{ order.info?.pay === 'bank' ? 'Chuyển khoản ngân hàng' : 'Thanh toán khi nhận hàng (COD)' }}
+              {{
+                order.info?.pay === "bank"
+                  ? "Chuyển khoản ngân hàng"
+                  : "Thanh toán khi nhận hàng (COD)"
+              }}
             </span>
           </div>
 
@@ -150,7 +188,10 @@ onMounted(async () => {
             <RouterLink to="/cua-hang" class="btn btn-primary w-100 py-2">
               Tiếp tục mua hàng
             </RouterLink>
-            <RouterLink to="/trang-chu" class="btn btn-light-border w-100 py-2 text-center text-decoration-none">
+            <RouterLink
+              to="/trang-chu"
+              class="btn btn-light-border w-100 py-2 text-center text-decoration-none"
+            >
               Về trang chủ
             </RouterLink>
           </div>

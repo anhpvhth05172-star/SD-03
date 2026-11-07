@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref, computed, watch, onMounted, unref } from "vue";
+import Swal from "sweetalert2";
 import * as store from "../store";
 import Select2 from "@/components/Select2.vue";
 import { layDiaGioi, layPhuongXa, timTinh } from "@/api/diaGioi";
@@ -8,6 +9,40 @@ const { cart, cartTotal, money } = store;
 
 // Phí vận chuyển đơn online (back-end yêu cầu > 1.000đ). Đổi theo chính sách của shop.
 const SHIP_FEE = 30000;
+
+/* ================= SWEETALERT2 HELPERS ================= */
+const Toast = Swal.mixin({
+  toast: true,
+  position: "top-end",
+  showConfirmButton: false,
+  timer: 2800,
+  timerProgressBar: true,
+});
+
+// Thông báo nhẹ (toast): ok = true -> success, false -> warning
+function notify(text, ok = true) {
+  Toast.fire({ icon: ok ? "success" : "warning", title: text });
+}
+function notifyInfo(text) {
+  Toast.fire({ icon: "info", title: text });
+}
+// Thông báo lỗi dạng popup
+function showError(text, title = "Có lỗi xảy ra") {
+  return Swal.fire({
+    icon: "error",
+    title,
+    text,
+    confirmButtonText: "Đóng",
+  });
+}
+const escapeHtml = (s) =>
+  String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
 
 /* ================= CẤU HÌNH API ================= */
 const API = "http://localhost:8080/api/khach-hang";
@@ -357,6 +392,10 @@ async function loadDiaGioi() {
     tinhThanhList.value = ds || [];
   } catch (err) {
     console.warn("Lỗi tải địa giới hành chính:", err);
+    notify(
+      "Không tải được danh sách Tỉnh/Phường, vui lòng tải lại trang.",
+      false,
+    );
   } finally {
     diaGioiLoading.value = false;
   }
@@ -365,12 +404,19 @@ async function loadDiaGioi() {
 // Khi đổi tỉnh -> tự động cập nhật danh sách phường/xã (bằng watch)
 watch(selectedTinh, (tenTinh) => {
   selectedPhuong.value = "";
+  errors.phuong = "";
+  if (tenTinh) errors.tinh = ""; // đã chọn -> hợp lệ
   if (!tenTinh) {
     phuongXaList.value = [];
     return;
   }
   const tinhObj = timTinh(tinhThanhList.value, tenTinh);
   phuongXaList.value = layPhuongXa(tinhThanhList.value, tinhObj);
+});
+
+// Chọn phường/xã -> xóa lỗi ngay
+watch(selectedPhuong, (v) => {
+  if (v) errors.phuong = "";
 });
 
 onMounted(() => {
@@ -382,6 +428,8 @@ const selectedAddr = ref("new");
 
 function chooseAddress(id) {
   selectedAddr.value = id;
+  // Đổi địa chỉ -> xóa toàn bộ lỗi cũ
+  Object.keys(errors).forEach((k) => (errors[k] = ""));
   const u = currentUser.value;
   if (!u) return;
   const base = userInfo(u);
@@ -426,10 +474,68 @@ watch(
   { immediate: true },
 );
 
+/* ================= VALIDATE TRỰC TIẾP KHI NGƯỜI DÙNG TÁC ĐỘNG ================= */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const rules = {
+  name: () => {
+    const v = f.name.trim();
+    if (!v) return "Vui lòng nhập họ và tên.";
+    if (v.length < 2) return "Họ và tên quá ngắn.";
+    return "";
+  },
+  phone: () => {
+    if (!f.phone.trim()) return "Vui lòng nhập số điện thoại.";
+    if (!/^0\d{9}$/.test(f.phone))
+      return "Số điện thoại gồm 10 số, bắt đầu bằng 0.";
+    return "";
+  },
+  email: () => {
+    if (!f.email.trim())
+      return "Vui lòng nhập email để nhận xác nhận đơn hàng.";
+    if (!EMAIL_RE.test(f.email.trim()))
+      return "Email không hợp lệ (ví dụ: ten@gmail.com).";
+    return "";
+  },
+  tinh: () => (selectedTinh.value ? "" : "Vui lòng chọn Tỉnh/Thành phố."),
+  phuong: () => (selectedPhuong.value ? "" : "Vui lòng chọn Phường/Xã."),
+  diaChiCuThe: () => {
+    const v = diaChiCuThe.value.trim();
+    if (!v) return "Vui lòng nhập số nhà, tên đường cụ thể.";
+    if (v.length < 5) return "Địa chỉ cụ thể quá ngắn.";
+    return "";
+  },
+  address: () =>
+    f.address.trim() ? "" : "Vui lòng nhập đầy đủ địa chỉ nhận hàng.",
+};
+
+// Validate 1 ô, gọi từ @input / @blur
+function validateField(key) {
+  errors[key] = rules[key]();
+  return errors[key];
+}
+
+// Ô SĐT: chỉ cho nhập số, tối đa 10 ký tự, rồi validate ngay
+function onPhoneInput() {
+  f.phone = f.phone.replace(/\D/g, "").slice(0, 10);
+  validateField("phone");
+}
+
+const isNewAddressMode = () =>
+  !isLoggedIn.value || selectedAddr.value === "new";
+
+// Validate toàn bộ form, trả về mảng thông báo lỗi
+function validateAll() {
+  capNhatDiaChi();
+  const keys = ["name", "phone", "email"];
+  if (isNewAddressMode()) keys.push("tinh", "phuong", "diaChiCuThe");
+  else keys.push("address");
+  return keys.map(validateField).filter(Boolean);
+}
+
 /* ---------- Voucher ---------- */
 const voucherCode = ref("");
 const voucher = ref(null); // { code, ...rule }
-const voucherMsg = reactive({ text: "", ok: false });
 const manualRemoved = ref(false); // khách chủ động gỡ mã -> không tự áp lại
 
 // Tổng trước giảm = tiền hàng + phí vận chuyển (khớp cách tính của back-end)
@@ -442,8 +548,7 @@ const applying = ref(false);
 async function applyVoucher() {
   const code = voucherCode.value.trim().toUpperCase();
   if (!code) {
-    voucherMsg.text = "Vui lòng nhập mã giảm giá.";
-    voucherMsg.ok = false;
+    notify("Vui lòng nhập mã giảm giá.", false);
     return;
   }
   applying.value = true;
@@ -451,31 +556,28 @@ async function applyVoucher() {
   applying.value = false;
   if (!r.ok) {
     voucher.value = null;
-    voucherMsg.text = r.message;
-    voucherMsg.ok = false;
+    notify(r.message, false);
     return;
   }
   manualRemoved.value = false;
   voucher.value = r.voucher;
-  voucherMsg.text = "Áp dụng mã thành công!";
-  voucherMsg.ok = true;
+  notify("Áp dụng mã thành công!");
 }
 function removeVoucher() {
   voucher.value = null;
   voucherCode.value = "";
-  voucherMsg.text = "";
 }
 // Khách bấm gỡ mã
 function onRemoveClick() {
   manualRemoved.value = true;
   removeVoucher();
+  notifyInfo("Đã gỡ mã giảm giá.");
 }
 // Giỏ thay đổi làm không còn đủ điều kiện -> gỡ voucher
 watch(orderTotal, () => {
   if (voucher.value && orderTotal.value < (voucher.value.min || 0)) {
     removeVoucher();
-    voucherMsg.text = "Mã giảm giá đã bị gỡ vì đơn hàng không đủ điều kiện.";
-    voucherMsg.ok = false;
+    notify("Mã giảm giá đã bị gỡ vì đơn hàng không đủ điều kiện.", false);
   }
 });
 
@@ -542,8 +644,7 @@ watch(allVouchers, () => {
   const d = allVouchers.value.find((x) => VF.id(x) === voucher.value.id);
   if (d && isExhausted(d)) {
     removeVoucher();
-    voucherMsg.text = "Mã giảm giá đã hết lượt sử dụng nên đã được gỡ.";
-    voucherMsg.ok = false;
+    notify("Mã giảm giá đã hết lượt sử dụng nên đã được gỡ.", false);
   }
 });
 
@@ -555,8 +656,7 @@ watch(
     if (best && (!voucher.value || voucher.value.id !== best.v.id)) {
       voucher.value = best.v;
       voucherCode.value = "";
-      voucherMsg.text = `Đã tự động áp dụng mã ưu đãi tốt nhất (${best.v.code})!`;
-      voucherMsg.ok = true;
+      notify(`Đã tự động áp dụng mã ưu đãi tốt nhất (${best.v.code})!`);
     }
   },
   { immediate: true },
@@ -577,8 +677,7 @@ function toggleVoucher(o) {
   manualRemoved.value = false;
   voucher.value = o.v;
   voucherCode.value = "";
-  voucherMsg.text = "Áp dụng mã thành công!";
-  voucherMsg.ok = true;
+  notify("Áp dụng mã thành công!");
 }
 
 /* ---------- Đặt hàng: lưu vào hóa đơn (POST /api/hoa-don) ---------- */
@@ -586,7 +685,6 @@ const HOA_DON_API = "http://localhost:8080/api/hoa-don";
 const ID_NHAN_VIEN_ONLINE = null; // null = không gán nhân viên (đơn online)
 const orderCode = ref("");
 const submitting = ref(false);
-const submitError = ref("");
 
 // Sinh mã dạng HD + yyMMddHHmmss + 3 số ngẫu nhiên, ví dụ HD261024153045123
 function genMaHoaDon() {
@@ -605,6 +703,11 @@ function genMaHoaDon() {
 /* ---------- Phương thức thanh toán: id cố định theo bảng phuong_thuc_thanh_toan ---------- */
 // 11 = COD (Thanh toán khi nhận hàng), 2 = Chuyển khoản ngân hàng, 4 = VNPay QR (id 4 trong hinh_thuc_thanh_toan)
 const PAY_METHOD_ID = { cod: 11, bank: 2, vnpay: 4 };
+const PAY_METHOD_LABEL = {
+  cod: "Thanh toán khi nhận hàng (COD)",
+  bank: "Chuyển khoản ngân hàng",
+  vnpay: "Thanh toán qua VNPAY",
+};
 
 const phuongThucFields = (kind) => ({
   idPhuongThucThanhToan: PAY_METHOD_ID[kind],
@@ -647,28 +750,50 @@ function clearCart() {
   if (Array.isArray(cart.items)) cart.items.splice(0);
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Popup xác nhận trước khi đặt hàng
+async function confirmOrder() {
+  const isVnpay = f.pay === "vnpay";
+  const r = await Swal.fire({
+    icon: "question",
+    title: isVnpay ? "Xác nhận thanh toán qua VNPAY?" : "Xác nhận đặt hàng?",
+    html: `
+      <div style="text-align:left;font-size:.95rem;line-height:1.7">
+        <div><b>Người nhận:</b> ${escapeHtml(f.name.trim())}</div>
+        <div><b>Điện thoại:</b> ${escapeHtml(f.phone)}</div>
+        <div><b>Email:</b> ${escapeHtml(f.email.trim())}</div>
+        <div><b>Địa chỉ:</b> ${escapeHtml(f.address.trim())}</div>
+        <div><b>Thanh toán:</b> ${escapeHtml(PAY_METHOD_LABEL[f.pay])}</div>
+        <hr style="margin:.6rem 0">
+        <div><b>Tổng cộng:</b> <span style="color:#dc2626;font-weight:800">${escapeHtml(money(finalTotal.value))}</span></div>
+      </div>`,
+    showCancelButton: true,
+    confirmButtonText: isVnpay ? "Thanh toán" : "Đặt hàng",
+    cancelButtonText: "Kiểm tra lại",
+    reverseButtons: true,
+    focusCancel: true,
+  });
+  return r.isConfirmed;
+}
 
 async function submit() {
-  submitError.value = "";
-  errors.name = f.name.trim() ? "" : "Vui lòng nhập họ và tên.";
-  errors.phone = /^0\d{9}$/.test(f.phone)
-    ? ""
-    : "Số điện thoại gồm 10 số, bắt đầu bằng 0.";
-  errors.email = EMAIL_RE.test(f.email.trim())
-    ? ""
-    : "Vui lòng nhập email hợp lệ để nhận xác nhận đơn hàng.";
+  if (submitting.value) return;
 
-  // Đồng bộ lại địa chỉ nếu là khách vãng lai hoặc chọn nhập địa chỉ mới
-  if (!isLoggedIn.value || selectedAddr.value === "new") {
-    errors.tinh = selectedTinh.value ? "" : "Vui lòng chọn Tỉnh/Thành phố.";
-    errors.phuong = selectedPhuong.value ? "" : "Vui lòng chọn Phường/Xã.";
-    errors.diaChiCuThe = diaChiCuThe.value.trim() ? "" : "Vui lòng nhập số nhà, tên đường cụ thể.";
-    capNhatDiaChi();
+  // 1) Validate toàn bộ (các ô đã được validate trực tiếp khi nhập)
+  const msgs = validateAll();
+  if (msgs.length) {
+    await Swal.fire({
+      icon: "warning",
+      title: "Thông tin chưa hợp lệ",
+      html: `<ul style="text-align:left;margin:0;padding-left:1.2rem">${msgs
+        .map((m) => `<li>${escapeHtml(m)}</li>`)
+        .join("")}</ul>`,
+      confirmButtonText: "Đã hiểu",
+    });
+    return;
   }
 
-  errors.address = f.address.trim() ? "" : "Vui lòng nhập đầy đủ địa chỉ nhận hàng.";
-  if (errors.name || errors.phone || errors.email || errors.address || errors.tinh || errors.phuong || errors.diaChiCuThe) return;
+  // 2) Confirm bằng SweetAlert2
+  if (!(await confirmOrder())) return;
 
   submitting.value = true;
 
@@ -708,11 +833,13 @@ async function submit() {
       }
     } catch (e) {
       console.error("[Checkout] Lỗi VNPAY:", e);
-      submitError.value =
+      submitting.value = false;
+      await showError(
         e.message === "Failed to fetch"
           ? "Không kết nối được máy chủ, vui lòng thử lại."
-          : e.message;
-      submitting.value = false;
+          : e.message,
+        "Thanh toán VNPAY thất bại",
+      );
       return;
     }
   }
@@ -767,10 +894,12 @@ async function submit() {
     clearCart();
   } catch (e) {
     console.error("[Checkout] Lỗi tạo hóa đơn:", e);
-    submitError.value =
+    await showError(
       e.message === "Failed to fetch"
         ? "Không kết nối được máy chủ, vui lòng thử lại."
-        : e.message;
+        : e.message,
+      "Đặt hàng thất bại",
+    );
   } finally {
     submitting.value = false;
   }
@@ -782,9 +911,10 @@ async function copyOrderCode() {
   try {
     await navigator.clipboard.writeText(String(orderCode.value));
     copied.value = true;
+    notify("Đã sao chép mã đơn hàng.");
     setTimeout(() => (copied.value = false), 1800);
   } catch (e) {
-    /* bỏ qua */
+    notify("Không sao chép được, vui lòng chép thủ công.", false);
   }
 }
 </script>
@@ -960,6 +1090,8 @@ async function copyOrderCode() {
                 :readonly="lockName"
                 :class="{ 'is-invalid': errors.name, 'bg-light': lockName }"
                 placeholder="Nhập họ tên của bạn"
+                @input="validateField('name')"
+                @blur="validateField('name')"
               />
               <div class="invalid-feedback">{{ errors.name }}</div>
             </div>
@@ -970,9 +1102,13 @@ async function copyOrderCode() {
               <input
                 v-model="f.phone"
                 class="form-control co-input"
+                inputmode="numeric"
+                maxlength="10"
                 :readonly="lockPhone"
                 :class="{ 'is-invalid': errors.phone, 'bg-light': lockPhone }"
                 placeholder="Nhập số điện thoại"
+                @input="onPhoneInput"
+                @blur="validateField('phone')"
               />
               <div class="invalid-feedback">{{ errors.phone }}</div>
             </div>
@@ -988,6 +1124,8 @@ async function copyOrderCode() {
                 :readonly="lockEmail"
                 :class="{ 'is-invalid': errors.email, 'bg-light': lockEmail }"
                 placeholder="Ví dụ: ten@gmail.com"
+                @input="validateField('email')"
+                @blur="validateField('email')"
               />
               <div class="invalid-feedback">{{ errors.email }}</div>
             </div>
@@ -1000,9 +1138,11 @@ async function copyOrderCode() {
               <input
                 v-model="f.address"
                 class="form-control co-input bg-light"
+                :class="{ 'is-invalid': errors.address }"
                 readonly
                 placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
               />
+              <div class="invalid-feedback">{{ errors.address }}</div>
             </div>
 
             <!-- Nếu là khách vãng lai hoặc tài khoản chọn 'Nhập địa chỉ mới' -> dùng Select2 tỉnh/phường và địa chỉ cụ thể -->
@@ -1031,7 +1171,11 @@ async function copyOrderCode() {
                 <Select2
                   v-model="selectedPhuong"
                   :options="phuongXaList"
-                  :placeholder="selectedTinh ? 'Chọn Phường / Xã' : 'Vui lòng chọn Tỉnh trước'"
+                  :placeholder="
+                    selectedTinh
+                      ? 'Chọn Phường / Xã'
+                      : 'Vui lòng chọn Tỉnh trước'
+                  "
                   search-placeholder="Tìm phường/xã..."
                   :disabled="diaGioiLoading || !selectedTinh"
                   :invalid="!!errors.phuong"
@@ -1043,20 +1187,24 @@ async function copyOrderCode() {
 
               <div class="col-12">
                 <label class="co-label"
-                  >Địa chỉ cụ thể (Số nhà, tên đường, ngõ...) <span class="text-danger">*</span></label
+                  >Địa chỉ cụ thể (Số nhà, tên đường, ngõ...)
+                  <span class="text-danger">*</span></label
                 >
                 <input
                   v-model="diaChiCuThe"
                   class="form-control co-input"
                   :class="{ 'is-invalid': errors.diaChiCuThe }"
                   placeholder="Ví dụ: Số 20 ngõ 15 đường Cầu Diễn"
-                  @input="capNhatDiaChi"
+                  @input="validateField('diaChiCuThe')"
+                  @blur="validateField('diaChiCuThe')"
                 />
                 <div class="invalid-feedback">{{ errors.diaChiCuThe }}</div>
               </div>
 
               <div v-if="f.address" class="col-12">
-                <div class="p-2 px-3 bg-light rounded-3 border small text-muted">
+                <div
+                  class="p-2 px-3 bg-light rounded-3 border small text-muted"
+                >
                   <i class="bi bi-geo-alt-fill text-danger me-1"></i>
                   <strong>Địa chỉ đầy đủ:</strong> {{ f.address }}
                 </div>
@@ -1253,14 +1401,6 @@ async function copyOrderCode() {
               </button>
             </div>
 
-            <div
-              v-if="voucherMsg.text"
-              class="small mt-2"
-              :class="voucherMsg.ok ? 'text-success' : 'text-danger'"
-            >
-              {{ voucherMsg.text }}
-            </div>
-
             <!-- Danh sách phiếu -->
             <div v-if="!isLoggedIn" class="small text-muted mt-3">
               Đăng nhập để xem các phiếu giảm giá dành cho bạn.
@@ -1362,13 +1502,6 @@ async function copyOrderCode() {
               <strong>{{ money(discount) }}</strong>
             </div>
 
-            <div
-              v-if="submitError"
-              class="alert alert-danger small py-2 mt-3 mb-0"
-            >
-              {{ submitError }}
-            </div>
-
             <button
               class="btn btn-primary w-100 co-submit"
               :disabled="submitting"
@@ -1387,21 +1520,6 @@ async function copyOrderCode() {
               }}
               <i v-if="!submitting" class="bi bi-arrow-right ms-1"></i>
             </button>
-
-            <div class="co-perks">
-              <span
-                ><i class="bi bi-shield-lock-fill text-success"></i>Bảo mật
-                thanh toán</span
-              >
-              <span
-                ><i class="bi bi-box-seam-fill text-danger"></i>Kiểm tra khi
-                nhận</span
-              >
-              <span
-                ><i class="bi bi-arrow-repeat text-primary"></i>Đổi size 7
-                ngày</span
-              >
-            </div>
           </section>
         </div>
       </div>
