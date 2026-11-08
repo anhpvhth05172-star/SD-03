@@ -34,9 +34,9 @@ public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, 
 
 
     @Query(value = "SELECT spct FROM SanPhamChiTiet spct " +
-           "LEFT JOIN spct.sanPham sp " +
-           "LEFT JOIN spct.mauSac ms " +
-           "LEFT JOIN spct.kichCo kc " +
+           "LEFT JOIN FETCH spct.sanPham sp " +
+           "LEFT JOIN FETCH spct.mauSac ms " +
+           "LEFT JOIN FETCH spct.kichCo kc " +
            "WHERE (:search IS NULL OR :search = '' OR spct.maChiTietSanPham LIKE CONCAT('%', :search, '%') " +
            "   OR sp.tenSanPham LIKE CONCAT('%', :search, '%') " +
            "   OR sp.maSanPham LIKE CONCAT('%', :search, '%') " +
