@@ -1917,6 +1917,116 @@ input:checked + .toggle-slider:before {
   cursor: not-allowed;
 }
 
+/* Giao diện Phiếu giảm giá (Voucher) tự động tinh gọn theo đúng ảnh */
+.pos-voucher-simple-wrap {
+  margin-bottom: 12px;
+}
+
+.pos-voucher-simple-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.pos-voucher-simple-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 9px;
+  padding: 10px 14px;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.05);
+}
+
+.pv-card-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pv-card-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.pv-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pv-card-headline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pv-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.pv-badge-public {
+  background: #e0f2fe;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+}
+
+.pv-badge-personal {
+  background: #fef3c7;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.pv-code {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.pv-name {
+  font-size: 12.5px;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pv-card-subline {
+  font-size: 11.5px;
+  color: #15803d;
+  font-weight: 600;
+}
+
+.pv-card-right {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.pv-discount-amt {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #16a34a;
+}
+
+.pv-discount-pct {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 1px;
+}
+
 /* Card voucher đã được áp dụng */
 .selected-voucher-card {
   display: flex;

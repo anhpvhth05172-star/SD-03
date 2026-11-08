@@ -2566,69 +2566,6 @@ const nextVoucherSuggestion = computed(() => {
   }
 })
 
-// Gợi ý sản phẩm mua thêm thông minh để đủ điều kiện đạt voucher tốt hơn
-const suggestedUpsellProducts = computed(() => {
-  if (!nextVoucherSuggestion.value || !Array.isArray(allProducts.value) || allProducts.value.length === 0) {
-    return []
-  }
-  const needed = nextVoucherSuggestion.value.neededMore
-
-  // Lọc các biến thể sản phẩm còn hàng thực tế
-  const available = allProducts.value.filter(p => {
-    const stock = Number(p.stock !== undefined ? p.stock : (p.soLuong || 0))
-    return stock > 0
-  })
-
-  if (available.length === 0) return []
-
-  // Đánh giá sản phẩm: ưu tiên sản phẩm có đơn giá xấp xỉ neededMore (ưu tiên >= needed để mua 1 chiếc là đủ mốc)
-  const scored = available.map(p => {
-    const price = getEffectivePrice(p)
-    let score = 0
-    if (price >= needed) {
-      score = price - needed // chênh lệch càng nhỏ càng tốt
-    } else {
-      score = (needed - price) + 1000000 // phạt nhẹ nếu giá nhỏ hơn số tiền cần thêm
-    }
-    return { item: p, price, score }
-  })
-
-  scored.sort((a, b) => a.score - b.score)
-
-  // Lấy tối đa 4 sản phẩm đa dạng khác nhau
-  const result = []
-  const seenNames = new Set()
-  for (const s of scored) {
-    const name = s.item.tenSp || s.item.tenSanPham || s.item.id
-    if (!seenNames.has(name)) {
-      seenNames.add(name)
-      result.push(s.item)
-    }
-    if (result.length >= 4) break
-  }
-
-  // Nếu số sản phẩm khác tên chưa đủ 4, lấy tiếp từ danh sách scored
-  if (result.length < 4) {
-    for (const s of scored) {
-      if (!result.some(r => r.id === s.item.id)) {
-        result.push(s.item)
-      }
-      if (result.length >= 4) break
-    }
-  }
-
-  return result
-})
-
-const handleQuickAddUpsellProduct = (prod) => {
-  addToCart(prod, 1)
-  const prodName = prod.tenSp || prod.tenSanPham || 'Sản phẩm'
-  notifySuccess(
-    'Đã thêm sản phẩm!',
-    `Đã thêm "${prodName}" vào đơn. Hệ thống sẽ tự động áp dụng voucher tốt nhất!`
-  )
-}
-
 // Tự động áp dụng phiếu giảm giá tốt nhất đủ điều kiện (hoàn toàn tự động)
 watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrder.value?.customer?.id], ([newSubTotal, newBest], [, , oldCustId]) => {
   if (!currentOrder.value) return
@@ -4586,89 +4523,34 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="checkout-voucher-section" v-if="currentOrder">
-            <div class="voucher-section-header">
-              <span class="voucher-section-title">Phiếu giảm giá / Voucher</span>
-              <button type="button" class="btn-browse-vouchers"
-                @click="openVoucherModal">
-                {{ currentOrder.selectedVoucher ? 'Đổi mã' : 'Chọn mã' }}
-                <span class="voucher-badge-num" v-if="allVouchers.length > 0">({{ availableEligibleVouchersCount }}/{{ allVouchers.length }})</span>
-              </button>
-            </div>
+          <!-- PHIẾU GIẢM GIÁ (VOUCHER) ĐƠN GIẢN THEO YÊU CẦU -->
+          <div class="pos-voucher-simple-wrap" v-if="currentOrder">
+            <div class="pos-voucher-simple-title">Phiếu giảm giá (Voucher)</div>
 
-            <div v-if="currentOrder.selectedVoucher" class="selected-voucher-card">
-              <div class="selected-voucher-content">
-                <div class="selected-voucher-top">
-                  <span class="selected-voucher-code">{{ currentOrder.selectedVoucher.ma ||
-                    currentOrder.selectedVoucher.maPhieuGiamGia }}</span>
-                  <span class="selected-voucher-val">- {{ formatVnd(discountAmount) }}</span>
-                </div>
-                <div class="selected-voucher-desc">
-                  {{ currentOrder.selectedVoucher.ten }}
-                  <span v-if="currentOrder.selectedVoucher.hoaDonToiThieu"> • Đơn từ {{
-                    formatVnd(currentOrder.selectedVoucher.hoaDonToiThieu) }}</span>
-                </div>
-              </div>
-              <span class="voucher-auto-applied-tag" title="Hệ thống tự động áp dụng mã ưu đãi tối ưu nhất cho đơn hàng">
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                Tự động áp dụng
-              </span>
-            </div>
-
-            <div v-else class="voucher-empty-notice">
-              <span class="voucher-empty-icon">🎟️</span>
-              <span class="voucher-empty-text">Chưa đủ điều kiện áp dụng mã giảm giá</span>
-            </div>
-          </div>
-
-          <!-- Banner gợi ý mua thêm để đạt voucher tiếp theo & sản phẩm gợi ý -->
-          <div v-if="nextVoucherSuggestion" class="next-voucher-upsell-box">
-            <div class="upsell-header">
-              <div class="upsell-icon-col">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-              </div>
-              <div class="upsell-body-col">
-                <div class="upsell-title">
-                  Mua thêm <span class="upsell-highlight-amt">{{ formatVnd(nextVoucherSuggestion.neededMore) }}</span> để dùng mã
-                  <span class="upsell-code-badge">{{ nextVoucherSuggestion.voucher.ma || nextVoucherSuggestion.voucher.maPhieuGiamGia }}</span>
-                </div>
-                <div class="upsell-desc">
-                  Ưu đãi giảm tới <strong class="upsell-benefit">{{ formatVnd(nextVoucherSuggestion.potentialDiscount) }}</strong>
-                  <span v-if="nextVoucherSuggestion.extraSaving > 0" class="upsell-extra-save">
-                    (Tiết kiệm thêm {{ formatVnd(nextVoucherSuggestion.extraSaving) }})
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Danh sách sản phẩm gợi ý mua thêm để đạt mốc voucher -->
-            <div v-if="suggestedUpsellProducts.length > 0" class="upsell-products-container">
-              <div class="upsell-products-title">
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#2563eb" stroke-width="2.2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                <span>Gợi ý thêm sản phẩm để hưởng ưu đãi:</span>
-              </div>
-              <div class="upsell-products-list">
-                <div v-for="prod in suggestedUpsellProducts" :key="prod.id" class="upsell-prod-card">
-                  <img :src="getShoeImage(prod)" class="upsell-prod-thumb" alt="thumb" />
-                  <div class="upsell-prod-info">
-                    <div class="upsell-prod-name" :title="prod.tenSp || prod.tenSanPham">{{ prod.tenSp || prod.tenSanPham }}</div>
-                    <div class="upsell-prod-meta">
-                      <span class="upsell-prod-attr">{{ prod.color || prod.tenMau || '---' }}</span>
-                      <span class="upsell-prod-attr">Size {{ prod.size || prod.tenKichCo || '---' }}</span>
-                    </div>
-                    <div class="upsell-prod-price-row">
-                      <span class="upsell-prod-price">{{ formatVnd(getEffectivePrice(prod)) }}</span>
-                      <span v-if="prod.discount && prod.discount !== '-'" class="upsell-prod-old-price">{{ formatVnd(prod.price || prod.giaBan) }}</span>
-                    </div>
+            <div v-if="currentOrder.selectedVoucher" class="pos-voucher-simple-card">
+              <div class="pv-card-left">
+                <span class="pv-card-icon">🏷️</span>
+                <div class="pv-card-info">
+                  <div class="pv-card-headline">
+                    <span class="pv-badge" :class="currentOrder.selectedVoucher.phamVi === 'CA_NHAN' ? 'pv-badge-personal' : 'pv-badge-public'">
+                      {{ currentOrder.selectedVoucher.phamVi === 'CA_NHAN' ? 'CÁ NHÂN' : 'CÔNG KHAI' }}
+                    </span>
+                    <strong class="pv-code">{{ currentOrder.selectedVoucher.ma || currentOrder.selectedVoucher.maPhieuGiamGia }}</strong>
+                    <span class="pv-name" v-if="currentOrder.selectedVoucher.ten">- {{ currentOrder.selectedVoucher.ten }}</span>
                   </div>
-                  <button type="button" class="btn-upsell-add" @click="handleQuickAddUpsellProduct(prod)" title="Thêm vào đơn hàng">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    Thêm
-                  </button>
+                  <div class="pv-card-subline">
+                    <span>Đơn từ {{ formatVnd(currentOrder.selectedVoucher.hoaDonToiThieu || 0) }}</span>
+                    <template v-if="currentOrder.selectedVoucher.giamToiDa">
+                      • Tối đa {{ formatVnd(currentOrder.selectedVoucher.giamToiDa) }}
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pv-card-right">
+                <div class="pv-discount-amt">-{{ formatVnd(discountAmount) }}</div>
+                <div class="pv-discount-pct" v-if="currentOrder.selectedVoucher.loaiGiamGia === 'PHAN_TRAM' || currentOrder.selectedVoucher.loaiGiamGia === 'PERCENT' || currentOrder.selectedVoucher.type === 'percent'">
+                  -{{ Math.round(currentOrder.selectedVoucher.giaTriGiam || 0) }}%
                 </div>
               </div>
             </div>
