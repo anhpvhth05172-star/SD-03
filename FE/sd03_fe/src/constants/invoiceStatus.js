@@ -115,7 +115,7 @@ export const trangThaiTiepTheoOf = (invoice) => {
 }
 
 export const pillClass = (value) => {
-  if (['Đã hoàn thành', 'Đã giao hàng', 'Đã xác nhận'].includes(value))
+  if (['Đã hoàn thành', 'Đã giao hàng', 'Đã xác nhận', 'Đã thanh toán'].includes(value))
     return 'inv-pill-green'
   if (['Đã hủy', 'Đã hoàn tiền', 'Giao hàng thất bại'].includes(value)) return 'inv-pill-red'
   if (['Chờ xác nhận', 'Chờ giao hàng'].includes(value)) return 'inv-pill-amber'

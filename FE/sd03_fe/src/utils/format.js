@@ -61,9 +61,39 @@ const AVATAR_COLORS = ['#cc0000', '#f59e0b', '#8b5cf6', '#14b8a6', '#3b82f6', '#
 
 export const avatarColor = (id) => AVATAR_COLORS[Math.abs(Number(id) || 0) % AVATAR_COLORS.length]
 
-export const payStatusOf = (trangThai) => {
-  if (trangThai === 'Đã hoàn thành' || trangThai === 'Đã giao hàng') return 'Đã thanh toán'
+export const payStatusOf = (target, optionalInvoice = null) => {
+  const invoice = (typeof target === 'object' && target !== null) ? target : optionalInvoice
+  const trangThai = (typeof target === 'object' && target !== null) ? target.trangThai : target
+
   if (trangThai === 'Đã hoàn tiền') return 'Đã hoàn tiền'
+  if (trangThai === 'Đã hoàn thành' || trangThai === 'Đã giao hàng') return 'Đã thanh toán'
+  if (trangThai === 'Đã hủy') return 'Chưa thanh toán'
+
+  if (invoice) {
+    const loaiDon = String(invoice.loaiDon || invoice.maLoaiDon || '').toUpperCase()
+    const isPos = loaiDon.includes('TẠI QUẦY') || loaiDon.includes('TAI_QUAY')
+
+    // 1. Đơn bán tại quầy (kể cả có giao hàng): Khách luôn thanh toán tại quầy trước khi tạo hóa đơn
+    if (isPos) {
+      return 'Đã thanh toán'
+    }
+
+    // 2. Đơn online: kiểm tra phương thức thanh toán chuyển khoản / VNPAY
+    const pttt = String(invoice.tenPhuongThucThanhToan || invoice.phuongThucThanhToan?.ten || invoice.tenPhuongThuc || '').toUpperCase()
+    const maPttt = String(invoice.maPhuongThucThanhToan || invoice.phuongThucThanhToan?.ma || '').toUpperCase()
+    const idPttt = Number(invoice.idPhuongThucThanhToan || invoice.phuongThucThanhToan?.id || 0)
+
+    const isVnPay = pttt.includes('VNPAY') || maPttt.includes('VNPAY') || idPttt === 4
+    const isChuyenKhoan = pttt.includes('CHUYỂN KHOẢN') || pttt.includes('CHUYEN_KHOAN') || maPttt.includes('CHUYEN_KHOAN') || idPttt === 2
+    const isCod = pttt.includes('COD') || pttt.includes('KHI NHẬN HÀNG') || maPttt.includes('COD') || idPttt === 11 || idPttt === 1
+
+    if ((isVnPay || isChuyenKhoan) && !isCod) {
+      if (trangThai !== 'Chờ thanh toán' && trangThai !== 'CHO_THANH_TOAN') {
+        return 'Đã thanh toán'
+      }
+    }
+  }
+
   return 'Chưa thanh toán'
 }
 
