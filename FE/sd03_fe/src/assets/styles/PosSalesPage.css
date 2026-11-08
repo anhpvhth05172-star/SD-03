@@ -1964,23 +1964,35 @@ input:checked + .toggle-slider:before {
   text-overflow: ellipsis;
 }
 
-.btn-remove-voucher-pill {
-  background: #fee2e2;
-  border: 1px solid #fca5a5;
-  color: #dc2626;
-  font-size: 11.5px;
+.voucher-auto-applied-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #059669;
+  font-size: 11px;
   font-weight: 700;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.btn-remove-voucher-pill:hover {
-  background: #dc2626;
-  color: #ffffff;
-  border-color: #dc2626;
+.voucher-empty-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.voucher-empty-icon {
+  font-size: 14px;
 }
 
 /* Billing Breakdown */
@@ -3751,23 +3763,44 @@ input:checked + .toggle-slider:before {
   cursor: not-allowed;
 }
 
-.btn-voucher-applied {
-  background: #fee2e2;
-  color: #dc2626;
-  border: 1px solid #fca5a5;
+.badge-voucher-applied {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
   font-size: 12px;
   font-weight: 700;
-  padding: 7px 14px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+
+.btn-select-voucher {
+  background: #ffffff;
+  color: #2563eb;
+  border: 1px solid #93c5fd;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 14px;
   border-radius: 7px;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;
 }
 
-.btn-voucher-applied:hover {
-  background: #dc2626;
-  color: #ffffff;
-  border-color: #dc2626;
+.btn-select-voucher:hover:not(:disabled) {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+.btn-select-voucher:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  cursor: not-allowed;
 }
 
 .empty-vouchers-msg {
@@ -7288,12 +7321,11 @@ input:checked + .toggle-slider:before {
   white-space: nowrap !important;
 }
 
-/* Next Voucher Upsell Banner */
+/* Next Voucher Upsell Banner & Products */
 .next-voucher-upsell-box {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 10px;
-  background: linear-space, #eff6ff;
   background-color: #f0f7ff;
   border: 1px dashed #3b82f6;
   border-radius: 10px;
@@ -7302,11 +7334,18 @@ input:checked + .toggle-slider:before {
   animation: fadeIn 0.2s ease-in;
 }
 
+.upsell-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
 .upsell-icon-col {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-top: 2px;
 }
 
 .upsell-body-col {
@@ -7346,6 +7385,136 @@ input:checked + .toggle-slider:before {
 
 .upsell-benefit {
   color: #ea580c;
+}
+
+.upsell-extra-save {
+  color: #059669;
+  font-weight: 600;
+  margin-left: 3px;
+}
+
+.upsell-products-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid #dbeafe;
+  padding-top: 8px;
+  margin-top: 2px;
+}
+
+.upsell-products-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #1e40af;
+}
+
+.upsell-products-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.upsell-prod-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 6px 8px;
+  transition: all 0.15s ease;
+}
+
+.upsell-prod-card:hover {
+  border-color: #60a5fa;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);
+}
+
+.upsell-prod-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+
+.upsell-prod-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.upsell-prod-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.upsell-prod-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.upsell-prod-attr {
+  font-size: 10.5px;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.upsell-prod-price-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.upsell-prod-price {
+  font-size: 12px;
+  font-weight: 700;
+  color: #dc2626;
+}
+
+.upsell-prod-old-price {
+  font-size: 10.5px;
+  color: #94a3b8;
+  text-decoration: line-through;
+}
+
+.btn-upsell-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.btn-upsell-add:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
 }
 
 /* Hiệu ứng flash viền xanh khi quét thành công */

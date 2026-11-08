@@ -2688,16 +2688,82 @@ const nextVoucherSuggestion = computed(() => {
   const target = eligibleHigher[0]
   const neededMore = Number(target.hoaDonToiThieu || 0) - subTotal.value
   const potentialDiscount = calculateVoucherDiscount(target, Number(target.hoaDonToiThieu || 0))
+  const currentDiscount = discountAmount.value
+  const extraSaving = potentialDiscount > currentDiscount ? potentialDiscount - currentDiscount : 0
 
   return {
     voucher: target,
     neededMore,
     minRequired: Number(target.hoaDonToiThieu || 0),
-    potentialDiscount
+    potentialDiscount,
+    extraSaving
   }
 })
 
-// Tự động áp dụng phiếu giảm giá tốt nhất đủ điều kiện
+// Gợi ý sản phẩm mua thêm thông minh để đủ điều kiện đạt voucher tốt hơn
+const suggestedUpsellProducts = computed(() => {
+  if (!nextVoucherSuggestion.value || !Array.isArray(allProducts.value) || allProducts.value.length === 0) {
+    return []
+  }
+  const needed = nextVoucherSuggestion.value.neededMore
+
+  // Lọc các biến thể sản phẩm còn hàng thực tế
+  const available = allProducts.value.filter(p => {
+    const stock = Number(p.stock !== undefined ? p.stock : (p.soLuong || 0))
+    return stock > 0
+  })
+
+  if (available.length === 0) return []
+
+  // Đánh giá sản phẩm: ưu tiên sản phẩm có đơn giá xấp xỉ neededMore (ưu tiên >= needed để mua 1 chiếc là đủ mốc)
+  const scored = available.map(p => {
+    const price = getEffectivePrice(p)
+    let score = 0
+    if (price >= needed) {
+      score = price - needed // chênh lệch càng nhỏ càng tốt
+    } else {
+      score = (needed - price) + 1000000 // phạt nhẹ nếu giá nhỏ hơn số tiền cần thêm
+    }
+    return { item: p, price, score }
+  })
+
+  scored.sort((a, b) => a.score - b.score)
+
+  // Lấy tối đa 4 sản phẩm đa dạng khác nhau
+  const result = []
+  const seenNames = new Set()
+  for (const s of scored) {
+    const name = s.item.tenSp || s.item.tenSanPham || s.item.id
+    if (!seenNames.has(name)) {
+      seenNames.add(name)
+      result.push(s.item)
+    }
+    if (result.length >= 4) break
+  }
+
+  // Nếu số sản phẩm khác tên chưa đủ 4, lấy tiếp từ danh sách scored
+  if (result.length < 4) {
+    for (const s of scored) {
+      if (!result.some(r => r.id === s.item.id)) {
+        result.push(s.item)
+      }
+      if (result.length >= 4) break
+    }
+  }
+
+  return result
+})
+
+const handleQuickAddUpsellProduct = (prod) => {
+  addToCart(prod, 1)
+  const prodName = prod.tenSp || prod.tenSanPham || 'Sản phẩm'
+  notifySuccess(
+    'Đã thêm sản phẩm!',
+    `Đã thêm "${prodName}" vào đơn. Hệ thống sẽ tự động áp dụng voucher tốt nhất!`
+  )
+}
+
+// Tự động áp dụng phiếu giảm giá tốt nhất đủ điều kiện (hoàn toàn tự động)
 watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrder.value?.customer?.id], ([newSubTotal, newBest], [, , oldCustId]) => {
   if (!currentOrder.value) return
   if (newSubTotal <= 0) {
@@ -2714,7 +2780,7 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
     currentOrder.value.userRemovedVoucher = false
   }
 
-  // 1. Nếu voucher đang chọn không còn hợp lệ (ví dụ: khách đã dùng hết lượt, đơn không đủ hoaDonToiThieu...)
+  // 1. Nếu voucher đang chọn không còn hợp lệ: tự động chuyển về voucher tốt nhất hiện tại
   if (currentOrder.value.selectedVoucher && !isVoucherEligible(currentOrder.value.selectedVoucher)) {
     currentOrder.value.selectedVoucher = newBest?.voucher || null
     currentOrder.value.userSelectedVoucherManually = false
@@ -2722,20 +2788,18 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
     return
   }
 
-  // 2. Nếu người dùng đã chủ động chọn voucher này (ví dụ bấm chọn GG018), và nó vẫn hợp lệ:
-  // TUYỆT ĐỐI KHÔNG GHI ĐÈ bằng mã khác!
+  // 2. Nếu người dùng đã chủ động chọn voucher này và nó vẫn hợp lệ: giữ nguyên
   if (currentOrder.value.userSelectedVoucherManually && currentOrder.value.selectedVoucher) {
     return
   }
 
-  // 3. Nếu chưa có voucher và người dùng không chủ động gỡ: tự động áp dụng voucher tốt nhất
+  // 3. Tự động áp dụng mã tốt nhất và nâng cấp mốc cao hơn khi đạt điều kiện
   if (!currentOrder.value.selectedVoucher) {
-    if (!currentOrder.value.userRemovedVoucher && newBest?.voucher) {
+    if (newBest?.voucher) {
       currentOrder.value.selectedVoucher = newBest.voucher
       currentOrder.value.userSelectedVoucherManually = false
     }
-  } else if (!currentOrder.value.userRemovedVoucher && newBest?.voucher) {
-    // Nếu trước đó là tự động áp dụng, nâng cấp lên voucher tốt hơn nếu đạt mốc mới
+  } else if (newBest?.voucher) {
     if (currentOrder.value.selectedVoucher.id !== newBest.voucher.id) {
       currentOrder.value.selectedVoucher = newBest.voucher
     }
@@ -4671,7 +4735,7 @@ onUnmounted(() => {
               <span class="voucher-section-title">Phiếu giảm giá / Voucher</span>
               <button type="button" class="btn-browse-vouchers"
                 @click="openVoucherModal">
-                {{ currentOrder.selectedVoucher ? 'Đổi mã' : 'Danh sách' }}
+                {{ currentOrder.selectedVoucher ? 'Đổi mã' : 'Chọn mã' }}
                 <span class="voucher-badge-num" v-if="allVouchers.length > 0">({{ availableEligibleVouchersCount }}/{{ allVouchers.length }})</span>
               </button>
             </div>
@@ -4689,41 +4753,21 @@ onUnmounted(() => {
                     formatVnd(currentOrder.selectedVoucher.hoaDonToiThieu) }}</span>
                 </div>
               </div>
-              <button class="btn-remove-voucher-pill" @click="removeVoucher" title="Gỡ bỏ mã giảm giá">
-                Gỡ
-              </button>
+              <span class="voucher-auto-applied-tag" title="Hệ thống tự động áp dụng mã ưu đãi tối ưu nhất cho đơn hàng">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Tự động áp dụng
+              </span>
             </div>
 
-            <div v-if="!currentOrder.selectedVoucher && bestVoucherSuggestion" class="checkout-best-voucher-box">
-              <div class="best-voucher-info-col">
-                <div class="best-line-top">
-                  <span class="best-tag-label">🔥 Gợi ý tốt nhất</span>
-                  <span class="best-discount-val">-{{ formatVnd(bestVoucherSuggestion.discount) }}</span>
-                </div>
-                <div class="best-line-sub">
-                  <span class="best-code-chip">{{ bestVoucherSuggestion.voucher.ma }}</span>
-                  <span class="best-sub-desc" :title="bestVoucherSuggestion.voucher.ten">{{
-                    bestVoucherSuggestion.voucher.ten
-                  }}</span>
-                </div>
-              </div>
-              <button type="button" class="btn-apply-best-quick" @click="applyBestVoucher">
-                Áp dụng
-              </button>
-            </div>
-            <div v-if="!currentOrder.selectedVoucher" class="voucher-input-group">
-              <input type="text" v-model="voucherInputCode" class="voucher-quick-input"
-                placeholder="Nhập mã voucher (VD: GG005)..." @keyup.enter="handleApplyManualVoucher" />
-              <button type="button" class="btn-apply-manual-voucher" :disabled="!voucherInputCode.trim()"
-                @click="handleApplyManualVoucher">
-                Áp dụng
-              </button>
+            <div v-else class="voucher-empty-notice">
+              <span class="voucher-empty-icon">🎟️</span>
+              <span class="voucher-empty-text">Chưa đủ điều kiện áp dụng mã giảm giá</span>
             </div>
           </div>
 
-          
-            <!-- Banner gợi ý mua thêm để đạt voucher tiếp theo -->
-            <div v-if="nextVoucherSuggestion" class="next-voucher-upsell-box">
+          <!-- Banner gợi ý mua thêm để đạt voucher tiếp theo & sản phẩm gợi ý -->
+          <div v-if="nextVoucherSuggestion" class="next-voucher-upsell-box">
+            <div class="upsell-header">
               <div class="upsell-icon-col">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2">
                   <circle cx="12" cy="12" r="10" />
@@ -4734,13 +4778,45 @@ onUnmounted(() => {
               <div class="upsell-body-col">
                 <div class="upsell-title">
                   Mua thêm <span class="upsell-highlight-amt">{{ formatVnd(nextVoucherSuggestion.neededMore) }}</span> để dùng mã
-                  <span class="upsell-code-badge">{{ nextVoucherSuggestion.voucher.ma }}</span>
+                  <span class="upsell-code-badge">{{ nextVoucherSuggestion.voucher.ma || nextVoucherSuggestion.voucher.maPhieuGiamGia }}</span>
                 </div>
                 <div class="upsell-desc">
-                  Ưu đãi giảm thêm lên tới <strong class="upsell-benefit">{{ formatVnd(nextVoucherSuggestion.potentialDiscount) }}</strong>
+                  Ưu đãi giảm tới <strong class="upsell-benefit">{{ formatVnd(nextVoucherSuggestion.potentialDiscount) }}</strong>
+                  <span v-if="nextVoucherSuggestion.extraSaving > 0" class="upsell-extra-save">
+                    (Tiết kiệm thêm {{ formatVnd(nextVoucherSuggestion.extraSaving) }})
+                  </span>
                 </div>
               </div>
             </div>
+
+            <!-- Danh sách sản phẩm gợi ý mua thêm để đạt mốc voucher -->
+            <div v-if="suggestedUpsellProducts.length > 0" class="upsell-products-container">
+              <div class="upsell-products-title">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#2563eb" stroke-width="2.2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <span>Gợi ý thêm sản phẩm để hưởng ưu đãi:</span>
+              </div>
+              <div class="upsell-products-list">
+                <div v-for="prod in suggestedUpsellProducts" :key="prod.id" class="upsell-prod-card">
+                  <img :src="getShoeImage(prod)" class="upsell-prod-thumb" alt="thumb" />
+                  <div class="upsell-prod-info">
+                    <div class="upsell-prod-name" :title="prod.tenSp || prod.tenSanPham">{{ prod.tenSp || prod.tenSanPham }}</div>
+                    <div class="upsell-prod-meta">
+                      <span class="upsell-prod-attr">{{ prod.color || prod.tenMau || '---' }}</span>
+                      <span class="upsell-prod-attr">Size {{ prod.size || prod.tenKichCo || '---' }}</span>
+                    </div>
+                    <div class="upsell-prod-price-row">
+                      <span class="upsell-prod-price">{{ formatVnd(getEffectivePrice(prod)) }}</span>
+                      <span v-if="prod.discount && prod.discount !== '-'" class="upsell-prod-old-price">{{ formatVnd(prod.price || prod.giaBan) }}</span>
+                    </div>
+                  </div>
+                  <button type="button" class="btn-upsell-add" @click="handleQuickAddUpsellProduct(prod)" title="Thêm vào đơn hàng">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Thêm
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div class="billing-summary-block">
             <div class="bill-row">
@@ -5141,18 +5217,18 @@ onUnmounted(() => {
                   <span class="best-subtotal-tag">(Tổng đơn: {{ formatVnd(subTotal) }})</span>
                 </div>
               </div>
-              <button type="button" class="btn-apply-best-modal" @click="applyVoucher(bestVoucherSuggestion.voucher)">
-                Áp dụng mã này
+              <button v-if="currentOrder?.selectedVoucher?.id !== bestVoucherSuggestion.voucher.id" type="button" class="btn-apply-best-modal" @click="applyVoucher(bestVoucherSuggestion.voucher)">
+                Chọn mã tối ưu này
               </button>
+              <span v-else class="badge-voucher-applied">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Đang áp dụng
+              </span>
             </div>
 
             <div class="voucher-modal-search-bar">
-              <input v-model="voucherSearchQuery" type="text" placeholder="Nhập mã hoặc tên phiếu giảm giá..."
+              <input v-model="voucherSearchQuery" type="text" placeholder="Tìm theo mã hoặc tên phiếu giảm giá..."
                 class="voucher-search-inp" @keyup.enter="handleModalSearchApply" />
-              <button v-if="voucherSearchQuery.trim()" type="button" class="btn-modal-apply-code"
-                @click="handleModalSearchApply">
-                Áp dụng mã
-              </button>
             </div>
 
 
@@ -5163,7 +5239,7 @@ onUnmounted(() => {
                 selected: currentOrder?.selectedVoucher?.id === v.id,
                 ineligible: !isVoucherEligible(v),
                 isBestItem: bestVoucherSuggestion?.voucher?.id === v.id
-              }">
+              }" @click="isVoucherEligible(v) && currentOrder?.selectedVoucher?.id !== v.id ? applyVoucher(v) : null">
                 <div class="voucher-card-left">
                   <div class="voucher-discount-highlight">
                     {{ formatVoucherValue(v) }}
@@ -5205,13 +5281,13 @@ onUnmounted(() => {
                 </div>
 
                 <div class="voucher-card-action">
-                  <button v-if="currentOrder?.selectedVoucher?.id === v.id" type="button" class="btn-voucher-applied"
-                    @click="removeVoucher" title="Bấm để gỡ bỏ voucher">
-                    Đang dùng (Gỡ)
-                  </button>
-                  <button v-else type="button" class="btn-apply-voucher" :disabled="!isVoucherEligible(v)"
-                    @click="applyVoucher(v)">
-                    Áp dụng
+                  <span v-if="currentOrder?.selectedVoucher?.id === v.id" class="badge-voucher-applied" title="Mã đang được áp dụng cho đơn hàng">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    Đang dùng
+                  </span>
+                  <button v-else type="button" class="btn-select-voucher" :disabled="!isVoucherEligible(v)"
+                    @click.stop="applyVoucher(v)">
+                    Chọn mã
                   </button>
                 </div>
               </div>
