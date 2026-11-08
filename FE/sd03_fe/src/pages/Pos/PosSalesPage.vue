@@ -3079,32 +3079,45 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
         const oldOrderSubTotal = oldSubTotalsMap.get(order.id) ?? newOrderSubTotal
         const oldDiscAmt = calculateVoucherDiscount(oldV, oldOrderSubTotal)
 
+        if (!freshV || freshV.trangThai === false) {
+          order.selectedVoucher = null
+          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} đã bị khóa, ngừng hoạt động hoặc bị xóa và được tự động gỡ`)
+          const fallback = getBestVoucherForOrder(order)
+          if (fallback?.voucher) {
+            order.selectedVoucher = fallback.voucher
+            changes.push(`Tự động đổi voucher: Chuyển sang phiếu giảm giá tốt nhất "${fallback.voucher.ma}" cho đơn hàng${orderLabel}`)
+          }
+          continue
+        }
+
         const isCaNhan = freshV.phamVi === 'CA_NHAN' || freshV.scope === 'CA_NHAN'
         const custId = order.customer?.id ? Number(order.customer.id) : null
         const alreadyUsed = custId && hasCustomerUsedVoucher(freshV, custId)
         const notAssigned = isCaNhan && (!custId || !isVoucherAssignedToCustomer(freshV, custId))
 
-        if (!freshV || freshV.trangThai === false) {
-          order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} đã bị khóa hoặc ngừng hoạt động và được tự động gỡ`)
-        } else if (alreadyUsed) {
-          order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} khách hàng đã dùng hết lượt và được tự động gỡ`)
+        let removeReason = null
+        if (alreadyUsed) {
+          removeReason = `khách hàng đã dùng hết lượt`
         } else if (notAssigned) {
-          order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá cá nhân "${vCode}"${orderLabel} không được cấp cho khách hàng này và được tự động gỡ`)
+          removeReason = `phiếu giảm giá cá nhân không được cấp cho khách hàng này`
         } else if (freshV.ngayKetThuc && new Date(freshV.ngayKetThuc) < now) {
-          order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} đã hết hạn sử dụng (${formatDateVn(freshV.ngayKetThuc)}) và được tự động gỡ`)
+          removeReason = `đã hết hạn sử dụng (${formatDateVn(freshV.ngayKetThuc)})`
         } else if (freshV.ngayBatDau && new Date(freshV.ngayBatDau) > now) {
-          order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} chưa đến thời gian hiệu lực (${formatDateVn(freshV.ngayBatDau)}) và được tự động gỡ`)
+          removeReason = `chưa đến thời gian hiệu lực (${formatDateVn(freshV.ngayBatDau)})`
         } else if (freshV.soLuong && freshV.soLuongDaSuDung !== undefined && Number(freshV.soLuongDaSuDung) >= Number(freshV.soLuong)) {
-          order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} đã hết lượt sử dụng (${freshV.soLuongDaSuDung}/${freshV.soLuong}) và được tự động gỡ`)
+          removeReason = `đã hết lượt sử dụng (${freshV.soLuongDaSuDung}/${freshV.soLuong})`
         } else if (newOrderSubTotal < Number(freshV.hoaDonToiThieu || 0)) {
+          removeReason = `yêu cầu đơn tối thiểu ${formatVnd(freshV.hoaDonToiThieu)} (hiện tại ${formatVnd(newOrderSubTotal)})`
+        }
+
+        if (removeReason) {
           order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} yêu cầu đơn tối thiểu ${formatVnd(freshV.hoaDonToiThieu)} (hiện tại ${formatVnd(newOrderSubTotal)}) nên đã được tự động gỡ`)
+          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} ${removeReason} và được tự động gỡ`)
+          const fallback = getBestVoucherForOrder(order)
+          if (fallback?.voucher) {
+            order.selectedVoucher = fallback.voucher
+            changes.push(`Tự động đổi voucher: Chuyển sang phiếu giảm giá tốt nhất "${fallback.voucher.ma}" cho đơn hàng${orderLabel}`)
+          }
         } else {
           const newDiscAmt = calculateVoucherDiscount(freshV, newOrderSubTotal)
           const valueEdited =
