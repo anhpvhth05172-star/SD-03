@@ -6,28 +6,7 @@ const stats = [
   { val: "7 ngày", label: "Đổi size miễn phí", icon: "bi-arrow-repeat" },
 ];
 
-const values = [
-  {
-    icon: "bi-shield-check",
-    title: "100% chính hãng",
-    desc: "Mọi sản phẩm đều được kiểm định nghiêm ngặt. Phát hiện hàng giả, Poly Shoes hoàn tiền gấp đôi.",
-  },
-  {
-    icon: "bi-arrow-repeat",
-    title: "Đổi size trong 7 ngày",
-    desc: "Chưa vừa chân? Đổi size miễn phí lần đầu, nhân viên đến tận nhà nhận và giao lại.",
-  },
-  {
-    icon: "bi-truck",
-    title: "Giao hàng nhanh",
-    desc: "Đóng gói 2 lớp cẩn thận, nhận hàng trong 1–3 ngày và được kiểm tra trước khi thanh toán.",
-  },
-  {
-    icon: "bi-patch-check",
-    title: "Bảo hành keo chỉ 12 tháng",
-    desc: "Bảo hành keo chỉ chu đáo, tư vấn chăm sóc và vệ sinh giày trọn đời.",
-  },
-];
+
 
 const stores = [
   {
@@ -111,26 +90,7 @@ const mapLink = (address) =>
       </div>
     </section>
 
-    <!-- ================= GIÁ TRỊ CỐT LÕI ================= -->
-    <section class="mb-5">
-      <div class="ab-head">
-        <div class="ab-eyebrow">/ Giá trị cốt lõi</div>
-        <h3 class="ab-h">Vì sao chọn Poly Shoes?</h3>
-        <p class="text-muted-ps small mb-0">
-          Bốn cam kết để bạn mua giày an tâm từ lúc chọn đến lúc nhận hàng.
-        </p>
-      </div>
 
-      <div class="row g-3">
-        <div v-for="v in values" :key="v.title" class="col-sm-6 col-lg-3">
-          <div class="ps-card ab-value h-100">
-            <div class="ab-ico"><i :class="'bi ' + v.icon"></i></div>
-            <h6 class="fw-bold mb-2">{{ v.title }}</h6>
-            <p class="text-muted-ps small mb-0">{{ v.desc }}</p>
-          </div>
-        </div>
-      </div>
-    </section>
 
     <!-- ================= CÂU CHUYỆN ================= -->
     <section class="ps-card ab-story mb-5">

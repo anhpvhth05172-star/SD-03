@@ -34,16 +34,18 @@ public class ThongKeService {
     private static final Set<String> MA_HINH_THUC_TIEN_MAT = Set.of("TM", "CASH");
 
     private static final List<String> THU_TU_TRANG_THAI = List.of(
-        "CHO_XAC_NHAN", "DA_XAC_NHAN", "CHO_GIAO_HANG", "DANG_GIAO_HANG",
-        "DA_GIAO_HANG", "DA_HOAN_THANH", "DA_HUY", "DA_HOAN_TIEN"
+        "CHO_THANH_TOAN", "CHO_XAC_NHAN", "DA_XAC_NHAN", "CHO_GIAO_HANG", "DANG_GIAO_HANG",
+        "GIAO_HANG_THAT_BAI", "DA_GIAO_HANG", "DA_HOAN_THANH", "DA_HUY", "DA_HOAN_TIEN"
     );
 
     private static final Map<String, String> NHAN_TRANG_THAI = Map.of(
+        "CHO_THANH_TOAN", "Chờ thanh toán",
         "CHO_XAC_NHAN", "Chờ xác nhận",
         "DA_XAC_NHAN", "Đã xác nhận",
         "CHO_GIAO_HANG", "Chờ giao hàng",
         "DANG_GIAO_HANG", "Đang giao hàng",
         "DA_GIAO_HANG", "Đã giao hàng",
+        "GIAO_HANG_THAT_BAI", "Giao hàng thất bại",
         "DA_HOAN_THANH", "Đã hoàn thành",
         "DA_HUY", "Đã hủy",
         "DA_HOAN_TIEN", "Đã hoàn tiền"
@@ -92,7 +94,16 @@ public class ThongKeService {
             .mapToLong(c -> c.soLuong() != null ? c.soLuong() : 0)
             .sum();
 
-        return new TongQuanDTO(doanhThu, tienMat, tienChuyenKhoan, soDon, aov, sanPhamBan, khachMoi);
+        long soDonOnline = demDonOnline(hoaDons, idHopLe);
+        return new TongQuanDTO(doanhThu, tienMat, tienChuyenKhoan, soDon, aov, sanPhamBan, khachMoi,
+            soDonOnline, soDon - soDonOnline);
+    }
+
+    /** Dem don ONLINE trong tap id; con lai (TAI_QUAY, TAI_QUAY_GIAO_HANG) la don tai quay. */
+    private long demDonOnline(List<HoaDonThongKeRow> hoaDons, Set<Long> ids) {
+        return hoaDons.stream()
+            .filter(h -> ids.contains(h.id()) && "ONLINE".equalsIgnoreCase(h.loaiDon()))
+            .count();
     }
 
     private TongQuanDTO tongQuanLocThuongHieu(
@@ -155,7 +166,9 @@ public class ThongKeService {
         long aov = soDon > 0 ? Math.round((double) doanhThu / soDon) : 0;
         long tienChuyenKhoan = doanhThu - tienMat;
 
-        return new TongQuanDTO(doanhThu, tienMat, tienChuyenKhoan, soDon, aov, sanPhamBan, khachMoi);
+        long soDonOnline = demDonOnline(hoaDons, idDonChuaThuongHieu);
+        return new TongQuanDTO(doanhThu, tienMat, tienChuyenKhoan, soDon, aov, sanPhamBan, khachMoi,
+            soDonOnline, soDon - soDonOnline);
     }
 
     /**

@@ -40,6 +40,7 @@ public class SmartProductSaveRequest {
     private String doiTuong;
     private String tinhNang;
     private String moTa;
+    private String hinhAnh;
     private String hinhAnhDaiDien;
     private Boolean trangThai = true;
 

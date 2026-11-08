@@ -8,7 +8,7 @@ import CurrencyInput from '@/components/CurrencyInput.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
-import { API_ORIGIN } from '@/api/http'
+import http, { API_ORIGIN } from '@/api/http'
 import { getToken } from '@/utils/auth'
 import { checkImageMagicBytes, compressImageToBase64 } from '@/utils/imageCompressor'
 
@@ -16,11 +16,23 @@ const router = useRouter()
 const route = useRoute()
 const API_BASE = `${API_ORIGIN}/api/v1`
 
-const getAuthHeaders = () => {
-  const token = getToken()
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+const apiFetch = async (url, options = {}) => {
+  const parsed = new URL(url, window.location.origin)
+  const apiPath = `${parsed.pathname.replace(/^\/api/, '')}${parsed.search}`
+  try {
+    const response = await http.request({
+      url: apiPath,
+      method: options.method || 'GET',
+      data: options.body ? JSON.parse(options.body) : undefined,
+      signal: options.signal,
+    })
+    return { ok: true, status: response.status, json: async () => response.data }
+  } catch (error) {
+    return {
+      ok: false,
+      status: error.status || error.response?.status || 500,
+      json: async () => error.response?.data || { message: error.message },
+    }
   }
 }
 
@@ -150,9 +162,9 @@ watch(() => filters.idSanPham, (newVal) => {
 const fetchFilterOptions = async () => {
   try {
     const [resColor, resSize, resProd] = await Promise.all([
-      fetch(`${API_BASE}/attributes/mau_sac`),
-      fetch(`${API_BASE}/attributes/kich_co`),
-      fetch(`${API_BASE}/san-pham?page=0&size=1000`)
+      apiFetch(`${API_BASE}/attributes/mau_sac`),
+      apiFetch(`${API_BASE}/attributes/kich_co`),
+      apiFetch(`${API_BASE}/san-pham?page=0&size=1000`)
     ])
     if (resColor.ok) colorsList.value = await resColor.json()
     if (resSize.ok) sizesList.value = await resSize.json()
@@ -201,8 +213,7 @@ const fetchVariants = async (useCache = true) => {
 
   try {
     const params = buildParams(currentPage.value)
-    const res = await fetch(`${API_BASE}/san-pham-chi-tiet?${params.toString()}`, {
-      headers: getAuthHeaders(),
+    const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet?${params.toString()}`, {
       signal: currentAbortController.signal
     })
 
@@ -316,12 +327,13 @@ const toggleStatus = async (item) => {
   const itemCode = item.maCtsp || item.maSp || `SKU-${item.id}`
 
   try {
-    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/${item.id}/toggle-status`, {
-      method: 'PATCH',
-      headers: getAuthHeaders()
-    })
+    const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet/${item.id}/toggle-status`, { method: 'PATCH' })
     if (res.ok) {
-      try { localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now())) } catch {}
+      try {
+        localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()))
+      } catch {
+        // Tín hiệu đồng bộ POS liên tab là tùy chọn.
+      }
       showToastNotice(
         'Cập nhật trạng thái thành công',
         `Đã chuyển trạng thái biến thể (${itemCode}) sang "${statusLabel}"`,
@@ -351,7 +363,7 @@ const exportVariantsToExcel = async () => {
     } else {
       const params = buildParams(0)
       params.set('size', '10000')
-      const res = await fetch(`${API_BASE}/san-pham-chi-tiet?${params.toString()}`)
+      const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet?${params.toString()}`)
       if (res.ok) {
         const data = await res.json()
         itemsToExport = data.content || variants.value
@@ -421,7 +433,7 @@ const exportVariantsToExcel = async () => {
   </Style>
   <Style ss:ID="PriceCell">
    <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>
-   <NumberFormat ss:Format="#,##0\ &quot;₫&quot;"/>
+   <NumberFormat ss:Format="#,##0 &quot;₫&quot;"/>
    <Borders>
     <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
     <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
@@ -580,12 +592,9 @@ const openSingleQrModal = async (item) => {
 }
 
 const openBatchQrModal = async () => {
-  let targetItems = []
-  if (selectedIds.value.length > 0) {
-    targetItems = variants.value.filter(v => selectedIds.value.includes(v.id))
-  } else {
-    targetItems = variants.value
-  }
+  const targetItems = selectedIds.value.length > 0
+    ? variants.value.filter(v => selectedIds.value.includes(v.id))
+    : variants.value
 
   if (targetItems.length === 0) {
     showToastNotice('Thông báo', 'Không có biến thể nào trong danh sách để tạo QR', 'warning')
@@ -690,7 +699,7 @@ const executeVisualSearch = async (base64, mimeType) => {
   visualSearchResult.value = null
 
   try {
-    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/ai-visual-search`, {
+    const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet/ai-visual-search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -755,7 +764,7 @@ const handleQuickAttributeAdded = async (item) => {
       trangThai: true
     }
 
-    const res = await fetch(`${API_BASE}/attributes/${endpoint}`, {
+    const res = await apiFetch(`${API_BASE}/attributes/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -815,12 +824,21 @@ const onAddColorChange = () => {
   }
 }
 
-const triggerAddImageUpload = () => {
+let activeVariantFileInput = null
+const pickVariantImageFile = (onDataUrl) => {
+  if (activeVariantFileInput && activeVariantFileInput.parentNode) {
+    activeVariantFileInput.parentNode.removeChild(activeVariantFileInput)
+  }
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = 'image/*,.jpg,.jpeg,.png,.webp,.gif,.avif,.jfif,.bmp'
+  input.style.display = 'none'
+  document.body.appendChild(input)
+  activeVariantFileInput = input
   input.onchange = async (e) => {
-    const file = e.target.files[0]
+    const file = e.target.files?.[0]
+    if (input.parentNode) input.parentNode.removeChild(input)
+    activeVariantFileInput = null
     if (!file) return
 
     const MAX_SIZE = 10 * 1024 * 1024 // 10MB
@@ -837,12 +855,21 @@ const triggerAddImageUpload = () => {
 
     try {
       const compressed = await compressImageToBase64(file)
-      addForm.imagePreview = compressed
-    } catch (err) {
-      notifyError('Lỗi xử lý ảnh', 'Không thể đọc và tối ưu hóa tệp ảnh này')
+      onDataUrl(compressed)
+    } catch {
+      const reader = new FileReader()
+      reader.onload = (ev) => onDataUrl(ev.target.result)
+      reader.readAsDataURL(file)
+    }
     }
   }
   input.click()
+}
+
+const triggerAddImageUpload = () => {
+  pickVariantImageFile((dataUrl) => {
+    addForm.imagePreview = dataUrl
+  })
 }
 
 const saveAddVariant = async () => {
@@ -895,9 +922,8 @@ const saveAddVariant = async () => {
       hinhAnh: addForm.imagePreview || addForm.existingColorImage || null
     }]
 
-    const res = await fetch(`${API_BASE}/san-pham-chi-tiet/batch`, {
+    const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet/batch`, {
       method: 'POST',
-      headers: getAuthHeaders(),
       body: JSON.stringify(payload)
     })
 
@@ -1134,33 +1160,9 @@ const saveAddVariant = async () => {
   }
 
   const triggerEditImageUpload = () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = 'image/*,.jpg,.jpeg,.png,.webp,.gif,.avif,.jfif,.bmp'
-    input.onchange = async (e) => {
-      const file = e.target.files[0]
-      if (!file) return
-
-      const MAX_SIZE = 10 * 1024 * 1024 // 10MB
-      if (file.size > MAX_SIZE) {
-        notifyWarning('Ảnh quá lớn', `Ảnh "${file.name}" vượt quá dung lượng tối đa 10MB!`)
-        return
-      }
-
-      const isValid = await checkImageMagicBytes(file)
-      if (!isValid) {
-        notifyError('Tệp không hợp lệ', `Tệp "${file.name}" không phải là ảnh hợp lệ!`)
-        return
-      }
-
-      try {
-        const compressed = await compressImageToBase64(file)
-        editForm.imagePreview = compressed
-      } catch (err) {
-        notifyError('Lỗi xử lý ảnh', 'Không thể đọc và tối ưu hóa tệp ảnh này')
-      }
-    }
-    input.click()
+    pickVariantImageFile((dataUrl) => {
+      editForm.imagePreview = dataUrl
+    })
   }
 
   const closeEditModal = () => {
@@ -1192,14 +1194,17 @@ const saveAddVariant = async () => {
         hinhAnh: editForm.imagePreview || editForm.existingColorImage || null
       }
 
-      const res = await fetch(`${API_BASE}/san-pham-chi-tiet/${currentId}`, {
+      const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet/${currentId}`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       })
 
       if (res.ok) {
-        try { localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now())) } catch {}
+        try {
+          localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()))
+        } catch {
+          // Tín hiệu đồng bộ POS liên tab là tùy chọn.
+        }
         isEditModalOpen.value = false
         notifySuccess('Thành công', `Đã cập nhật biến thể "${editForm.maCtsp}" thành công!`)
         fetchVariants(false)
@@ -1804,7 +1809,8 @@ const saveAddVariant = async () => {
               <div class="form-group span-2">
                 <label class="form-lbl">Sản phẩm áp dụng biến thể <span class="required">*</span></label>
                 <SearchableSelect v-model="addForm.idSanPham" :options="formattedProductsOptions" label-key="ten"
-                  value-key="id" placeholder="-- Chọn sản phẩm --" search-placeholder="Tìm sản phẩm theo mã, tên..." />
+                  value-key="id" placeholder="-- Chọn sản phẩm --" search-placeholder="Tìm sản phẩm theo mã, tên..."
+                  @change="onAddColorChange" />
               </div>
 
               <div class="form-group">

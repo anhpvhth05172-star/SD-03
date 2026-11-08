@@ -37,7 +37,11 @@ onMounted(async () => {
 
     if (data.success) {
       // ✅ Thanh toán thành công → xóa giỏ hàng (đơn đã được xác nhận phía BE)
-      try { await clearCart(); } catch (e) {}
+      try {
+        await clearCart()
+      } catch {
+        // Thanh toán đã được xác nhận phía BE; không chặn màn hình kết quả vì lỗi dọn cache.
+      }
 
       // Lưu đơn vào danh sách tra cứu (nếu có mã đơn)
       if (data.maHoaDon && data.orderId) {
@@ -54,7 +58,9 @@ onMounted(async () => {
             });
             localStorage.setItem("ps_orders", JSON.stringify(orders.slice(0, 20)));
           }
-        } catch (e) {}
+        } catch {
+          // Lưu lịch sử cục bộ là tùy chọn; mã đơn vẫn lấy được từ kết quả thanh toán.
+        }
       }
     }
     // ❌ Nếu thất bại: BE đã xóa đơn CHO_THANH_TOAN → giỏ hàng vẫn còn nguyên

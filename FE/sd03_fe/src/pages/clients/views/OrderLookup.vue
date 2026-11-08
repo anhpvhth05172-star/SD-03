@@ -1,18 +1,18 @@
 <script setup>
-import { ref, computed, unref, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import * as store from "../store";
-import { getUser } from "@/utils/auth";
+import { getUser, getToken as getSessionToken, isKhachHangDangNhap } from "@/utils/auth";
 
 const { money } = store;
 const route = useRoute();
 
 /* ================= CẤU HÌNH API ================= */
-const HOA_DON_API = "http://localhost:8080/api/hoa-don";
+const HOA_DON_API = "/api/hoa-don";
 
 const getToken = () => {
-  const a = unref(store.auth);
-  if (a?.token) return a.token;
+  const sessionToken = getSessionToken();
+  if (sessionToken) return sessionToken;
   for (const area of [localStorage, sessionStorage]) {
     const t = area.getItem("token") || area.getItem("accessToken");
     if (t) return t;
@@ -121,52 +121,24 @@ function normalize(h) {
 }
 
 /* ================= CHỈ XEM ĐƠN CỦA TÀI KHOẢN ĐANG ĐĂNG NHẬP ================= */
-function decodeJwt(token) {
-  try {
-    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(decodeURIComponent(escape(atob(payload))));
-  } catch (e) {
-    return null;
-  }
-}
-
-const KHACH_HANG_API = "http://localhost:8080/api/khach-hang";
 
 // Thông tin đăng nhập hiện có (id có thể chưa có, chỉ có tên đăng nhập)
 function getLoginInfo() {
   const u = getUser();
-  const a = unref(store.auth);
-  const au = unref(a?.user) || a;
-  const p = decodeJwt(getToken());
   return {
-    loggedIn: !!(u || getToken()),
-    id: u?.id ?? au?.id ?? p?.id ?? p?.userId ?? null,
-    username:
-      u?.tenTaiKhoan ??
-      u?.username ??
-      au?.tenTaiKhoan ??
-      au?.username ??
-      p?.sub ??
-      p?.username ??
-      null,
-    email: u?.email ?? au?.email ?? null,
+    loggedIn: isKhachHangDangNhap(),
+    id: u?.idKhachHang ?? u?.id ?? null,
   };
 }
 
-// Xác định id khách hàng: ưu tiên id có sẵn, không có thì tra qua API khach-hang
+// Xác định ID khách hàng từ phiên đăng nhập, dự phòng bằng API thông tin phiên.
 async function resolveCustomerId() {
   const info = getLoginInfo();
+  if (!info.loggedIn) return null;
   if (info.id != null) return info.id;
-  if (!info.username && !info.email) return null;
   try {
-    const page = await getJson(`${KHACH_HANG_API}?size=1000`);
-    const list = page.content || page || [];
-    const c = list.find(
-      (k) =>
-        (info.username && k.tenTaiKhoan === info.username) ||
-        (info.email && k.email === info.email),
-    );
-    return c?.id ?? null;
+    const profile = await getJson("/api/auth/thong-tin");
+    return profile?.id ?? null;
   } catch (e) {
     console.warn("[Auth] Không tra được id khách hàng:", e.message);
     return null;
@@ -180,7 +152,17 @@ const isMine = (o) =>
 
 // Lấy chi tiết hóa đơn theo id; trả về null nếu không phải đơn của mình
 async function fetchById(id) {
-  const o = normalize(await getJson(`${HOA_DON_API}/${id}`));
+  const o = normalize(await getJson(`${HOA_DON_API}/cua-toi/${id}`));
+  if (o.status === "DA_HUY") {
+    try {
+      const history = await getJson(`${HOA_DON_API}/cua-toi/${id}/lich-su`);
+      o.cancelReason = (history || []).find((item) =>
+        item.maTrangThaiSau === "DA_HUY" && /3 lần giao hàng thất bại/i.test(item.ghiChu || ""),
+      )?.ghiChu || "";
+    } catch {
+      o.cancelReason = "";
+    }
+  }
   return isMine(o) ? o : null;
 }
 
@@ -209,7 +191,7 @@ async function loadRecent() {
   try {
     // 1) Lấy danh sách đơn của khách hàng đang đăng nhập từ BE
     const page = await getJson(
-      `${HOA_DON_API}?idKhachHang=${encodeURIComponent(myId.value)}&size=50`,
+      `${HOA_DON_API}/cua-toi?size=50`,
     );
     const list = (page.content || page || [])
       .map(normalize)
@@ -257,7 +239,7 @@ async function findOrder(query) {
 
   // 2) Tìm theo mã hóa đơn / số điện thoại
   const page = await getJson(
-    `${HOA_DON_API}?keyword=${encodeURIComponent(query)}&idKhachHang=${encodeURIComponent(myId.value)}&size=50`,
+    `${HOA_DON_API}/cua-toi?keyword=${encodeURIComponent(query)}&size=50`,
   );
   const list = page.content || page || [];
   // Chỉ giữ đơn khớp mã/SĐT VÀ thuộc về tài khoản đang đăng nhập
@@ -276,7 +258,8 @@ async function findOrder(query) {
 
   // 3) Danh sách có thể không kèm chi tiết sản phẩm -> tải lại theo id
   const n = normalize(newest);
-  return n.hasItems ? n : await fetchById(n.id);
+  if (!n.hasItems || n.status === "DA_HUY") return await fetchById(n.id);
+  return n;
 }
 
 const doSearch = async (codeToSearch) => {
@@ -436,7 +419,14 @@ onMounted(async () => {
   myId.value = await resolveCustomerId();
   loadRecent();
   if (route.query.code) doSearch(route.query.code);
+  refreshTimer = window.setInterval(() => {
+    if (document.hidden || !myId.value) return;
+    if (searched.value && searchInput.value) doSearch(searchInput.value);
+    else loadRecent();
+  }, 30000);
 });
+let refreshTimer = null;
+onUnmounted(() => window.clearInterval(refreshTimer));
 </script>
 
 <template>
@@ -528,7 +518,7 @@ onMounted(async () => {
           Để bảo mật thông tin, bạn chỉ có thể tra cứu những đơn hàng thuộc tài
           khoản của mình.
         </p>
-        <RouterLink to="/dang-nhap" class="btn btn-primary ol-pill-btn px-4"
+        <RouterLink to="/khach-hang" class="btn btn-primary ol-pill-btn px-4"
           >Đăng nhập</RouterLink
         >
       </div>
@@ -786,8 +776,9 @@ onMounted(async () => {
             <div>
               <div class="fw-bold">{{ endedText(currentResult) }}</div>
               <div class="small">
-                Vui lòng liên hệ hotline <strong>1900 1234</strong> nếu cần hỗ
-                trợ.
+                <template v-if="currentResult.cancelReason">{{ currentResult.cancelReason }}. </template>
+                <template v-else>Vui lòng liên hệ hotline </template>
+                <strong>1900 1234</strong> nếu cần hỗ trợ.
               </div>
             </div>
           </div>

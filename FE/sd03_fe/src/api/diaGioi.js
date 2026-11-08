@@ -236,7 +236,9 @@ export const layPhuongXa = async (ds, tinh) => {
             return { districts: [{ wards: dataV2.wards }] }
           }
         }
-      } catch {}
+      } catch {
+        // Tiếp tục sang nguồn dữ liệu địa giới dự phòng bên dưới.
+      }
 
       const res = await fetch(`https://provinces.open-api.vn/api/v1/p/${subCode}?depth=3`, { signal: ctrl.signal })
       if (!res.ok) return null
@@ -372,7 +374,7 @@ export const phanTichDiaChiCccd = (raw) => {
 
   let huyen = ''
   let xa = ''
-  let diaChiCuThe = ''
+  let diaChiCuThe
 
   if (cacPhanConLai.length === 0) {
     diaChiCuThe = tinhGoc
@@ -458,9 +460,9 @@ export const phanTichChuoiCccd = (raw) => {
 
   let soCccd = ''
   let hoTen = ''
-  let dobRaw = ''
+  let dobRaw
   let gioiTinhRaw = ''
-  let diaChiRaw = ''
+  let diaChiRaw
   let ngayCapRaw = ''
 
   // Tìm số CCCD (12 chữ số)

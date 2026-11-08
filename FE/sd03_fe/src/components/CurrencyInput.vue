@@ -145,7 +145,6 @@ const handleInput = (e) => {
 
   if (props.max !== undefined && props.max !== null && num > props.max) {
     num = props.max
-    digits = String(num)
   }
 
   // 3. Format chuẩn theo tiền tệ Việt Nam (vi-VN)

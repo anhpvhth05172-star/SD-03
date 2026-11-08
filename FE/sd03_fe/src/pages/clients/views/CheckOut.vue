@@ -1,21 +1,34 @@
 <script setup>
-import { reactive, ref, computed, watch, onMounted, unref } from "vue";
+import { reactive, ref, computed, watch, onMounted } from "vue";
 import * as store from "../store";
+import { createInvoice } from "@/api/invoice";
+import { listVouchers, suDungCuaToi } from "@/api/voucher";
+import { getProvinces, getWards, getServices, tinhPhi } from "@/api/shipping";
+import { notifyConfirm } from "@/utils/notify";
+import { getUser, isKhachHangDangNhap } from "@/utils/auth";
 
 const { cart, cartTotal, money } = store;
 
 // Phí vận chuyển đơn online (back-end yêu cầu > 1.000đ). Đổi theo chính sách của shop.
 const SHIP_FEE = 30000;
-
-/* ================= CẤU HÌNH API ================= */
-const API = "http://localhost:8080/api/khach-hang";
+const shippingFee = ref(SHIP_FEE);
+const provinces = ref([]);
+const wards = ref([]);
+const provinceId = ref("");
+const wardId = ref("");
+const toProvinceId = ref(null);
+const toDistrictId = ref(null);
+const toWardCode = ref("");
+const serviceTypeId = ref(null);
+const shippingLoading = ref(false);
+const shippingError = ref("");
+const savedAddressToRestore = ref(null);
+let shippingRequestId = 0;
 
 const getToken = () => {
-  const a = unref(store.auth);
-  if (a?.token) return a.token;
   for (const area of [localStorage, sessionStorage]) {
-    const t = area.getItem("token") || area.getItem("accessToken");
-    if (t) return t;
+    const token = area.getItem("polyshoes_token") || area.getItem("token") || area.getItem("accessToken");
+    if (token) return token;
   }
   return "";
 };
@@ -31,59 +44,10 @@ async function getJson(url) {
   return res.json();
 }
 
-// Giải mã JWT -> lấy username / id
-function decodeJwt(token) {
-  try {
-    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(decodeURIComponent(escape(atob(payload))));
-  } catch (e) {
-    return null;
-  }
-}
-
 function getLoggedInUser() {
-  // 1) store.auth (nếu có)
-  const a = unref(store.auth);
-  if (a) {
-    const u = unref(a.user) || a;
-    if (u && (u.id || u.tenTaiKhoan || u.username || u.email)) return u;
-  }
-
-  // 2) quét toàn bộ localStorage + sessionStorage
-  for (const area of [localStorage, sessionStorage]) {
-    for (let i = 0; i < area.length; i++) {
-      const key = area.key(i);
-      const raw = area.getItem(key);
-      if (!raw) continue;
-
-      // Chuỗi là JWT
-      if (raw.split(".").length === 3) {
-        const p = decodeJwt(raw);
-        if (p)
-          return { tenTaiKhoan: p.sub || p.username, id: p.id || p.userId };
-      }
-      // Chuỗi là JSON
-      try {
-        const obj = JSON.parse(raw);
-        const u = obj.user || obj.khachHang || obj.data || obj;
-        if (
-          u &&
-          typeof u === "object" &&
-          (u.id || u.tenTaiKhoan || u.username || u.email)
-        ) {
-          return u;
-        }
-        if (obj.token) {
-          const p = decodeJwt(obj.token);
-          if (p)
-            return { tenTaiKhoan: p.sub || p.username, id: p.id || p.userId };
-        }
-      } catch (e) {
-        /* không phải JSON */
-      }
-    }
-  }
-  return null;
+  const user = getUser();
+  if (!user || !isKhachHangDangNhap()) return null;
+  return { ...user, id: user.idKhachHang ?? user.id };
 }
 
 async function fetchCustomer() {
@@ -96,43 +60,24 @@ async function fetchCustomer() {
     return null;
   }
 
-  const username = u.tenTaiKhoan || u.username;
-  const matches = (k) =>
-    (u.id && k.id === u.id) ||
-    (username && k.tenTaiKhoan === username) ||
-    (u.email && k.email === u.email);
-
-  // 1) API chi tiết theo id
-  if (u.id) {
-    try {
-      const c = await getJson(`${API}/${u.id}`);
-      console.log("[Checkout] khách hàng (chi tiết):", c);
-      return c;
-    } catch (e) {
-      console.warn("[Checkout] API chi tiết lỗi:", e.message);
-    }
-  }
-
-  // 2) Tìm trong danh sách
+  // API thông tin phiên trả đúng hồ sơ khách hàng mà không cần gọi danh sách quản trị.
   try {
-    const page = await getJson(`${API}?size=1000`);
-    const list = page.content || page;
-    const c = list.find(matches) || null;
-    console.log("[Checkout] khách hàng (từ danh sách):", c);
-    return c;
+    const profile = await getJson("/api/auth/thong-tin");
+    return { ...u, ...profile, id: profile.id ?? u.idKhachHang ?? u.id };
   } catch (e) {
-    console.warn("[Checkout] API danh sách lỗi (401/CORS?):", e.message);
-    return u.tenKhachHang ? u : null;
+    console.warn("[Checkout] Không tải được thông tin phiên:", e.message);
+    return u;
   }
 }
 
 const customer = ref(null);
 onMounted(async () => {
-  try {
-    customer.value = await fetchCustomer();
-  } catch (e) {
-    console.error("Không tải được khách hàng:", e);
-  }
+  const [, shippingResult] = await Promise.allSettled([
+    fetchCustomer().then((result) => { customer.value = result; }),
+    loadProvinces(),
+  ]);
+  if (shippingResult.status === "rejected") shippingError.value = "Không tải được danh sách tỉnh/thành phố.";
+  await loadVouchers();
 });
 
 /* ============== ADAPTER theo JSON thực tế ============== */
@@ -162,6 +107,9 @@ const savedAddresses = computed(() => {
       name: a.tenChiChi || c.tenKhachHang || "",
       phone: c.soDienThoai || "",
       address: fullAddress(a),
+      street: a.diaChiCuThe || "",
+      ward: a.phuong || "",
+      province: a.thanhPho || a.tinhThanhPho || "",
       isDefault: !!a.macDinh,
     }))
     .sort((x, y) => Number(y.isDefault) - Number(x.isDefault)); // mặc định lên đầu
@@ -179,7 +127,9 @@ const totalQty = computed(() =>
 );
 
 /* ================= PHIẾU GIẢM GIÁ (gọi API thật) ================= */
-const VOUCHER_API = "http://localhost:8080/admin/phieu-giam-gia";
+const availableVouchers = ref([]);
+const selectedVoucherId = ref("");
+const voucherCode = ref("");
 
 /* >>> ADAPTER: đổi tên field cho khớp entity/DTO PhieuGiamGia của bạn <<< */
 const VF = {
@@ -207,13 +157,18 @@ const VF = {
   },
   active: (v) => v.trangThai,
   scope: (v) => String(v.phamVi ?? "").toUpperCase(), // chứa CA_NHAN/KHACH_HANG => riêng từng khách
-  // danh sách id khách được áp dụng (lấy từ API detail)
+  // danh sách id khách được áp dụng (lấy từ API detail hoặc DTO)
   customerIds: (d) =>
-    (d.danhSachKhachHang || d.khachHangIds || d.khachHang || []).map((k) =>
-      typeof k === "object" ? (k.id ?? k.idKhachHang) : k,
+    (d.idKhachHangsChuaDung || d.danhSachKhachHang || d.khachHangIds || d.khachHang || []).map((k) =>
+      typeof k === "object" ? (k.id ?? k.idKhachHang) : Number(k),
+    ),
+  usedCustomerIds: (d) =>
+    (d.idKhachHangsDaDung || []).map((k) =>
+      typeof k === "object" ? (k.id ?? k.idKhachHang) : Number(k),
     ),
 };
 
+const myVoucherUsage = ref({});
 const isPercent = (loai) => /PHAN_TRAM|PERCENT|%/.test(loai);
 const isPersonal = (scope) => /CA_NHAN|KHACH_HANG|RIENG|PRIVATE/.test(scope);
 
@@ -224,10 +179,23 @@ function isExhausted(detail) {
   return /HET_LUOT|HET_SO_LUONG|DA_HET|HET_SL/i.test(String(VF.active(detail)));
 }
 
-// Kiểm tra điều kiện của 1 phiếu. Trả về chuỗi lỗi, hoặc "" nếu hợp lệ.
-// ignoreMin = true: bỏ qua điều kiện "đơn tối thiểu" (dùng khi liệt kê phiếu gợi ý)
+function hasCustomerReachedLimit(detail, cid) {
+  if (!detail || !cid) return false;
+  const numCid = Number(cid);
+  if (VF.usedCustomerIds(detail).includes(numCid)) return true;
+  const usage = myVoucherUsage.value[VF.id(detail)];
+  if (usage) {
+    const limit = Number(detail.gioiHanMoiTaiKhoan || usage.gioiHanMoiTaiKhoan || 1);
+    if (Number(usage.daSuDung || 0) >= limit) return true;
+  }
+  return false;
+}
+
+// Kiểm tra điều kiện của 1 phiếu. Trả về chuỗi lỗi, hoặc "" nếu hợp lệ (dùng được).
+// ignoreMin = true: bỏ qua điều kiện "đơn tối thiểu" (dùng khi kiểm tra gợi ý mua thêm)
 function checkVoucher(detail, ignoreMin = false) {
-  if (isExhausted(detail)) return "Mã giảm giá đã hết lượt sử dụng.";
+  if (!detail) return "Mã giảm giá không tồn tại.";
+  if (isExhausted(detail)) return "Đã hết lượt sử dụng.";
 
   const act = VF.active(detail);
   if (act === false || /NGUNG|TAT|INACTIVE|HET_HAN/i.test(String(act)))
@@ -237,25 +205,31 @@ function checkVoucher(detail, ignoreMin = false) {
   const st = VF.start(detail);
   const en = VF.end(detail);
   if (st && now < new Date(st))
-    return "Mã giảm giá chưa đến thời gian áp dụng.";
+    return "Chưa đến thời gian áp dụng.";
   if (en && now > new Date(en)) return "Mã giảm giá đã hết hạn.";
 
+  const cid = customer.value?.id ? Number(customer.value.id) : null;
+  if (!cid) {
+    return "Cần đăng nhập tài khoản để dùng mã giảm giá.";
+  }
+
+  if (hasCustomerReachedLimit(detail, cid)) {
+    const usage = myVoucherUsage.value[VF.id(detail)];
+    const limit = Number(detail.gioiHanMoiTaiKhoan || usage?.gioiHanMoiTaiKhoan || 1);
+    const used = Number(usage?.daSuDung || limit);
+    return `Bạn đã dùng hết lượt mã này (${used}/${limit} lần).`;
+  }
+
   if (isPersonal(VF.scope(detail))) {
-    const cid = customer.value?.id;
-    if (!cid) return "Vui lòng đăng nhập để dùng mã này.";
-    const khList = detail.khachHangs || detail.danhSachKhachHang || detail.khachHang || [];
-    const custRecord = khList.find(k => (k.idKhachHang ?? k.id) === cid);
-    if (!custRecord) {
-      return "Mã này không áp dụng cho tài khoản của bạn.";
-    }
-    if (custRecord.ngaySuDung || custRecord.trangThai === false) {
-      return "Bạn đã sử dụng mã giảm giá này rồi.";
+    const allowedIds = VF.customerIds(detail);
+    if (!allowedIds.includes(cid)) {
+      return "Mã cá nhân không thuộc tài khoản của bạn.";
     }
   }
 
   const min = VF.min(detail);
   if (!ignoreMin && orderTotal.value < min)
-    return `Đơn tối thiểu ${money(min)} để dùng mã này.`;
+    return `Mua thêm ${money(min - orderTotal.value)} để dùng mã này (Đơn từ ${money(min)}).`;
 
   return "";
 }
@@ -281,40 +255,16 @@ function calcDiscount(v, total) {
   return Math.max(0, Math.min(Math.floor(d), total));
 }
 
-// Lấy chi tiết 1 phiếu (có danh sách khách hàng được gắn)
-async function getVoucherDetail(v) {
-  try {
-    return { ...v, ...(await getJson(`${VOUCHER_API}/detail/${VF.id(v)}`)) };
-  } catch (e) {
-    return v; // dùng dữ liệu từ danh sách
-  }
-}
-
 // Trả về { ok: true, voucher } hoặc { ok: false, message }  (nhập mã tay)
 async function fetchVoucher(code) {
-  // Back-end chỉ cho dùng phiếu giảm giá khi có khách hàng
-  if (!customer.value?.id)
-    return { ok: false, message: "Vui lòng đăng nhập để dùng phiếu giảm giá." };
-
-  // 1) Tìm phiếu theo mã
-  let found = null;
-  try {
-    const page = await getJson(
-      `${VOUCHER_API}?keyword=${encodeURIComponent(code)}&size=50`,
-    );
-    const list = page.content || page;
-    found = list.find((v) => String(VF.code(v)).toUpperCase() === code);
-  } catch (e) {
-    return { ok: false, message: "Không kiểm tra được mã, vui lòng thử lại." };
-  }
+  const found = availableVouchers.value.find((v) => String(VF.code(v)).toUpperCase() === code);
   if (!found) return { ok: false, message: "Mã giảm giá không tồn tại." };
 
   // 2) Lấy chi tiết + 3) Kiểm tra điều kiện
-  const detail = await getVoucherDetail(found);
-  const msg = checkVoucher(detail);
+  const msg = checkVoucher(found);
   if (msg) return { ok: false, message: msg };
 
-  return { ok: true, voucher: toVoucher(detail) };
+  return { ok: true, voucher: toVoucher(found) };
 }
 /* ======================================================= */
 
@@ -335,14 +285,120 @@ function chooseAddress(id) {
     f.name = base.name;
     f.phone = base.phone;
     f.address = "";
+    provinceId.value = "";
+    wardId.value = "";
+    savedAddressToRestore.value = null;
     return;
   }
   const a = savedAddresses.value.find((x) => x.id === id);
   if (!a) return;
   f.name = a.name || base.name;
   f.phone = a.phone || base.phone;
-  f.address = a.address;
+  f.address = a.street;
+  savedAddressToRestore.value = a;
+  restoreSavedAddressRegion();
 }
+
+const selectedProvince = computed(() => provinces.value.find((p) => String(p.id) === String(provinceId.value)) || null);
+const selectedWard = computed(() => wards.value.find((w) => String(w.id) === String(wardId.value)) || null);
+const fullDeliveryAddress = computed(() =>
+  [f.address.trim(), selectedWard.value?.name, selectedProvince.value?.name].filter(Boolean).join(", "),
+);
+
+function normalizePlace(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim().toLowerCase();
+}
+
+function cleanPlaceName(v) {
+  return normalizePlace(v).replace(/^(thanh pho|tp\.?|tinh|quan|huyen|thi xa|phuong|xa|thi tran)\s+/i, "").trim();
+}
+
+function restoreSavedAddressRegion() {
+  const address = savedAddressToRestore.value;
+  if (!address || !provinces.value.length) return;
+  const targetProv = cleanPlaceName(address.province);
+  const province = targetProv
+    ? provinces.value.find((p) => cleanPlaceName(p.name) === targetProv || normalizePlace(p.name).includes(targetProv))
+    : null;
+  if (province) provinceId.value = String(province.id);
+  savedAddressToRestore.value = null;
+  if (province && address.ward) savedWardToRestore.value = address.ward;
+}
+
+const savedWardToRestore = ref("");
+
+async function loadProvinces() {
+  provinces.value = await getProvinces();
+  restoreSavedAddressRegion();
+}
+
+watch(provinceId, async (id) => {
+  wards.value = [];
+  wardId.value = "";
+  shippingError.value = "";
+  if (!id) return;
+  try {
+    wards.value = await getWards(Number(id));
+    if (savedWardToRestore.value) {
+      const savedWard = savedWardToRestore.value;
+      const match = wards.value.find((w) => normalizePlace(w.name) === normalizePlace(savedWard)
+        || normalizePlace(w.name).startsWith(`${normalizePlace(savedWard)} `));
+      if (match) wardId.value = String(match.id);
+      savedWardToRestore.value = "";
+    }
+  } catch {
+    shippingError.value = "Không tải được danh sách phường/xã.";
+  }
+});
+
+watch([provinceId, wardId, serviceTypeId], async ([province, ward]) => {
+  const requestId = ++shippingRequestId;
+  if (!province || !ward || !selectedProvince.value || !selectedWard.value) {
+    shippingFee.value = SHIP_FEE;
+    toProvinceId.value = null;
+    toDistrictId.value = null;
+    toWardCode.value = "";
+    shippingLoading.value = false;
+    return;
+  }
+  shippingLoading.value = true;
+  shippingError.value = "";
+  try {
+    const result = await tinhPhi({
+      toProvinceName: selectedProvince.value.name,
+      toWardName: selectedWard.value.name,
+      serviceTypeId: serviceTypeId.value || undefined,
+      items: cart.items.map((i) => ({
+        idSanPhamChiTiet: i.idSanPhamChiTiet ?? i.spctId ?? i.id,
+        soLuong: i.qty || 1,
+      })),
+    });
+    if (requestId !== shippingRequestId) return;
+    shippingFee.value = Number(result.shippingFee || SHIP_FEE);
+    toProvinceId.value = Number(result.toProvinceId || selectedProvince.value.id) || 201;
+    toDistrictId.value = Number(result.toDistrictId || 0) || 1;
+    toWardCode.value = String(result.toWardCode || selectedWard.value.id || "001");
+    if (result.toDistrictId) {
+      try {
+        const services = await getServices(result.toDistrictId);
+        if (requestId !== shippingRequestId) return;
+        if (!serviceTypeId.value && services.length) serviceTypeId.value = services[0].serviceTypeId;
+      } catch {
+        /* ignore service fetch error */
+      }
+    }
+  } catch (error) {
+    if (requestId !== shippingRequestId) return;
+    console.warn("[Checkout] Không tính được phí GHN tự động, dùng phí mặc định:", error.message);
+    shippingError.value = "";
+    shippingFee.value = SHIP_FEE;
+    toProvinceId.value = Number(selectedProvince.value.id) || 201;
+    toDistrictId.value = 1;
+    toWardCode.value = "001";
+  } finally {
+    if (requestId === shippingRequestId) shippingLoading.value = false;
+  }
+});
 
 /* ---------- Khóa ô nhập khi đã tự điền ---------- */
 // Họ tên, SĐT: khóa nếu thông tin lấy được từ tài khoản (SĐT trống thì vẫn cho nhập)
@@ -354,7 +410,8 @@ const lockPhone = computed(
 );
 // Địa chỉ: khóa khi đang dùng địa chỉ đã lưu, chỉ nhập được khi chọn "Nhập địa chỉ mới"
 const lockAddress = computed(
-  () => isLoggedIn.value && selectedAddr.value !== "new",
+  () => isLoggedIn.value && selectedAddr.value !== "new"
+    && !!savedAddresses.value.find((a) => a.id === selectedAddr.value)?.street,
 );
 
 // Chạy khi dữ liệu khách hàng tải xong
@@ -369,22 +426,39 @@ watch(
 );
 
 /* ---------- Voucher ---------- */
-const voucherCode = ref("");
 const voucher = ref(null); // { code, ...rule }
 const voucherMsg = reactive({ text: "", ok: false });
 const manualRemoved = ref(false); // khách chủ động gỡ mã -> không tự áp lại
 
 // Tổng trước giảm = tiền hàng + phí vận chuyển (khớp cách tính của back-end)
-const orderTotal = computed(() => cartTotal.value + SHIP_FEE);
+const orderTotal = computed(() => cartTotal.value + shippingFee.value);
+const voucherIsAvailable = (v) => {
+  const now = new Date();
+  const end = v.ngayKetThuc ? new Date(v.ngayKetThuc) : null;
+  return v.trangThai !== false
+    && (!v.soLuong || Number(v.soLuongDaSuDung || 0) < Number(v.soLuong))
+    && (!v.ngayBatDau || now >= new Date(v.ngayBatDau))
+    && (!end || now <= end);
+};
+const voucherSuggestion = computed(() => availableVouchers.value
+  .filter((v) => !checkVoucher(v, true) && Number(v.hoaDonToiThieu || 0) > orderTotal.value)
+  .sort((a, b) => Number(a.hoaDonToiThieu) - Number(b.hoaDonToiThieu))[0] || null);
+
+function formatVoucherValue(v) {
+  return /PERCENT|PHAN_TRAM|%/i.test(String(v.loaiGiamGia || ""))
+    ? `Giảm ${v.giaTriGiam}%`
+    : `Giảm ${money(v.giaTriGiam || 0)}`;
+}
 
 const discount = computed(() => calcDiscount(voucher.value, orderTotal.value));
 const finalTotal = computed(() => orderTotal.value - discount.value);
 
 const applying = ref(false);
 async function applyVoucher() {
-  const code = voucherCode.value.trim().toUpperCase();
+  const selected = availableVouchers.value.find((v) => String(v.id) === String(selectedVoucherId.value));
+  const code = String(voucherCode.value || VF.code(selected) || "").trim().toUpperCase();
   if (!code) {
-    voucherMsg.text = "Vui lòng nhập mã giảm giá.";
+    voucherMsg.text = "Vui lòng chọn voucher.";
     voucherMsg.ok = false;
     return;
   }
@@ -403,9 +477,8 @@ async function applyVoucher() {
   voucherMsg.ok = true;
 }
 function removeVoucher() {
-  userRemovedVoucher.value = true;
   voucher.value = null;
-  voucherCode.value = "";
+  selectedVoucherId.value = "";
   voucherMsg.text = "";
 }
 // Khách bấm gỡ mã
@@ -423,88 +496,117 @@ watch(orderTotal, () => {
 });
 
 /* ---------- Danh sách phiếu gợi ý theo giá trị đơn hàng ---------- */
-const allVouchers = ref([]); // chi tiết các phiếu tải từ API
+const allVouchers = ref([]); // voucher công khai đang còn hiệu lực
 const loadingVouchers = ref(false);
 
 async function loadVouchers() {
-  if (!customer.value?.id) {
-    allVouchers.value = [];
-    return;
-  }
   loadingVouchers.value = true;
   try {
-    const page = await getJson(`${VOUCHER_API}?size=100`);
-    const list = page.content || page;
-    allVouchers.value = await Promise.all(list.map(getVoucherDetail));
+    const [listRes, usageRes] = await Promise.allSettled([
+      listVouchers(),
+      customer.value?.id ? suDungCuaToi() : Promise.resolve([]),
+    ]);
+    const list = listRes.status === "fulfilled" && Array.isArray(listRes.value) ? listRes.value : [];
+    const usageList = usageRes.status === "fulfilled" && Array.isArray(usageRes.value) ? usageRes.value : [];
+    const map = {};
+    for (const u of usageList) {
+      if (u && u.id != null) {
+        map[u.id] = {
+          daSuDung: Number(u.daSuDung || 0),
+          gioiHanMoiTaiKhoan: Number(u.gioiHanMoiTaiKhoan || 1),
+        };
+      }
+    }
+    myVoucherUsage.value = map;
+    availableVouchers.value = list;
+    allVouchers.value = list;
   } catch (e) {
     console.warn("[Checkout] Không tải được danh sách phiếu:", e.message);
+    availableVouchers.value = [];
     allVouchers.value = [];
   } finally {
     loadingVouchers.value = false;
   }
 }
-// Tải lại khi đã có thông tin khách hàng
-watch(() => customer.value?.id, loadVouchers, { immediate: true });
 
-// Phiếu còn hiệu lực VÀ còn lượt sử dụng (phiếu hết lượt bị ẩn hoàn toàn)
+// Danh sách tất cả phiếu giảm giá kèm kiểm tra cái nào dùng được / không dùng được
 const voucherOptions = computed(() => {
   const total = orderTotal.value;
+  const cid = customer.value?.id ? Number(customer.value.id) : null;
   const list = allVouchers.value
-    .filter((d) => !isExhausted(d))
-    .filter((d) => !checkVoucher(d, true))
+    .filter((d) => {
+      // Với phiếu cá nhân, chỉ hiển thị nếu được cấp cho khách hàng hiện tại
+      if (isPersonal(VF.scope(d))) {
+        if (!cid) return false;
+        const assigned = VF.customerIds(d).includes(cid) || VF.usedCustomerIds(d).includes(cid);
+        if (!assigned) return false;
+      }
+      return true;
+    })
     .map((d) => {
       const v = toVoucher(d);
-      const eligible = total >= (v.min || 0);
+      const reason = checkVoucher(d, false);
+      const disc = calcDiscount(v, total);
+      const eligible = !reason && disc > 0;
       const end = VF.end(d);
       const left = VF.qty(d);
       return {
         v,
+        raw: d,
         eligible,
-        discount: eligible ? calcDiscount(v, total) : 0,
+        reason: reason || (disc <= 0 ? "Không đủ điều kiện giảm giá." : ""),
+        discount: eligible ? disc : 0,
         missing: Math.max(0, (v.min || 0) - total),
         expire: end ? new Date(end).toLocaleDateString("vi-VN") : "",
         left: left !== undefined && left !== null ? Number(left) : null,
         best: false,
       };
     });
-  // Đủ điều kiện lên trước, giảm nhiều nhất lên đầu
+  // Phiếu dùng được lên trước (giảm nhiều nhất lên đầu), phiếu không dùng được xuống dưới
   list.sort(
     (x, y) =>
-      Number(y.eligible) - Number(x.eligible) || y.discount - x.discount,
+      Number(y.eligible) - Number(x.eligible) ||
+      y.discount - x.discount ||
+      (x.v.min || 0) - (y.v.min || 0),
   );
   const best = list.find((o) => o.eligible && o.discount > 0);
   if (best) best.best = true;
   return list;
 });
 
-const bestVoucher = computed(() => voucherOptions.value.find((o) => o.best));
-const userRemovedVoucher = ref(false);
+const usableVoucherCount = computed(() => voucherOptions.value.filter((o) => o.eligible).length);
+const bestVoucher = computed(() => voucherOptions.value.find((o) => o.best && o.eligible) || null);
 
-// Tự động áp dụng mã giảm giá tốt nhất khi có sản phẩm trong giỏ
-watch([bestVoucher, orderTotal], ([best, total]) => {
-  if (total <= 0) {
-    voucher.value = null;
-    userRemovedVoucher.value = false;
-    return;
-  }
-  if (!userRemovedVoucher.value && best) {
-    if (!voucher.value || voucher.value.id !== best.v.id) {
-      voucher.value = best.v;
-      voucherMsg.text = `Đã tự động áp dụng mã ${best.v.code} (tiết kiệm ${money(best.discount)})`;
-      voucherMsg.ok = true;
+// Tự động áp dụng duy nhất voucher tốt nhất VÀ dùng được; nếu không dùng được thì tuyệt đối không tự áp dụng.
+watch([bestVoucher, orderTotal, customer, myVoucherUsage], ([best]) => {
+  if (voucher.value) {
+    const raw = allVouchers.value.find((x) => VF.id(x) === voucher.value.id);
+    const err = raw ? checkVoucher(raw, false) : "Mã giảm giá không còn khả dụng.";
+    if (err || calcDiscount(voucher.value, orderTotal.value) <= 0) {
+      voucher.value = null;
+      selectedVoucherId.value = "";
     }
-  } else if (voucher.value) {
-    const curDetail = allVouchers.value.find((x) => VF.id(x) === voucher.value.id);
-    if (!curDetail || checkVoucher(curDetail)) {
-      if (best) {
-        voucher.value = best.v;
-      } else {
-        voucher.value = null;
-      }
+  }
+  if (manualRemoved.value) return;
+  const current = voucher.value;
+  const next = best && best.eligible ? best.v : null;
+  if (current?.id === next?.id) return;
+  voucher.value = next;
+  if (next) {
+    voucherCode.value = "";
+    selectedVoucherId.value = String(next.id);
+    voucherMsg.text = `Tự động áp dụng mã tốt nhất dùng được: ${next.code}.`;
+    voucherMsg.ok = true;
+  } else {
+    selectedVoucherId.value = "";
+    if (current) {
+      voucherMsg.text = "Không có mã giảm giá nào dùng được cho đơn hàng này.";
+      voucherMsg.ok = false;
+    } else {
+      voucherMsg.text = "";
     }
   }
 }, { immediate: true });
-
 
 // Voucher đang áp dụng mà bị hết lượt (sau khi tải lại danh sách) -> gỡ
 watch(allVouchers, () => {
@@ -516,21 +618,6 @@ watch(allVouchers, () => {
     voucherMsg.ok = false;
   }
 });
-
-// Tự động áp dụng mã giảm giá tốt nhất cho khách hàng
-watch(
-  [bestVoucher, () => cart.items.length],
-  ([best]) => {
-    if (manualRemoved.value) return;
-    if (best && (!voucher.value || voucher.value.id !== best.v.id)) {
-      voucher.value = best.v;
-      voucherCode.value = "";
-      voucherMsg.text = `Đã tự động áp dụng mã ưu đãi tốt nhất (${best.v.code})!`;
-      voucherMsg.ok = true;
-    }
-  },
-  { immediate: true },
-);
 
 const voucherLabel = (v) =>
   v.type === "percent"
@@ -552,7 +639,6 @@ function toggleVoucher(o) {
 }
 
 /* ---------- Đặt hàng: lưu vào hóa đơn (POST /api/hoa-don) ---------- */
-const HOA_DON_API = "http://localhost:8080/api/hoa-don";
 const ID_NHAN_VIEN_ONLINE = null; // null = không gán nhân viên (đơn online)
 const orderCode = ref("");
 const submitting = ref(false);
@@ -592,7 +678,7 @@ function buildHoaDonRequest() {
     idKhachHang: customer.value?.id ?? null,
     tenKhachHang: f.name.trim(),
     soDienThoaiKhachHang: f.phone.trim(),
-    diaChiNhanHang: f.address.trim(),
+    diaChiNhanHang: fullDeliveryAddress.value,
     ghiChu: f.note.trim(),
 
     // Đơn online không có nhân viên (cần back-end cho phép null)
@@ -600,7 +686,10 @@ function buildHoaDonRequest() {
 
     ...phuongThucFields(f.pay),
     idPhieuGiamGia: voucher.value?.id ?? null,
-    phiVanChuyen: SHIP_FEE,
+    phiVanChuyen: shippingFee.value,
+    toProvinceId: toProvinceId.value,
+    toDistrictId: toDistrictId.value,
+    toWardCode: toWardCode.value,
 
     chiTiet: cart.items.map((i) => ({
       idSanPhamChiTiet: i.idSanPhamChiTiet ?? i.spctId ?? i.id,
@@ -610,9 +699,18 @@ function buildHoaDonRequest() {
   };
 }
 
-function clearCart() {
-  if (typeof store.clearCart === "function") return store.clearCart();
+async function clearCart() {
+  if (typeof store.clearCart === "function") {
+    try {
+      await store.clearCart();
+    } catch (e) {
+      console.warn("[Checkout] clearCart server warn:", e);
+    }
+  }
   if (Array.isArray(cart.items)) cart.items.splice(0);
+  if (typeof store.resetCartLocal === "function") {
+    store.resetCartLocal();
+  }
 }
 
 async function submit() {
@@ -621,8 +719,22 @@ async function submit() {
   errors.phone = /^0\d{9}$/.test(f.phone)
     ? ""
     : "Số điện thoại gồm 10 số, bắt đầu bằng 0.";
-  errors.address = f.address.trim() ? "" : "Vui lòng nhập địa chỉ nhận hàng.";
-  if (errors.name || errors.phone || errors.address) return;
+  errors.address = f.address.trim() && provinceId.value && wardId.value
+    ? ""
+    : "Vui lòng nhập địa chỉ cụ thể và chọn tỉnh/thành phố, phường/xã.";
+  if (errors.name || errors.phone || errors.address) {
+    submitError.value = errors.name || errors.phone || errors.address;
+    return;
+  }
+  if (shippingLoading.value) {
+    submitError.value = "Đang tính phí vận chuyển, vui lòng đợi trong giây lát.";
+    return;
+  }
+  if (!toProvinceId.value) toProvinceId.value = Number(selectedProvince.value?.id) || 201;
+  if (!toDistrictId.value || toDistrictId.value === 1) {
+    toDistrictId.value = 1;
+    toWardCode.value = "001";
+  }
 
   submitting.value = true;
 
@@ -634,7 +746,7 @@ async function submit() {
     console.log("[Checkout] VNPAY payload:", payload);
     try {
       const res = await fetch(
-        "http://localhost:8080/api/vnpay/create-payment",
+        "/api/vnpay/create-payment",
         {
           method: "POST",
           headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -646,7 +758,7 @@ async function submit() {
         let errJson = {};
         try {
           errJson = await res.json();
-        } catch (e) {}
+        } catch { /* Response có thể không phải JSON. */ }
         throw new Error(
           errJson.message || `Lỗi tạo thanh toán VNPAY (mã lỗi ${res.status}).`,
         );
@@ -672,27 +784,16 @@ async function submit() {
   }
 
   // ====== COD / Bank: flow bình thường ======
-  const payload = buildHoaDonRequest();
-  console.log("[Checkout] payload gửi hóa đơn:", payload);
   try {
-    const res = await fetch(HOA_DON_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      let msg = "";
-      try {
-        const err = await res.json();
-        msg = err.message || err.error || "";
-      } catch (e) {
-        /* không có body JSON */
-      }
-      throw new Error(msg || `Đặt hàng thất bại (mã lỗi ${res.status}).`);
-    }
-
-    const hd = await res.json(); // HoaDonDTO
+    const confirmed = await notifyConfirm(
+      "Xác nhận đặt hàng",
+      `Xác nhận đơn hàng với tổng thanh toán ${money(finalTotal.value)}?`,
+      "Xác nhận đặt hàng",
+    );
+    if (!confirmed) return;
+    const payload = buildHoaDonRequest();
+    console.log("[Checkout] payload gửi hóa đơn:", payload);
+    const hd = await createInvoice(payload); // HoaDonDTO
     orderId.value = hd.id;
     orderCode.value = hd.maHoaDon ?? hd.ma ?? hd.id;
 
@@ -705,7 +806,7 @@ async function submit() {
         info: {
           name: f.name,
           phone: f.phone,
-          address: f.address,
+          address: fullDeliveryAddress.value,
           note: f.note,
           pay: f.pay,
         },
@@ -714,16 +815,14 @@ async function submit() {
         date: new Date().toLocaleString("vi-VN"),
       });
       localStorage.setItem("ps_orders", JSON.stringify(orders.slice(0, 20)));
-    } catch (e) {}
+    } catch { /* Lưu lịch sử đơn hàng ở localStorage là tùy chọn. */ }
 
     done.value = true;
-    clearCart();
+    await clearCart();
   } catch (e) {
     console.error("[Checkout] Lỗi tạo hóa đơn:", e);
-    submitError.value =
-      e.message === "Failed to fetch"
-        ? "Không kết nối được máy chủ, vui lòng thử lại."
-        : e.message;
+    submitError.value = e.response?.data?.message
+      || (e.message === "Network Error" ? "Không kết nối được máy chủ, vui lòng thử lại." : e.message);
   } finally {
     submitting.value = false;
   }
@@ -832,7 +931,7 @@ async function copyOrderCode() {
             >
           </div>
           <RouterLink
-            to="/dang-nhap"
+            to="/khach-hang"
             class="btn btn-sm btn-dark rounded-pill px-3 fw-bold"
           >
             Đăng nhập
@@ -923,10 +1022,22 @@ async function copyOrderCode() {
               />
               <div class="invalid-feedback">{{ errors.phone }}</div>
             </div>
+            <div class="col-md-6">
+              <label class="co-label">Tỉnh / Thành phố <span class="text-danger">*</span></label>
+              <select v-model="provinceId" class="form-select co-input" :disabled="!provinces.length">
+                <option value="">Chọn tỉnh / thành phố</option>
+                <option v-for="p in provinces" :key="p.id" :value="String(p.id)">{{ p.name }}</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="co-label">Phường / Xã <span class="text-danger">*</span></label>
+              <select v-model="wardId" class="form-select co-input" :disabled="!provinceId || !wards.length">
+                <option value="">Chọn phường / xã</option>
+                <option v-for="w in wards" :key="w.id" :value="String(w.id)">{{ w.name }}</option>
+              </select>
+            </div>
             <div class="col-12">
-              <label class="co-label"
-                >Địa chỉ nhận hàng <span class="text-danger">*</span></label
-              >
+              <label class="co-label">Địa chỉ cụ thể (số nhà, tên đường) <span class="text-danger">*</span></label>
               <input
                 v-model="f.address"
                 class="form-control co-input"
@@ -935,10 +1046,11 @@ async function copyOrderCode() {
                   'is-invalid': errors.address,
                   'bg-light': lockAddress,
                 }"
-                placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
+                placeholder="Ví dụ: 123 Nguyễn Trãi"
               />
               <div class="invalid-feedback">{{ errors.address }}</div>
             </div>
+            <div v-if="shippingError" class="col-12 small text-danger">{{ shippingError }}</div>
             <div class="col-12">
               <label class="co-label">Ghi chú (không bắt buộc)</label>
               <textarea
@@ -974,7 +1086,7 @@ async function copyOrderCode() {
                 >Nhận hàng trong 1-3 ngày làm việc</span
               >
             </span>
-            <span class="small fw-bold">{{ money(SHIP_FEE) }}</span>
+            <span class="small fw-bold">{{ shippingLoading ? 'Đang tính...' : money(shippingFee) }}</span>
           </label>
         </section>
 
@@ -1111,14 +1223,19 @@ async function copyOrderCode() {
               <button
                 class="btn btn-primary co-apply"
                 type="button"
-                :disabled="applying"
+                :disabled="applying || (!voucherCode && !selectedVoucherId)"
                 @click="applyVoucher"
               >
                 {{ applying ? "Đang kiểm tra..." : "Áp dụng" }}
               </button>
             </div>
+            <div v-if="!voucher && voucherSuggestion" class="small text-primary mt-2">
+              Mua thêm {{ money(Number(voucherSuggestion.hoaDonToiThieu) - orderTotal) }} để dùng
+              <strong>{{ voucherSuggestion.maPhieuGiamGia }}</strong>
+              ({{ formatVoucherValue(voucherSuggestion) }}).
+            </div>
 
-            <div v-else class="co-voucher-ok">
+            <div v-if="voucher" class="co-voucher-ok">
               <i class="bi bi-ticket-perforated-fill"></i>
               <div class="flex-grow-1 small">
                 <div>
@@ -1143,15 +1260,17 @@ async function copyOrderCode() {
             </div>
 
             <!-- Danh sách phiếu -->
-            <div v-if="!isLoggedIn" class="small text-muted mt-3">
-              Đăng nhập để xem các phiếu giảm giá dành cho bạn.
-            </div>
-            <div v-else-if="loadingVouchers" class="small text-muted mt-3">
+            <div v-if="loadingVouchers" class="small text-muted mt-3">
               <span class="spinner-border spinner-border-sm me-1"></span>Đang
               tải phiếu giảm giá...
             </div>
             <div v-else-if="voucherOptions.length" class="mt-3">
-              <div class="co-label">Phiếu phù hợp với đơn hàng</div>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="co-label mb-0">Tất cả phiếu giảm giá</div>
+                <span class="badge bg-light text-dark border">
+                  {{ usableVoucherCount }}/{{ voucherOptions.length }} dùng được
+                </span>
+              </div>
               <div class="co-voucher-list">
                 <div
                   v-for="o in voucherOptions"
@@ -1164,11 +1283,17 @@ async function copyOrderCode() {
                 >
                   <div class="co-vleft"><i class="bi bi-percent"></i></div>
                   <div class="flex-grow-1 min-w-0">
-                    <div class="fw-bold small">
-                      {{ o.v.code }}
-                      <span v-if="o.best" class="badge bg-success ms-1"
-                        >Tốt nhất</span
-                      >
+                    <div class="fw-bold small d-flex align-items-center flex-wrap gap-1">
+                      <span>{{ o.v.code }}</span>
+                      <span v-if="o.eligible" class="badge bg-success-subtle text-success border border-success-subtle">
+                        Dùng được
+                      </span>
+                      <span v-else class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                        Không dùng được
+                      </span>
+                      <span v-if="o.best && o.eligible" class="badge bg-success">
+                        Tốt nhất
+                      </span>
                     </div>
                     <div class="small">
                       {{ voucherLabel(o.v) }} • Đơn từ {{ money(o.v.min) }}
@@ -1176,11 +1301,11 @@ async function copyOrderCode() {
                     <div class="co-vexp">
                       <span v-if="o.expire">HSD: {{ o.expire }}</span>
                       <span v-if="o.left !== null">
-                        · Còn {{ o.left }} lượt</span
+                        · Còn {{ Math.max(0, o.left) }} lượt</span
                       >
                     </div>
                     <div v-if="!o.eligible" class="co-vexp text-danger">
-                      Mua thêm {{ money(o.missing) }} để dùng mã này
+                      {{ o.reason || `Mua thêm ${money(o.missing)} để dùng mã này` }}
                     </div>
                     <div v-else class="co-vexp text-success">
                       Giảm được {{ money(o.discount) }}
@@ -1192,7 +1317,9 @@ async function copyOrderCode() {
                     :class="
                       voucher && voucher.id === o.v.id
                         ? 'btn-success'
-                        : 'btn-outline-primary'
+                        : o.eligible
+                          ? 'btn-outline-primary'
+                          : 'btn-outline-secondary'
                     "
                     :disabled="!o.eligible"
                     @click="toggleVoucher(o)"
@@ -1200,7 +1327,9 @@ async function copyOrderCode() {
                     {{
                       voucher && voucher.id === o.v.id
                         ? "✓ Đang dùng"
-                        : "Chọn mã"
+                        : o.eligible
+                          ? "Áp dụng"
+                          : "Không khả dụng"
                     }}
                   </button>
                 </div>
@@ -1225,7 +1354,7 @@ async function copyOrderCode() {
             </div>
             <div class="co-row">
               <span>Phí vận chuyển</span>
-              <span class="fw-semibold">{{ money(SHIP_FEE) }}</span>
+              <span class="fw-semibold">{{ money(shippingFee) }}</span>
             </div>
             <div v-if="discount" class="co-row text-success">
               <span
@@ -1269,20 +1398,6 @@ async function copyOrderCode() {
               <i v-if="!submitting" class="bi bi-arrow-right ms-1"></i>
             </button>
 
-            <div class="co-perks">
-              <span
-                ><i class="bi bi-shield-lock-fill text-success"></i>Bảo mật
-                thanh toán</span
-              >
-              <span
-                ><i class="bi bi-box-seam-fill text-danger"></i>Kiểm tra khi
-                nhận</span
-              >
-              <span
-                ><i class="bi bi-arrow-repeat text-primary"></i>Đổi size 7
-                ngày</span
-              >
-            </div>
           </section>
         </div>
       </div>

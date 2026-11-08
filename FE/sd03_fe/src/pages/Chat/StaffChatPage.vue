@@ -1,14 +1,19 @@
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import {
   dsHoiThoaiNhanVien,
   guiTinNhanVien,
   layTinNhanVien,
   danhDaDocNhanVien,
   dongHoiThoai,
+  tiepNhanHoiThoai,
 } from '@/api/chat'
 
 const dsHoiThoai = ref([])
+const tab = ref('mo')
+const dsHienThi = computed(() => dsHoiThoai.value.filter(h => tab.value === 'lich-su'
+  ? h.trangThai === 'DONG'
+  : h.trangThai !== 'DONG'))
 const hoiThoaiChon = ref(null)
 const tinNhan = ref([])
 const noiDung = ref('')
@@ -97,6 +102,16 @@ const dong = async () => {
   }
 }
 
+const tiepNhan = async () => {
+  if (!hoiThoaiChon.value) return
+  try {
+    hoiThoaiChon.value = await tiepNhanHoiThoai(hoiThoaiChon.value.id)
+    await taiDanhSach()
+  } catch (e) {
+    loi.value = e.message
+  }
+}
+
 const tenNguoiGui = (t) => {
   if (t.loaiNguoiGui === 'KHACH') return t.tenNguoiGui || 'Khách'
   if (t.loaiNguoiGui === 'AI') return 'AI'
@@ -125,15 +140,20 @@ onUnmounted(() => {
   <div class="staff-chat">
     <aside class="conv-list">
       <h2>Hội thoại khách hàng</h2>
+      <nav class="chat-queue-tabs">
+        <button type="button" :class="{ active: tab === 'mo' }" @click="tab = 'mo'">Chờ tiếp nhận / đang mở</button>
+        <button type="button" :class="{ active: tab === 'lich-su' }" @click="tab = 'lich-su'">Lịch sử đã đóng</button>
+      </nav>
       <p v-if="!dsHoiThoai.length" class="empty">Chưa có hội thoại nào</p>
-      <button v-for="h in dsHoiThoai" :key="h.id" type="button" class="conv-item"
+      <p v-if="dsHoiThoai.length && !dsHienThi.length" class="empty">Không có hội thoại trong mục này</p>
+      <button v-for="h in dsHienThi" :key="h.id" type="button" class="conv-item"
         :class="{ active: hoiThoaiChon?.id === h.id }" @click="chonHoiThoai(h)">
         <div class="conv-top">
           <strong>{{ h.tenKhach || 'Khách ẩn danh' }}</strong>
           <span v-if="h.tinChuaDoc" class="badge">{{ h.tinChuaDoc }}</span>
         </div>
         <div class="conv-meta">
-          <span>{{ h.trangThai === 'DANG_MO' ? 'Đang mở' : 'Đã đóng' }}</span>
+          <span>{{ h.trangThai === 'CHO_TIEP_NHAN' ? 'Chờ tiếp nhận' : h.trangThai === 'DANG_MO' ? 'Đang mở' : 'Đã đóng' }}</span>
           <span>{{ h.tongTinKhach + h.tongTinNhanVien }} tin</span>
         </div>
       </button>
@@ -148,11 +168,14 @@ onUnmounted(() => {
           <div>
             <strong>{{ hoiThoaiChon.tenKhach || 'Khách ẩn danh' }}</strong>
             <span class="status" :class="hoiThoaiChon.trangThai">
-              {{ hoiThoaiChon.trangThai === 'DANG_MO' ? 'Đang mở' : 'Đã đóng' }}
+              {{ hoiThoaiChon.trangThai === 'CHO_TIEP_NHAN' ? 'Chờ tiếp nhận' : hoiThoaiChon.trangThai === 'DANG_MO' ? 'Đang mở' : 'Đã đóng' }}
             </span>
           </div>
           <button v-if="hoiThoaiChon.trangThai === 'DANG_MO'" type="button" class="btn-close" @click="dong">
             Đóng hội thoại
+          </button>
+          <button v-if="hoiThoaiChon.trangThai === 'CHO_TIEP_NHAN'" type="button" class="btn-close" @click="tiepNhan">
+            Tiếp nhận
           </button>
         </header>
 
@@ -173,8 +196,8 @@ onUnmounted(() => {
         </div>
 
         <form class="composer" @submit.prevent="gui">
-          <input v-model="noiDung" type="text" placeholder="Nhập trả lời cho khách..." :disabled="dangGui"
-            :readonly="hoiThoaiChon.trangThai !== 'DANG_MO'" maxlength="2000" />
+          <input v-model="noiDung" type="text" :placeholder="hoiThoaiChon.trangThai === 'CHO_TIEP_NHAN' ? 'Tiếp nhận hội thoại để trả lời' : 'Nhập trả lời cho khách...'" :disabled="dangGui || hoiThoaiChon.trangThai !== 'DANG_MO'"
+            maxlength="2000" />
           <button type="submit" :disabled="dangGui || !noiDung.trim() || hoiThoaiChon.trangThai !== 'DANG_MO'">
             {{ dangGui ? '...' : 'Gửi' }}
           </button>
@@ -211,6 +234,10 @@ onUnmounted(() => {
   border-bottom: 1px solid #e2e8f0;
   background: #fff;
 }
+
+.chat-queue-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 8px; background: #fff; border-bottom: 1px solid #e2e8f0; }
+.chat-queue-tabs button { border: 0; border-radius: 7px; padding: 8px 5px; background: transparent; color: #475569; font-size: 12px; cursor: pointer; }
+.chat-queue-tabs button.active { background: #eff6ff; color: #1d4ed8; font-weight: 700; }
 
 .conv-item {
   border: none;

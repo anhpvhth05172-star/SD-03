@@ -9,10 +9,10 @@ import {
   hoiAI,
   layTinAI,
 } from '@/api/chat'
-import { isNhanVienDangNhap } from '@/utils/auth'
+import { isNhanVienDangNhap, isKhachHangDangNhap } from '@/utils/auth'
 
 const mo = ref(false)
-const cheDo = ref('nhan-vien') // 'nhan-vien' | 'ai'
+const cheDo = ref('ai') // 'nhan-vien' | 'ai'
 const hoiThoaiNhanVien = ref(null)
 const hoiThoaiAI = ref(null)
 const tinNhan = ref([])
@@ -23,16 +23,6 @@ const danhSachRef = ref(null)
 let timer = null
 let tuId = 0
 let tuIdAI = 0
-
-const moChat = async () => {
-  mo.value = true
-  await nextTick()
-  try {
-    await taiHoiThoai()
-  } catch (e) {
-    loi.value = e.message
-  }
-}
 
 const doiCheDo = async (mode) => {
   if (cheDo.value === mode) return
@@ -145,7 +135,7 @@ onUnmounted(() => {
 
 <template>
   <div v-if="!isNhanVienDangNhap()" class="chat-widget-root">
-    <button class="chat-fab" type="button" :title="mo ? 'Đóng chat' : 'Chat hỗ trợ'" @click="mo ? (mo = false) : moChat()">
+    <button class="chat-fab" type="button" :title="mo ? 'Đóng chat' : 'Chat hỗ trợ'" @click="mo ? (mo = false) : (mo = true)">
       <svg v-if="!mo" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
         stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -160,7 +150,7 @@ onUnmounted(() => {
     <div v-if="mo" class="chat-panel">
       <div class="chat-header">
         <strong>PolyShoes hỗ trợ</strong>
-        <div class="chat-tabs">
+        <div v-if="isKhachHangDangNhap()" class="chat-tabs">
           <button type="button" class="tab" :class="{ active: cheDo === 'nhan-vien' }" @click="doiCheDo('nhan-vien')">
             Nhân viên
           </button>
@@ -170,8 +160,16 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <div v-if="!isKhachHangDangNhap()" class="chat-login-prompt">
+        <p>Đăng nhập tài khoản khách hàng để trò chuyện với trợ lý AI hoặc nhân viên.</p>
+        <RouterLink to="/khach-hang" class="chat-login-link">Đăng nhập khách hàng</RouterLink>
+      </div>
+      <template v-else>
       <div ref="danhSachRef" class="chat-list">
         <p v-if="loi" class="chat-error">{{ loi }}</p>
+        <p v-if="cheDo === 'nhan-vien' && hoiThoaiNhanVien?.trangThai === 'CHO_TIEP_NHAN'" class="chat-empty">
+          Yêu cầu đã gửi. Nhân viên sẽ tiếp nhận trước khi bạn có thể nhắn tin.
+        </p>
         <p v-if="!tinNhan.length && !loi" class="chat-empty">
           {{ cheDo === 'ai' ? 'Hỏi mình bất cứ điều gì về giày dép PolyShoes!' : 'Gửi tin nhắn, nhân viên sẽ phản hồi trong giây lát.' }}
         </p>
@@ -185,17 +183,21 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <form class="chat-input" @submit.prevent="gui">
+      <form v-if="cheDo === 'ai' || hoiThoaiNhanVien?.trangThai === 'DANG_MO'" class="chat-input" @submit.prevent="gui">
         <input v-model="noiDung" type="text" placeholder="Nhập tin nhắn..." :disabled="dangGui" maxlength="2000" />
         <button type="submit" :disabled="dangGui || !noiDung.trim()">
           {{ dangGui ? '...' : 'Gửi' }}
         </button>
       </form>
+      </template>
     </div>
   </div>
 </template>
 
 <style scoped>
+.chat-login-prompt { padding: 24px; text-align: center; color: #475569; }
+.chat-login-link { display: inline-block; padding: 8px 16px; border-radius: 8px; background: #2563eb; color: #fff; text-decoration: none; }
+
 .chat-widget-root {
   position: fixed;
   right: 20px;

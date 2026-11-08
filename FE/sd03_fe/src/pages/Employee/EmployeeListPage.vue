@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+  deleteEmployee,
   getEmployee,
   getEmployeeFormData,
   importEmployeesConfirm,
@@ -16,7 +17,7 @@ import { exportExcel, fetchAllPages } from '@/utils/export'
 import { takeFlashWithMeta } from '@/utils/flash'
 import { avatarColor, formatDate, formatDateTime, initialsOf } from '@/utils/format'
 import { getAvatarSrc, onAvatarError } from '@/utils/avatar'
-import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyError, notifyConfirm, notifyDeleteConfirm } from '@/utils/notify'
 import { API_BASE } from '@/api/http'
 
 const router = useRouter()
@@ -521,7 +522,11 @@ const toggleStatus = async (row) => {
   const moi = !row.trangThai
   try {
     const capNhat = await updateEmployeeStatus(row.id, moi ? 'true' : 'false')
-    try { localStorage.setItem('polyshoes_last_updated_staff', JSON.stringify({ ...(capNhat || row), trangThai: moi, _ts: Date.now() })) } catch {}
+    try {
+      localStorage.setItem('polyshoes_last_updated_staff', JSON.stringify({ ...(capNhat || row), trangThai: moi, _ts: Date.now() }))
+    } catch {
+      // Cập nhật cache liên tab là tùy chọn; trạng thái máy chủ đã được lưu.
+    }
     row.trangThai = moi
     row.trangThaiLabel = moi ? 'Đang hoạt động' : 'Đã khóa'
     notifySuccess(`Đã ${actionText} tài khoản "${row.tenTaiKhoan}" thành công!`)
@@ -536,7 +541,11 @@ const removeEmployee = async (row) => {
   if (!ok) return
   try {
     await deleteEmployee(row.id)
-    try { localStorage.setItem('polyshoes_last_updated_staff', JSON.stringify({ ...row, trangThai: false, _ts: Date.now() })) } catch {}
+    try {
+      localStorage.setItem('polyshoes_last_updated_staff', JSON.stringify({ ...row, trangThai: false, _ts: Date.now() }))
+    } catch {
+      // Cập nhật cache liên tab là tùy chọn; thao tác xóa máy chủ đã hoàn tất.
+    }
     notifySuccess(`Đã xóa nhân viên "${row.tenTaiKhoan}" thành công!`)
     await load()
   } catch (e) {

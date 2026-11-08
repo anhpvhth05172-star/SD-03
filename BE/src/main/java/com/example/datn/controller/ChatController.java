@@ -127,6 +127,11 @@ public class ChatController {
         return chatService.dongHoiThoai(id, idNhanVien(auth));
     }
 
+    @PostMapping("/nhan-vien/hoi-thoai/{id}/tiep-nhan")
+    public HoiThoaiDTO tiepNhanHoiThoai(@PathVariable Long id, Authentication auth) {
+        return chatService.tiepNhanHoiThoai(id, idNhanVien(auth));
+    }
+
     // ---- AI ----
 
     @PostMapping("/ai/hoi-thoai")

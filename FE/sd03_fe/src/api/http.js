@@ -103,7 +103,9 @@ http.interceptors.response.use(
     if (['post', 'put', 'patch', 'delete'].includes(method)) {
       try {
         localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()))
-      } catch {}
+      } catch {
+        // Tín hiệu đồng bộ liên tab là tùy chọn; không làm hỏng phản hồi API.
+      }
     }
     return res
   },
@@ -169,7 +171,9 @@ axios.interceptors.response.use((res) => {
   if (['post', 'put', 'patch', 'delete'].includes(method)) {
     try {
       localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()))
-    } catch {}
+    } catch {
+      // Tín hiệu đồng bộ liên tab là tùy chọn; không làm hỏng phản hồi API.
+    }
   }
   return res
 })

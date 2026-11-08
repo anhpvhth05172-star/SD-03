@@ -212,15 +212,11 @@ public class GHNService {
             return daCache.ds();
         }
 
+        RuntimeException loiV3 = null;
         if (cauHinh.daCauHinh()) {
-            JsonNode root = null;
             try {
-                root = doc(ghnApiClient.get(
+                JsonNode root = doc(ghnApiClient.get(
                     PATH_WARD_V3 + "?province_id=" + provinceId + "&offset=0&limit=200"));
-            } catch (RuntimeException loiKetNoi) {
-                root = null;
-            }
-            if (root != null) {
                 kiemTraCode(root, "phường/xã (mô hình 2 tầng)");
                 List<ShippingAddressDTO> ketQua = new ArrayList<>();
                 for (JsonNode n : root.path("data")) {
@@ -230,9 +226,13 @@ public class GHNService {
                         ketQua.add(new ShippingAddressDTO(id, ten));
                     }
                 }
-                sapXepTheoTen(ketQua);
-                cachePhuongXaMoi.put(provinceId, new CapPhongXaMoi(ketQua, now));
-                return ketQua;
+                if (!ketQua.isEmpty()) {
+                    sapXepTheoTen(ketQua);
+                    cachePhuongXaMoi.put(provinceId, new CapPhongXaMoi(ketQua, now));
+                    return ketQua;
+                }
+            } catch (RuntimeException ex) {
+                loiV3 = ex;
             }
         }
 
@@ -273,6 +273,9 @@ public class GHNService {
         } catch (Exception ignored) {
         }
 
+        if (loiV3 != null && provinceId >= 1000000) {
+            throw loiV3;
+        }
         List<ShippingAddressDTO> ketQua = List.of(
             new ShippingAddressDTO(1, "Phường/Xã trung tâm"),
             new ShippingAddressDTO(2, "Khu vực nội thành")

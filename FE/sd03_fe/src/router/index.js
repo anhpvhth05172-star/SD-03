@@ -132,12 +132,12 @@ const routes = [
       {
         path: '/lich-lam-viec',
         component: WorkSchedulePage,
-        meta: { ...metaBo, title: 'Quản lý lịch làm việc', roles: ['ADMIN'] },
+        meta: { ...metaBo, title: 'Quản lý lịch làm việc', roles: ['ADMIN', 'STAFF', 'NHAN_VIEN'] },
       },
       {
         path: '/lich-ca-lam',
         component: ShiftSchedulePage,
-        meta: { ...metaBo, title: 'Lịch ca làm', roles: ['ADMIN'] },
+        meta: { ...metaBo, title: 'Lịch ca làm', roles: ['ADMIN', 'STAFF', 'NHAN_VIEN'] },
       },
       {
         path: '/lich-su-hoat-dong',

@@ -40,10 +40,10 @@ public class ChatService {
     public HoiThoaiDTO layHoiThoaiNhanVien(Long idKhachHang, String maAnDanh) {
         if (idKhachHang != null) {
             return hoiThoaiRepository
-                .findFirstByLoaiAndKhachHangIdAndTrangThaiOrderByNgayCapNhatDesc(
+                .findFirstByLoaiAndKhachHangIdAndTrangThaiInOrderByNgayCapNhatDesc(
                     HoiThoai.LOAI_NHAN_VIEN,
                     idKhachHang,
-                    HoiThoai.TRANG_THAI_DANG_MO
+                    List.of(HoiThoai.TRANG_THAI_CHO_TIEP_NHAN, HoiThoai.TRANG_THAI_DANG_MO)
                 )
                 .map(this::toKhachDTO)
                 .orElseGet(() -> {
@@ -55,10 +55,10 @@ public class ChatService {
         }
         String hash = hashMaAnDanh(maAnDanh);
         return hoiThoaiRepository
-            .findFirstByLoaiAndMaAnDanhAndTrangThaiOrderByNgayCapNhatDesc(
+            .findFirstByLoaiAndMaAnDanhAndTrangThaiInOrderByNgayCapNhatDesc(
                 HoiThoai.LOAI_NHAN_VIEN,
                 hash,
-                HoiThoai.TRANG_THAI_DANG_MO
+                List.of(HoiThoai.TRANG_THAI_CHO_TIEP_NHAN, HoiThoai.TRANG_THAI_DANG_MO)
             )
             .map(this::toKhachDTO)
             .orElseGet(() -> toKhachDTO(taoHoiThoaiNhanVien(null, hash, "Khách ẩn danh")));
@@ -74,17 +74,17 @@ public class ChatService {
             .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay khach hang"));
         String hash = hashMaAnDanh(maAnDanh);
         HoiThoai coTrong = hoiThoaiRepository
-            .findFirstByLoaiAndMaAnDanhAndTrangThaiOrderByNgayCapNhatDesc(
+            .findFirstByLoaiAndMaAnDanhAndTrangThaiInOrderByNgayCapNhatDesc(
                 HoiThoai.LOAI_NHAN_VIEN,
                 hash,
-                HoiThoai.TRANG_THAI_DANG_MO
+                List.of(HoiThoai.TRANG_THAI_CHO_TIEP_NHAN, HoiThoai.TRANG_THAI_DANG_MO)
             )
             .orElse(null);
         HoiThoai cuaKh = hoiThoaiRepository
-            .findFirstByLoaiAndKhachHangIdAndTrangThaiOrderByNgayCapNhatDesc(
+            .findFirstByLoaiAndKhachHangIdAndTrangThaiInOrderByNgayCapNhatDesc(
                 HoiThoai.LOAI_NHAN_VIEN,
                 idKhachHang,
-                HoiThoai.TRANG_THAI_DANG_MO
+                List.of(HoiThoai.TRANG_THAI_CHO_TIEP_NHAN, HoiThoai.TRANG_THAI_DANG_MO)
             )
             .orElse(null);
 
@@ -123,6 +123,9 @@ public class ChatService {
             .findByIdAndLoai(idHoiThoai, HoiThoai.LOAI_NHAN_VIEN)
             .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay hoi thoai"));
         xacMinhSoHuu(hoiThoai, idKhachHang, maAnDanh);
+        if (HoiThoai.TRANG_THAI_CHO_TIEP_NHAN.equals(hoiThoai.getTrangThai())) {
+            throw new IllegalStateException("Yeu cau ho tro dang cho nhan vien tiep nhan");
+        }
         if (!HoiThoai.TRANG_THAI_DANG_MO.equals(hoiThoai.getTrangThai())) {
             throw new IllegalStateException("Hoi thoai da dong");
         }
@@ -209,6 +212,22 @@ public class ChatService {
         return toNVDTO(hoiThoaiRepository.save(hoiThoai));
     }
 
+    @Transactional
+    public HoiThoaiDTO tiepNhanHoiThoai(Long idHoiThoai, Long idNhanVien) {
+        HoiThoai hoiThoai = hoiThoaiRepository
+            .findByIdAndLoai(idHoiThoai, HoiThoai.LOAI_NHAN_VIEN)
+            .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay hoi thoai"));
+        if (HoiThoai.TRANG_THAI_CHO_TIEP_NHAN.equals(hoiThoai.getTrangThai())) {
+            var nv = new com.example.datn.entity.NhanVien();
+            nv.setId(idNhanVien);
+            hoiThoai.setNhanVienPhuTrach(nv);
+            hoiThoai.setTrangThai(HoiThoai.TRANG_THAI_DANG_MO);
+            hoiThoai.setNgayCapNhat(LocalDateTime.now());
+            hoiThoaiRepository.save(hoiThoai);
+        }
+        return toNVDTO(hoiThoai);
+    }
+
     // ---- AI chat ----
 
     @Transactional
@@ -290,7 +309,7 @@ public class ChatService {
     private HoiThoai taoHoiThoaiNhanVien(Long idKhachHang, String maAnDanhHash, String tenKhach) {
         HoiThoai h = new HoiThoai();
         h.setLoai(HoiThoai.LOAI_NHAN_VIEN);
-        h.setTrangThai(HoiThoai.TRANG_THAI_DANG_MO);
+        h.setTrangThai(HoiThoai.TRANG_THAI_CHO_TIEP_NHAN);
         if (idKhachHang != null) {
             var kh = new KhachHang();
             kh.setId(idKhachHang);

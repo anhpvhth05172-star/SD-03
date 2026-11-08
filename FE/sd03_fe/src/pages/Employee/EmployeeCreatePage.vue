@@ -13,7 +13,7 @@ import {
   updateEmployee,
 } from '@/api/employee'
 import { setFlash } from '@/utils/flash'
-import { layNguoiDung } from '@/utils/session'
+import { datVaiTro, layNguoiDung } from '@/utils/session'
 import { notifyConfirm, notifyError, notifySuccess, notifyWarning } from '@/utils/notify'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import {
@@ -208,7 +208,9 @@ const playBeep = () => {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18)
     osc.start()
     osc.stop(ctx.currentTime + 0.18)
-  } catch { }
+  } catch {
+    // Âm báo mã QR là tùy chọn trên trình duyệt không hỗ trợ Web Audio.
+  }
 }
 
 const apDungDiaChiCccd = (diaChiRaw) => {
@@ -368,7 +370,9 @@ const stopCamera = async () => {
           try {
             track.stop()
             track.enabled = false
-          } catch {}
+          } catch {
+            // Bỏ qua track đã được trình duyệt giải phóng trong lúc đóng camera.
+          }
         })
         v.srcObject = null
       }
@@ -376,7 +380,9 @@ const stopCamera = async () => {
         v.pause()
         v.removeAttribute('src')
         v.load()
-      } catch {}
+      } catch {
+        // Bỏ qua lỗi dọn video nếu phần tử đã bị tháo khỏi DOM.
+      }
     })
   } catch (err) {
     console.warn('Lỗi giải phóng media tracks:', err)
@@ -397,7 +403,9 @@ const stopCamera = async () => {
 
     try {
       html5QrCode.clear()
-    } catch {}
+    } catch {
+      // Scanner có thể đã tự dọn tài nguyên khi camera đóng.
+    }
     html5QrCode = null
   }
 
@@ -582,7 +590,9 @@ const submit = async () => {
             }
           }
         }
-      } catch {}
+      } catch {
+        // Cập nhật cache cục bộ chỉ giúp các tab khác phản ánh thay đổi sớm hơn.
+      }
       msg = `Đã cập nhật thông tin nhân viên "${form.value.tenTaiKhoan}" thành công!`
       setFlash(msg)
     } else {
@@ -627,7 +637,8 @@ const napDiaGioi = async (tenTinh, tenPhuong) => {
     if (tenPhuong && !phuongXas.value.some((p) => p.ten === tenPhuong)) {
       phuongXas.value = [{ code: 'khac', ten: tenPhuong }, ...phuongXas.value]
     }
-  } catch {
+  } catch (error) {
+    console.warn('Không tải được danh sách tỉnh/phường:', error)
   } finally {
     if (myToken === yeuCauHienTai) diaGioiLoading.value = false
   }

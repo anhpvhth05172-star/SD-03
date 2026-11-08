@@ -139,9 +139,10 @@ const tiepTheoMenuList = computed(() => tiepTheoList.value.filter((tt) => tt !==
 
 const laChoXacNhan = computed(() => data.value?.maTrangThai === 'CHO_XAC_NHAN')
 
-const coTheHuy = computed(
-  () => tiepTheoList.value.includes('Đã hủy'),
-)
+const coTheHuy = computed(() => {
+  const code = data.value?.maTrangThai || TRANG_THAI_CODE[data.value?.trangThai]
+  return code === 'CHO_XAC_NHAN' && tiepTheoList.value.includes('Đã hủy')
+})
 
 const laTrangThaiHienTai = (ten) => data.value?.trangThai === ten
 
@@ -209,6 +210,11 @@ const chuyenTrangThai = async (ten) => {
       notifySuccess('Đã cập nhật trạng thái', `${hienTai} → ${ten}`)
     }
     await load(true)
+    if (code === 'DA_XAC_NHAN' || ten === 'Đã xác nhận') {
+      setTimeout(() => {
+        inHoaDon()
+      }, 400)
+    }
   } catch (e) {
     notifyError('Cập nhật thất bại', e.message || 'Không thể chuyển trạng thái')
   } finally {
@@ -569,14 +575,18 @@ const enrichInvoiceLinesWithVariantData = async (lines) => {
                 if (withImg) variant.img = withImg.img
               }
             }
-          } catch {}
+          } catch {
+            // Ảnh biến thể là dữ liệu bổ sung; vẫn hiển thị dòng hóa đơn hiện có.
+          }
         }
 
         if (variant) {
           if (line.idSanPhamChiTiet) map[line.idSanPhamChiTiet] = variant
           if (line.maSanPhamChiTiet) map[line.maSanPhamChiTiet] = variant
         }
-      } catch {}
+      } catch {
+        // Tiếp tục dựng hóa đơn nếu một biến thể không tải được dữ liệu bổ sung.
+      }
     })
   )
 
@@ -1253,7 +1263,7 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <button
-              v-if="coTheHuy"
+              v-if="coTheHuy && !isTerminal"
               class="btn btn-outline btn-huy-don"
               type="button"
               :disabled="updatingStatus"
@@ -1265,6 +1275,7 @@ onBeforeUnmount(() => {
               </svg>
               {{ updatingStatus ? 'Đang xử lý...' : 'Hủy đơn' }}
             </button>
+
           </div>
         </div>
       </div>

@@ -12,6 +12,7 @@ import lombok.Setter;
 public class KetCaRequest {
 
     private Long tienThucTe;
+    private Long tienChi;
     private String lyDoLech;
     private String ghiChu;
 }

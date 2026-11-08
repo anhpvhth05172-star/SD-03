@@ -245,6 +245,10 @@ onMounted(loadData)
             <span class="calc-label">Tiền hoàn trả khách (-)</span>
             <span class="calc-val">{{ formatVnd(caData?.tienHoanMat ?? tongKetData?.tienHoanMat ?? 0) }}</span>
           </div>
+          <div class="calc-row">
+            <span class="calc-label">Tiền chi trong ca (-)</span>
+            <span class="calc-val">{{ formatVnd(caData?.tienChi ?? tongKetData?.tienChi ?? 0) }}</span>
+          </div>
           <div class="calc-row calc-result-row">
             <span class="calc-label bold">Tiền dự kiến trong két:</span>
             <span class="calc-val bold text-indigo">{{ formatVnd(caData?.tienDuKien ?? tongKetData?.tienDuKien ?? 0) }}</span>
@@ -270,6 +274,11 @@ onMounted(loadData)
           <div v-else class="discrepancy-banner is-open-info">
             <span class="banner-tag">CA ĐANG MỞ</span>
             <span>Số tiền thực tế và chênh lệch sẽ được xác nhận khi nhân viên thực hiện chốt ca.</span>
+          </div>
+
+          <div class="calc-row" v-if="caData?.thoiGianKet">
+            <span class="calc-label bold">Người nhận bàn giao:</span>
+            <span class="calc-val bold">{{ caData?.tenNguoiNhan || 'Cuối ngày' }}</span>
           </div>
         </div>
       </div>

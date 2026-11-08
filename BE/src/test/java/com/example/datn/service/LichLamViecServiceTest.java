@@ -272,4 +272,21 @@ class LichLamViecServiceTest {
         service().deleteTheoNgay(ngay);
         verify(lichRepo).deleteByNgayLam(ngay);
     }
+
+    @Test
+    void nhanVienKhongDuocThemHoacSuaLichCuaNhanVienKhac() {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+            new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                1L, null, List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_NHAN_VIEN"))
+            )
+        );
+        try {
+            when(nvRepo.findByMaNhanVien("NV002")).thenReturn(Optional.of(nv(2, "NV002")));
+            when(caRepo.findById(1L)).thenReturn(Optional.of(ca(1, "sang", "Ca sáng", "08:00", "12:00", true)));
+            assertThrows(com.example.datn.exception.KhongCoQuyenException.class,
+                () -> service().create(new LichLamViecRequest("NV002", 1L, LocalDate.of(2026, 10, 20))));
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
 }

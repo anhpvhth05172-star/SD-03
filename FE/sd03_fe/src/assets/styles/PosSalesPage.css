@@ -2523,7 +2523,7 @@ input:checked + .toggle-slider:before {
 }
 
 .modal-xl {
-  width: 1080px;
+  width: 1140px;
   max-width: 96vw;
 }
 
@@ -2860,8 +2860,9 @@ input:checked + .toggle-slider:before {
 }
 
 .pos-prod-table {
-  min-width: 1080px;
-  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+  table-layout: auto;
 }
 
 .pos-prod-table th:first-child,
@@ -2895,7 +2896,7 @@ input:checked + .toggle-slider:before {
   font-size: 11.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 12px 14px;
+  padding: 10px 8px;
   border-bottom: 2px solid #e2e8f0;
   white-space: nowrap;
 }
@@ -2923,7 +2924,7 @@ input:checked + .toggle-slider:before {
 
 .pos-prod-table tbody td,
 .modal-prod-row td {
-  padding: 10px 14px;
+  padding: 8px 8px;
   vertical-align: middle;
   border-bottom: 1px solid #f1f5f9;
   color: #334155;

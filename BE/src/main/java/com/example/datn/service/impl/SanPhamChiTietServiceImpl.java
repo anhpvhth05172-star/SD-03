@@ -157,31 +157,31 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
             spct.setTrangThai(req.getTrangThai() != null ? req.getTrangThai() : true);
 
             if (req.getHinhAnh() != null && !req.getHinhAnh().trim().isEmpty()) {
+                String cleanImg = req.getHinhAnh().trim();
+                com.example.datn.util.ImageValidator.validateBase64Image(cleanImg);
                 String imgKey = sp.getId() + "_" + ms.getId();
                 if (!savedImages.contains(imgKey)) {
                     savedImages.add(imgKey);
-                    try {
-                        List<HinhAnhSanPham> existingImages = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
-                        HinhAnhSanPham existingColorImg = (existingImages != null) ? existingImages.stream()
-                                .filter(img -> img.getTenAnh() != null && (
-                                        img.getTenAnh().contains("COLOR_" + ms.getId()) ||
-                                        (ms.getTenMau() != null && !ms.getTenMau().trim().isEmpty() && img.getTenAnh().toLowerCase().contains(ms.getTenMau().toLowerCase()))
-                                ))
-                                .findFirst()
-                                .orElse(null) : null;
+                    String colorName = ms.getTenMau() != null ? ms.getTenMau().trim() : "";
+                    List<HinhAnhSanPham> existingImages = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
+                    HinhAnhSanPham existingColorImg = (existingImages != null) ? existingImages.stream()
+                            .filter(img -> img.getTenAnh() != null && (
+                                    img.getTenAnh().contains("COLOR_" + ms.getId()) ||
+                                    (!colorName.isEmpty() && img.getTenAnh().toLowerCase().contains(colorName.toLowerCase()))
+                            ))
+                            .findFirst()
+                            .orElse(null) : null;
 
-                        if (existingColorImg != null) {
-                            existingColorImg.setDuongDan(req.getHinhAnh().trim());
-                            hinhAnhSanPhamRepository.save(existingColorImg);
-                        } else {
-                            HinhAnhSanPham hasp = new HinhAnhSanPham();
-                            hasp.setSanPham(sp);
-                            hasp.setTenAnh("COLOR_" + ms.getId() + " - " + (ms.getTenMau() != null ? ms.getTenMau() : ""));
-                            hasp.setDuongDan(req.getHinhAnh().trim());
-                            hinhAnhSanPhamRepository.save(hasp);
-                        }
-                    } catch (Exception ex) {
-                        System.err.println("Lỗi lưu ảnh sản phẩm: " + ex.getMessage());
+                    if (existingColorImg != null) {
+                        existingColorImg.setTenAnh("COLOR_" + ms.getId() + " - " + colorName);
+                        existingColorImg.setDuongDan(cleanImg);
+                        hinhAnhSanPhamRepository.save(existingColorImg);
+                    } else {
+                        HinhAnhSanPham hasp = new HinhAnhSanPham();
+                        hasp.setSanPham(sp);
+                        hasp.setTenAnh("COLOR_" + ms.getId() + " - " + colorName);
+                        hasp.setDuongDan(cleanImg);
+                        hinhAnhSanPhamRepository.save(hasp);
                     }
                 }
             }
@@ -256,32 +256,31 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
         }
 
         if (req.getHinhAnh() != null && !req.getHinhAnh().trim().isEmpty() && spct.getSanPham() != null) {
+            String cleanImg = req.getHinhAnh().trim();
+            com.example.datn.util.ImageValidator.validateBase64Image(cleanImg);
             MauSac currentMs = spct.getMauSac();
             Long colorId = currentMs != null ? currentMs.getId() : null;
-            String colorName = currentMs != null && currentMs.getTenMau() != null ? currentMs.getTenMau() : "";
+            String colorName = currentMs != null && currentMs.getTenMau() != null ? currentMs.getTenMau().trim() : "";
 
-            try {
-                List<HinhAnhSanPham> existingImages = hinhAnhSanPhamRepository.findBySanPhamId(spct.getSanPham().getId());
-                HinhAnhSanPham existingColorImg = (existingImages != null) ? existingImages.stream()
-                        .filter(img -> img.getTenAnh() != null && colorId != null && (
-                                img.getTenAnh().contains("COLOR_" + colorId) ||
-                                (!colorName.isEmpty() && img.getTenAnh().toLowerCase().contains(colorName.toLowerCase()))
-                        ))
-                        .findFirst()
-                        .orElse(null) : null;
+            List<HinhAnhSanPham> existingImages = hinhAnhSanPhamRepository.findBySanPhamId(spct.getSanPham().getId());
+            HinhAnhSanPham existingColorImg = (existingImages != null) ? existingImages.stream()
+                    .filter(img -> img.getTenAnh() != null && colorId != null && (
+                            img.getTenAnh().contains("COLOR_" + colorId) ||
+                            (!colorName.isEmpty() && img.getTenAnh().toLowerCase().contains(colorName.toLowerCase()))
+                    ))
+                    .findFirst()
+                    .orElse(null) : null;
 
-                if (existingColorImg != null) {
-                    existingColorImg.setDuongDan(req.getHinhAnh().trim());
-                    hinhAnhSanPhamRepository.save(existingColorImg);
-                } else {
-                    HinhAnhSanPham hasp = new HinhAnhSanPham();
-                    hasp.setSanPham(spct.getSanPham());
-                    hasp.setTenAnh(colorId != null ? ("COLOR_" + colorId + " - " + colorName) : spct.getSanPham().getTenSanPham());
-                    hasp.setDuongDan(req.getHinhAnh().trim());
-                    hinhAnhSanPhamRepository.save(hasp);
-                }
-            } catch (Exception ex) {
-                System.err.println("Lỗi cập nhật ảnh biến thể sản phẩm: " + ex.getMessage());
+            if (existingColorImg != null) {
+                existingColorImg.setTenAnh("COLOR_" + colorId + " - " + colorName);
+                existingColorImg.setDuongDan(cleanImg);
+                hinhAnhSanPhamRepository.save(existingColorImg);
+            } else {
+                HinhAnhSanPham hasp = new HinhAnhSanPham();
+                hasp.setSanPham(spct.getSanPham());
+                hasp.setTenAnh(colorId != null ? ("COLOR_" + colorId + " - " + colorName) : ("DEFAULT_" + spct.getSanPham().getId()));
+                hasp.setDuongDan(cleanImg);
+                hinhAnhSanPhamRepository.save(hasp);
             }
         }
 

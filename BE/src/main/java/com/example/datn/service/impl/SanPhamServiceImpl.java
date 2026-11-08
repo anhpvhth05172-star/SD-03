@@ -54,6 +54,51 @@ public class SanPhamServiceImpl implements SanPhamService {
     private final DeGiayRepository deGiayRepository;
     private final GiaService giaService;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void ensureHinhAnhColumnCapacity() {
+        if (jdbcTemplate == null) return;
+        try {
+            jdbcTemplate.execute("""
+                IF COL_LENGTH('dbo.hinh_anh_san_pham', 'duong_dan') IS NOT NULL
+                    ALTER TABLE dbo.hinh_anh_san_pham ALTER COLUMN duong_dan NVARCHAR(MAX) NULL;
+                IF COL_LENGTH('dbo.hinh_anh_san_pham', 'ten_anh') IS NOT NULL
+                    ALTER TABLE dbo.hinh_anh_san_pham ALTER COLUMN ten_anh NVARCHAR(255) NULL;
+                IF COL_LENGTH('dbo.hinh_anh_san_pham', 'id_san_pham_chi_tiet') IS NOT NULL
+                    ALTER TABLE dbo.hinh_anh_san_pham ALTER COLUMN id_san_pham_chi_tiet BIGINT NULL;
+                """);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void saveOrUpdateProductImage(SanPham sp, String rawImg) {
+        if (sp == null || rawImg == null || rawImg.trim().isEmpty()) {
+            return;
+        }
+        String cleanImg = rawImg.trim();
+        com.example.datn.util.ImageValidator.validateBase64Image(cleanImg);
+        List<com.example.datn.entity.HinhAnhSanPham> existing = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
+        com.example.datn.entity.HinhAnhSanPham defaultImg = (existing != null) ? existing.stream()
+                .filter(img -> img.getTenAnh() == null || !img.getTenAnh().startsWith("COLOR_"))
+                .findFirst()
+                .orElse(existing.isEmpty() ? null : existing.get(0)) : null;
+        if (defaultImg != null) {
+            defaultImg.setDuongDan(cleanImg);
+            if (defaultImg.getTenAnh() == null || defaultImg.getTenAnh().isBlank()) {
+                defaultImg.setTenAnh("DEFAULT_" + sp.getId());
+            }
+            hinhAnhSanPhamRepository.save(defaultImg);
+        } else {
+            com.example.datn.entity.HinhAnhSanPham hasp = new com.example.datn.entity.HinhAnhSanPham();
+            hasp.setSanPham(sp);
+            hasp.setTenAnh("DEFAULT_" + sp.getId());
+            hasp.setDuongDan(cleanImg);
+            hinhAnhSanPhamRepository.save(hasp);
+        }
+    }
+
     /** Tiêu đề mẫu của tệp import sản phẩm (14 cột, đọc theo đúng thứ tự). */
     private static final String[] TIEU_DE_MAU_SANPHAM = {
         "STT", "Tên sản phẩm (*)", "Thương hiệu (*)", "Loại giày (*)",
@@ -131,6 +176,10 @@ public class SanPhamServiceImpl implements SanPhamService {
         sanPham.setNgayCapNhat(LocalDateTime.now());
 
         SanPham saved = sanPhamRepository.save(sanPham);
+        String reqImg = (request.getHinhAnh() != null && !request.getHinhAnh().trim().isEmpty())
+                ? request.getHinhAnh()
+                : request.getHinhAnhDaiDien();
+        saveOrUpdateProductImage(saved, reqImg);
         return mapToResponse(saved);
     }
 
@@ -174,6 +223,10 @@ public class SanPhamServiceImpl implements SanPhamService {
         sanPham.setNgayCapNhat(LocalDateTime.now());
 
         SanPham updated = sanPhamRepository.save(sanPham);
+        String reqImg = (request.getHinhAnh() != null && !request.getHinhAnh().trim().isEmpty())
+                ? request.getHinhAnh()
+                : request.getHinhAnhDaiDien();
+        saveOrUpdateProductImage(updated, reqImg);
         return mapToResponse(updated);
     }
 
@@ -260,7 +313,11 @@ public class SanPhamServiceImpl implements SanPhamService {
         try {
             List<com.example.datn.entity.HinhAnhSanPham> images = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
             if (images != null && !images.isEmpty()) {
-                hinhAnhDaiDien = images.get(0).getDuongDan();
+                hinhAnhDaiDien = images.stream()
+                        .filter(img -> img.getTenAnh() != null && img.getTenAnh().startsWith("DEFAULT_"))
+                        .map(com.example.datn.entity.HinhAnhSanPham::getDuongDan)
+                        .findFirst()
+                        .orElse(images.get(0).getDuongDan());
             }
         } catch (Exception ignored) {
         }
@@ -316,10 +373,14 @@ public class SanPhamServiceImpl implements SanPhamService {
         LoaiGiay loaiGiay = loaiGiayRepository.findById(request.getIdLoaiGiay())
                 .orElseThrow(() -> new IllegalArgumentException("Vui lòng chọn Loại giày hợp lệ"));
 
-        // Validate hình ảnh (Magic Bytes, dung lượng tối đa 10MB)
-        if (request.getHinhAnhDaiDien() != null && !request.getHinhAnhDaiDien().trim().isEmpty()) {
-            com.example.datn.util.ImageValidator.validateBase64Image(request.getHinhAnhDaiDien());
+        String productImg = (request.getHinhAnh() != null && !request.getHinhAnh().trim().isEmpty())
+                ? request.getHinhAnh().trim()
+                : (request.getHinhAnhDaiDien() != null && !request.getHinhAnhDaiDien().trim().isEmpty() ? request.getHinhAnhDaiDien().trim() : null);
+        if (productImg != null) {
+            com.example.datn.util.ImageValidator.validateBase64Image(productImg);
         }
+
+        // Validate hình ảnh (Magic Bytes, dung lượng tối đa 10MB)
         if (request.getBienThes() != null) {
             for (BienTheItem item : request.getBienThes()) {
                 if (item.getHinhAnh() != null && !item.getHinhAnh().trim().isEmpty()) {
@@ -394,7 +455,7 @@ public class SanPhamServiceImpl implements SanPhamService {
             existingSp.setNgayCapNhat(LocalDateTime.now());
             sanPhamRepository.save(existingSp);
 
-            saveHinhAnhDaiDien(existingSp, request.getHinhAnhDaiDien());
+            saveOrUpdateProductImage(existingSp, productImg);
             processSaveVariants(existingSp, request.getBienThes());
 
             return SmartProductSaveResponse.builder()
@@ -423,7 +484,7 @@ public class SanPhamServiceImpl implements SanPhamService {
         newSp.setNgayCapNhat(LocalDateTime.now());
 
         SanPham savedSp = sanPhamRepository.save(newSp);
-        saveHinhAnhDaiDien(savedSp, request.getHinhAnhDaiDien());
+        saveOrUpdateProductImage(savedSp, productImg);
         processSaveVariants(savedSp, request.getBienThes());
 
         return SmartProductSaveResponse.builder()
@@ -509,18 +570,28 @@ public class SanPhamServiceImpl implements SanPhamService {
                 String imgKey = sp.getId() + "_" + ms.getId();
                 if (!savedImages.contains(imgKey)) {
                     savedImages.add(imgKey);
-                    try {
-                        List<com.example.datn.entity.HinhAnhSanPham> existingImages = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
-                        boolean imgExists = existingImages != null && existingImages.stream()
-                                .anyMatch(img -> item.getHinhAnh().equals(img.getDuongDan()));
-                        if (!imgExists) {
-                            com.example.datn.entity.HinhAnhSanPham hasp = new com.example.datn.entity.HinhAnhSanPham();
-                            hasp.setSanPham(sp);
-                            hasp.setDuongDan(item.getHinhAnh());
-                            hasp.setTenAnh("Ảnh màu " + ms.getTenMau());
-                            hinhAnhSanPhamRepository.save(hasp);
-                        }
-                    } catch (Exception ignored) {}
+                    String cleanImg = item.getHinhAnh().trim();
+                    String colorName = ms.getTenMau() != null ? ms.getTenMau().trim() : "";
+                    List<com.example.datn.entity.HinhAnhSanPham> existingImages = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
+                    com.example.datn.entity.HinhAnhSanPham existingColorImg = (existingImages != null) ? existingImages.stream()
+                            .filter(img -> img.getTenAnh() != null && (
+                                    img.getTenAnh().contains("COLOR_" + ms.getId()) ||
+                                    (!colorName.isEmpty() && img.getTenAnh().toLowerCase().contains(colorName.toLowerCase()))
+                            ))
+                            .findFirst()
+                            .orElse(null) : null;
+
+                    if (existingColorImg != null) {
+                        existingColorImg.setTenAnh("COLOR_" + ms.getId() + " - " + colorName);
+                        existingColorImg.setDuongDan(cleanImg);
+                        hinhAnhSanPhamRepository.save(existingColorImg);
+                    } else {
+                        com.example.datn.entity.HinhAnhSanPham hasp = new com.example.datn.entity.HinhAnhSanPham();
+                        hasp.setSanPham(sp);
+                        hasp.setTenAnh("COLOR_" + ms.getId() + " - " + colorName);
+                        hasp.setDuongDan(cleanImg);
+                        hinhAnhSanPhamRepository.save(hasp);
+                    }
                 }
             }
         }

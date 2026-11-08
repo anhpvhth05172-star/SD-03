@@ -63,6 +63,9 @@ const submit = async () => {
 <template>
   <div class="auth-screen">
     <div class="auth-card">
+      <router-link to="/trang-chu" class="auth-back-link">
+        <i class="bi bi-arrow-left me-1"></i>Quay lại cửa hàng
+      </router-link>
       <div class="auth-brand">
         <img src="/images/logo_polyshoes_final.png" alt="PolyShoes" />
       </div>
@@ -126,6 +129,13 @@ const submit = async () => {
 .auth-brand {
   text-align: center;
   margin-bottom: 12px;
+}
+.auth-back-link {
+  display: inline-block;
+  margin-bottom: 14px;
+  color: #b91c1c;
+  font-size: 13px;
+  text-decoration: none;
 }
 .auth-brand img {
   height: 48px;

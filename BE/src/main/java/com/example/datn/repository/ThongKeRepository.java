@@ -14,7 +14,7 @@ public interface ThongKeRepository extends JpaRepository<com.example.datn.entity
     @Query("""
         SELECT new com.example.datn.dto.ThongKe.HoaDonThongKeRow(
             h.id, h.trangThai, h.tienSauGiamGia, h.daXoa,
-            ptt.hinhThucThanhToan.maHinhThuc)
+            ptt.hinhThucThanhToan.maHinhThuc, h.loaiDon)
         FROM HoaDon h
         LEFT JOIN h.phuongThucThanhToan ptt
         LEFT JOIN ptt.hinhThucThanhToan

@@ -222,7 +222,9 @@ const playBeep = () => {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18)
     osc.start()
     osc.stop(ctx.currentTime + 0.18)
-  } catch {}
+  } catch {
+    // Âm báo mã QR là tùy chọn trên trình duyệt không hỗ trợ Web Audio.
+  }
 }
 
 const apDungDiaChiCccd = async (diaChiRaw) => {
@@ -346,7 +348,9 @@ const stopCamera = async () => {
     try {
       await html5QrCode.stop()
       html5QrCode.clear()
-    } catch {}
+    } catch {
+      // Bỏ qua lỗi dừng camera nếu stream đã bị trình duyệt giải phóng.
+    }
     isCameraRunning.value = false
   }
 }

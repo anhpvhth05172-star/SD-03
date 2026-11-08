@@ -42,7 +42,9 @@ try {
       totalElements.value = parsed.totalElements || parsed.content.length;
     }
   }
-} catch (e) {}
+} catch {
+  // Cache sai định dạng hoặc bị chặn thì tải lại danh sách từ API.
+}
 
 /* ---------------- Tải dữ liệu ---------------- */
 const getData = async (p = 0) => {

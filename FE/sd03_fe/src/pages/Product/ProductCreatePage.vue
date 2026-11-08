@@ -6,12 +6,39 @@ import SearchableSelect from '@/components/SearchableSelect.vue'
 import CurrencyInput from '@/components/CurrencyInput.vue'
 import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
-import { API_ORIGIN } from '@/api/http'
+import http, { API_ORIGIN } from '@/api/http'
 import { getToken } from '@/utils/auth'
 import { checkImageMagicBytes, compressImageToBase64 } from '@/utils/imageCompressor'
 
 const router = useRouter()
 const API_BASE = `${API_ORIGIN}/api/v1`
+
+const apiFetch = async (url, options = {}) => {
+  const parsed = new URL(url, window.location.origin)
+  const apiPath = `${parsed.pathname.replace(/^\/api/, '')}${parsed.search}`
+  try {
+    const response = await http.request({
+      url: apiPath,
+      method: options.method || 'GET',
+      data: options.body ? JSON.parse(options.body) : undefined,
+      signal: options.signal,
+    })
+    return {
+      ok: true,
+      status: response.status,
+      json: async () => response.data,
+      text: async () => (typeof response.data === 'string' ? response.data : JSON.stringify(response.data || {})),
+    }
+  } catch (error) {
+    const errPayload = error.response?.data || { message: error.message }
+    return {
+      ok: false,
+      status: error.status || error.response?.status || 500,
+      json: async () => errPayload,
+      text: async () => (typeof errPayload === 'string' ? errPayload : JSON.stringify(errPayload)),
+    }
+  }
+}
 
 const form = reactive({
   code: '',
@@ -72,6 +99,7 @@ const hasGeneratedVariants = ref(false)
 const colorGroups = ref([])
 
 const colorImages = reactive({})
+const productAvatar = ref(null)
 
 const isModalOpen = ref(false)
 const modalType = ref('color')
@@ -89,13 +117,13 @@ const showToast = (message, type = 'success') => {
 const fetchOptions = async () => {
   try {
     const [bRes, cRes, mRes, sRes, oRes, colRes, szRes] = await Promise.all([
-      fetch(`${API_BASE}/attributes/thuong_hieu`),
-      fetch(`${API_BASE}/attributes/loai_giay`),
-      fetch(`${API_BASE}/attributes/chat_lieu`),
-      fetch(`${API_BASE}/attributes/kieu_dang`),
-      fetch(`${API_BASE}/attributes/xuat_xu`),
-      fetch(`${API_BASE}/attributes/mau_sac`),
-      fetch(`${API_BASE}/attributes/kich_co`)
+      apiFetch(`${API_BASE}/attributes/thuong_hieu`),
+      apiFetch(`${API_BASE}/attributes/loai_giay`),
+      apiFetch(`${API_BASE}/attributes/chat_lieu`),
+      apiFetch(`${API_BASE}/attributes/kieu_dang`),
+      apiFetch(`${API_BASE}/attributes/xuat_xu`),
+      apiFetch(`${API_BASE}/attributes/mau_sac`),
+      apiFetch(`${API_BASE}/attributes/kich_co`)
     ])
 
     if (bRes.ok) brandOptions.value = await bRes.json()
@@ -244,88 +272,113 @@ const removeItem = (groupIndex, itemIndex) => {
   }
 }
 
-const triggerImageUpload = (colorId) => {
+const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = (ev) => resolve(ev.target.result)
+  reader.onerror = reject
+  reader.readAsDataURL(file)
+})
+
+let activePickerInput = null
+const openImageFilePicker = ({ multiple = false, onSelect }) => {
+  if (activePickerInput && activePickerInput.parentNode) {
+    activePickerInput.parentNode.removeChild(activePickerInput)
+  }
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = 'image/*,.jpg,.jpeg,.png,.webp,.gif,.avif,.jfif,.bmp'
-  input.multiple = true
+  input.accept = '.jpg,.jpeg,.png,.webp,.gif,.avif,.jfif,.bmp,image/*'
+  input.multiple = multiple
+  input.style.display = 'none'
+  document.body.appendChild(input)
+  activePickerInput = input
   input.onchange = async (e) => {
-    const files = Array.from(e.target.files)
-    if (!colorImages[colorId]) colorImages[colorId] = []
-    const currentList = colorImages[colorId]
+    const files = Array.from(e.target.files || [])
+    if (input.parentNode) input.parentNode.removeChild(input)
+    activePickerInput = null
+    if (files.length > 0) {
+      await onSelect(files)
+    }
+  }
+  input.click()
+}
 
-    const MAX_SIZE = 10 * 1024 * 1024 // 10MB
-    const MAX_IMAGES_PER_COLOR = 4
-
-    let addedCount = 0
-    for (const file of files) {
-      if (currentList.length >= MAX_IMAGES_PER_COLOR) {
-        showToast(`Nhóm màu này đã đạt giới hạn tối đa ${MAX_IMAGES_PER_COLOR} ảnh chi tiết!`, 'warning')
-        break
-      }
-
-      // 1. Kiểm tra dung lượng 10MB
+const triggerProductAvatarUpload = () => {
+  openImageFilePicker({
+    multiple: false,
+    onSelect: async (files) => {
+      const file = files[0]
+      if (!file) return
+      const MAX_SIZE = 10 * 1024 * 1024
       if (file.size > MAX_SIZE) {
-        showToast(`Ảnh "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) vượt quá dung lượng tối đa 10MB!`, 'warning')
-        continue
+        showToast(`Ảnh "${file.name}" vượt quá dung lượng tối đa 10MB!`, 'warning')
+        return
       }
-
-      // 2. Kiểm tra định dạng & Magic Bytes
       const isValidRealImage = await checkImageMagicBytes(file)
       if (!isValidRealImage) {
         showToast(`Tệp "${file.name}" không phải là ảnh hợp lệ!`, 'error')
-        continue
+        return
       }
-
       try {
-        const compressedBase64 = await compressImageToBase64(file)
-        currentList.push(compressedBase64)
-        addedCount++
+        const compressed = await compressImageToBase64(file)
+        productAvatar.value = compressed
       } catch (err) {
-        console.error('Lỗi xử lý nén ảnh:', err)
+        productAvatar.value = await readFileAsDataUrl(file)
+      }
+      showToast('Đã chọn ảnh đại diện sản phẩm!')
+    }
+  })
+}
+
+const triggerMainImageUpload = triggerProductAvatarUpload
+const removeMainImage = () => {
+  productAvatar.value = null
+}
+
+const triggerImageUpload = (colorId) => {
+  openImageFilePicker({
+    multiple: true,
+    onSelect: async (files) => {
+      if (!colorImages[colorId]) colorImages[colorId] = []
+      const currentList = colorImages[colorId]
+
+      const MAX_SIZE = 10 * 1024 * 1024
+      const MAX_IMAGES_PER_COLOR = 4
+
+      let addedCount = 0
+      for (const file of files) {
+        if (currentList.length >= MAX_IMAGES_PER_COLOR) {
+          showToast(`Nhóm màu này đã đạt giới hạn tối đa ${MAX_IMAGES_PER_COLOR} ảnh chi tiết!`, 'warning')
+          break
+        }
+
+        if (file.size > MAX_SIZE) {
+          showToast(`Ảnh "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) vượt quá dung lượng tối đa 10MB!`, 'warning')
+          continue
+        }
+
+        const isValidRealImage = await checkImageMagicBytes(file)
+        if (!isValidRealImage) {
+          showToast(`Tệp "${file.name}" không phải là ảnh hợp lệ!`, 'error')
+          continue
+        }
+
+        try {
+          const compressed = await compressImageToBase64(file)
+          currentList.push(compressed)
+          addedCount++
+        } catch {
+          const base64Url = await readFileAsDataUrl(file)
+          currentList.push(base64Url)
+          addedCount++
+        }
+      }
+
+      if (addedCount > 0) {
+        showToast(`Đã tải lên và tối ưu ${addedCount} ảnh hợp lệ!`)
       }
     }
-
-    if (addedCount > 0) {
-      showToast(`Đã tải lên và tối ưu ${addedCount} ảnh hợp lệ!`)
-    }
-  }
-  input.click()
+  })
 }
-
-const triggerMainImageUpload = () => {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/*,.jpg,.jpeg,.png,.webp,.gif,.avif,.jfif,.bmp'
-  input.onchange = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-
-    const MAX_SIZE = 10 * 1024 * 1024 // 10MB
-    if (file.size > MAX_SIZE) {
-      showToast(`Ảnh "${file.name}" vượt quá dung lượng tối đa 10MB!`, 'warning')
-      return
-    }
-
-    const isValid = await checkImageMagicBytes(file)
-    if (!isValid) {
-      showToast(`Tệp "${file.name}" không phải là ảnh hợp lệ!`, 'error')
-      return
-    }
-
-    try {
-      const compressed = await compressImageToBase64(file)
-      form.mainImage = compressed
-      showToast('Đã tải ảnh đại diện sản phẩm!')
-    } catch (err) {
-      showToast('Không thể xử lý ảnh này', 'error')
-    }
-  }
-  input.click()
-}
-
-const removeMainImage = () => {
-  form.mainImage = null
 }
 
 const removeImage = (colorId, index, event) => {
@@ -358,7 +411,7 @@ const handleAttributeAdded = async (item) => {
       trangThai: true
     }
 
-    const res = await fetch(`${API_BASE}/attributes/${endpoint}`, {
+    const res = await apiFetch(`${API_BASE}/attributes/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -482,7 +535,7 @@ const saveProduct = async (confirmMerge = false) => {
           }
 
           const imageList = colorImages[group.colorId] || []
-          const firstImg = imageList.length > 0 ? imageList[0] : null
+          const firstImg = imageList.length > 0 ? imageList[0] : (productAvatar.value || null)
 
           bienThes.push({
             idMauSac: Number(group.colorId),
@@ -513,7 +566,8 @@ const saveProduct = async (confirmMerge = false) => {
     doiTuong: form.gender,
     tinhNang: form.feature ? form.feature.trim() : '',
     moTa: form.description ? form.description.trim() : '',
-    hinhAnhDaiDien: form.mainImage || null,
+    hinhAnh: productAvatar.value || (bienThes.find(b => b.hinhAnh)?.hinhAnh || null),
+    hinhAnhDaiDien: productAvatar.value || (bienThes.find(b => b.hinhAnh)?.hinhAnh || null),
     trangThai: true,
     confirmMerge: Boolean(confirmMerge),
     bienThes: bienThes
@@ -522,7 +576,7 @@ const saveProduct = async (confirmMerge = false) => {
   try {
     isSubmitting.value = true
     const token = getToken()
-    const res = await fetch(`${API_BASE}/san-pham/smart-save`, {
+    const res = await apiFetch(`${API_BASE}/san-pham/smart-save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -539,7 +593,7 @@ const saveProduct = async (confirmMerge = false) => {
       } catch (e) {
         if (errorText.includes('tồn tại')) {
           errors.name = 'Tên sản phẩm đã tồn tại trong cơ sở dữ liệu'
-          throw new Error('Tên sản phẩm đã tồn tại')
+          throw new Error('Tên sản phẩm đã tồn tại', { cause: e })
         }
       }
       throw new Error('Thao tác thất bại, vui lòng kiểm tra lại dữ liệu')
@@ -562,8 +616,8 @@ const saveProduct = async (confirmMerge = false) => {
     showToast(data.message || 'Lưu sản phẩm thành công!')
 
     setTimeout(() => {
-      router.push('/admin/san-pham')
-    }, 1000)
+      router.push('/san-pham')
+    }, 800)
   } catch (err) {
     showToast(err.message || 'Không thể kết nối đến cơ sở dữ liệu', 'error')
   } finally {
@@ -576,7 +630,7 @@ const confirmMergeAction = () => {
 }
 
 const goBack = () => {
-  router.push('/admin/san-pham')
+  router.push('/san-pham')
 }
 
 onMounted(() => {
@@ -786,6 +840,32 @@ onMounted(() => {
     <div class="form-card margin-top">
       <label class="card-section-label">Mô tả</label>
       <textarea v-model="form.description" rows="3" class="form-textarea" placeholder="Mô tả sản phẩm"></textarea>
+    </div>
+
+    <div class="form-card margin-top">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div>
+          <label class="card-section-label" style="margin-bottom: 2px;">Ảnh đại diện sản phẩm</label>
+          <p style="margin: 0; font-size: 13px; color: #64748b;">Tải lên ảnh đại diện chung cho sản phẩm (JPG, PNG, WEBP • Tối đa 5MB).</p>
+        </div>
+        <button type="button" class="btn btn-red-solid" @click="triggerProductAvatarUpload">
+          {{ productAvatar ? 'Đổi ảnh sản phẩm' : '+ Thêm ảnh sản phẩm' }}
+        </button>
+      </div>
+      <div class="img-dropzone" @click="triggerProductAvatarUpload" style="min-height: 130px;">
+        <div v-if="productAvatar" class="preview-thumbs-grid">
+          <div class="thumb-item-wrap" @click.stop>
+            <img :src="productAvatar" class="thumb-preview" />
+            <span class="badge-main-img">Ảnh đại diện</span>
+            <button type="button" class="btn-remove-thumb" @click.stop="productAvatar = null" title="Xóa ảnh">×</button>
+          </div>
+        </div>
+        <div v-else class="empty-dropzone-content">
+          <div class="icon-box-placeholder">🖼</div>
+          <p class="placeholder-text-main">Nhấn để chọn ảnh đại diện sản phẩm</p>
+          <p class="placeholder-text-sub">Hỗ trợ JPG, PNG, WEBP (Tối đa 5MB)</p>
+        </div>
+      </div>
     </div>
 
     <div v-if="hasGeneratedVariants" class="form-card margin-top">

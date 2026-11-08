@@ -4,12 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.example.datn.dto.CaLamViecDto;
+import com.example.datn.dto.DotGiamGia.GiaKhuyenMai;
 import com.example.datn.dto.HoaDon.ChiTietHoaDonRequest;
 import com.example.datn.dto.HoaDon.HoaDonDTO;
 import com.example.datn.dto.HoaDon.HoaDonRequest;
@@ -31,13 +34,20 @@ import com.example.datn.repository.NhanVienRepository;
 import com.example.datn.repository.PhieuGiamGiaRepository;
 import com.example.datn.repository.PhuongThucThanhToanRepository;
 import com.example.datn.repository.SanPhamChiTietRepository;
+import com.example.datn.service.impls.GiaService;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class HoaDonServicePhieuGiamGiaTest {
 
@@ -62,6 +72,8 @@ class HoaDonServicePhieuGiamGiaTest {
     private final DiaChiKhachHangRepository diaChiKhachHangRepository =
         mock(DiaChiKhachHangRepository.class);
     private final GHNService ghnService = mock(GHNService.class);
+    private final GiaoCaService giaoCaService = mock(GiaoCaService.class);
+    private final GiaService giaService = mock(GiaService.class);
 
     private final HoaDonService service = new HoaDonService(
         hoaDonRepository,
@@ -119,6 +131,28 @@ class HoaDonServicePhieuGiamGiaTest {
         nv.setTenTaiKhoan("admin");
         nv.setTrangThai(true);
         when(nhanVienRepository.findById(NV_ID)).thenReturn(Optional.of(nv));
+        // Nhan vien dang nhap: kiemTraNguoiTaoHoaDon yeu cau principal Long + ROLE_NHAN_VIEN
+        SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(
+            NV_ID, "n/a", List.of(new SimpleGrantedAuthority("ROLE_NHAN_VIEN"))));
+        ReflectionTestUtils.setField(service, "giaoCaService", giaoCaService);
+        ReflectionTestUtils.setField(service, "giaService", giaService);
+        when(giaoCaService.getDangMoOf(NV_ID)).thenReturn(
+            CaLamViecDto.builder().id(1L).trangThai("DANG_MO").build());
+        // Don online can nhan vien hoat dong de phan cong; don tai quay can khoa bien the + gia
+        when(nhanVienRepository.findActiveOrderAssignees()).thenReturn(List.of(nv));
+        SanPhamChiTiet spct = new SanPhamChiTiet();
+        spct.setId(SPCT_ID);
+        spct.setMaChiTietSanPham("SPCT01");
+        spct.setGiaBan(new BigDecimal("1000000"));
+        spct.setSoLuong(10);
+        when(sanPhamChiTietRepository.findAllByIdForUpdate(anyCollection())).thenReturn(List.of(spct));
+        when(giaService.tinhGia(anyCollection())).thenReturn(
+            Map.of(SPCT_ID, new GiaKhuyenMai(new BigDecimal("1000000"), null, new BigDecimal("1000000"))));
+    }
+
+    @AfterEach
+    void xoaSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     private void chuanBi(PhieuGiamGia pgg) {
@@ -373,7 +407,7 @@ class HoaDonServicePhieuGiamGiaTest {
 
         assertThatThrownBy(() -> service.create(req))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("bị trùng ở nhiều dòng");
+            .hasMessageContaining("Mỗi dòng chi tiết phải chọn một biến thể riêng");
     }
 
     @Test

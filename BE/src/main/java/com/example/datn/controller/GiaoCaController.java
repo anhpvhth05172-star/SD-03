@@ -69,7 +69,7 @@ public class GiaoCaController {
         Authentication auth
     ) {
         idNhanVien(auth);
-        return giaoCaService.ketCa(id, request.getTienThucTe(), request.getLyDoLech(), request.getGhiChu());
+        return giaoCaService.ketCa(id, request.getTienThucTe(), request.getTienChi(), request.getLyDoLech(), request.getGhiChu());
     }
 
     @GetMapping("/{id}/doi-soat")

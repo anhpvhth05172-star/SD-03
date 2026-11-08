@@ -57,17 +57,6 @@ const resetTimer = () => {
   bannerTimer = setInterval(nextSlide, 5000);
 };
 
-// 7 thương hiệu nổi bật có logo/icon hiển thị dạng card trắng như ảnh mẫu
-const featuredBrands = [
-  { name: "Nike", icon: "bi-check2", link: "/cua-hang?brand=Nike", isNike: true },
-  { name: "Jordan", icon: "bi-person-arms-up", link: "/cua-hang?brand=Jordan", isJumpman: true },
-  { name: "MLB", text: "⚾ MLB", link: "/cua-hang?brand=MLB" },
-  { name: "Lacoste", text: "🐊", link: "/cua-hang?brand=Lacoste" },
-  { name: "Salomon", iconText: "S", nameText: "Salomon", link: "/cua-hang?brand=Salomon" },
-  { name: "On Running", text: "8", nameText: "On Running", link: "/cua-hang?brand=On" },
-  { name: "Under Armour", iconText: "X", nameText: "Under Armour", link: "/cua-hang?brand=Under Armour" },
-];
-
 onMounted(async () => {
   resetTimer();
   try {
@@ -185,39 +174,6 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <!-- 2. THƯƠNG HIỆU HÀNG ĐẦU (7 Ô Card trắng bo viền theo ảnh mẫu) -->
-    <section class="mb-5">
-      <div class="d-flex align-items-center justify-content-between mb-3">
-        <div>
-          <div class="section-tag small fw-bold text-danger d-flex align-items-center gap-1">
-            <span class="slash-mark">/</span> THƯƠNG HIỆU ĐỒNG HÀNH
-          </div>
-          <h4 class="fw-black text-dark mb-0 mt-1">Những thương hiệu hàng đầu</h4>
-        </div>
-        <RouterLink to="/cua-hang" class="text-danger fw-semibold small text-decoration-none">
-          Xem tất cả <i class="bi bi-arrow-right"></i>
-        </RouterLink>
-      </div>
-
-      <div class="row g-2 g-md-3">
-        <div v-for="b in featuredBrands" :key="b.name" class="col-4 col-md-3 col-lg">
-          <RouterLink :to="b.link" class="brand-showcase-card text-decoration-none text-dark">
-            <div class="brand-logo-area">
-              <!-- Nike Swoosh -->
-              <svg v-if="b.isNike" class="brand-svg-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M21.707 5.293c-.27-.27-.69-.33-1.02-.15l-14 8a1.002 1.002 0 0 0-.47.67c-.07.36.05.73.32.98l4 3.73c.18.17.43.27.67.27.18 0 .36-.05.52-.16l9.98-7.06c.35-.25.46-.73.27-1.11-.19-.38-.66-.54-1.05-.35l-9.17 6.49-2.73-2.55 12.68-7.77z"/>
-              </svg>
-              <!-- Jumpman Icon -->
-              <i v-else-if="b.isJumpman" class="bi bi-person-walking fs-3"></i>
-              <!-- Text brand -->
-              <span v-else class="fw-bold fs-6">{{ b.text || b.nameText }}</span>
-            </div>
-            <div v-if="b.nameText" class="brand-subtext">{{ b.nameText }}</div>
-          </RouterLink>
-        </div>
-      </div>
-    </section>
-
     <!-- 3. PROMO 2 BANNER (Streetwear 2026 & Giày chạy bộ - Đúng mẫu ảnh) -->
     <section class="row g-4 mb-5">
       <!-- Banner trái: Streetwear 2026 nền trắng -->
@@ -292,71 +248,6 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <!-- 5. KHỐI TRẢI NGHIỆM MUA SẮM (Banner đỏ nhỏ bên trái + 4 cam kết bên phải - Theo đúng ảnh) -->
-    <section class="mb-5">
-      <div class="experience-strip rounded-4 p-4 p-md-4 bg-white border">
-        <div class="row align-items-center g-4">
-          <!-- Cột đỏ nhỏ giày bên trái -->
-          <div class="col-lg-5 d-flex align-items-center gap-3">
-            <div class="experience-thumb-box rounded-3 overflow-hidden flex-shrink-0">
-              <img 
-                src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=300&q=80" 
-                alt="Sneaker Shoes" 
-                class="experience-thumb-img"
-              />
-            </div>
-            <div>
-              <div class="small fw-bold text-danger text-uppercase mb-1">/ VÌ SAO CHỌN POLY SHOES?</div>
-              <h4 class="fw-black text-dark mb-0 lh-sm">
-                Trải nghiệm mua sắm<br />sneaker đơn giản và an toàn
-              </h4>
-            </div>
-          </div>
-
-          <!-- 4 cột cam kết bên phải đúng ảnh -->
-          <div class="col-lg-7">
-            <div class="row g-3 text-start">
-              <div class="col-6 col-md-3">
-                <div class="exp-perk-item">
-                  <div class="exp-icon-shield text-danger mb-2">
-                    <i class="bi bi-shield-check fs-4"></i>
-                  </div>
-                  <div class="fw-bold small text-dark">Chính hãng 100%</div>
-                  <p class="text-muted-ps extra-small mb-0">Cam kết nguồn gốc, hoàn tiền nếu phát hiện hàng giả.</p>
-                </div>
-              </div>
-              <div class="col-6 col-md-3">
-                <div class="exp-perk-item">
-                  <div class="exp-icon-shield text-danger mb-2">
-                    <i class="bi bi-arrow-repeat fs-4"></i>
-                  </div>
-                  <div class="fw-bold small text-dark">Đổi size trong 7 ngày</div>
-                  <p class="text-muted-ps extra-small mb-0">Hỗ trợ đổi miễn phí lần đầu nếu không vừa.</p>
-                </div>
-              </div>
-              <div class="col-6 col-md-3">
-                <div class="exp-perk-item">
-                  <div class="exp-icon-shield text-danger mb-2">
-                    <i class="bi bi-credit-card-2-front fs-4"></i>
-                  </div>
-                  <div class="fw-bold small text-dark">Thanh toán an toàn</div>
-                  <p class="text-muted-ps extra-small mb-0">Đa dạng hình thức, bảo mật tuyệt đối.</p>
-                </div>
-              </div>
-              <div class="col-6 col-md-3">
-                <div class="exp-perk-item">
-                  <div class="exp-icon-shield text-danger mb-2">
-                    <i class="bi bi-headset fs-4"></i>
-                  </div>
-                  <div class="fw-bold small text-dark">Hỗ trợ 24/7</div>
-                  <p class="text-muted-ps extra-small mb-0">Tư vấn nhanh chóng, chuyên nghiệp.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
   </div>
 </template>
 
@@ -524,46 +415,6 @@ onUnmounted(() => {
 .banner-dot.active {
   width: 22px;
   background: #d32f2f;
-}
-
-/* Brand Showcase Cards */
-.brand-showcase-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 1.25rem 0.5rem;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 84px;
-  transition: all 0.25s ease;
-}
-
-.brand-showcase-card:hover {
-  border-color: #d32f2f;
-  box-shadow: 0 6px 16px rgba(211, 47, 47, 0.1);
-  transform: translateY(-3px);
-}
-
-.brand-logo-area {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 36px;
-}
-
-.brand-svg-icon {
-  width: 38px;
-  height: 38px;
-}
-
-.brand-subtext {
-  font-size: 0.68rem;
-  color: #64748b;
-  margin-top: 4px;
-  font-weight: 600;
 }
 
 /* Promo Custom Cards */

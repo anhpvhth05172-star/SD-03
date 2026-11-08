@@ -63,3 +63,6 @@ export const danhDaDocNhanVien = (idHoiThoai) =>
 
 export const dongHoiThoai = (idHoiThoai) =>
   http.post(`/chat/nhan-vien/hoi-thoai/${idHoiThoai}/dong`).then((r) => r.data)
+
+export const tiepNhanHoiThoai = (idHoiThoai) =>
+  http.post(`/chat/nhan-vien/hoi-thoai/${idHoiThoai}/tiep-nhan`).then((r) => r.data)
