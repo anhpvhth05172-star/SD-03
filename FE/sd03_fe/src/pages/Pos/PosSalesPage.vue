@@ -4580,9 +4580,6 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
-                </div>
-              </div>
-            </div>
           </div>
 
           <div class="billing-summary-block">

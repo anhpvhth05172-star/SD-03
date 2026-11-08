@@ -375,7 +375,7 @@ const triggerImageUpload = (colorId) => {
     }
   })
 }
-}
+
 
 const removeImage = (colorId, index, event) => {
   if (event) event.stopPropagation()
