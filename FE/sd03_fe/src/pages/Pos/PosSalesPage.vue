@@ -1361,68 +1361,17 @@ const resetModalFilters = () => {
   modalCurrentPage.value = 0
 }
 
-// Nhóm biến thể theo Sản phẩm cha (mỗi sản phẩm chỉ hiển thị 1 dòng đại diện)
-const activePickerProduct = ref(null)
-const isVariantPickerModalOpen = ref(false)
-const selectedPickerVariant = ref(null)
-const pickerColorFilter = ref('ALL')
-
-const openVariantPickerForProduct = (prodGroup) => {
-  if (!prodGroup) return
-  activePickerProduct.value = prodGroup
-  selectedPickerVariant.value = null
-  pickerColorFilter.value = 'ALL'
-  isVariantPickerModalOpen.value = true
-}
-
-const closeVariantPickerModal = () => {
-  isVariantPickerModalOpen.value = false
-  activePickerProduct.value = null
-  selectedPickerVariant.value = null
-}
-
-const availablePickerColors = computed(() => {
-  if (!activePickerProduct.value) return []
-  const set = new Set()
-  activePickerProduct.value.variants.forEach(v => {
-    const c = v.color || v.tenMau
-    if (c) set.add(c)
-  })
-  return Array.from(set)
-})
-
-const filteredPickerVariants = computed(() => {
-  if (!activePickerProduct.value) return []
-  let list = activePickerProduct.value.variants
-  if (pickerColorFilter.value !== 'ALL') {
-    list = list.filter(v => (v.color || v.tenMau) === pickerColorFilter.value)
-  }
-  return list
-})
-
-const addVariantFromPicker = (variant) => {
-  if (!kiemTraQuyenBanHang('thêm sản phẩm vào giỏ')) return
-  if (!variant) return
-  const stock = getRemainingStock(variant.id)
-  if (stock <= 0) {
-    notifyWarning('Hết hàng', 'Biến thể này hiện đã hết tồn kho khả dụng!')
-    return
-  }
-  addToCart(variant, 1, false)
-  closeVariantPickerModal()
-}
-
-const filteredModalProducts = computed(() => {
+const filteredModalVariants = computed(() => {
+  // Lắng nghe pendingOrders để kích hoạt lại computed ngay khi thêm/sửa/xóa sản phẩm trong giỏ
   const _cartTrigger = pendingOrders.value.map(o => (o.cart || []).map(i => `${i.idCtsp}:${i.quantity}`).join(',')).join(';')
 
-  // Lấy toàn bộ biến thể còn tồn kho khả dụng > 0
-  let variantList = (allProducts.value || []).filter(p => {
+  // Tự động ẩn những sản phẩm có số lượng tồn kho khả dụng = 0 (khi đã thêm hết vào giỏ hàng)
+  let list = (allProducts.value || []).filter(p => {
     return getRemainingStock(p.id) > 0
   })
-
   const term = modalFilters.search.trim().toLowerCase()
   if (term) {
-    variantList = variantList.filter(p =>
+    list = list.filter(p =>
       (p.tenSp && p.tenSp.toLowerCase().includes(term)) ||
       (p.tenSanPham && p.tenSanPham.toLowerCase().includes(term)) ||
       (p.maCtsp && p.maCtsp.toLowerCase().includes(term)) ||
@@ -1434,23 +1383,23 @@ const filteredModalProducts = computed(() => {
   }
 
   if (modalFilters.idThuongHieu) {
-    variantList = variantList.filter(p => String(p.idThuongHieu) === String(modalFilters.idThuongHieu) || (p.tenThuongHieu && p.tenThuongHieu === modalFilters.idThuongHieu))
+    list = list.filter(p => String(p.idThuongHieu) === String(modalFilters.idThuongHieu) || (p.tenThuongHieu && p.tenThuongHieu === modalFilters.idThuongHieu))
   }
 
   if (modalFilters.idLoaiGiay) {
-    variantList = variantList.filter(p => String(p.idLoaiGiay) === String(modalFilters.idLoaiGiay) || (p.tenLoaiGiay && p.tenLoaiGiay === modalFilters.idLoaiGiay))
+    list = list.filter(p => String(p.idLoaiGiay) === String(modalFilters.idLoaiGiay) || (p.tenLoaiGiay && p.tenLoaiGiay === modalFilters.idLoaiGiay))
   }
 
   if (modalFilters.idMauSac) {
-    variantList = variantList.filter(p => String(p.idMauSac) === String(modalFilters.idMauSac) || (p.color && p.color === modalFilters.idMauSac) || (p.tenMau && p.tenMau === modalFilters.idMauSac))
+    list = list.filter(p => String(p.idMauSac) === String(modalFilters.idMauSac) || (p.color && p.color === modalFilters.idMauSac) || (p.tenMau && p.tenMau === modalFilters.idMauSac))
   }
 
   if (modalFilters.idKichCo) {
-    variantList = variantList.filter(p => String(p.idKichCo) === String(modalFilters.idKichCo) || (p.size && p.size === modalFilters.idKichCo) || (p.tenKichCo && p.tenKichCo === modalFilters.idKichCo))
+    list = list.filter(p => String(p.idKichCo) === String(modalFilters.idKichCo) || (p.size && p.size === modalFilters.idKichCo) || (p.tenKichCo && p.tenKichCo === modalFilters.idKichCo))
   }
 
   if (modalFilters.priceRange) {
-    variantList = variantList.filter(p => {
+    list = list.filter(p => {
       const pr = getEffectivePrice(p)
       if (modalFilters.priceRange === '<1m') return pr < 1000000
       if (modalFilters.priceRange === '1m-3m') return pr >= 1000000 && pr <= 3000000
@@ -1460,56 +1409,15 @@ const filteredModalProducts = computed(() => {
     })
   }
 
-  // Nhóm các biến thể theo sản phẩm cha: mỗi sản phẩm chỉ xuất hiện 1 dòng duy nhất
-  const groupsMap = new Map()
-  variantList.forEach(v => {
-    const spKey = v.idSanPham ? `id_${v.idSanPham}` : (v.maSp ? `masp_${v.maSp}` : (v.tenSp || v.tenSanPham || `item_${v.id}`))
-    if (!groupsMap.has(spKey)) {
-      groupsMap.set(spKey, {
-        key: spKey,
-        idSanPham: v.idSanPham || null,
-        maSp: v.maSp || v.maSanPham || (v.maCtsp ? v.maCtsp.split('-')[0] : 'SP---'),
-        tenSp: v.tenSp || v.tenSanPham || 'Sản phẩm',
-        img: getShoeImage(v),
-        tenThuongHieu: v.tenThuongHieu || '',
-        tenLoaiGiay: v.tenLoaiGiay || '',
-        variants: [],
-        totalStock: 0,
-        minPrice: Infinity,
-        maxPrice: -Infinity,
-        colors: new Set(),
-        sizes: new Set()
-      })
-    }
-    const grp = groupsMap.get(spKey)
-    grp.variants.push(v)
-    const stock = getRemainingStock(v.id)
-    grp.totalStock += stock
-    const effPrice = getEffectivePrice(v)
-    if (effPrice < grp.minPrice) grp.minPrice = effPrice
-    if (effPrice > grp.maxPrice) grp.maxPrice = effPrice
-    if (v.color || v.tenMau) grp.colors.add(v.color || v.tenMau)
-    if (v.size || v.tenKichCo) grp.sizes.add(v.size || v.tenKichCo)
-  })
-
-  const productList = []
-  groupsMap.forEach(grp => {
-    if (grp.minPrice === Infinity) grp.minPrice = 0
-    if (grp.maxPrice === -Infinity) grp.maxPrice = grp.minPrice
-    grp.colorsList = Array.from(grp.colors)
-    grp.sizesList = Array.from(grp.sizes).sort((a, b) => Number(a) - Number(b))
-    productList.push(grp)
-  })
-
-  return productList
+  return list
 })
 
-const modalTotalElements = computed(() => filteredModalProducts.value.length)
+const modalTotalElements = computed(() => filteredModalVariants.value.length)
 const modalTotalPages = computed(() => Math.max(1, Math.ceil(modalTotalElements.value / modalPageSize.value)))
 
-const paginatedModalProducts = computed(() => {
+const paginatedModalVariants = computed(() => {
   const start = modalCurrentPage.value * modalPageSize.value
-  return filteredModalProducts.value.slice(start, start + modalPageSize.value)
+  return filteredModalVariants.value.slice(start, start + modalPageSize.value)
 })
 
 const changeModalPage = (p) => {
@@ -1522,18 +1430,114 @@ watch([modalFilters, modalPageSize], () => {
   modalCurrentPage.value = 0
 }, { deep: true })
 
+const modalSelectedIds = ref([])
+
 const openProductPicker = async () => {
   if (!currentOrder.value) {
     createNewOrder()
   }
   resetModalFilters()
+  modalSelectedIds.value = []
   isProductModalOpen.value = true
   await handleDiscountChanged()
 }
 
+const isModalRowSelected = (id) => modalSelectedIds.value.includes(id)
+
+const isAllPageSelected = computed(() => {
+  const selectable = paginatedModalVariants.value.filter(p => (p.stock ?? p.soLuong ?? 0) > 0)
+  if (selectable.length === 0) return false
+  return selectable.every(p => modalSelectedIds.value.includes(p.id))
+})
+
+const toggleModalRow = (product, event) => {
+  if (event) event.stopPropagation()
+  const stock = product.stock !== undefined ? product.stock : (product.soLuong || 0)
+  if (stock <= 0) {
+    notifyWarning('Hết hàng', 'Sản phẩm này hiện đã hết tồn kho!')
+    return
+  }
+  toggleModalSelect(product.id)
+}
+
+const toggleModalSelect = (id) => {
+  const i = modalSelectedIds.value.indexOf(id)
+  if (i >= 0) modalSelectedIds.value.splice(i, 1)
+  else modalSelectedIds.value.push(id)
+}
+
+const toggleSelectAllPage = () => {
+  const selectable = paginatedModalVariants.value.filter(p => (p.stock ?? p.soLuong ?? 0) > 0)
+  if (isAllPageSelected.value) {
+    const pageIds = selectable.map(p => p.id)
+    modalSelectedIds.value = modalSelectedIds.value.filter(id => !pageIds.includes(id))
+  } else {
+    const toAdd = selectable.filter(p => !modalSelectedIds.value.includes(p.id)).map(p => p.id)
+    modalSelectedIds.value = [...modalSelectedIds.value, ...toAdd]
+  }
+}
+
+const handleSelectProductFromModal = (product) => {
+  const stock = product.stock !== undefined ? product.stock : (product.soLuong || 0)
+  if (stock <= 0) {
+    notifyWarning('Hết hàng', 'Sản phẩm này hiện đã hết tồn kho!')
+    return
+  }
+  toggleModalSelect(product.id)
+}
+
+const quickAddSingleProductFromModal = (product) => {
+  if (!kiemTraQuyenBanHang('thêm sản phẩm vào giỏ')) return
+  const stock = product.stock !== undefined ? product.stock : (product.soLuong || 0)
+  if (stock <= 0) {
+    notifyWarning('Hết hàng', 'Sản phẩm này hiện đã hết tồn kho!')
+    return
+  }
+  addToCart(product, 1, false)
+}
+
 const closeProductPicker = () => {
   isProductModalOpen.value = false
+  modalSelectedIds.value = []
   syncCartPricesWithCatalog()
+}
+
+const confirmModalSelection = () => {
+  if (!kiemTraQuyenBanHang('thêm sản phẩm vào giỏ')) return
+  const products = modalSelectedIds.value
+    .map(id => allProducts.value.find(p => p.id === id))
+    .filter(Boolean)
+
+  if (products.length === 0) {
+    notifyWarning('Chưa chọn sản phẩm', 'Vui lòng chọn ít nhất 1 sản phẩm để thêm vào giỏ hàng.')
+    return
+  }
+
+  let added = 0
+  let outOfStock = 0
+
+  products.forEach(p => {
+    const stock = p.stock !== undefined ? p.stock : (p.soLuong || 0)
+    if (stock <= 0) {
+      outOfStock++
+      return
+    }
+    addToCart(p, 1, true)
+    added++
+  })
+
+  isProductModalOpen.value = false
+  modalSelectedIds.value = []
+  syncCartPricesWithCatalog()
+
+  if (outOfStock > 0) {
+    notifyWarning(
+      'Thêm vào giỏ hàng',
+      `Đã thêm ${added} dòng sản phẩm. Bỏ qua ${outOfStock} sản phẩm hết hàng.`
+    )
+  } else if (added > 0) {
+    notifySuccess('Thêm thành công', `Đã thêm ${added} sản phẩm vào giỏ hàng thành công!`, 1500)
+  }
 }
 
 const getShoeImage = (p) => {
@@ -3749,10 +3753,6 @@ const printReceipt = () => {
 
 const handleKeyDown = (e) => {
   if (e.key === 'Escape') {
-    if (isVariantPickerModalOpen.value) {
-      isVariantPickerModalOpen.value = false
-      return
-    }
     isProductModalOpen.value = false
     isQrModalOpen.value = false
     isAddCustomerModalOpen.value = false
@@ -4797,88 +4797,101 @@ onUnmounted(() => {
               </div>
             </div>
 
+            <div class="pos-prod-select-summary">
+              <span class="select-summary-text">
+                Đã chọn <strong>{{ modalSelectedIds.length }}</strong> sản phẩm
+                <template v-if="filteredModalVariants.length === 0">(không có kết quả khớp bộ lọc)</template>
+              </span>
+              <button v-if="modalSelectedIds.length > 0" class="btn-clear-selection" @click="modalSelectedIds = []">Bỏ
+                chọn
+                tất cả</button>
+            </div>
+
             <div class="pos-prod-table-wrap">
               <table class="pos-prod-table">
                 <thead>
                   <tr>
-                    <th style="width: 42px;" class="text-center">STT</th>
-                    <th style="width: 56px;" class="text-center">ẢNH</th>
-                    <th style="width: 100px;" class="text-center">MÃ SP</th>
-                    <th>TÊN SẢN PHẨM</th>
-                    <th style="width: 120px;" class="text-center">MÀU SẮC</th>
-                    <th style="width: 105px;" class="text-center">KÍCH CỠ</th>
-                    <th style="width: 90px;" class="text-center">TỔNG TỒN</th>
-                    <th style="width: 140px;" class="text-center">KHOẢNG GIÁ</th>
-                    <th style="width: 125px;" class="text-center">THAO TÁC</th>
+                    <th width="42" class="text-center">
+                      <input type="checkbox" class="custom-chk pos-chk" :checked="isAllPageSelected"
+                        @change="toggleSelectAllPage" title="Chọn tất cả trên trang này" />
+                    </th>
+                    <th width="45" class="text-center">STT</th>
+                    <th width="64" class="text-center">ẢNH</th>
+                    <th width="140" class="text-center">MÃ CTSP</th>
+                    <th>SẢN PHẨM</th>
+                    <th width="110" class="text-center">MÀU SẮC</th>
+                    <th width="75" class="text-center">SIZE</th>
+                    <th width="90" class="text-center">TỒN KHO</th>
+                    <th width="130" class="text-center">ĐƠN GIÁ</th>
+                    <th width="90" class="text-center">CHỌN</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(prod, idx) in paginatedModalProducts" :key="prod.key"
-                    @click="openVariantPickerForProduct(prod)"
-                    style="cursor: pointer;"
-                    title="Bấm để xem và chọn biến thể">
+                  <tr v-for="(item, idx) in paginatedModalVariants" :key="item.id"
+                    :class="{ 'row-selected': isModalRowSelected(item.id) }" @click="handleSelectProductFromModal(item)"
+                    title="Click để thêm nhanh hoặc tick chọn">
+                    <td class="text-center" @click.stop>
+                      <input type="checkbox" class="custom-chk pos-chk" :checked="isModalRowSelected(item.id)"
+                        :disabled="(item.stock ?? item.soLuong ?? 0) <= 0" @change="toggleModalRow(item, $event)" />
+                    </td>
                     <td class="text-center prod-stt">{{ modalCurrentPage * modalPageSize + idx + 1 }}</td>
                     <td class="text-center">
                       <div class="modal-thumb-box">
-                        <img :src="prod.img" class="modal-thumb-img" alt="shoe" />
-                        <span class="prod-img-discount-badge" v-if="prod.variants.length > 1">
-                          {{ prod.variants.length }} mẫu
+                        <img :src="getShoeImage(item)" class="modal-thumb-img" alt="shoe" />
+                        <span v-if="getDiscountPercentBadge(item)" class="prod-img-discount-badge">
+                          {{ getDiscountPercentBadge(item) }}
                         </span>
                       </div>
                     </td>
                     <td class="text-center">
-                      <span class="code-pill-modal">{{ prod.maSp }}</span>
+                      <span class="code-pill-modal">{{ item.maCtsp || item.maChiTietSanPham || item.maSp }}</span>
                     </td>
                     <td class="modal-prod-name">
-                      <div class="prod-text-title fw-bold">{{ prod.tenSp }}</div>
-                      <div class="small text-muted" v-if="prod.tenThuongHieu">{{ prod.tenThuongHieu }}</div>
+                      <span class="prod-text-title">{{ item.tenSp || item.tenSanPham }}</span>
                     </td>
                     <td class="text-center">
-                      <div class="d-flex flex-wrap gap-1 justify-content-center align-items-center">
-                        <span v-for="c in prod.colorsList.slice(0, 3)" :key="c" class="badge bg-light text-dark border" style="font-size: 11px;">
-                          {{ c }}
-                        </span>
-                        <span v-if="prod.colorsList.length > 3" class="badge bg-secondary-subtle text-secondary" style="font-size: 10px;">
-                          +{{ prod.colorsList.length - 3 }}
-                        </span>
+                      <div class="modal-color-cell">
+                        <span class="modal-color-dot" :style="{ backgroundColor: (item.colorHex || '#64748b') }"></span>
+                        <span class="modal-color-name">{{ item.color || item.tenMau || '---' }}</span>
                       </div>
                     </td>
                     <td class="text-center">
-                      <div class="d-flex flex-wrap gap-1 justify-content-center align-items-center">
-                        <span v-for="s in prod.sizesList.slice(0, 4)" :key="s" class="badge-size-tag" style="font-size: 11px; padding: 2px 5px;">
-                          {{ s }}
-                        </span>
-                        <span v-if="prod.sizesList.length > 4" class="text-muted small">
-                          ...
-                        </span>
-                      </div>
+                      <span class="badge-size-tag">{{ item.size || item.tenKichCo || '---' }}</span>
                     </td>
                     <td class="text-center">
-                      <span class="stock-badge in-stock">
-                        {{ prod.totalStock }} đôi
+                      <span class="stock-badge" :class="{
+                        'in-stock': (item.stock !== undefined ? item.stock : (item.soLuong || 0)) > 10,
+                        'low-stock': (item.stock !== undefined ? item.stock : (item.soLuong || 0)) > 0 && (item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 10,
+                        'zero-stock': (item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0
+                      }">
+                        {{ item.stock !== undefined ? item.stock : (item.soLuong || 0) }}
                       </span>
+                      <div class="modal-reserved-hint" v-if="getReservedQtyAcrossOrders(item.id) > 0">
+                        Đang giữ: {{ getReservedQtyAcrossOrders(item.id) }}
+                      </div>
                     </td>
                     <td class="text-center">
                       <div class="prod-modal-price-box">
-                        <span class="price-now" v-if="prod.minPrice === prod.maxPrice">
-                          {{ formatVnd(prod.minPrice) }}
-                        </span>
-                        <span class="price-now" v-else style="font-size: 12.5px;">
-                          {{ formatVnd(prod.minPrice) }} - {{ formatVnd(prod.maxPrice) }}
-                        </span>
+                        <span class="price-now">{{ formatVnd(getEffectivePrice(item)) }}</span>
+                        <span v-if="item.discount && item.discount !== '-'" class="price-was">{{ formatVnd(item.price ||
+                          item.giaBan) }}</span>
                       </div>
                     </td>
                     <td class="text-center" @click.stop>
-                      <button class="btn btn-sm btn-danger fw-bold rounded-pill px-3 py-1"
-                        @click="openVariantPickerForProduct(prod)"
-                        style="font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
-                        <span>Chọn biến thể</span>
-                        <span class="badge bg-white text-danger rounded-circle px-1" style="font-size: 10px;">{{ prod.variants.length }}</span>
+                      <button class="btn-select-add-cart"
+                        :disabled="(item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0"
+                        @click="quickAddSingleProductFromModal(item)">
+                        <svg v-if="(item.stock !== undefined ? item.stock : (item.soLuong || 0)) > 0" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2.5">
+                          <line x1="12" y1="5" x2="12" y2="19"></line>
+                          <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        {{ (item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0 ? 'Hết hàng' : 'Thêm' }}
                       </button>
                     </td>
                   </tr>
-                  <tr v-if="paginatedModalProducts.length === 0">
-                    <td colspan="9" class="empty-state-modal">
+                  <tr v-if="paginatedModalVariants.length === 0">
+                    <td colspan="10" class="empty-state-modal">
                       <div class="empty-modal-inner">
                         <span class="empty-icon-shoe">👟</span>
                         <p class="empty-text">Không tìm thấy sản phẩm nào phù hợp với bộ lọc hiện tại.</p>
@@ -4891,7 +4904,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Phân trang -->
+          <!-- Phân trang chuẩn giống Quản lý sản phẩm -->
           <div v-if="modalTotalPages > 1" class="table-card-foot" style="border-top: 1px solid #e2e8f0; background: #ffffff;">
             <PaginationBar
               :page="modalCurrentPage"
@@ -4899,15 +4912,15 @@ onUnmounted(() => {
               :total-elements="modalTotalElements"
               :page-size="modalPageSize"
               :sizes="pageSizeOptions"
-              :from="paginatedModalProducts.length ? modalCurrentPage * modalPageSize + 1 : 0"
-              :to="modalCurrentPage * modalPageSize + paginatedModalProducts.length"
+              :from="paginatedModalVariants.length ? modalCurrentPage * modalPageSize + 1 : 0"
+              :to="modalCurrentPage * modalPageSize + paginatedModalVariants.length"
               label="sản phẩm"
               @change="changeModalPage"
               @size-change="(sz) => { modalPageSize = sz; modalCurrentPage = 0 }"
             />
           </div>
 
-          <div class="pos-prod-footer">
+          <div class="pos-prod-footer pos-prod-footer-with-action">
             <div class="pos-modal-page-size">
               <span class="page-size-label">Hiển thị:</span>
               <select v-model.number="modalPageSize" class="page-size-select" @change="modalCurrentPage = 0">
@@ -4917,131 +4930,22 @@ onUnmounted(() => {
             </div>
 
             <div class="pos-prod-action-group">
-              <button class="btn-pos-secondary px-4 py-2" @click="closeProductPicker">Đóng</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- SUB-MODAL: CHỌN BIẾN THỂ CỦA SẢN PHẨM -->
-    <transition name="fade">
-      <div v-if="isVariantPickerModalOpen" class="pos-modal-overlay" style="z-index: 1065;" @click.self="closeVariantPickerModal">
-        <div class="pos-modal-dialog modal-swap-variant" style="max-width: 860px;">
-          <div class="pos-modal-head">
-            <div class="modal-head-title">
-              <div class="modal-title-icon" style="background: #fee2e2; color: #dc2626;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <span class="pos-prod-selected-count">Đã chọn: <strong>{{ modalSelectedIds.length }}</strong></span>
+              <button class="btn-pos-secondary" @click="closeProductPicker">Hủy</button>
+              <button class="btn-pos-primary" :disabled="modalSelectedIds.length === 0" @click="confirmModalSelection">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                   <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
                   <line x1="3" y1="6" x2="21" y2="6"></line>
                   <path d="M16 10a4 4 0 0 1-8 0"></path>
                 </svg>
-              </div>
-              <div class="modal-title-text-group">
-                <h3>Chọn biến thể sản phẩm</h3>
-                <span class="modal-badge-count" v-if="activePickerProduct">{{ activePickerProduct.variants.length }} biến thể có sẵn</span>
-              </div>
+                Thêm vào giỏ hàng ({{ modalSelectedIds.length }})
+              </button>
             </div>
-            <button class="pos-modal-close" @click="closeVariantPickerModal" title="Đóng (Esc)">×</button>
-          </div>
-
-          <div class="pos-modal-body">
-            <div class="current-swap-banner" v-if="activePickerProduct">
-              <div class="csb-left">
-                <img v-if="activePickerProduct.img" :src="activePickerProduct.img" alt="Ảnh SP" class="csb-img" />
-                <div v-else class="csb-no-img">👟</div>
-                <div class="csb-details">
-                  <span class="csb-title" style="font-size: 16px;">{{ activePickerProduct.tenSp }}</span>
-                  <div class="csb-pills">
-                    <span class="csb-pill pill-code">Mã SP: {{ activePickerProduct.maSp }}</span>
-                    <span class="csb-pill pill-current">Tổng tồn kho: <strong>{{ activePickerProduct.totalStock }} đôi</strong></span>
-                    <span class="csb-pill pill-qty" v-if="activePickerProduct.tenThuongHieu">{{ activePickerProduct.tenThuongHieu }}</span>
-                  </div>
-                </div>
-              </div>
-              <div class="csb-price-box">
-                <span class="csb-price-lbl">Khoảng giá:</span>
-                <span class="csb-price-val" v-if="activePickerProduct.minPrice === activePickerProduct.maxPrice">
-                  {{ formatVnd(activePickerProduct.minPrice) }}
-                </span>
-                <span class="csb-price-val" v-else style="font-size: 14px;">
-                  {{ formatVnd(activePickerProduct.minPrice) }} - {{ formatVnd(activePickerProduct.maxPrice) }}
-                </span>
-              </div>
-            </div>
-
-            <div class="swap-color-filter-bar" v-if="availablePickerColors.length > 1">
-              <span class="filter-bar-title">Lọc theo màu sắc:</span>
-              <div class="filter-chips-list">
-                <button type="button" class="swap-chip-btn" :class="{ active: pickerColorFilter === 'ALL' }"
-                  @click="pickerColorFilter = 'ALL'">
-                  Tất cả màu ({{ activePickerProduct?.variants.length || 0 }})
-                </button>
-                <button v-for="color in availablePickerColors" :key="color" type="button" class="swap-chip-btn"
-                  :class="{ active: pickerColorFilter === color }" @click="pickerColorFilter = color">
-                  {{ color }}
-                </button>
-              </div>
-            </div>
-
-            <div class="swap-variants-matrix" v-if="filteredPickerVariants.length > 0">
-              <div v-for="variant in filteredPickerVariants" :key="variant.id" class="variant-swap-card" :class="{
-                'is-card-selected': selectedPickerVariant?.id === variant.id,
-                'is-stock-depleted': getRemainingStock(variant.id) <= 0
-              }"
-                @click="getRemainingStock(variant.id) > 0 && (selectedPickerVariant = variant)">
-                <div class="vsc-top-bar">
-                  <span v-if="getRemainingStock(variant.id) <= 0" class="badge-vsc out-stock">Hết hàng</span>
-                  <span v-else class="badge-vsc in-stock">Còn {{ getRemainingStock(variant.id) }} đôi</span>
-
-                  <span class="vsc-color-pill">
-                    <span class="vsc-dot" :style="{ backgroundColor: variant.colorHex || '#64748b' }"></span>
-                    {{ variant.color || variant.tenMau }}
-                  </span>
-                </div>
-
-                <div class="vsc-body">
-                  <div class="vsc-size-display">
-                    <span class="size-large">{{ variant.size || variant.tenKichCo }}</span>
-                    <span class="size-sub">Size / Mã: {{ variant.maCtsp || variant.maChiTietSanPham || variant.maSp }}</span>
-                  </div>
-
-                  <div class="vsc-price-col">
-                    <div class="vsc-price-val">{{ formatVnd(getEffectivePrice(variant)) }}</div>
-                    <div class="vsc-price-diff" v-if="variant.discount && variant.discount !== '-'">
-                      <span class="diff-tag down">{{ variant.discount }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="vsc-foot">
-                  <button type="button" v-if="getRemainingStock(variant.id) <= 0" class="btn-vsc-btn disabled-stock" disabled>
-                    Hết hàng
-                  </button>
-                  <button type="button" v-else class="btn btn-sm btn-danger w-100 py-2 fw-bold rounded-3"
-                    @click.stop="addVariantFromPicker(variant)">
-                    + Thêm vào giỏ
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div v-else class="swap-empty-box">
-              <p>Không có biến thể nào còn hàng phù hợp với màu này.</p>
-            </div>
-          </div>
-
-          <div class="pos-modal-footer cust-modal-footer">
-            <button type="button" class="btn-cust-cancel" @click="closeVariantPickerModal">
-              Đóng
-            </button>
           </div>
         </div>
       </div>
     </transition>
 
-
-      <!-- MODAL PHIẾU GIẢM GIÁ (ĐỒNG BỘ GIAO DIỆN ONLINE) -->
     <transition name="fade">
       <div v-if="isVoucherModalOpen" class="pos-modal-overlay" @click.self="isVoucherModalOpen = false">
         <div class="pos-modal-dialog modal-voucher-dialog">
