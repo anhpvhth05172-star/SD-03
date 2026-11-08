@@ -1932,140 +1932,6 @@ const handleManualCodeSubmit = () => {
   scannedCodeInput.value = ''
 }
 
-const isSwapModalOpen = ref(false)
-const swapCartItem = ref(null)
-const swapVariants = ref([])
-const isLoadingSwapVariants = ref(false)
-const selectedNewVariant = ref(null)
-const swapColorFilter = ref('ALL')
-
-const openSwapModal = async (item) => {
-  if (!item) return
-  swapCartItem.value = item
-  selectedNewVariant.value = null
-  swapColorFilter.value = 'ALL'
-  isSwapModalOpen.value = true
-  isLoadingSwapVariants.value = true
-
-  try {
-    let idSp = item.idSanPham
-    if (!idSp) {
-      const matchInAll = allProducts.value.find(p => p.id === item.idCtsp)
-      if (matchInAll && matchInAll.idSanPham) {
-        idSp = matchInAll.idSanPham
-        item.idSanPham = idSp
-      }
-    }
-
-    let variants = []
-    if (idSp) {
-      try {
-        const res = await fetch(`${API_BASE}/san-pham-chi-tiet/by-san-pham/${idSp}`)
-        if (res.ok) {
-          variants = await res.json()
-        }
-      } catch (err) {
-        console.warn('Cannot fetch variants by-san-pham, falling back to allProducts:', err)
-      }
-    }
-
-    if (!variants || variants.length === 0) {
-      variants = allProducts.value.filter(p => {
-        if (idSp && p.idSanPham === idSp) return true
-        if (item.maSp && p.maSp === item.maSp) return true
-        return false
-      })
-    }
-
-    swapVariants.value = (variants || []).map(v => {
-      const inAll = allProducts.value.find(p => p.id === v.id)
-      const currentStock = inAll
-        ? (inAll.stock !== undefined ? inAll.stock : (inAll.soLuong || 0))
-        : (v.stock !== undefined ? v.stock : (v.soLuong || 0))
-      return {
-        ...v,
-        currentStock: v.id === item.idCtsp ? currentStock + item.quantity : currentStock
-      }
-    })
-  } catch (err) {
-    console.error('Lỗi tải danh sách biến thể để đổi:', err)
-  } finally {
-    isLoadingSwapVariants.value = false
-  }
-}
-
-const availableSwapColors = computed(() => {
-  const set = new Set()
-  swapVariants.value.forEach(v => {
-    const c = v.color || v.tenMau
-    if (c) set.add(c)
-  })
-  return Array.from(set)
-})
-
-const filteredSwapVariants = computed(() => {
-  if (swapColorFilter.value === 'ALL') return swapVariants.value
-  return swapVariants.value.filter(v => (v.color || v.tenMau) === swapColorFilter.value)
-})
-
-const executeSwap = (newVariant) => {
-  if (!swapCartItem.value || !newVariant || !currentOrder.value) return
-  const currentItem = swapCartItem.value
-  if (newVariant.id === currentItem.idCtsp) {
-    notifyWarning('Biến thể trùng khớp', 'Bạn đang chọn đúng biến thể hiện tại!')
-    return
-  }
-
-  const targetNew = ensureProductInCatalog(newVariant)
-  const availableStock = targetNew
-    ? Number(targetNew.stock !== undefined ? targetNew.stock : (targetNew.soLuong || 0))
-    : Number(newVariant.stock !== undefined ? newVariant.stock : (newVariant.soLuong || 0))
-
-  const reservedOther = getReservedInOtherOrders(newVariant.id)
-
-  if (availableStock < currentItem.quantity) {
-    const extraMsg = reservedOther > 0 ? ` (đang giữ ${reservedOther} sản phẩm ở hóa đơn chờ khác)` : ''
-    notifyWarning('Tồn kho không đủ!', `Biến thể này chỉ còn ${availableStock} sản phẩm khả dụng${extraMsg}, không đủ số lượng ${currentItem.quantity} trong giỏ.`)
-    return
-  }
-
-  const newEffectivePrice = getEffectivePrice(newVariant)
-  const newSize = newVariant.size || newVariant.tenKichCo || '---'
-  const newColor = newVariant.color || newVariant.tenMau || '---'
-
-  const existingInCart = currentOrder.value.cart.find(i => Number(i.idCtsp) === Number(newVariant.id) && i !== currentItem)
-  if (existingInCart) {
-    existingInCart.quantity += currentItem.quantity
-    const oldIdx = currentOrder.value.cart.findIndex(i => i === currentItem)
-    if (oldIdx !== -1) {
-      currentOrder.value.cart.splice(oldIdx, 1)
-    }
-    notifySuccess('Gộp biến thể thành công!', `Đã chuyển và gộp ${currentItem.quantity} sản phẩm vào Size ${newSize} - ${newColor}`, 2000)
-  } else {
-    currentItem.idCtsp = newVariant.id
-    currentItem.idSanPham = newVariant.idSanPham || currentItem.idSanPham
-    currentItem.maCtsp = newVariant.maCtsp || newVariant.maChiTietSanPham || `CTSP${newVariant.id}`
-    currentItem.name = newVariant.tenSp || newVariant.tenSanPham || currentItem.name
-    currentItem.color = newColor
-    currentItem.colorHex = newVariant.colorHex || ''
-    currentItem.size = newSize
-    currentItem.price = newEffectivePrice
-    currentItem.originalPrice = Number(newVariant.price || newVariant.giaBan || 0)
-    currentItem.discount = newVariant.discount || null
-    if (newVariant.img) {
-      currentItem.img = newVariant.img
-    }
-    notifySuccess('Đổi biến thể thành công!', `Đã đổi sang Size ${newSize} - Màu ${newColor}`, 2000)
-  }
-
-  recalculateAvailableStocks()
-  savePendingOrdersToStorage()
-
-  isSwapModalOpen.value = false
-  swapCartItem.value = null
-  selectedNewVariant.value = null
-}
-
 const defaultStoreBank = {
   id: 'MB',
   name: 'MB Bank',
@@ -3018,7 +2884,6 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
       isVoucherModalOpen.value ||
       isQrModalOpen.value ||
       isAddCustomerModalOpen.value ||
-      isSwapModalOpen.value ||
       isReceiptModalOpen.value ||
       isRecentInvoicesModalOpen.value ||
       isProcessingCheckout.value
@@ -3945,7 +3810,6 @@ const printReceipt = () => {
 const handleKeyDown = (e) => {
   if (e.key === 'Escape') {
     isProductModalOpen.value = false
-    isSwapModalOpen.value = false
     isQrModalOpen.value = false
     isAddCustomerModalOpen.value = false
     isBankQrModalOpen.value = false
@@ -4340,14 +4204,6 @@ onUnmounted(() => {
                           <span class="variant-sep">•</span>
                           <span class="variant-color-txt">{{ item.color }}</span>
                         </div>
-                        <button type="button" class="btn-quick-swap-variant" @click="openSwapModal(item)"
-                          title="Đổi sang Size hoặc Màu khác của sản phẩm này">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.2">
-                            <path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4" />
-                          </svg>
-                          <span>Đổi size/màu</span>
-                        </button>
                       </td>
                       <td class="text-center">
                         <div class="qty-stepper-modern">
@@ -5546,151 +5402,6 @@ onUnmounted(() => {
                 <polyline points="7 3 7 8 15 8"></polyline>
               </svg>
               <span>{{ isSavingCustomer ? 'Đang lưu...' : 'Lưu khách hàng' }}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <transition name="fade">
-      <div v-if="isSwapModalOpen" class="pos-modal-overlay" @click.self="isSwapModalOpen = false">
-        <div class="pos-modal-dialog modal-swap-variant">
-          <div class="pos-modal-head">
-            <div class="modal-head-title">
-              <div class="modal-title-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4" />
-                </svg>
-              </div>
-              <div class="modal-title-text-group">
-                <h3>Đổi Size / Màu sắc sản phẩm</h3>
-                <span class="modal-badge-count">{{ swapVariants.length }} biến thể</span>
-              </div>
-            </div>
-            <button class="pos-modal-close" @click="isSwapModalOpen = false" title="Đóng (Esc)">×</button>
-          </div>
-
-          <div class="pos-modal-body">
-            <div class="current-swap-banner" v-if="swapCartItem">
-              <div class="csb-left">
-                <img v-if="swapCartItem.img" :src="swapCartItem.img" alt="Ảnh SP" class="csb-img" />
-                <div v-else class="csb-no-img">👟</div>
-                <div class="csb-details">
-                  <span class="csb-title">{{ swapCartItem.name }}</span>
-                  <div class="csb-pills">
-                    <span class="csb-pill pill-code">Mã: {{ swapCartItem.maCtsp || swapCartItem.maSp }}</span>
-                    <span class="csb-pill pill-current">Đang chọn: <strong>Size {{ swapCartItem.size }}</strong> •
-                      <strong>{{ swapCartItem.color }}</strong></span>
-                    <span class="csb-pill pill-qty">Số lượng trong giỏ: <strong>{{ swapCartItem.quantity
-                    }}</strong></span>
-                  </div>
-                </div>
-              </div>
-              <div class="csb-price-box">
-                <span class="csb-price-lbl">Đơn giá hiện tại:</span>
-                <span class="csb-price-val">{{ formatVnd(swapCartItem.price) }}</span>
-              </div>
-            </div>
-
-            <div class="swap-color-filter-bar" v-if="availableSwapColors.length > 1">
-              <span class="filter-bar-title">Lọc theo màu sắc:</span>
-              <div class="filter-chips-list">
-                <button type="button" class="swap-chip-btn" :class="{ active: swapColorFilter === 'ALL' }"
-                  @click="swapColorFilter = 'ALL'">
-                  Tất cả màu ({{ swapVariants.length }})
-                </button>
-                <button v-for="color in availableSwapColors" :key="color" type="button" class="swap-chip-btn"
-                  :class="{ active: swapColorFilter === color }" @click="swapColorFilter = color">
-                  {{ color }}
-                </button>
-              </div>
-            </div>
-
-            <div v-if="isLoadingSwapVariants" class="swap-loading-box">
-              <div class="spinner-sm"></div>
-              <span>Đang kiểm tra tồn kho các biến thể cùng dòng...</span>
-            </div>
-
-            <div v-else-if="filteredSwapVariants.length > 0" class="swap-variants-matrix">
-              <div v-for="variant in filteredSwapVariants" :key="variant.id" class="variant-swap-card" :class="{
-                'is-current-active': variant.id === swapCartItem?.idCtsp,
-                'is-card-selected': selectedNewVariant?.id === variant.id,
-                'is-stock-depleted': variant.id !== swapCartItem?.idCtsp && (variant.currentStock < (swapCartItem?.quantity || 1))
-              }"
-                @click="variant.id !== swapCartItem?.idCtsp && variant.currentStock >= (swapCartItem?.quantity || 1) && (selectedNewVariant = variant)">
-                <div class="vsc-top-bar">
-                  <span v-if="variant.id === swapCartItem?.idCtsp" class="badge-vsc current">Đang ở trong giỏ</span>
-                  <span v-else-if="variant.currentStock < (swapCartItem?.quantity || 1)"
-                    class="badge-vsc out-stock">Không
-                    đủ hàng</span>
-                  <span v-else class="badge-vsc in-stock">Còn {{ variant.currentStock }} đôi</span>
-
-                  <span class="vsc-color-pill">
-                    <span class="vsc-dot" :style="{ backgroundColor: variant.colorHex || '#64748b' }"></span>
-                    {{ variant.color || variant.tenMau }}
-                  </span>
-                </div>
-
-                <div class="vsc-body">
-                  <div class="vsc-size-display">
-                    <span class="size-large">{{ variant.size || variant.tenKichCo }}</span>
-                    <span class="size-sub">Kích cỡ</span>
-                  </div>
-
-                  <div class="vsc-price-col">
-                    <div class="vsc-price-val">{{ formatVnd(getEffectivePrice(variant)) }}</div>
-                    <div class="vsc-price-diff">
-                      <span v-if="getEffectivePrice(variant) === swapCartItem?.price" class="diff-tag same">Đồng
-                        giá</span>
-                      <span v-else-if="getEffectivePrice(variant) > swapCartItem?.price" class="diff-tag up">
-                        +{{ formatVnd(getEffectivePrice(variant) - swapCartItem?.price) }}
-                      </span>
-                      <span v-else class="diff-tag down">
-                        -{{ formatVnd(swapCartItem?.price - getEffectivePrice(variant)) }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="vsc-foot">
-                  <button type="button" v-if="variant.id === swapCartItem?.idCtsp" class="btn-vsc-btn disabled-current"
-                    disabled>
-                    Dòng hiện tại
-                  </button>
-                  <button type="button" v-else-if="variant.currentStock < (swapCartItem?.quantity || 1)"
-                    class="btn-vsc-btn disabled-stock" disabled>
-                    Hết kho (Còn {{ variant.currentStock }})
-                  </button>
-                  <button type="button" v-else class="btn-vsc-btn select-action"
-                    :class="{ active: selectedNewVariant?.id === variant.id }"
-                    @click.stop="selectedNewVariant = variant">
-                    <span v-if="selectedNewVariant?.id === variant.id">✓ Đã chọn đổi</span>
-                    <span v-else>Chọn đổi sang đôi này</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div v-else class="swap-empty-box">
-              <p>Không tìm thấy biến thể nào phù hợp theo bộ lọc này.</p>
-            </div>
-          </div>
-
-          <div class="pos-modal-footer cust-modal-footer swap-modal-footer">
-            <button type="button" class="btn-cust-cancel" @click="isSwapModalOpen = false">
-              Hủy bỏ
-            </button>
-            <button type="button" class="btn-confirm-swap-action"
-              :disabled="!selectedNewVariant || selectedNewVariant.id === swapCartItem?.idCtsp"
-              @click="executeSwap(selectedNewVariant)">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-              <span v-if="selectedNewVariant">
-                Xác nhận đổi sang Size {{ selectedNewVariant.size || selectedNewVariant.tenKichCo }} ({{
-                  selectedNewVariant.color || selectedNewVariant.tenMau }})
-              </span>
-              <span v-else>Chọn 1 biến thể ở trên để đổi</span>
             </button>
           </div>
         </div>
