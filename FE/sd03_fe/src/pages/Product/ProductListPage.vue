@@ -99,30 +99,6 @@ const origins = ref([])
 let debounceTimer = null
 let currentAbortController = null
 
-const isQuickAddModalOpen = ref(false)
-const isSubmittingQuickAdd = ref(false)
-const quickAddErrors = reactive({
-  tenSanPham: '',
-  idThuongHieu: '',
-  idLoaiGiay: '',
-  idChatLieu: '',
-  idKieuDang: '',
-  idXuatXu: ''
-})
-
-const quickAddForm = reactive({
-  tenSanPham: '',
-  idThuongHieu: '',
-  idLoaiGiay: '',
-  idChatLieu: '',
-  idKieuDang: '',
-  idXuatXu: '',
-  doiTuong: 'Nam',
-  tinhNang: '',
-  moTa: '',
-  trangThai: true
-})
-
 const showToastNotice = (title, message, type = 'success') => {
   const content = message || title
   const heading = message && title ? title : ''
@@ -412,92 +388,6 @@ const exportToExcel = async () => {
   }
 }
 
-const openQuickAdd = () => {
-  quickAddForm.tenSanPham = ''
-  quickAddForm.idThuongHieu = ''
-  quickAddForm.idLoaiGiay = ''
-  quickAddForm.idChatLieu = ''
-  quickAddForm.idKieuDang = ''
-  quickAddForm.idXuatXu = ''
-  quickAddForm.doiTuong = 'Nam'
-  quickAddForm.tinhNang = ''
-  quickAddForm.moTa = ''
-  quickAddForm.trangThai = true
-
-  Object.keys(quickAddErrors).forEach(k => (quickAddErrors[k] = ''))
-  isQuickAddModalOpen.value = true
-}
-
-const validateQuickAddForm = () => {
-  let valid = true
-  Object.keys(quickAddErrors).forEach(k => (quickAddErrors[k] = ''))
-
-  if (!quickAddForm.tenSanPham || !quickAddForm.tenSanPham.trim()) {
-    quickAddErrors.tenSanPham = 'Tên sản phẩm không được để trống'
-    valid = false
-  }
-  if (!quickAddForm.idThuongHieu) {
-    quickAddErrors.idThuongHieu = 'Vui lòng chọn Thương hiệu'
-    valid = false
-  }
-  if (!quickAddForm.idLoaiGiay) {
-    quickAddErrors.idLoaiGiay = 'Vui lòng chọn Loại giày'
-    valid = false
-  }
-  if (!quickAddForm.idChatLieu) {
-    quickAddErrors.idChatLieu = 'Vui lòng chọn Chất liệu'
-    valid = false
-  }
-  if (!quickAddForm.idKieuDang) {
-    quickAddErrors.idKieuDang = 'Vui lòng chọn Kiểu dáng'
-    valid = false
-  }
-  if (!quickAddForm.idXuatXu) {
-    quickAddErrors.idXuatXu = 'Vui lòng chọn Xuất xứ'
-    valid = false
-  }
-  return valid
-}
-
-const submitQuickAdd = async () => {
-  if (!validateQuickAddForm()) return
-
-  isSubmittingQuickAdd.value = true
-  const payload = {
-    tenSanPham: quickAddForm.tenSanPham.trim(),
-    idThuongHieu: Number(quickAddForm.idThuongHieu),
-    idLoaiGiay: Number(quickAddForm.idLoaiGiay),
-    idChatLieu: Number(quickAddForm.idChatLieu),
-    idKieuDang: Number(quickAddForm.idKieuDang),
-    idXuatXu: Number(quickAddForm.idXuatXu),
-    doiTuong: quickAddForm.doiTuong,
-    tinhNang: quickAddForm.tinhNang ? quickAddForm.tinhNang.trim() : '',
-    moTa: quickAddForm.moTa ? quickAddForm.moTa.trim() : '',
-    trangThai: quickAddForm.trangThai
-  }
-
-  try {
-    const res = await fetch(`${API_BASE}/san-pham`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-
-    if (res.ok) {
-      showToastNotice('Thành công', `Đã thêm sản phẩm "${quickAddForm.tenSanPham}" thành công!`, 'success')
-      isQuickAddModalOpen.value = false
-      fetchProducts()
-    } else {
-      const errData = await res.json().catch(() => ({}))
-      showToastNotice('Lỗi thêm sản phẩm', errData.message || 'Không thể tạo sản phẩm mới', 'danger')
-    }
-  } catch (err) {
-    showToastNotice('Lỗi kết nối', 'Không thể kết nối máy chủ', 'danger')
-  } finally {
-    isSubmittingQuickAdd.value = false
-  }
-}
-
 const isGeneratingAi = ref(false)
 
 const generateAiContent = async (targetForm) => {
@@ -604,13 +494,6 @@ onUnmounted(() => {
               <polyline points="10 9 9 9 8 9"></polyline>
             </svg>
             {{ isExporting ? 'Đang xuất...' : 'Xuất Excel' }}
-          </button>
-          <button class="btn btn-quick-add" @click="openQuickAdd" title="Thêm nhanh sản phẩm">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            Thêm nhanh
           </button>
           <button class="btn btn-add-new" @click="navigateToAdd">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -898,126 +781,6 @@ onUnmounted(() => {
             <button class="btn btn-secondary" @click="isEditModalOpen = false">Hủy bỏ</button>
             <button class="btn btn-primary" :disabled="isUpdating" @click="submitQuickEdit">
               {{ isUpdating ? 'Đang lưu...' : 'Lưu thay đổi' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <transition name="modal-fade">
-      <div v-if="isQuickAddModalOpen" class="modal-overlay" @click.self="isQuickAddModalOpen = false">
-        <div class="modal-dialog">
-          <div class="modal-header">
-            <div class="modal-title-group">
-              <h3 class="modal-title">Thêm nhanh sản phẩm</h3>
-            </div>
-            <button class="modal-close" @click="isQuickAddModalOpen = false">×</button>
-          </div>
-
-          <div class="modal-body">
-            <div class="edit-grid">
-              <div class="form-group span-2">
-                <label class="form-label">Tên sản phẩm <span class="req">*</span></label>
-                <input v-model="quickAddForm.tenSanPham" type="text" class="modal-input"
-                  :class="{ 'has-error': quickAddErrors.tenSanPham }" placeholder="Nhập tên sản phẩm..." />
-                <span v-if="quickAddErrors.tenSanPham" class="err-msg">{{ quickAddErrors.tenSanPham }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Thương hiệu <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idThuongHieu" :options="brands" label-key="ten" value-key="id"
-                  placeholder="-- Chọn thương hiệu --" search-placeholder="Tìm thương hiệu..."
-                  :has-error="!!quickAddErrors.idThuongHieu" />
-                <span v-if="quickAddErrors.idThuongHieu" class="err-msg">{{ quickAddErrors.idThuongHieu }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Loại giày <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idLoaiGiay" :options="categories" label-key="ten" value-key="id"
-                  placeholder="-- Chọn loại giày --" search-placeholder="Tìm loại giày..."
-                  :has-error="!!quickAddErrors.idLoaiGiay" />
-                <span v-if="quickAddErrors.idLoaiGiay" class="err-msg">{{ quickAddErrors.idLoaiGiay }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Chất liệu <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idChatLieu" :options="materials" label-key="ten" value-key="id"
-                  placeholder="-- Chọn chất liệu --" search-placeholder="Tìm chất liệu..."
-                  :has-error="!!quickAddErrors.idChatLieu" />
-                <span v-if="quickAddErrors.idChatLieu" class="err-msg">{{ quickAddErrors.idChatLieu }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Kiểu dáng <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idKieuDang" :options="styles" label-key="ten" value-key="id"
-                  placeholder="-- Chọn kiểu dáng --" search-placeholder="Tìm kiểu dáng..."
-                  :has-error="!!quickAddErrors.idKieuDang" />
-                <span v-if="quickAddErrors.idKieuDang" class="err-msg">{{ quickAddErrors.idKieuDang }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Xuất xứ <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idXuatXu" :options="origins" label-key="ten" value-key="id"
-                  placeholder="-- Chọn xuất xứ --" search-placeholder="Tìm xuất xứ..."
-                  :has-error="!!quickAddErrors.idXuatXu" />
-                <span v-if="quickAddErrors.idXuatXu" class="err-msg">{{ quickAddErrors.idXuatXu }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Đối tượng sử dụng</label>
-                <SearchableSelect v-model="quickAddForm.doiTuong" :options="[
-                  { value: 'Nam', label: 'Nam' },
-                  { value: 'Nữ', label: 'Nữ' },
-                  { value: 'Unisex', label: 'Tất cả (Unisex)' }
-                ]" label-key="label" value-key="value" placeholder="Chọn đối tượng..." :allow-clear="false" />
-              </div>
-
-              <div class="form-group span-2 ai-magic-card">
-                <div class="ai-magic-content">
-                  <div class="ai-magic-info">
-                    <span class="ai-badge">Gemini AI Copilot</span>
-                    <span class="ai-magic-desc">Tự động sinh tính năng nổi bật và bài viết mô tả sản phẩm chuẩn
-                      SEO</span>
-                  </div>
-                  <button type="button" class="btn-ai-generate" :disabled="isGeneratingAi"
-                    @click="generateAiContent(quickAddForm)">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      stroke-width="2.2">
-                      <path
-                        d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83">
-                      </path>
-                    </svg>
-                    {{ isGeneratingAi ? 'Đang tạo...' : '✨ Sinh mô tả bằng AI' }}
-                  </button>
-                </div>
-              </div>
-
-              <div class="form-group span-2">
-                <label class="form-label">Tính năng nổi bật</label>
-                <input v-model="quickAddForm.tinhNang" type="text" class="modal-input"
-                  placeholder="Ví dụ: Êm ái, Chống trượt, Thoáng khí..." />
-              </div>
-
-              <div class="form-group span-2">
-                <label class="form-label">Mô tả sản phẩm</label>
-                <textarea v-model="quickAddForm.moTa" class="modal-textarea" rows="3"
-                  placeholder="Nhập mô tả chi tiết sản phẩm..."></textarea>
-              </div>
-
-              <div class="form-group span-2 switch-row">
-                <label class="form-label mb-0">Trạng thái (Bật: Kinh doanh / Tắt: Ngưng kinh doanh)</label>
-                <label class="switch-toggle">
-                  <input type="checkbox" v-model="quickAddForm.trangThai" />
-                  <span class="slider round"></span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="isQuickAddModalOpen = false">Hủy bỏ</button>
-            <button class="btn btn-primary" :disabled="isSubmittingQuickAdd" @click="submitQuickAdd">
-              {{ isSubmittingQuickAdd ? 'Đang lưu...' : 'Thêm sản phẩm' }}
             </button>
           </div>
         </div>
