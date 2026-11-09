@@ -164,13 +164,13 @@ const fetchFilterOptions = async () => {
     const [resColor, resSize, resProd] = await Promise.all([
       apiFetch(`${API_BASE}/attributes/mau_sac`),
       apiFetch(`${API_BASE}/attributes/kich_co`),
-      apiFetch(`${API_BASE}/san-pham?page=0&size=1000`)
+      apiFetch(`${API_BASE}/san-pham/lua-chon`)
     ])
     if (resColor.ok) colorsList.value = await resColor.json()
     if (resSize.ok) sizesList.value = await resSize.json()
     if (resProd.ok) {
       const pData = await resProd.json()
-      productsList.value = pData.content || []
+      productsList.value = Array.isArray(pData) ? pData : (pData.content || [])
     }
   } catch (e) {
     console.error('Lỗi khi tải danh mục màu sắc / kích cỡ / sản phẩm:', e)
@@ -1856,14 +1856,6 @@ onUnmounted(() => {
               <div class="form-group">
                 <label class="form-lbl">Giá bán (VNĐ) <span class="required">*</span></label>
                 <CurrencyInput v-model="addForm.price" placeholder="Nhập giá bán..." />
-              </div>
-
-              <div class="form-group span-2">
-                <label class="form-lbl">Trạng thái</label>
-                <SearchableSelect v-model="addForm.trangThai" :options="[
-                  { value: true, label: 'Kinh doanh' },
-                  { value: false, label: 'Ngưng kinh doanh' }
-                ]" label-key="label" value-key="value" :allow-clear="false" />
               </div>
 
               <!-- PHẦN HÌNH ẢNH BIẾN THỂ -->

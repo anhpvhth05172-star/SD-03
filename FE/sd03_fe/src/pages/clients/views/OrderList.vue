@@ -182,7 +182,8 @@ async function resolveCustomerId() {
   if (info.id != null) return info.id;
   if (!info.username && !info.email) return null;
   try {
-    const page = await getJson(`${KHACH_HANG_API}?size=1000`);
+    const query = info.email || info.username;
+    const page = await getJson(`${KHACH_HANG_API}?keyword=${encodeURIComponent(query)}&size=5`);
     const list = page.content || page || [];
     const c = list.find(
       (k) =>

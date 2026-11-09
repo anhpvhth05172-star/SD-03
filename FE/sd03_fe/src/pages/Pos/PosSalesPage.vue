@@ -1454,7 +1454,9 @@ const toggleModalRow = (product, event) => {
   if (event) event.stopPropagation()
   const stock = product.stock !== undefined ? product.stock : (product.soLuong || 0)
   if (stock <= 0) {
-    notifyWarning('Hết hàng', 'Sản phẩm này hiện đã hết tồn kho!')
+    const reservedOther = getReservedInOtherOrders(product.id)
+    const extra = reservedOther > 0 ? ` (đang giữ ${reservedOther} sản phẩm ở các đơn chờ khác)` : ''
+    notifyWarning('Hết hàng', `Sản phẩm này hiện đã hết tồn kho khả dụng${extra}!`)
     return
   }
   toggleModalSelect(product.id)
@@ -1480,7 +1482,9 @@ const toggleSelectAllPage = () => {
 const handleSelectProductFromModal = (product) => {
   const stock = product.stock !== undefined ? product.stock : (product.soLuong || 0)
   if (stock <= 0) {
-    notifyWarning('Hết hàng', 'Sản phẩm này hiện đã hết tồn kho!')
+    const reservedOther = getReservedInOtherOrders(product.id)
+    const extra = reservedOther > 0 ? ` (đang giữ ${reservedOther} sản phẩm ở các đơn chờ khác)` : ''
+    notifyWarning('Hết hàng', `Sản phẩm này hiện đã hết tồn kho khả dụng${extra}!`)
     return
   }
   toggleModalSelect(product.id)
@@ -1490,7 +1494,9 @@ const quickAddSingleProductFromModal = (product) => {
   if (!kiemTraQuyenBanHang('thêm sản phẩm vào giỏ')) return
   const stock = product.stock !== undefined ? product.stock : (product.soLuong || 0)
   if (stock <= 0) {
-    notifyWarning('Hết hàng', 'Sản phẩm này hiện đã hết tồn kho!')
+    const reservedOther = getReservedInOtherOrders(product.id)
+    const extra = reservedOther > 0 ? ` (đang giữ ${reservedOther} sản phẩm ở các đơn chờ khác)` : ''
+    notifyWarning('Hết hàng', `Sản phẩm này hiện đã hết tồn kho khả dụng${extra}!`)
     return
   }
   addToCart(product, 1, false)
@@ -2577,9 +2583,21 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
 
   // 1. Nếu voucher đang chọn không còn hợp lệ: tự động chuyển về voucher tốt nhất hiện tại
   if (currentOrder.value.selectedVoucher && !isVoucherEligible(currentOrder.value.selectedVoucher)) {
+    const droppedV = currentOrder.value.selectedVoucher
+    const vCode = droppedV.ma || droppedV.maPhieuGiamGia || 'Voucher'
+    const minReq = Number(droppedV.hoaDonToiThieu || 0)
+
     currentOrder.value.selectedVoucher = newBest?.voucher || null
     currentOrder.value.userSelectedVoucherManually = false
     currentOrder.value.userRemovedVoucher = false
+
+    if (minReq > 0 && newSubTotal < minReq) {
+      notifyWarning(
+        'Không đủ điều kiện áp dụng voucher',
+        `Tổng tiền hàng giảm xuống ${formatVnd(newSubTotal)}, chưa đạt mức tối thiểu ${formatVnd(minReq)} của mã "${vCode}". ${newBest?.voucher ? `Hệ thống chuyển sang mã "${newBest.voucher.ma}".` : 'Đã gỡ phiếu giảm giá.'}`,
+        4500
+      )
+    }
     return
   }
 
@@ -3433,7 +3451,29 @@ const handleCheckout = async (options = {}) => {
 
   } catch (err) {
     console.error('Checkout error:', err)
-    notifyError('Lỗi thanh toán', err.message || 'Không thể lưu hóa đơn vào hệ thống!')
+    const errMsg = err?.response?.data?.message ||
+      err?.response?.data?.error ||
+      (typeof err?.response?.data === 'string' ? err?.response?.data : '') ||
+      err?.message || ''
+
+    if (
+      errMsg.includes('chỉ còn') ||
+      errMsg.includes('trong kho') ||
+      errMsg.includes('ngừng bán') ||
+      errMsg.includes('không tồn tại') ||
+      errMsg.includes('hết hàng') ||
+      errMsg.includes('không đủ')
+    ) {
+      // Case 1.1: Tranh chấp tồn kho đồng thời với quầy khác hoặc đơn online
+      await handleDiscountChanged()
+      notifyWarning(
+        'Phát hiện tranh chấp tồn kho!',
+        `${errMsg}. Hệ thống đã tự động đồng bộ lại giỏ hàng theo tồn kho thực tế mới nhất. Vui lòng kiểm tra lại đơn!`,
+        7000
+      )
+    } else {
+      notifyError('Lỗi thanh toán', errMsg || 'Không thể lưu hóa đơn vào hệ thống!')
+    }
   } finally {
     isProcessingCheckout.value = false
   }
@@ -4866,8 +4906,8 @@ onUnmounted(() => {
                       }">
                         {{ item.stock !== undefined ? item.stock : (item.soLuong || 0) }}
                       </span>
-                      <div class="modal-reserved-hint" v-if="getReservedQtyAcrossOrders(item.id) > 0">
-                        Đang giữ: {{ getReservedQtyAcrossOrders(item.id) }}
+                      <div class="modal-reserved-hint" v-if="getReservedInOtherOrders(item.id) > 0">
+                        Đang giữ ở đơn khác: {{ getReservedInOtherOrders(item.id) }}
                       </div>
                     </td>
                     <td class="text-center">

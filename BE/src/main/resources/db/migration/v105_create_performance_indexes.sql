@@ -129,3 +129,4 @@ BEGIN
     CREATE NONCLUSTERED INDEX IX_ca_lam_viec_trang_thai
     ON ca_lam_viec (trang_thai, thoi_gian_mo DESC);
 END;
+

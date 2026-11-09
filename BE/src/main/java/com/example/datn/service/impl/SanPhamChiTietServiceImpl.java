@@ -73,50 +73,44 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
 
     private final HinhAnhSanPhamRepository hinhAnhSanPhamRepository;
 
+    private final com.example.datn.service.HinhAnhCacheService hinhAnhCacheService;
+
     private final GiaService giaService;
 
 
 
     @Override
-
     public Page<SanPhamChiTietResponse> getAll(int page, int size, String search, Long idSanPham, Long idMauSac, Long idKichCo, Boolean trangThai) {
-
+        long t0 = System.currentTimeMillis();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id"));
 
         String keyword = search != null && !search.trim().isEmpty() ? search.trim() : null;
 
+        long t1 = System.currentTimeMillis();
         Page<SanPhamChiTiet> result = sanPhamChiTietRepository.filterChiTiet(keyword, idSanPham, idMauSac, idKichCo, trangThai, pageable);
+        long t2 = System.currentTimeMillis();
 
         Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(result.getContent());
-
-
+        long t3 = System.currentTimeMillis();
 
         java.util.Set<Long> spIds = result.getContent().stream()
-
                 .map(s -> s.getSanPham() != null ? s.getSanPham().getId() : null)
-
                 .filter(java.util.Objects::nonNull)
-
                 .collect(Collectors.toSet());
-
         Map<Long, List<HinhAnhSanPham>> imagesMap = spIds.isEmpty() ? Collections.emptyMap()
+                : hinhAnhCacheService.getImagesBySanPhamIdIn(spIds);
+        long t4 = System.currentTimeMillis();
 
-                : hinhAnhSanPhamRepository.findBySanPhamIdIn(spIds).stream()
-
-                        .filter(img -> img.getSanPham() != null && img.getSanPham().getId() != null)
-
-                        .collect(Collectors.groupingBy(img -> img.getSanPham().getId()));
-
-
-
-        return result.map(spct -> {
-
+        Page<SanPhamChiTietResponse> response = result.map(spct -> {
             Long spId = spct.getSanPham() != null ? spct.getSanPham().getId() : null;
-
             return mapToResponse(spct, giaMap.get(spct.getId()), imagesMap.get(spId));
-
         });
+        long t5 = System.currentTimeMillis();
 
+        System.out.printf("[SPCT-BENCH] filterChiTiet=%dms, tinhGia=%dms, images=%dms, map=%dms, total=%dms%n",
+                (t2 - t1), (t3 - t2), (t4 - t3), (t5 - t4), (t5 - t0));
+
+        return response;
     }
 
 
@@ -129,7 +123,7 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
 
         Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(list);
 
-        List<HinhAnhSanPham> images = idSanPham != null ? hinhAnhSanPhamRepository.findBySanPhamId(idSanPham) : Collections.emptyList();
+        List<HinhAnhSanPham> images = idSanPham != null ? hinhAnhCacheService.getImagesBySanPhamId(idSanPham) : Collections.emptyList();
 
         return list.stream()
 
@@ -384,6 +378,7 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
                         existingColorImg.setDuongDan(cleanImg);
 
                         hinhAnhSanPhamRepository.save(existingColorImg);
+                        hinhAnhCacheService.invalidate(sp.getId());
 
                     } else {
 
@@ -396,6 +391,7 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
                         hasp.setDuongDan(cleanImg);
 
                         hinhAnhSanPhamRepository.save(hasp);
+                        hinhAnhCacheService.invalidate(sp.getId());
 
                     }
 
@@ -582,6 +578,7 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
                 existingColorImg.setDuongDan(cleanImg);
 
                 hinhAnhSanPhamRepository.save(existingColorImg);
+                hinhAnhCacheService.invalidate(spct.getSanPham().getId());
 
             } else {
 
@@ -594,6 +591,7 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
                 hasp.setDuongDan(cleanImg);
 
                 hinhAnhSanPhamRepository.save(hasp);
+                hinhAnhCacheService.invalidate(spct.getSanPham().getId());
 
             }
 
@@ -671,7 +669,7 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
 
         if (spct != null && spct.getSanPham() != null && spct.getSanPham().getId() != null) {
 
-            images = hinhAnhSanPhamRepository.findBySanPhamId(spct.getSanPham().getId());
+            images = hinhAnhCacheService.getImagesBySanPhamId(spct.getSanPham().getId());
 
         }
 
