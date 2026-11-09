@@ -59,6 +59,25 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
     @Query("SELECT h FROM HoaDon h WHERE h.id = :id")
     Optional<HoaDon> findByIdForUpdate(@Param("id") Long id);
 
+    @Query("""
+        SELECT h FROM HoaDon h
+        WHERE h.loaiDon = 'TAI_QUAY'
+          AND h.trangThai = 'CHO_XAC_NHAN'
+          AND h.daXoa = false
+        ORDER BY h.id ASC
+        """)
+    List<HoaDon> findPosWaitingOrders();
+
+    @Query("""
+        SELECT h FROM HoaDon h
+        WHERE h.loaiDon = 'TAI_QUAY'
+          AND h.trangThai = 'CHO_XAC_NHAN'
+          AND h.daXoa = false
+          AND h.nhanVien.id = :idNhanVien
+        ORDER BY h.id ASC
+        """)
+    List<HoaDon> findPosWaitingOrdersByEmployee(@Param("idNhanVien") Long idNhanVien);
+
     @Query(
         value = """
             SELECT * FROM hoa_don h

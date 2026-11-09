@@ -807,6 +807,13 @@ onMounted(async () => {
         </template>
       </div>
       <div class="page-header-actions">
+        <button v-if="!soSanhMode" type="button" class="btn-compare-mode" @click="chuyenCheDoSoSanh">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+            <polyline points="17 6 23 6 23 12"></polyline>
+          </svg>
+          So sánh &amp; Tăng trưởng
+        </button>
         <button type="button" class="btn-mail-outline" @click="moGuiMail">
           <i class="bi bi-envelope"></i>
           Gửi mail tổng kết
@@ -925,8 +932,8 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 4 THẺ SỐ LIỆU NHỎ -->
-    <div class="stat-grid stat-grid-4">
+    <!-- 2 HÀNG THẺ SỐ LIỆU TỔNG QUAN -->
+    <div class="stat-grid stat-grid-3">
       <div class="stat-card">
         <div class="stat-icon is-emerald">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -935,8 +942,32 @@ onMounted(async () => {
           </svg>
         </div>
         <div class="stat-value">{{ formatVnd(khoang.doanhThu) }}</div>
-        <div class="stat-label">Tổng doanh thu</div>
+        <div class="stat-label">Tổng doanh thu (Đã thanh toán)</div>
       </div>
+      <div class="stat-card">
+        <div class="stat-icon is-amber">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+        </div>
+        <div class="stat-value">{{ formatVnd(khoang.doanhThuDuKien || 0) }}</div>
+        <div class="stat-label">Doanh thu dự kiến (Chờ thu)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon is-cyan">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="21" r="1"></circle>
+            <circle cx="20" cy="21" r="1"></circle>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+          </svg>
+        </div>
+        <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.soDon) }}</div>
+        <div class="stat-label">Tổng đơn hàng</div>
+      </div>
+    </div>
+
+    <div class="stat-grid stat-grid-3" style="margin-top: 14px;">
       <div class="stat-card">
         <div class="stat-icon is-indigo">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -972,32 +1003,6 @@ onMounted(async () => {
         <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.khachMoi) }}</div>
         <div class="stat-label">Khách mới</div>
       </div>
-    </div>
-
-    <!-- 3 THẺ SỐ ĐƠN: TỔNG / ONLINE / TẠI QUẦY -->
-    <div class="stat-grid stat-grid-3">
-      <div class="stat-card">
-        <div class="stat-icon is-cyan">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="9" cy="21" r="1"></circle>
-            <circle cx="20" cy="21" r="1"></circle>
-            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-          </svg>
-        </div>
-        <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.soDon) }}</div>
-        <div class="stat-label">Tổng đơn hàng</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon is-indigo"><i class="bi bi-globe2"></i></div>
-        <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.soDonOnline || 0) }}</div>
-        <div class="stat-label">Đơn online ({{ tyLeDon(khoang.soDonOnline) }})</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon is-amber"><i class="bi bi-shop"></i></div>
-        <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.soDonTaiQuay || 0) }}</div>
-        <div class="stat-label">Đơn tại quầy - offline ({{ tyLeDon(khoang.soDonTaiQuay) }})</div>
-      </div>
-
     </div>
 
     <div class="table-card">
@@ -2691,6 +2696,29 @@ onMounted(async () => {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.btn-compare-mode {
+  height: 42px;
+  padding: 0 16px;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.btn-compare-mode:hover {
+  background: #eef2ff;
+  border-color: #a5b4fc;
+  color: #3730a3;
 }
 
 .btn-mail-outline {

@@ -61,8 +61,8 @@ const todayLocal = () => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-fTuNgay.value = ''
-fDenNgay.value = ''
+fTuNgay.value = todayLocal()
+fDenNgay.value = todayLocal()
 
 const parseDate = (value) => {
   const v = (value || '').trim()
@@ -144,14 +144,19 @@ const setDateRange = (preset) => {
 }
 
 const applyFilter = () => {
+  if (!fTuNgay.value) {
+    fDenNgay.value = ''
+  } else if (!fDenNgay.value || fTuNgay.value > fDenNgay.value) {
+    fDenNgay.value = fTuNgay.value > todayLocal() ? fTuNgay.value : todayLocal()
+  }
   page.value = 0
   load()
 }
 
 const resetFilter = () => {
   fMa.value = ''
-  fTuNgay.value = ''
-  fDenNgay.value = ''
+  fTuNgay.value = todayLocal()
+  fDenNgay.value = todayLocal()
   fLoaiDon.value = ''
   activeTab.value = 'ALL'
   page.value = 0

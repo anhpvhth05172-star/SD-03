@@ -1,10 +1,60 @@
 <script setup>
-import { computed } from "vue";
+import { ref, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { getOrder, money } from "../store";
+import { getToken } from "@/utils/auth";
 
 const route = useRoute();
-const order = computed(() => getOrder(route.params.id));
+const order = ref(null);
+
+onMounted(async () => {
+  const local = getOrder(route.params.id);
+  if (local) {
+    order.value = local;
+    return;
+  }
+  const idOrCode = route.params.id;
+  try {
+    const t = getToken();
+    const headers = t ? { Authorization: `Bearer ${t}` } : {};
+    let res = null;
+    if (/^\d+$/.test(idOrCode)) {
+      res = await fetch(`/api/hoa-don/cua-toi/${idOrCode}`, { headers });
+    }
+    if (!res || !res.ok) {
+      res = await fetch(`/api/v1/hoa-don/tra-cuu?maHoaDon=${encodeURIComponent(idOrCode)}`);
+    }
+    if (res && res.ok) {
+      const data = await res.json();
+      order.value = {
+        id: data.maHoaDon || data.id,
+        date: data.ngayTao || "—",
+        info: {
+          name: data.tenKhachHang || "—",
+          phone: data.soDienThoaiKhachHang || "—",
+          address: data.diaChiNhanHang || "—",
+          note: data.ghiChu || "",
+          pay: data.tenPhuongThucThanhToan || (data.idPhuongThucThanhToan === 4 ? "vnpay" : "cod"),
+        },
+        items: (data.chiTiet || []).map(c => ({
+          id: c.id,
+          name: c.tenSanPham,
+          brand: "",
+          size: c.tenKichCo,
+          qty: c.soLuong,
+          price: c.donGia,
+          emoji: "👟"
+        })),
+        subtotal: data.tongTien || 0,
+        ship: data.phiVanChuyen || 0,
+        discount: data.tienGiam || 0,
+        total: data.tienSauGiamGia || data.tongTien || 0,
+      };
+    }
+  } catch (err) {
+    console.warn("Không tải được chi tiết đơn hàng:", err);
+  }
+});
 </script>
 
 <template>

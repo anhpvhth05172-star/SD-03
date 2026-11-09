@@ -30,7 +30,15 @@ public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, 
            "WHERE s.sanPham.id = :idSanPham")
     List<SanPhamChiTiet> findBySanPhamId(@Param("idSanPham") Long idSanPham);
 
-    List<SanPhamChiTiet> findBySanPhamIdIn(java.util.Collection<Long> idSanPhams);
+    List<SanPhamChiTiet> findBySanPhamIdIn(Collection<Long> idSanPhams);
+
+    @Query("""
+        SELECT s FROM SanPhamChiTiet s
+        LEFT JOIN FETCH s.sanPham
+        LEFT JOIN FETCH s.kichCo
+        LEFT JOIN FETCH s.mauSac
+        """)
+    List<SanPhamChiTiet> findAllWithDetails();
 
     java.util.Optional<SanPhamChiTiet> findBySanPhamIdAndMauSacIdAndKichCoId(Long idSanPham, Long idMauSac, Long idKichCo);
 

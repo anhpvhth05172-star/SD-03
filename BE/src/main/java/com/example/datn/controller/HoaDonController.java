@@ -121,6 +121,27 @@ public class HoaDonController {
         return hoaDonService.lichSuHoaDon(id);
     }
 
+    @GetMapping("/pos-cho")
+    public List<HoaDonDTO> getPosCho() {
+        return hoaDonService.getPosCho();
+    }
+
+    @PostMapping("/pos-cho")
+    public HoaDonDTO luuPosCho(@RequestBody HoaDonRequest req) {
+        return hoaDonService.luuPosCho(req);
+    }
+
+    @DeleteMapping("/pos-cho/{id}")
+    public ResponseEntity<Void> huyPosCho(@PathVariable Long id) {
+        hoaDonService.huyPosCho(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/pos-cho/{id}/thanh-toan")
+    public HoaDonDTO thanhToanPosCho(@PathVariable Long id, @RequestBody HoaDonRequest req) {
+        return hoaDonService.thanhToanPosCho(id, req);
+    }
+
     @PostMapping("/{id}/gui-email")
     public org.springframework.http.ResponseEntity<?> guiLaiEmail(
         @PathVariable Long id,
