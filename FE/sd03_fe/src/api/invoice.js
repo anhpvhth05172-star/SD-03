@@ -22,3 +22,15 @@ export const getInvoiceHistory = (id) =>
 
 export const resendInvoiceEmail = (id, email) =>
   http.post(`/hoa-don/${id}/gui-email`, null, { params: { email } }).then((r) => r.data)
+
+export const getPosWaitingOrders = () =>
+  http.get('/hoa-don/pos-cho').then((r) => r.data)
+
+export const savePosWaitingOrder = (data) =>
+  http.post('/hoa-don/pos-cho', data).then((r) => r.data)
+
+export const cancelPosWaitingOrder = (id) =>
+  http.delete(`/hoa-don/pos-cho/${id}`).then((r) => r.data)
+
+export const checkoutPosWaitingOrder = (id, data) =>
+  http.post(`/hoa-don/pos-cho/${id}/thanh-toan`, data).then((r) => r.data)

@@ -20,6 +20,16 @@ public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, 
 
     List<SanPhamChiTiet> findBySanPhamId(Long idSanPham);
 
+    List<SanPhamChiTiet> findBySanPhamIdIn(Collection<Long> idSanPhams);
+
+    @Query("""
+        SELECT s FROM SanPhamChiTiet s
+        LEFT JOIN FETCH s.sanPham
+        LEFT JOIN FETCH s.kichCo
+        LEFT JOIN FETCH s.mauSac
+        """)
+    List<SanPhamChiTiet> findAllWithDetails();
+
     java.util.Optional<SanPhamChiTiet> findBySanPhamIdAndMauSacIdAndKichCoId(Long idSanPham, Long idMauSac, Long idKichCo);
 
     boolean existsByMaChiTietSanPham(String maChiTietSanPham);

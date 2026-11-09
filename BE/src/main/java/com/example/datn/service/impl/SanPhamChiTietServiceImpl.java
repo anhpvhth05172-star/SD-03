@@ -37,24 +37,45 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
     private final GiaService giaService;
 
     @Override
+    @Transactional(readOnly = true)
     public Page<SanPhamChiTietResponse> getAll(int page, int size, String search, Long idSanPham, Long idMauSac, Long idKichCo, Boolean trangThai) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id"));
         String keyword = search != null && !search.trim().isEmpty() ? search.trim() : null;
         Page<SanPhamChiTiet> result = sanPhamChiTietRepository.filterChiTiet(keyword, idSanPham, idMauSac, idKichCo, trangThai, pageable);
-        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(result.getContent());
-        return result.map(spct -> mapToResponse(spct, giaMap.get(spct.getId())));
+        List<SanPhamChiTiet> content = result.getContent();
+        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(content);
+        List<Long> spIds = content.stream()
+                .filter(s -> s.getSanPham() != null)
+                .map(s -> s.getSanPham().getId())
+                .distinct()
+                .toList();
+        Map<Long, List<HinhAnhSanPham>> imagesMap = java.util.Collections.emptyMap();
+        if (!spIds.isEmpty()) {
+            imagesMap = hinhAnhSanPhamRepository.findBySanPhamIdIn(spIds).stream()
+                    .filter(img -> img.getSanPham() != null)
+                    .collect(Collectors.groupingBy(img -> img.getSanPham().getId()));
+        }
+        final Map<Long, List<HinhAnhSanPham>> finalImages = imagesMap;
+        return result.map(spct -> {
+            Long spId = spct.getSanPham() != null ? spct.getSanPham().getId() : null;
+            List<HinhAnhSanPham> imgs = spId != null ? finalImages.getOrDefault(spId, java.util.Collections.emptyList()) : java.util.Collections.emptyList();
+            return mapToResponse(spct, giaMap.get(spct.getId()), imgs);
+        });
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<SanPhamChiTietResponse> getBySanPhamId(Long idSanPham) {
         List<SanPhamChiTiet> list = sanPhamChiTietRepository.findBySanPhamId(idSanPham);
         Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(list);
+        List<HinhAnhSanPham> imgs = hinhAnhSanPhamRepository.findBySanPhamId(idSanPham);
         return list.stream()
-                .map(spct -> mapToResponse(spct, giaMap.get(spct.getId())))
+                .map(spct -> mapToResponse(spct, giaMap.get(spct.getId()), imgs))
                 .collect(Collectors.toList());
     }
 
     @Override
+    @Transactional(readOnly = true)
     public SanPhamChiTietResponse getById(Long id) {
         SanPhamChiTiet item = sanPhamChiTietRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy biến thể với ID: " + id));
@@ -313,10 +334,14 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
 
     private SanPhamChiTietResponse mapToResponse(SanPhamChiTiet spct) {
         Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(List.of(spct));
-        return mapToResponse(spct, giaMap.get(spct.getId()));
+        return mapToResponse(spct, giaMap.get(spct.getId()), null);
     }
 
     private SanPhamChiTietResponse mapToResponse(SanPhamChiTiet spct, GiaKhuyenMai gkm) {
+        return mapToResponse(spct, gkm, null);
+    }
+
+    private SanPhamChiTietResponse mapToResponse(SanPhamChiTiet spct, GiaKhuyenMai gkm, List<HinhAnhSanPham> preloadedImages) {
         String colorHex = "#64748b";
         String colorName = "Mặc định";
         if (spct.getMauSac() != null) {
@@ -333,7 +358,7 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
 
         String imgUrl = null;
         if (spct.getSanPham() != null) {
-            List<HinhAnhSanPham> images = hinhAnhSanPhamRepository.findBySanPhamId(spct.getSanPham().getId());
+            List<HinhAnhSanPham> images = preloadedImages != null ? preloadedImages : hinhAnhSanPhamRepository.findBySanPhamId(spct.getSanPham().getId());
             if (images != null && !images.isEmpty()) {
                 if (spct.getMauSac() != null) {
                     Long colorId = spct.getMauSac().getId();

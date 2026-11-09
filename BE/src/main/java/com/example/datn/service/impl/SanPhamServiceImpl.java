@@ -115,6 +115,7 @@ public class SanPhamServiceImpl implements SanPhamService {
     };
 
     @Override
+    @Transactional(readOnly = true)
     public Page<SanPhamResponse> getAll(int page, int size, String keyword, Long idThuongHieu, Long idLoaiGiay, Long idChatLieu, Long idKieuDang, Long idXuatXu, String doiTuong, Boolean trangThai) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id"));
         Page<SanPham> sanPhamPage = sanPhamRepository.filterSanPhams(
@@ -128,10 +129,34 @@ public class SanPhamServiceImpl implements SanPhamService {
                 trangThai,
                 pageable
         );
-        return sanPhamPage.map(this::mapToResponse);
+        List<SanPham> sanPhams = sanPhamPage.getContent();
+        if (sanPhams.isEmpty()) {
+            return sanPhamPage.map(this::mapToResponse);
+        }
+        List<Long> spIds = sanPhams.stream().map(SanPham::getId).toList();
+        List<com.example.datn.entity.SanPhamChiTiet> allVariants = sanPhamChiTietRepository.findBySanPhamIdIn(spIds);
+        Map<Long, List<com.example.datn.entity.SanPhamChiTiet>> variantsBySpId = allVariants.stream()
+                .filter(v -> v.getSanPham() != null)
+                .collect(java.util.stream.Collectors.groupingBy(v -> v.getSanPham().getId()));
+        Map<Long, GiaKhuyenMai> allGiaMap = giaService.tinhGia(allVariants);
+        Map<Long, List<com.example.datn.entity.HinhAnhSanPham>> imagesBySpId = java.util.Collections.emptyMap();
+        try {
+            imagesBySpId = hinhAnhSanPhamRepository.findBySanPhamIdIn(spIds).stream()
+                    .filter(img -> img.getSanPham() != null)
+                    .collect(java.util.stream.Collectors.groupingBy(img -> img.getSanPham().getId()));
+        } catch (Exception ignored) {}
+        final Map<Long, List<com.example.datn.entity.SanPhamChiTiet>> finalVariants = variantsBySpId;
+        final Map<Long, List<com.example.datn.entity.HinhAnhSanPham>> finalImages = imagesBySpId;
+        return sanPhamPage.map(sp -> mapToResponse(
+                sp,
+                finalVariants.getOrDefault(sp.getId(), java.util.Collections.emptyList()),
+                allGiaMap,
+                finalImages.getOrDefault(sp.getId(), java.util.Collections.emptyList())
+        ));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public SanPhamResponse getById(Long id) {
         SanPham sanPham = sanPhamRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy sản phẩm với ID: " + id));
@@ -272,6 +297,21 @@ public class SanPhamServiceImpl implements SanPhamService {
 
     private SanPhamResponse mapToResponse(SanPham sp) {
         List<com.example.datn.entity.SanPhamChiTiet> variants = sanPhamChiTietRepository.findBySanPhamId(sp.getId());
+        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(variants);
+        List<com.example.datn.entity.HinhAnhSanPham> images = null;
+        try {
+            images = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
+        } catch (Exception ignored) {}
+        return mapToResponse(sp, variants, giaMap, images);
+    }
+
+    private SanPhamResponse mapToResponse(
+            SanPham sp,
+            List<com.example.datn.entity.SanPhamChiTiet> variants,
+            Map<Long, GiaKhuyenMai> giaMap,
+            List<com.example.datn.entity.HinhAnhSanPham> images
+    ) {
+        if (variants == null) variants = java.util.Collections.emptyList();
         int totalQty = variants.stream()
                 .mapToInt(v -> v.getSoLuong() != null ? v.getSoLuong() : 0)
                 .sum();
@@ -286,40 +326,47 @@ public class SanPhamServiceImpl implements SanPhamService {
                 .max(java.math.BigDecimal::compareTo)
                 .orElse(java.math.BigDecimal.ZERO);
 
-        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(variants);
-        java.math.BigDecimal maxPhanTram = giaMap.values().stream()
-                .map(GiaKhuyenMai::phanTramGiam)
-                .filter(java.util.Objects::nonNull)
-                .max(java.math.BigDecimal::compareTo)
-                .orElse(null);
+        java.math.BigDecimal maxPhanTram = null;
+        java.math.BigDecimal minGiaSauGiam = minPrice;
+        java.math.BigDecimal maxGiaSauGiam = maxPrice;
+        if (giaMap != null) {
+            maxPhanTram = variants.stream()
+                    .map(v -> giaMap.get(v.getId()))
+                    .filter(java.util.Objects::nonNull)
+                    .map(GiaKhuyenMai::phanTramGiam)
+                    .filter(java.util.Objects::nonNull)
+                    .max(java.math.BigDecimal::compareTo)
+                    .orElse(null);
+
+            minGiaSauGiam = variants.stream()
+                    .map(v -> giaMap.get(v.getId()))
+                    .filter(java.util.Objects::nonNull)
+                    .map(GiaKhuyenMai::giaSauGiam)
+                    .filter(java.util.Objects::nonNull)
+                    .min(java.math.BigDecimal::compareTo)
+                    .orElse(minPrice);
+
+            maxGiaSauGiam = variants.stream()
+                    .map(v -> giaMap.get(v.getId()))
+                    .filter(java.util.Objects::nonNull)
+                    .map(GiaKhuyenMai::giaSauGiam)
+                    .filter(java.util.Objects::nonNull)
+                    .max(java.math.BigDecimal::compareTo)
+                    .orElse(maxPrice);
+        }
 
         String discountStr = "-";
         if (maxPhanTram != null && maxPhanTram.compareTo(java.math.BigDecimal.ZERO) > 0) {
             discountStr = "-" + maxPhanTram.stripTrailingZeros().toPlainString() + "%";
         }
 
-        java.math.BigDecimal minGiaSauGiam = giaMap.values().stream()
-                .map(GiaKhuyenMai::giaSauGiam)
-                .filter(java.util.Objects::nonNull)
-                .min(java.math.BigDecimal::compareTo)
-                .orElse(minPrice);
-        java.math.BigDecimal maxGiaSauGiam = giaMap.values().stream()
-                .map(GiaKhuyenMai::giaSauGiam)
-                .filter(java.util.Objects::nonNull)
-                .max(java.math.BigDecimal::compareTo)
-                .orElse(maxPrice);
-
         String hinhAnhDaiDien = null;
-        try {
-            List<com.example.datn.entity.HinhAnhSanPham> images = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
-            if (images != null && !images.isEmpty()) {
-                hinhAnhDaiDien = images.stream()
-                        .filter(img -> img.getTenAnh() != null && img.getTenAnh().startsWith("DEFAULT_"))
-                        .map(com.example.datn.entity.HinhAnhSanPham::getDuongDan)
-                        .findFirst()
-                        .orElse(images.get(0).getDuongDan());
-            }
-        } catch (Exception ignored) {
+        if (images != null && !images.isEmpty()) {
+            hinhAnhDaiDien = images.stream()
+                    .filter(img -> img.getTenAnh() != null && img.getTenAnh().startsWith("DEFAULT_"))
+                    .map(com.example.datn.entity.HinhAnhSanPham::getDuongDan)
+                    .findFirst()
+                    .orElse(images.get(0).getDuongDan());
         }
 
         return SanPhamResponse.builder()

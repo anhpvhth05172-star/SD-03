@@ -14,6 +14,8 @@ public interface HinhAnhSanPhamRepository extends JpaRepository<HinhAnhSanPham, 
 
     List<HinhAnhSanPham> findBySanPhamId(Long idSanPham);
 
+    List<HinhAnhSanPham> findBySanPhamIdIn(java.util.Collection<Long> idSanPhams);
+
     @Modifying
     @Query("DELETE FROM HinhAnhSanPham h WHERE h.sanPham.id = :idSanPham")
     void deleteBySanPhamId(@Param("idSanPham") Long idSanPham);

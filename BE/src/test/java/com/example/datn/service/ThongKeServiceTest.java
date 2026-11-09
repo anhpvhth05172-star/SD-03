@@ -33,7 +33,7 @@ class ThongKeServiceTest {
     }
 
     private static HoaDonThongKeRow hd(long id, String trangThai, String tien, String maHinhThuc) {
-        return new HoaDonThongKeRow(id, trangThai, new BigDecimal(tien), false, maHinhThuc);
+        return new HoaDonThongKeRow(id, trangThai, new BigDecimal(tien), false, maHinhThuc, "ONLINE");
     }
 
     private static HoaDonThongKeRow hdXoa(long id, String trangThai, String tien) {
@@ -112,6 +112,23 @@ class ThongKeServiceTest {
         assertEquals(1_000_000L, r.doanhThu());
         assertEquals(1L, r.soDon());
         assertEquals(0L, r.sanPhamBan());
+    }
+
+    @Test
+    void tongQuan_donChuaThanhToanTinhVaoDoanhThuDuKien() {
+        mockRows(
+            List.of(
+                new HoaDonThongKeRow(1L, "DA_HOAN_THANH", new BigDecimal("1000000"), false, "TM", "TAI_QUAY"),
+                new HoaDonThongKeRow(2L, "CHO_XAC_NHAN", new BigDecimal("500000"), false, "TM", "ONLINE"),
+                new HoaDonThongKeRow(3L, "CHO_XAC_NHAN", new BigDecimal("300000"), false, "TM", "TAI_QUAY")
+            ),
+            List.of(),
+            0
+        );
+        TongQuanDTO r = service().tongQuan(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31), null);
+        assertEquals(1_000_000L, r.doanhThu());
+        assertEquals(800_000L, r.doanhThuDuKien());
+        assertEquals(3L, r.soDon());
     }
 
     @Test

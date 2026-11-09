@@ -32,8 +32,8 @@ public class QuyenGuard {
     }
 
     public void canXemThongKe() {
-        if (!coQuyen("ROLE_ADMIN") && !coQuyen("ROLE_STAFF") && !coQuyen("ROLE_NHAN_VIEN")) {
-            throw new KhongCoQuyenException("Bạn không có quyền xem thống kê");
+        if (!coQuyen("ROLE_ADMIN")) {
+            throw new KhongCoQuyenException("Chỉ quản trị viên mới có quyền xem thống kê");
         }
     }
 

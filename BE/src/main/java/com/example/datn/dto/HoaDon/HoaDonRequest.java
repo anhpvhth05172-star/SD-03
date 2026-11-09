@@ -13,6 +13,7 @@ import lombok.Setter;
 @AllArgsConstructor
 public class HoaDonRequest {
 
+    private Long id;
     private String maHoaDon;
     private String loaiDon;
     private BigDecimal phiVanChuyen;

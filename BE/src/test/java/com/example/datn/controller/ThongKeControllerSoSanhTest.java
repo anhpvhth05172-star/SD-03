@@ -43,7 +43,7 @@ class ThongKeControllerSoSanhTest {
             .build();
         // canQuanLyKhachHang doc quyen tu SecurityContext (khong tin header X-Vai-Tro)
         SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(
-            1L, "n/a", List.of(new SimpleGrantedAuthority("ROLE_NHAN_VIEN"))));
+            1L, "n/a", List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
     }
 
     @AfterEach

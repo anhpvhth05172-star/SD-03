@@ -61,22 +61,7 @@ const loadPosPendingOrders = () => {
   }
 }
 
-const getPosReservedForProduct = (item) => {
-  if (!item || !Array.isArray(posPendingOrders.value)) return 0
-  let reserved = 0
-  for (const order of posPendingOrders.value) {
-    if (!Array.isArray(order.cart)) continue
-    for (const c of order.cart) {
-      const matchId = c.idSanPham && item.id && Number(c.idSanPham) === Number(item.id)
-      const matchCode = c.maSp && item.maSanPham && String(c.maSp).toUpperCase() === String(item.maSanPham).toUpperCase()
-      const matchName = !c.idSanPham && c.name && item.tenSanPham && String(c.name).trim() === String(item.tenSanPham).trim()
-      if (matchId || matchCode || matchName) {
-        reserved += Number(c.quantity || 0)
-      }
-    }
-  }
-  return reserved
-}
+const getPosReservedForProduct = () => 0
 
 const getAvailableProductStock = (item) => {
   const base = Number(item?.soLuong ?? 0)
@@ -794,13 +779,6 @@ onUnmounted(() => {
             </svg>
             {{ isExporting ? 'Đang xuất...' : 'Xuất Excel' }}
           </button>
-          <button class="btn btn-quick-add" @click="openQuickAdd" title="Thêm nhanh sản phẩm">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            Thêm nhanh
-          </button>
           <button class="btn btn-add-new" @click="navigateToAdd">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -1114,142 +1092,6 @@ onUnmounted(() => {
             <button class="btn btn-secondary" @click="isEditModalOpen = false">Hủy bỏ</button>
             <button class="btn btn-primary" :disabled="isUpdating" @click="submitQuickEdit">
               {{ isUpdating ? 'Đang lưu...' : 'Lưu thay đổi' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <transition name="modal-fade">
-      <div v-if="isQuickAddModalOpen" class="modal-overlay" @click.self="isQuickAddModalOpen = false">
-        <div class="modal-dialog">
-          <div class="modal-header">
-            <div class="modal-title-group">
-              <h3 class="modal-title">Thêm nhanh sản phẩm</h3>
-            </div>
-            <button class="modal-close" @click="isQuickAddModalOpen = false">×</button>
-          </div>
-
-          <div class="modal-body">
-            <div class="edit-grid">
-              <div class="form-group span-2">
-                <label class="form-label">Tên sản phẩm <span class="req">*</span></label>
-                <input v-model="quickAddForm.tenSanPham" type="text" class="modal-input"
-                  :class="{ 'has-error': quickAddErrors.tenSanPham }" placeholder="Nhập tên sản phẩm..." />
-                <span v-if="quickAddErrors.tenSanPham" class="err-msg">{{ quickAddErrors.tenSanPham }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Thương hiệu <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idThuongHieu" :options="brands" label-key="ten" value-key="id"
-                  placeholder="-- Chọn thương hiệu --" search-placeholder="Tìm thương hiệu..."
-                  :has-error="!!quickAddErrors.idThuongHieu" />
-                <span v-if="quickAddErrors.idThuongHieu" class="err-msg">{{ quickAddErrors.idThuongHieu }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Loại giày <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idLoaiGiay" :options="categories" label-key="ten" value-key="id"
-                  placeholder="-- Chọn loại giày --" search-placeholder="Tìm loại giày..."
-                  :has-error="!!quickAddErrors.idLoaiGiay" />
-                <span v-if="quickAddErrors.idLoaiGiay" class="err-msg">{{ quickAddErrors.idLoaiGiay }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Chất liệu <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idChatLieu" :options="materials" label-key="ten" value-key="id"
-                  placeholder="-- Chọn chất liệu --" search-placeholder="Tìm chất liệu..."
-                  :has-error="!!quickAddErrors.idChatLieu" />
-                <span v-if="quickAddErrors.idChatLieu" class="err-msg">{{ quickAddErrors.idChatLieu }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Kiểu dáng <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idKieuDang" :options="styles" label-key="ten" value-key="id"
-                  placeholder="-- Chọn kiểu dáng --" search-placeholder="Tìm kiểu dáng..."
-                  :has-error="!!quickAddErrors.idKieuDang" />
-                <span v-if="quickAddErrors.idKieuDang" class="err-msg">{{ quickAddErrors.idKieuDang }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Xuất xứ <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idXuatXu" :options="origins" label-key="ten" value-key="id"
-                  placeholder="-- Chọn xuất xứ --" search-placeholder="Tìm xuất xứ..."
-                  :has-error="!!quickAddErrors.idXuatXu" />
-                <span v-if="quickAddErrors.idXuatXu" class="err-msg">{{ quickAddErrors.idXuatXu }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Đối tượng sử dụng</label>
-                <SearchableSelect v-model="quickAddForm.doiTuong" :options="[
-                  { value: 'Nam', label: 'Nam' },
-                  { value: 'Nữ', label: 'Nữ' },
-                  { value: 'Unisex', label: 'Tất cả (Unisex)' }
-                ]" label-key="label" value-key="value" placeholder="Chọn đối tượng..." :allow-clear="false" />
-              </div>
-
-              <div class="form-group span-2 ai-magic-card">
-                <div class="ai-magic-content">
-                  <div class="ai-magic-info">
-                    <span class="ai-badge">Gemini AI Copilot</span>
-                    <span class="ai-magic-desc">Tự động sinh tính năng nổi bật và bài viết mô tả sản phẩm chuẩn
-                      SEO</span>
-                  </div>
-                  <button type="button" class="btn-ai-generate" :disabled="isGeneratingAi"
-                    @click="generateAiContent(quickAddForm)">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      stroke-width="2.2">
-                      <path
-                        d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83">
-                      </path>
-                    </svg>
-                    {{ isGeneratingAi ? 'Đang tạo...' : '✨ Sinh mô tả bằng AI' }}
-                  </button>
-                </div>
-              </div>
-
-              <div class="form-group span-2">
-                <label class="form-label">Tính năng nổi bật</label>
-                <input v-model="quickAddForm.tinhNang" type="text" class="modal-input"
-                  placeholder="Ví dụ: Êm ái, Chống trượt, Thoáng khí..." />
-              </div>
-
-              <div class="form-group span-2">
-                <label class="form-label">Mô tả sản phẩm</label>
-                <textarea v-model="quickAddForm.moTa" class="modal-textarea" rows="3"
-                  placeholder="Nhập mô tả chi tiết sản phẩm..."></textarea>
-              </div>
-
-              <div class="form-group span-2">
-                <label class="form-label">Hình ảnh đại diện sản phẩm</label>
-                <div v-if="quickAddForm.hinhAnh" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f8fafc;">
-                  <img :src="quickAddForm.hinhAnh" alt="Preview" style="width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0;" />
-                  <div style="flex: 1;">
-                    <div style="font-size: 13px; font-weight: 600; color: #0f172a;">Đã chọn ảnh đại diện</div>
-                    <div style="font-size: 12px; color: #64748b;">Nhấn Đổi ảnh để chọn ảnh khác (JPG, PNG, WEBP • Tối đa 5MB)</div>
-                  </div>
-                  <button type="button" class="btn btn-secondary" @click="triggerProductImageUpload(quickAddForm)">Đổi ảnh</button>
-                </div>
-                <div v-else @click="triggerProductImageUpload(quickAddForm)" style="cursor: pointer; padding: 14px; text-align: center; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f8fafc;">
-                  <div style="font-size: 13px; font-weight: 600; color: #334155;">+ Nhấn để tải ảnh đại diện cho sản phẩm</div>
-                  <div style="font-size: 12px; color: #64748b;">Hỗ trợ JPG, PNG, WEBP (Tối đa 5MB)</div>
-                </div>
-              </div>
-
-              <div class="form-group span-2 switch-row">
-                <label class="form-label mb-0">Trạng thái (Bật: Kinh doanh / Tắt: Ngưng kinh doanh)</label>
-                <label class="switch-toggle">
-                  <input type="checkbox" v-model="quickAddForm.trangThai" />
-                  <span class="slider round"></span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="isQuickAddModalOpen = false">Hủy bỏ</button>
-            <button class="btn btn-primary" :disabled="isSubmittingQuickAdd" @click="submitQuickAdd">
-              {{ isSubmittingQuickAdd ? 'Đang lưu...' : 'Thêm sản phẩm' }}
             </button>
           </div>
         </div>

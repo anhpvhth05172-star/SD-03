@@ -271,9 +271,28 @@ const doSearch = async (codeToSearch) => {
     return;
   }
   if (!myId.value) {
-    errorMessage.value = isLoggedIn.value
-      ? "Không xác định được tài khoản của bạn, vui lòng đăng nhập lại."
-      : "Vui lòng đăng nhập để tra cứu đơn hàng của bạn.";
+    if (isPhone(query)) {
+      errorMessage.value = "Vui lòng đăng nhập để tra cứu đơn hàng theo số điện thoại.";
+      return;
+    }
+    // Khách vãng lai tra cứu chính xác theo mã đơn hàng
+    errorMessage.value = "";
+    searchInput.value = query;
+    searched.value = true;
+    searching.value = true;
+    currentResult.value = null;
+    try {
+      const data = await getJson(`/api/v1/hoa-don/tra-cuu?maHoaDon=${encodeURIComponent(query)}`);
+      currentResult.value = normalize(data);
+    } catch (e) {
+      if (e.status === 404) {
+        currentResult.value = null;
+      } else {
+        errorMessage.value = "Không tra cứu được đơn hàng, vui lòng thử lại.";
+      }
+    } finally {
+      searching.value = false;
+    }
     return;
   }
   errorMessage.value = "";

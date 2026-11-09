@@ -55,19 +55,7 @@ const loadPosPendingOrders = () => {
   }
 }
 
-const getPosReservedForVariant = (item) => {
-  if (!item || !Array.isArray(posPendingOrders.value)) return 0
-  let reserved = 0
-  for (const order of posPendingOrders.value) {
-    if (!Array.isArray(order.cart)) continue
-    for (const c of order.cart) {
-      if (Number(c.idCtsp) === Number(item.id)) {
-        reserved += Number(c.quantity || 0)
-      }
-    }
-  }
-  return reserved
-}
+const getPosReservedForVariant = () => 0
 
 const getAvailableVariantStock = (item) => {
   const base = Number(item?.stock ?? item?.soLuong ?? 0)
@@ -1862,14 +1850,6 @@ const saveAddVariant = async () => {
               <div class="form-group">
                 <label class="form-lbl">Giá bán (VNĐ) <span class="required">*</span></label>
                 <CurrencyInput v-model="addForm.price" placeholder="Nhập giá bán..." />
-              </div>
-
-              <div class="form-group span-2">
-                <label class="form-lbl">Trạng thái</label>
-                <SearchableSelect v-model="addForm.trangThai" :options="[
-                  { value: true, label: 'Kinh doanh' },
-                  { value: false, label: 'Ngưng kinh doanh' }
-                ]" label-key="label" value-key="value" :allow-clear="false" />
               </div>
 
               <!-- PHẦN HÌNH ẢNH BIẾN THỂ -->

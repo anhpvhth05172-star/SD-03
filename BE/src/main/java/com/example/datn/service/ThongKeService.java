@@ -65,6 +65,23 @@ public class ThongKeService {
         return tongQuanLocThuongHieu(hoaDons, chiTiets, khachMoi, thuongHieu);
     }
 
+    public static boolean daThanhToan(HoaDonThongKeRow h) {
+        if (h.daXoa() || TRANG_THAI_HUY_HOAN_TIEN.contains(h.trangThai())) {
+            return false;
+        }
+        String tt = h.trangThai();
+        if ("DA_HOAN_THANH".equals(tt) || "DA_GIAO_HANG".equals(tt)) {
+            return true;
+        }
+        if ("ONLINE".equalsIgnoreCase(h.loaiDon())) {
+            boolean laTienMatCod = h.maHinhThuc() != null && MA_HINH_THUC_TIEN_MAT.contains(h.maHinhThuc());
+            if (!laTienMatCod && !"CHO_THANH_TOAN".equals(tt)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private TongQuanDTO tongQuanKhongLocThuongHieu(
         List<HoaDonThongKeRow> hoaDons,
         List<ChiTietThongKeRow> chiTiets,
@@ -75,20 +92,32 @@ public class ThongKeService {
             .map(HoaDonThongKeRow::id)
             .collect(Collectors.toSet());
 
+        Set<Long> idDaThanhToan = hoaDons.stream()
+            .filter(ThongKeService::daThanhToan)
+            .map(HoaDonThongKeRow::id)
+            .collect(Collectors.toSet());
+
         long doanhThu = hoaDons.stream()
-            .filter(h -> idHopLe.contains(h.id()))
-            .mapToLong(h -> h.tienSauGiamGia().longValue())
+            .filter(h -> idDaThanhToan.contains(h.id()))
+            .mapToLong(h -> Math.max(0, h.tienSauGiamGia().longValue()))
             .sum();
 
         long tienMat = hoaDons.stream()
-            .filter(h -> idHopLe.contains(h.id()))
+            .filter(h -> idDaThanhToan.contains(h.id()))
             .filter(h -> MA_HINH_THUC_TIEN_MAT.contains(h.maHinhThuc()))
-            .mapToLong(h -> h.tienSauGiamGia().longValue())
+            .mapToLong(h -> Math.max(0, h.tienSauGiamGia().longValue()))
+            .sum();
+
+        long tienChuyenKhoan = Math.max(0, doanhThu - tienMat);
+
+        long doanhThuDuKien = hoaDons.stream()
+            .filter(h -> idHopLe.contains(h.id()) && !idDaThanhToan.contains(h.id()))
+            .mapToLong(h -> Math.max(0, h.tienSauGiamGia().longValue()))
             .sum();
 
         long soDon = idHopLe.size();
-        long aov = soDon > 0 ? Math.round((double) doanhThu / soDon) : 0;
-        long tienChuyenKhoan = doanhThu - tienMat;
+        long soDonDaTra = idDaThanhToan.size();
+        long aov = soDonDaTra > 0 ? Math.round((double) doanhThu / soDonDaTra) : 0;
         long sanPhamBan = chiTiets.stream()
             .filter(c -> idHopLe.contains(c.idHoaDon()))
             .mapToLong(c -> c.soLuong() != null ? c.soLuong() : 0)
@@ -96,7 +125,7 @@ public class ThongKeService {
 
         long soDonOnline = demDonOnline(hoaDons, idHopLe);
         return new TongQuanDTO(doanhThu, tienMat, tienChuyenKhoan, soDon, aov, sanPhamBan, khachMoi,
-            soDonOnline, soDon - soDonOnline);
+            soDonOnline, soDon - soDonOnline, doanhThuDuKien);
     }
 
     /** Dem don ONLINE trong tap id; con lai (TAI_QUAY, TAI_QUAY_GIAO_HANG) la don tai quay. */
@@ -119,13 +148,24 @@ public class ThongKeService {
             .map(HoaDonThongKeRow::id)
             .collect(Collectors.toSet());
 
+        Set<Long> idDaThanhToan = hoaDons.stream()
+            .filter(ThongKeService::daThanhToan)
+            .map(HoaDonThongKeRow::id)
+            .collect(Collectors.toSet());
+
         List<ChiTietThongKeRow> dongThuongHieu = chiTiets.stream()
             .filter(c -> idHopLe.contains(c.idHoaDon()))
             .filter(c -> c.tenThuongHieu() != null && c.tenThuongHieu().toLowerCase().equals(thuongHieuLower))
             .toList();
 
         long doanhThu = dongThuongHieu.stream()
-            .mapToLong(c -> c.thanhTien().longValue())
+            .filter(c -> idDaThanhToan.contains(c.idHoaDon()))
+            .mapToLong(c -> Math.max(0, c.thanhTien().longValue()))
+            .sum();
+
+        long doanhThuDuKien = dongThuongHieu.stream()
+            .filter(c -> !idDaThanhToan.contains(c.idHoaDon()))
+            .mapToLong(c -> Math.max(0, c.thanhTien().longValue()))
             .sum();
 
         long sanPhamBan = dongThuongHieu.stream()
@@ -137,21 +177,29 @@ public class ThongKeService {
             .collect(Collectors.toSet());
         long soDon = idDonChuaThuongHieu.size();
 
+        long soDonDaTra = dongThuongHieu.stream()
+            .filter(c -> idDaThanhToan.contains(c.idHoaDon()))
+            .map(ChiTietThongKeRow::idHoaDon)
+            .distinct()
+            .count();
+
         Map<Long, BigDecimal> tongTienTungDon = new LinkedHashMap<>();
         for (ChiTietThongKeRow c : chiTiets) {
-            if (idHopLe.contains(c.idHoaDon())) {
+            if (idDaThanhToan.contains(c.idHoaDon())) {
                 tongTienTungDon.merge(c.idHoaDon(), c.thanhTien(), BigDecimal::add);
             }
         }
 
         Map<Long, BigDecimal> tienThuongHieuTungDon = new LinkedHashMap<>();
         for (ChiTietThongKeRow c : dongThuongHieu) {
-            tienThuongHieuTungDon.merge(c.idHoaDon(), c.thanhTien(), BigDecimal::add);
+            if (idDaThanhToan.contains(c.idHoaDon())) {
+                tienThuongHieuTungDon.merge(c.idHoaDon(), c.thanhTien(), BigDecimal::add);
+            }
         }
 
         long tienMat = 0;
         for (HoaDonThongKeRow h : hoaDons) {
-            if (!idHopLe.contains(h.id()) || !MA_HINH_THUC_TIEN_MAT.contains(h.maHinhThuc())) {
+            if (!idDaThanhToan.contains(h.id()) || !MA_HINH_THUC_TIEN_MAT.contains(h.maHinhThuc())) {
                 continue;
             }
             BigDecimal tongTien = tongTienTungDon.get(h.id());
@@ -163,12 +211,12 @@ public class ThongKeService {
             tienMat += h.tienSauGiamGia().multiply(tyTrong).setScale(0, RoundingMode.HALF_UP).longValue();
         }
 
-        long aov = soDon > 0 ? Math.round((double) doanhThu / soDon) : 0;
-        long tienChuyenKhoan = doanhThu - tienMat;
+        long aov = soDonDaTra > 0 ? Math.round((double) doanhThu / soDonDaTra) : 0;
+        long tienChuyenKhoan = Math.max(0, doanhThu - tienMat);
 
         long soDonOnline = demDonOnline(hoaDons, idDonChuaThuongHieu);
         return new TongQuanDTO(doanhThu, tienMat, tienChuyenKhoan, soDon, aov, sanPhamBan, khachMoi,
-            soDonOnline, soDon - soDonOnline);
+            soDonOnline, soDon - soDonOnline, doanhThuDuKien);
     }
 
     /**

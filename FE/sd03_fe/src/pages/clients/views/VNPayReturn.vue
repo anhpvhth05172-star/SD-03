@@ -29,7 +29,7 @@ onMounted(async () => {
       return;
     }
 
-    const res = await fetch(`http://localhost:8080/api/vnpay/payment-callback${search}`);
+    const res = await fetch(`/api/vnpay/payment-callback${search}`);
     if (!res.ok) throw new Error(`Máy chủ phản hồi lỗi ${res.status}`);
 
     const data = await res.json();

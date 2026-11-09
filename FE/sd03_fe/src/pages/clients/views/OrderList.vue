@@ -11,7 +11,7 @@ const route = useRoute();
 const LOOKUP_ROUTE = "/tra-cuu";
 
 /* ================= CẤU HÌNH API ================= */
-const HOA_DON_API = "http://localhost:8080/api/hoa-don";
+const HOA_DON_API = "/api/hoa-don";
 
 const getToken = () => {
   const sessionToken = getSessionToken();
@@ -80,6 +80,7 @@ const STATUS = {
     cls: "bg-warning-subtle text-warning-emphasis",
   },
   DA_XAC_NHAN: { label: "Đã xác nhận", cls: "bg-primary-subtle text-primary" },
+  CHO_GIAO_HANG: { label: "Chờ giao hàng", cls: "bg-info-subtle text-info" },
   DANG_GIAO: {
     label: "Đang vận chuyển",
     cls: "bg-primary-subtle text-primary",
@@ -88,12 +89,21 @@ const STATUS = {
     label: "Đang vận chuyển",
     cls: "bg-primary-subtle text-primary",
   },
+  GIAO_HANG_THAT_BAI: {
+    label: "Giao thất bại",
+    cls: "bg-warning-subtle text-warning-emphasis",
+  },
   HOAN_THANH: {
     label: "Giao thành công",
     cls: "bg-success-subtle text-success",
   },
   DA_GIAO: { label: "Giao thành công", cls: "bg-success-subtle text-success" },
+  DA_HOAN_THANH: {
+    label: "Đã hoàn thành",
+    cls: "bg-success-subtle text-success",
+  },
   DA_HUY: { label: "Đã hủy", cls: "bg-danger-subtle text-danger" },
+  DA_HOAN_TIEN: { label: "Đã hoàn tiền", cls: "bg-danger-subtle text-danger" },
 };
 const statusInfo = (code) =>
   STATUS[code] || {
@@ -176,20 +186,13 @@ function getLoginInfo() {
   };
 }
 
-// Xác định id khách hàng: ưu tiên id có sẵn, không có thì tra qua API khach-hang
+// Xác định id khách hàng: ưu tiên id có sẵn, không có thì tra qua API thong-tin
 async function resolveCustomerId() {
   const info = getLoginInfo();
   if (info.id != null) return info.id;
-  if (!info.username && !info.email) return null;
   try {
-    const page = await getJson(`${KHACH_HANG_API}?size=1000`);
-    const list = page.content || page || [];
-    const c = list.find(
-      (k) =>
-        (info.username && k.tenTaiKhoan === info.username) ||
-        (info.email && k.email === info.email),
-    );
-    return c?.id ?? null;
+    const profile = await getJson("/api/auth/thong-tin");
+    return profile?.id ?? null;
   } catch (e) {
     console.warn("[Auth] Không tra được id khách hàng:", e.message);
     return null;
@@ -212,7 +215,7 @@ async function loadOrder(id) {
   }
 
   try {
-    const o = normalize(await getJson(`${HOA_DON_API}/${id}`));
+    const o = normalize(await getJson(`${HOA_DON_API}/cua-toi/${id}`));
     // Chỉ cho xem đơn của chính mình; đơn người khác hiển thị như "không tìm thấy"
     if (String(o.customerId) === String(myId)) order.value = o;
   } catch (e) {
