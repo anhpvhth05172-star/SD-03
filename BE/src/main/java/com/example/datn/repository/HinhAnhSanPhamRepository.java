@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -14,7 +15,7 @@ public interface HinhAnhSanPhamRepository extends JpaRepository<HinhAnhSanPham, 
 
     List<HinhAnhSanPham> findBySanPhamId(Long idSanPham);
 
-    List<HinhAnhSanPham> findBySanPhamIdIn(java.util.Collection<Long> idSanPhams);
+    List<HinhAnhSanPham> findBySanPhamIdIn(Collection<Long> idSanPhams);
 
     @Modifying
     @Query("DELETE FROM HinhAnhSanPham h WHERE h.sanPham.id = :idSanPham")

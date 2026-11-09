@@ -1220,8 +1220,8 @@ onBeforeUnmount(() => {
                 <span class="pay-label">Phương thức thanh toán</span>
                 <strong>{{ data.tenPhuongThucThanhToan || '—' }}</strong>
               </div>
-              <span class="inv-pill" :class="pillClass(payStatusOf(data.trangThai))">
-                {{ payStatusOf(data.trangThai) }}
+              <span class="inv-pill" :class="pillClass(payStatusOf(data))">
+                {{ payStatusOf(data) }}
               </span>
             </div>
             <div class="pay-amount-row">

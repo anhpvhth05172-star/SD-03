@@ -244,14 +244,14 @@ const statusPill = (value) => {
   return 'inv-pill-gray'
 }
 
-const payPill = (value) => {
-  const s = payStatusOf(value)
+const payPill = (row) => {
+  const s = payStatusOf(row)
   if (s === 'Đã thanh toán') return 'inv-pill-green'
   if (s === 'Đã hoàn tiền') return 'inv-pill-red'
   return 'inv-pill-gray'
 }
 
-const payLabel = (value) => payStatusOf(value)
+const payLabel = (row) => payStatusOf(row)
 
 const fmtNgayTao = (iso) => {
   if (!iso) return '—'
@@ -473,7 +473,7 @@ onMounted(load)
                   <span class="inv-pill" :class="statusPill(row.trangThai)">{{ row.trangThai }}</span>
                 </td>
                 <td class="text-center">
-                  <span class="inv-pill" :class="payPill(row.trangThai)">{{ payLabel(row.trangThai) }}</span>
+                  <span class="inv-pill" :class="payPill(row)">{{ payLabel(row) }}</span>
                 </td>
                 <td class="text-center">
                   <div class="action-btns">

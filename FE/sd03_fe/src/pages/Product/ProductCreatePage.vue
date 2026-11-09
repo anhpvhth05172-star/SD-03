@@ -7,6 +7,8 @@ import CurrencyInput from '@/components/CurrencyInput.vue'
 import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 import http, { API_ORIGIN } from '@/api/http'
+import { getToken } from '@/utils/auth'
+import { checkImageMagicBytes, compressImageToBase64 } from '@/utils/imageCompressor'
 
 const router = useRouter()
 const API_BASE = `${API_ORIGIN}/api/v1`
@@ -48,7 +50,8 @@ const form = reactive({
   style: '',
   origin: '',
   feature: '',
-  description: ''
+  description: '',
+  mainImage: null
 })
 
 const errors = reactive({
@@ -207,7 +210,6 @@ const generateVariants = () => {
 }
 
 const applyBulkValues = () => {
-  // 1. Kiểm tra có biến thể nào được tick chọn hay không
   let selectedCount = 0
   colorGroups.value.forEach(group => {
     group.items.forEach(item => {
@@ -220,7 +222,6 @@ const applyBulkValues = () => {
     return
   }
 
-  // 2. Validate Giá bán mặc định (Bắt buộc)
   if (defaultPrice.value === null || defaultPrice.value === undefined || defaultPrice.value === '') {
     showToast('Giá bán mặc định không được để trống!', 'warning')
     return
@@ -231,7 +232,6 @@ const applyBulkValues = () => {
     return
   }
 
-  // 3. Validate Số lượng mặc định
   let qtyNum = 0
   if (defaultQty.value !== null && defaultQty.value !== undefined && defaultQty.value !== '') {
     qtyNum = Number(defaultQty.value)
@@ -241,7 +241,6 @@ const applyBulkValues = () => {
     }
   }
 
-  // 4. Áp dụng giá trị vào các biến thể đã chọn
   colorGroups.value.forEach(group => {
     group.items.forEach(item => {
       if (item.checked) {
@@ -269,30 +268,6 @@ const removeItem = (groupIndex, itemIndex) => {
   }
 }
 
-// Kiểm tra Magic Bytes client-side (JPEG: FF D8 FF, PNG: 89 50 4E 47, WEBP: RIFF...WEBP)
-const checkImageMagicBytes = async (file) => {
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onloadend = (e) => {
-      const arr = new Uint8Array(e.target.result).subarray(0, 12)
-      if (arr.length < 4) return resolve(false)
-      
-      // JPEG: FF D8 FF
-      if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) return resolve(true)
-      // PNG: 89 50 4E 47
-      if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) return resolve(true)
-      // WEBP: 52 49 46 46 (RIFF) ... 57 45 42 50 (WEBP)
-      if (arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 &&
-          arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50) return resolve(true)
-      // GIF: 47 49 46 38
-      if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x38) return resolve(true)
-      
-      resolve(false)
-    }
-    reader.readAsArrayBuffer(file.slice(0, 12))
-  })
-}
-
 const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader()
   reader.onload = (ev) => resolve(ev.target.result)
@@ -307,7 +282,7 @@ const openImageFilePicker = ({ multiple = false, onSelect }) => {
   }
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+  input.accept = '.jpg,.jpeg,.png,.webp,.gif,.avif,.jfif,.bmp,image/*'
   input.multiple = multiple
   input.style.display = 'none'
   document.body.appendChild(input)
@@ -329,20 +304,30 @@ const triggerProductAvatarUpload = () => {
     onSelect: async (files) => {
       const file = files[0]
       if (!file) return
-      const MAX_SIZE = 5 * 1024 * 1024
+      const MAX_SIZE = 10 * 1024 * 1024
       if (file.size > MAX_SIZE) {
-        showToast(`Ảnh "${file.name}" vượt quá dung lượng tối đa 5MB!`, 'warning')
+        showToast(`Ảnh "${file.name}" vượt quá dung lượng tối đa 10MB!`, 'warning')
         return
       }
       const isValidRealImage = await checkImageMagicBytes(file)
       if (!isValidRealImage) {
-        showToast(`Tệp "${file.name}" không phải là ảnh hợp lệ (chỉ hỗ trợ JPG, PNG, WEBP)!`, 'error')
+        showToast(`Tệp "${file.name}" không phải là ảnh hợp lệ!`, 'error')
         return
       }
-      productAvatar.value = await readFileAsDataUrl(file)
+      try {
+        const compressed = await compressImageToBase64(file)
+        productAvatar.value = compressed
+      } catch (err) {
+        productAvatar.value = await readFileAsDataUrl(file)
+      }
       showToast('Đã chọn ảnh đại diện sản phẩm!')
     }
   })
+}
+
+const triggerMainImageUpload = triggerProductAvatarUpload
+const removeMainImage = () => {
+  productAvatar.value = null
 }
 
 const triggerImageUpload = (colorId) => {
@@ -352,7 +337,7 @@ const triggerImageUpload = (colorId) => {
       if (!colorImages[colorId]) colorImages[colorId] = []
       const currentList = colorImages[colorId]
 
-      const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+      const MAX_SIZE = 10 * 1024 * 1024
       const MAX_IMAGES_PER_COLOR = 4
 
       let addedCount = 0
@@ -363,27 +348,34 @@ const triggerImageUpload = (colorId) => {
         }
 
         if (file.size > MAX_SIZE) {
-          showToast(`Ảnh "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) vượt quá dung lượng tối đa 5MB!`, 'warning')
+          showToast(`Ảnh "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)}MB) vượt quá dung lượng tối đa 10MB!`, 'warning')
           continue
         }
 
         const isValidRealImage = await checkImageMagicBytes(file)
         if (!isValidRealImage) {
-          showToast(`Tệp "${file.name}" không phải là ảnh hợp lệ (chỉ hỗ trợ JPG, PNG, WEBP)!`, 'error')
+          showToast(`Tệp "${file.name}" không phải là ảnh hợp lệ!`, 'error')
           continue
         }
 
-        const base64Url = await readFileAsDataUrl(file)
-        currentList.push(base64Url)
-        addedCount++
+        try {
+          const compressed = await compressImageToBase64(file)
+          currentList.push(compressed)
+          addedCount++
+        } catch {
+          const base64Url = await readFileAsDataUrl(file)
+          currentList.push(base64Url)
+          addedCount++
+        }
       }
 
       if (addedCount > 0) {
-        showToast(`Đã tải lên ${addedCount} ảnh hợp lệ!`)
+        showToast(`Đã tải lên và tối ưu ${addedCount} ảnh hợp lệ!`)
       }
     }
   })
 }
+
 
 const removeImage = (colorId, index, event) => {
   if (event) event.stopPropagation()
@@ -571,6 +563,7 @@ const saveProduct = async (confirmMerge = false) => {
     tinhNang: form.feature ? form.feature.trim() : '',
     moTa: form.description ? form.description.trim() : '',
     hinhAnh: productAvatar.value || (bienThes.find(b => b.hinhAnh)?.hinhAnh || null),
+    hinhAnhDaiDien: productAvatar.value || (bienThes.find(b => b.hinhAnh)?.hinhAnh || null),
     trangThai: true,
     confirmMerge: Boolean(confirmMerge),
     bienThes: bienThes
@@ -578,9 +571,13 @@ const saveProduct = async (confirmMerge = false) => {
 
   try {
     isSubmitting.value = true
+    const token = getToken()
     const res = await apiFetch(`${API_BASE}/san-pham/smart-save`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
       body: JSON.stringify(payload)
     })
 
@@ -665,87 +662,61 @@ onMounted(() => {
         <div class="form-field">
           <div class="field-label-row">
             <label class="form-label required">Thương hiệu</label>
-            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('brand')" title="Thêm nhanh Thương hiệu">+ Thêm nhanh</button>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('brand')"
+              title="Thêm nhanh Thương hiệu">+ Thêm nhanh</button>
           </div>
-          <SearchableSelect
-            v-model="form.brand"
-            :options="brandOptions"
-            placeholder="Chọn thương hiệu..."
-            search-placeholder="Tìm thương hiệu..."
-            :has-error="!!errors.brand"
-          />
+          <SearchableSelect v-model="form.brand" :options="brandOptions" placeholder="Chọn thương hiệu..."
+            search-placeholder="Tìm thương hiệu..." :has-error="!!errors.brand" />
           <span v-if="errors.brand" class="err-txt">{{ errors.brand }}</span>
         </div>
 
         <div class="form-field">
           <div class="field-label-row">
             <label class="form-label required">Loại giày</label>
-            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('category')" title="Thêm nhanh Loại giày">+ Thêm nhanh</button>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('category')"
+              title="Thêm nhanh Loại giày">+ Thêm nhanh</button>
           </div>
-          <SearchableSelect
-            v-model="form.category"
-            :options="categoryOptions"
-            placeholder="Chọn loại giày..."
-            search-placeholder="Tìm loại giày..."
-            :has-error="!!errors.category"
-          />
+          <SearchableSelect v-model="form.category" :options="categoryOptions" placeholder="Chọn loại giày..."
+            search-placeholder="Tìm loại giày..." :has-error="!!errors.category" />
           <span v-if="errors.category" class="err-txt">{{ errors.category }}</span>
         </div>
 
         <div class="form-field">
           <label class="form-label required">Giới tính / Đối tượng</label>
-          <SearchableSelect
-            v-model="form.gender"
-            :options="genderOptions"
-            value-key="value"
-            label-key="label"
-            placeholder="Chọn đối tượng..."
-            :allow-clear="false"
-          />
+          <SearchableSelect v-model="form.gender" :options="genderOptions" value-key="value" label-key="label"
+            placeholder="Chọn đối tượng..." :allow-clear="false" />
         </div>
 
         <div class="form-field">
           <div class="field-label-row">
             <label class="form-label required">Chất liệu</label>
-            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('material')" title="Thêm nhanh Chất liệu">+ Thêm nhanh</button>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('material')"
+              title="Thêm nhanh Chất liệu">+ Thêm nhanh</button>
           </div>
-          <SearchableSelect
-            v-model="form.material"
-            :options="materialOptions"
-            placeholder="Chọn chất liệu..."
-            search-placeholder="Tìm chất liệu..."
-            :has-error="!!errors.material"
-          />
+          <SearchableSelect v-model="form.material" :options="materialOptions" placeholder="Chọn chất liệu..."
+            search-placeholder="Tìm chất liệu..." :has-error="!!errors.material" />
           <span v-if="errors.material" class="err-txt">{{ errors.material }}</span>
         </div>
 
         <div class="form-field">
           <div class="field-label-row">
             <label class="form-label required">Kiểu dáng</label>
-            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('style')" title="Thêm nhanh Kiểu dáng">+ Thêm nhanh</button>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('style')"
+              title="Thêm nhanh Kiểu dáng">+ Thêm nhanh</button>
           </div>
-          <SearchableSelect
-            v-model="form.style"
-            :options="styleOptions"
-            placeholder="Chọn kiểu dáng..."
-            search-placeholder="Tìm kiểu dáng..."
-            :has-error="!!errors.style"
-          />
+          <SearchableSelect v-model="form.style" :options="styleOptions" placeholder="Chọn kiểu dáng..."
+            search-placeholder="Tìm kiểu dáng..." :has-error="!!errors.style" />
           <span v-if="errors.style" class="err-txt">{{ errors.style }}</span>
         </div>
 
         <div class="form-field">
           <div class="field-label-row">
             <label class="form-label required">Xuất xứ</label>
-            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('origin')" title="Thêm nhanh Xuất xứ">+ Thêm nhanh</button>
+            <button type="button" class="btn-quick-add-link" @click="openQuickAdd('origin')"
+              title="Thêm nhanh Xuất xứ">+ Thêm nhanh</button>
           </div>
-          <SearchableSelect
-            v-model="form.origin"
-            :options="originOptions"
-            placeholder="Chọn xuất xứ..."
-            search-placeholder="Tìm xuất xứ..."
-            :has-error="!!errors.origin"
-          />
+          <SearchableSelect v-model="form.origin" :options="originOptions" placeholder="Chọn xuất xứ..."
+            search-placeholder="Tìm xuất xứ..." :has-error="!!errors.origin" />
           <span v-if="errors.origin" class="err-txt">{{ errors.origin }}</span>
         </div>
 
@@ -753,6 +724,30 @@ onMounted(() => {
           <label class="form-label">Tính năng sản phẩm</label>
           <input v-model="form.feature" type="text" class="form-input"
             placeholder="Mô tả các tính năng nổi bật (vd: Êm chân, thoáng khí...)" />
+        </div>
+
+        <div class="form-field full-row">
+          <label class="form-label">Ảnh đại diện sản phẩm (Tùy chọn)</label>
+          <div v-if="form.mainImage" class="main-image-preview-card">
+            <img :src="form.mainImage" class="main-image-thumb" alt="Ảnh đại diện sản phẩm" />
+            <div class="main-image-meta">
+              <span class="badge-main-img">📷 Ảnh đại diện chính</span>
+              <p class="main-image-hint">Ảnh này sẽ làm hình ảnh đại diện hiển thị cho sản phẩm trên hệ thống.</p>
+              <div class="main-image-btn-row">
+                <button type="button" class="btn btn-outline-secondary btn-sm" @click="triggerMainImageUpload">Đổi ảnh
+                  khác</button>
+                <button type="button" class="btn btn-outline-danger btn-sm" @click="removeMainImage">Xóa ảnh</button>
+              </div>
+            </div>
+          </div>
+          <div v-else class="main-image-dropzone-box" @click="triggerMainImageUpload">
+            <div class="dropzone-icon">📷</div>
+            <div class="dropzone-text-group">
+              <span class="dropzone-main-txt">Tải lên ảnh đại diện sản phẩm</span>
+              <span class="dropzone-sub-txt">Nhấn để chọn ảnh đại diện từ máy tính (JPG, PNG, WEBP, AVIF... Tối đa
+                10MB)</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -762,14 +757,8 @@ onMounted(() => {
         <label class="attr-label required">Màu sắc</label>
         <div class="attr-input-wrap">
           <div style="flex: 1;">
-            <SearchableSelect
-              v-model="tempColorSelect"
-              :options="colorOptions"
-              color-key="ma"
-              placeholder="Chọn màu sắc..."
-              search-placeholder="Tìm kiếm màu..."
-              @change="handleSelectColor"
-            />
+            <SearchableSelect v-model="tempColorSelect" :options="colorOptions" color-key="ma"
+              placeholder="Chọn màu sắc..." search-placeholder="Tìm kiếm màu..." @change="handleSelectColor" />
           </div>
           <button class="btn btn-quick-add" @click="openQuickAdd('color')">+ Thêm nhanh</button>
         </div>
@@ -787,14 +776,8 @@ onMounted(() => {
         <label class="attr-label required">Kích cỡ</label>
         <div class="attr-input-wrap">
           <div style="flex: 1;">
-            <SearchableSelect
-              v-model="tempSizeSelect"
-              :options="sizeOptions"
-              prefix="Size "
-              placeholder="Chọn kích cỡ..."
-              search-placeholder="Tìm size..."
-              @change="handleSelectSize"
-            />
+            <SearchableSelect v-model="tempSizeSelect" :options="sizeOptions" prefix="Size "
+              placeholder="Chọn kích cỡ..." search-placeholder="Tìm size..." @change="handleSelectSize" />
           </div>
           <button class="btn btn-quick-add" @click="openQuickAdd('size')">+ Thêm nhanh</button>
         </div>
@@ -823,7 +806,8 @@ onMounted(() => {
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <div>
           <label class="card-section-label" style="margin-bottom: 2px;">Ảnh đại diện sản phẩm</label>
-          <p style="margin: 0; font-size: 13px; color: #64748b;">Tải lên ảnh đại diện chung cho sản phẩm (JPG, PNG, WEBP • Tối đa 5MB).</p>
+          <p style="margin: 0; font-size: 13px; color: #64748b;">Tải lên ảnh đại diện chung cho sản phẩm (JPG, PNG, WEBP
+            • Tối đa 5MB).</p>
         </div>
         <button type="button" class="btn btn-red-solid" @click="triggerProductAvatarUpload">
           {{ productAvatar ? 'Đổi ảnh sản phẩm' : '+ Thêm ảnh sản phẩm' }}
@@ -927,30 +911,18 @@ onMounted(() => {
                 Đã tải: <strong>{{ colorImages[group.colorId]?.length || 0 }}/4</strong> ảnh chi tiết (tối đa 5MB/ảnh)
               </span>
             </div>
-            <button 
-              class="btn btn-red-solid" 
-              @click="triggerImageUpload(group.colorId)"
-              :disabled="(colorImages[group.colorId]?.length || 0) >= 4"
-            >
+            <button class="btn btn-red-solid" @click="triggerImageUpload(group.colorId)"
+              :disabled="(colorImages[group.colorId]?.length || 0) >= 4">
               + Thêm ảnh
             </button>
           </div>
 
           <div class="img-dropzone" @click="triggerImageUpload(group.colorId)">
             <div v-if="colorImages[group.colorId] && colorImages[group.colorId].length > 0" class="preview-thumbs-grid">
-              <div 
-                v-for="(src, idx) in colorImages[group.colorId]" 
-                :key="idx" 
-                class="thumb-item-wrap"
-                @click.stop
-              >
+              <div v-for="(src, idx) in colorImages[group.colorId]" :key="idx" class="thumb-item-wrap" @click.stop>
                 <img :src="src" class="thumb-preview" />
                 <span v-if="idx === 0" class="badge-main-img">Ảnh chính</span>
-                <button 
-                  class="btn-remove-thumb" 
-                  @click="removeImage(group.colorId, idx, $event)" 
-                  title="Xóa ảnh này"
-                >
+                <button class="btn-remove-thumb" @click="removeImage(group.colorId, idx, $event)" title="Xóa ảnh này">
                   ×
                 </button>
               </div>
@@ -982,12 +954,13 @@ onMounted(() => {
         <div class="merge-modal-body">
           <div class="merge-alert-box">
             <p>
-              Sản phẩm <strong>"{{ mergePreviewData?.tenSanPham }}"</strong> 
-              (Mã: <span class="badge-code">{{ mergePreviewData?.maSanPham }}</span>) 
+              Sản phẩm <strong>"{{ mergePreviewData?.tenSanPham }}"</strong>
+              (Mã: <span class="badge-code">{{ mergePreviewData?.maSanPham }}</span>)
               đã có sẵn trong hệ thống.
             </p>
             <p class="sub-alert-text">
-              Bạn có muốn <strong>cập nhật thông tin</strong> và <strong>cộng dồn số lượng tồn kho</strong> cho các biến thể dưới đây không?
+              Bạn có muốn <strong>cập nhật thông tin</strong> và <strong>cộng dồn số lượng tồn kho</strong> cho các biến
+              thể dưới đây không?
             </p>
           </div>
 
@@ -1054,3 +1027,78 @@ onMounted(() => {
 </template>
 
 <style scoped src="@/assets/styles/ProductCreatePage.css"></style>
+
+<style scoped>
+.main-image-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.main-image-thumb {
+  width: 90px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+}
+
+.main-image-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.main-image-hint {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+}
+
+.main-image-btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.main-image-dropzone-box {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.main-image-dropzone-box:hover {
+  border-color: #ef4444;
+  background: #fff1f2;
+}
+
+.dropzone-icon {
+  font-size: 28px;
+}
+
+.dropzone-text-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.dropzone-main-txt {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.dropzone-sub-txt {
+  font-size: 12px;
+  color: #94a3b8;
+}
+</style>

@@ -1241,23 +1241,14 @@ async function copyOrderCode() {
                 <div>
                   Mã: <strong>{{ voucher.code }}</strong>
                   <span
-                    v-if="bestVoucher && bestVoucher.v.id === voucher.id"
                     class="badge bg-success ms-1"
-                    >Tốt nhất</span
+                    >Tự động áp dụng</span
                   >
                 </div>
                 <div class="text-success fw-semibold">
                   Đã giảm -{{ money(discount) }}
                 </div>
               </div>
-              <button
-                class="co-x"
-                type="button"
-                title="Gỡ mã"
-                @click="onRemoveClick"
-              >
-                <i class="bi bi-x-lg"></i>
-              </button>
             </div>
 
             <div

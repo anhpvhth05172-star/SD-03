@@ -9,6 +9,8 @@ import PaginationBar from '@/components/PaginationBar.vue'
 import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 import http, { API_ORIGIN } from '@/api/http'
+import { getToken } from '@/utils/auth'
+import { checkImageMagicBytes, compressImageToBase64 } from '@/utils/imageCompressor'
 
 const router = useRouter()
 const route = useRoute()
@@ -55,7 +57,19 @@ const loadPosPendingOrders = () => {
   }
 }
 
-const getPosReservedForVariant = () => 0
+const getPosReservedForVariant = (item) => {
+  if (!item || !Array.isArray(posPendingOrders.value)) return 0
+  let reserved = 0
+  for (const order of posPendingOrders.value) {
+    if (!Array.isArray(order.cart)) continue
+    for (const c of order.cart) {
+      if (Number(c.idCtsp) === Number(item.id)) {
+        reserved += Number(c.quantity || 0)
+      }
+    }
+  }
+  return reserved
+}
 
 const getAvailableVariantStock = (item) => {
   const base = Number(item?.stock ?? item?.soLuong ?? 0)
@@ -150,13 +164,13 @@ const fetchFilterOptions = async () => {
     const [resColor, resSize, resProd] = await Promise.all([
       apiFetch(`${API_BASE}/attributes/mau_sac`),
       apiFetch(`${API_BASE}/attributes/kich_co`),
-      apiFetch(`${API_BASE}/san-pham?page=0&size=1000`)
+      apiFetch(`${API_BASE}/san-pham/lua-chon`)
     ])
     if (resColor.ok) colorsList.value = await resColor.json()
     if (resSize.ok) sizesList.value = await resSize.json()
     if (resProd.ok) {
       const pData = await resProd.json()
-      productsList.value = pData.content || []
+      productsList.value = Array.isArray(pData) ? pData : (pData.content || [])
     }
   } catch (e) {
     console.error('Lỗi khi tải danh mục màu sắc / kích cỡ / sản phẩm:', e)
@@ -719,29 +733,6 @@ const applyMatchedVariant = (item) => {
   showToastNotice('Đã chọn', `Đang lọc danh sách theo biến thể "${item.maCtsp || item.color}"`, 'success')
 }
 
-const checkImageMagicBytes = async (file) => {
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onloadend = (e) => {
-      const arr = new Uint8Array(e.target.result).subarray(0, 12)
-      if (arr.length < 4) return resolve(false)
-
-      // JPEG: FF D8 FF
-      if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) return resolve(true)
-      // PNG: 89 50 4E 47
-      if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) return resolve(true)
-      // WEBP: 52 49 46 46 (RIFF) ... 57 45 42 50 (WEBP)
-      if (arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 &&
-        arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50) return resolve(true)
-      // GIF: 47 49 46 38
-      if (arr[0] === 0x47 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x38) return resolve(true)
-
-      resolve(false)
-    }
-    reader.readAsArrayBuffer(file.slice(0, 12))
-  })
-}
-
 const isAddModalOpen = ref(false)
 const isSubmittingAdd = ref(false)
 const addFormError = ref('')
@@ -840,7 +831,7 @@ const pickVariantImageFile = (onDataUrl) => {
   }
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+  input.accept = 'image/*,.jpg,.jpeg,.png,.webp,.gif,.avif,.jfif,.bmp'
   input.style.display = 'none'
   document.body.appendChild(input)
   activeVariantFileInput = input
@@ -850,23 +841,26 @@ const pickVariantImageFile = (onDataUrl) => {
     activeVariantFileInput = null
     if (!file) return
 
-    const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+    const MAX_SIZE = 10 * 1024 * 1024 // 10MB
     if (file.size > MAX_SIZE) {
-      notifyWarning('Ảnh quá lớn', `Ảnh "${file.name}" vượt quá dung lượng tối đa 5MB!`)
+      notifyWarning('Ảnh quá lớn', `Ảnh "${file.name}" vượt quá dung lượng tối đa 10MB!`)
       return
     }
 
     const isValid = await checkImageMagicBytes(file)
     if (!isValid) {
-      notifyError('Tệp không hợp lệ', `Tệp "${file.name}" không phải là ảnh hợp lệ (chỉ hỗ trợ JPG, PNG, WEBP)!`)
+      notifyError('Tệp không hợp lệ', `Tệp "${file.name}" không phải là ảnh hợp lệ!`)
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      onDataUrl(ev.target.result)
+    try {
+      const compressed = await compressImageToBase64(file)
+      onDataUrl(compressed)
+    } catch {
+      const reader = new FileReader()
+      reader.onload = (ev) => onDataUrl(ev.target.result)
+      reader.readAsDataURL(file)
     }
-    reader.readAsDataURL(file)
   }
   input.click()
 }
@@ -929,7 +923,6 @@ const saveAddVariant = async () => {
 
     const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet/batch`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
 
@@ -952,311 +945,313 @@ const saveAddVariant = async () => {
   }
 }
 
-  const isEditModalOpen = ref(false)
-  const isSubmittingEdit = ref(false)
-  const editingVariantId = ref(null)
-  const editForm = reactive({
-    idSanPham: null,
-    tenSanPham: '',
-    maSanPham: '',
-    maCtsp: '',
-    idMauSac: '',
-    idKichCo: '',
-    stock: 10,
-    price: 1000000,
-    trangThai: true,
-    imagePreview: null,
-    existingColorImage: null
-  })
-  const editErrors = reactive({
-    idMauSac: '',
-    idKichCo: '',
-    stock: '',
-    price: ''
-  })
-  const formError = ref('')
+const isEditModalOpen = ref(false)
+const isSubmittingEdit = ref(false)
+const editingVariantId = ref(null)
+const editForm = reactive({
+  idSanPham: null,
+  tenSanPham: '',
+  maSanPham: '',
+  maCtsp: '',
+  idMauSac: '',
+  idKichCo: '',
+  stock: 10,
+  price: 1000000,
+  trangThai: true,
+  imagePreview: null,
+  existingColorImage: null
+})
+const editErrors = reactive({
+  idMauSac: '',
+  idKichCo: '',
+  stock: '',
+  price: ''
+})
+const formError = ref('')
 
-  const resetEditErrors = () => {
-    editErrors.idMauSac = ''
-    editErrors.idKichCo = ''
-    editErrors.stock = ''
-    editErrors.price = ''
-    formError.value = ''
+const resetEditErrors = () => {
+  editErrors.idMauSac = ''
+  editErrors.idKichCo = ''
+  editErrors.stock = ''
+  editErrors.price = ''
+  formError.value = ''
+}
+
+
+const preventInvalidQtyKey = (e) => {
+  if (['e', 'E', '+', '-', '.'].includes(e.key)) {
+    e.preventDefault()
   }
+}
 
-  
-  const preventInvalidQtyKey = (e) => {
-    if (['e', 'E', '+', '-', '.'].includes(e.key)) {
-      e.preventDefault()
-    }
-  }
-
-  const handleQtyFocus = (e) => {
-    if (String(e.target.value) === '0') {
+const handleQtyFocus = (e) => {
+  setTimeout(() => {
+    if (e.target && typeof e.target.select === 'function') {
       e.target.select()
     }
-  }
+  }, 20)
+}
 
-  const normalizeEditStock = () => {
-    if (editForm.stock === '' || editForm.stock === null || editForm.stock === undefined || isNaN(editForm.stock)) {
-      editForm.stock = 0
+const normalizeEditStock = () => {
+  if (editForm.stock === '' || editForm.stock === null || editForm.stock === undefined || isNaN(editForm.stock)) {
+    editForm.stock = 0
+  } else {
+    editForm.stock = Math.max(0, Math.min(100000, Math.floor(Number(editForm.stock))))
+  }
+  validateEditField('stock')
+}
+
+const normalizeAddStock = () => {
+  if (addForm.stock === '' || addForm.stock === null || addForm.stock === undefined || isNaN(addForm.stock)) {
+    addForm.stock = 0
+  } else {
+    addForm.stock = Math.max(0, Math.min(100000, Math.floor(Number(addForm.stock))))
+  }
+}
+
+const handleEditPriceInput = (val) => {
+  if (val !== undefined) {
+    editForm.price = val
+  }
+  const num = Number(editForm.price)
+  if (!isNaN(num) && num >= 1000 && num <= 1000000000) {
+    editErrors.price = ''
+  }
+}
+
+const validateEditField = (field) => {
+  if (field === 'idMauSac') {
+    if (!editForm.idMauSac) {
+      editErrors.idMauSac = 'Vui lòng chọn màu sắc cho biến thể!'
     } else {
-      editForm.stock = Math.max(0, Math.min(100000, Math.floor(Number(editForm.stock))))
+      editErrors.idMauSac = ''
     }
-    validateEditField('stock')
   }
 
-  const normalizeAddStock = () => {
-    if (addForm.stock === '' || addForm.stock === null || addForm.stock === undefined || isNaN(addForm.stock)) {
-      addForm.stock = 0
+  if (field === 'idKichCo') {
+    if (!editForm.idKichCo) {
+      editErrors.idKichCo = 'Vui lòng chọn kích cỡ cho biến thể!'
     } else {
-      addForm.stock = Math.max(0, Math.min(100000, Math.floor(Number(addForm.stock))))
+      editErrors.idKichCo = ''
     }
   }
 
-  
-  const handleEditPriceInput = () => {
-    const num = Number(editForm.price)
-    if (!isNaN(num) && num >= 1000 && num <= 1000000000) {
-      editErrors.price = ''
-    }
-  }
-
-  const validateEditField = (field) => {
-    if (field === 'idMauSac') {
-      if (!editForm.idMauSac) {
-        editErrors.idMauSac = 'Vui lòng chọn màu sắc cho biến thể!'
+  if (field === 'stock') {
+    const val = editForm.stock
+    if (val === '' || val === null || val === undefined) {
+      editErrors.stock = 'Số lượng tồn kho không được để trống!'
+    } else {
+      const num = Number(val)
+      if (!Number.isInteger(num)) {
+        editErrors.stock = 'Số lượng tồn kho phải là số nguyên!'
+      } else if (num < 0) {
+        editErrors.stock = 'Số lượng tồn kho không được nhỏ hơn 0!'
+      } else if (num > 100000) {
+        editErrors.stock = 'Số lượng tồn kho tối đa là 100,000 sản phẩm!'
       } else {
-        editErrors.idMauSac = ''
-      }
-    }
-
-    if (field === 'idKichCo') {
-      if (!editForm.idKichCo) {
-        editErrors.idKichCo = 'Vui lòng chọn kích cỡ cho biến thể!'
-      } else {
-        editErrors.idKichCo = ''
-      }
-    }
-
-    if (field === 'stock') {
-      const val = editForm.stock
-      if (val === '' || val === null || val === undefined) {
-        editErrors.stock = 'Số lượng tồn kho không được để trống!'
-      } else {
-        const num = Number(val)
-        if (!Number.isInteger(num)) {
-          editErrors.stock = 'Số lượng tồn kho phải là số nguyên!'
-        } else if (num < 0) {
-          editErrors.stock = 'Số lượng tồn kho không được nhỏ hơn 0!'
-        } else if (num > 100000) {
-          editErrors.stock = 'Số lượng tồn kho tối đa là 100,000 sản phẩm!'
-        } else {
-          editErrors.stock = ''
-        }
-      }
-    }
-
-    if (field === 'price') {
-      const val = editForm.price
-      if (val === '' || val === null || val === undefined) {
-        editErrors.price = 'Giá bán không được để trống!'
-      } else {
-        const num = Number(val)
-        if (isNaN(num)) {
-          editErrors.price = 'Giá bán phải là số hợp lệ!'
-        } else if (num < 1000) {
-          editErrors.price = 'Giá bán phải từ 1,000 VNĐ trở lên!'
-        } else if (num > 1000000000) {
-          editErrors.price = 'Giá bán tối đa là 1,000,000,000 VNĐ!'
-        } else {
-          editErrors.price = ''
-        }
+        editErrors.stock = ''
       }
     }
   }
 
-  const validateEditForm = () => {
-    validateEditField('idMauSac')
-    validateEditField('idKichCo')
-    validateEditField('stock')
-    validateEditField('price')
+  if (field === 'price') {
+    const val = editForm.price
+    if (val === '' || val === null || val === undefined) {
+      editErrors.price = 'Giá bán không được để trống!'
+    } else {
+      const num = Number(val)
+      if (isNaN(num)) {
+        editErrors.price = 'Giá bán phải là số hợp lệ!'
+      } else if (num < 1000) {
+        editErrors.price = 'Giá bán phải từ 1,000 VNĐ trở lên!'
+      } else if (num > 1000000000) {
+        editErrors.price = 'Giá bán tối đa là 1,000,000,000 VNĐ!'
+      } else {
+        editErrors.price = ''
+      }
+    }
+  }
+}
 
-    const hasFieldError = !!(editErrors.idMauSac || editErrors.idKichCo || editErrors.stock || editErrors.price)
-    if (hasFieldError) {
-      formError.value = 'Vui lòng điền đầy đủ và chính xác các thông tin bắt buộc!'
+const validateEditForm = () => {
+  validateEditField('idMauSac')
+  validateEditField('idKichCo')
+  validateEditField('stock')
+  validateEditField('price')
+
+  const hasFieldError = !!(editErrors.idMauSac || editErrors.idKichCo || editErrors.stock || editErrors.price)
+  if (hasFieldError) {
+    formError.value = 'Vui lòng điền đầy đủ và chính xác các thông tin bắt buộc!'
+    return false
+  }
+
+  const currentId = editingVariantId.value
+  const targetIdx = variants.value.findIndex(v => v.id === currentId)
+  const currentVariant = targetIdx !== -1 ? variants.value[targetIdx] : null
+  const targetSpId = editForm.idSanPham || (currentVariant ? currentVariant.idSanPham : null)
+
+  if (targetSpId) {
+    const isDuplicate = variants.value.some(v =>
+      v.id !== currentId &&
+      v.idSanPham && Number(v.idSanPham) === Number(targetSpId) &&
+      Number(v.idMauSac) === Number(editForm.idMauSac) &&
+      Number(v.idKichCo) === Number(editForm.idKichCo)
+    )
+    if (isDuplicate) {
+      const colorObj = colorsList.value.find(c => c.id === Number(editForm.idMauSac))
+      const sizeObj = sizesList.value.find(s => s.id === Number(editForm.idKichCo))
+      const colorName = colorObj?.ten || colorObj?.tenMau || 'này'
+      const sizeName = sizeObj?.ten || sizeObj?.tenKichCo || 'này'
+      formError.value = `Biến thể [Màu: ${colorName}, Size: ${sizeName}] đã tồn tại trong sản phẩm!`
+      editErrors.idMauSac = 'Màu và Size này đã tồn tại!'
+      editErrors.idKichCo = 'Màu và Size này đã tồn tại!'
       return false
     }
-
-    const currentId = editingVariantId.value
-    const targetIdx = variants.value.findIndex(v => v.id === currentId)
-    const currentVariant = targetIdx !== -1 ? variants.value[targetIdx] : null
-    const targetSpId = editForm.idSanPham || (currentVariant ? currentVariant.idSanPham : null)
-
-    if (targetSpId) {
-      const isDuplicate = variants.value.some(v =>
-        v.id !== currentId &&
-        v.idSanPham && Number(v.idSanPham) === Number(targetSpId) &&
-        Number(v.idMauSac) === Number(editForm.idMauSac) &&
-        Number(v.idKichCo) === Number(editForm.idKichCo)
-      )
-      if (isDuplicate) {
-        const colorObj = colorsList.value.find(c => c.id === Number(editForm.idMauSac))
-        const sizeObj = sizesList.value.find(s => s.id === Number(editForm.idKichCo))
-        const colorName = colorObj?.ten || colorObj?.tenMau || 'này'
-        const sizeName = sizeObj?.ten || sizeObj?.tenKichCo || 'này'
-        formError.value = `Biến thể [Màu: ${colorName}, Size: ${sizeName}] đã tồn tại trong sản phẩm!`
-        editErrors.idMauSac = 'Màu và Size này đã tồn tại!'
-        editErrors.idKichCo = 'Màu và Size này đã tồn tại!'
-        return false
-      }
-    }
-
-    formError.value = ''
-    return true
   }
 
-  const openEditModal = (item) => {
-    editingVariantId.value = item.id
-    resetEditErrors()
-    isSubmittingEdit.value = false
+  formError.value = ''
+  return true
+}
 
-    editForm.idSanPham = item.idSanPham || null
-    editForm.tenSanPham = item.tenSp || (productsList.value.find(p => p.id === item.idSanPham)?.tenSanPham || selectedProductName.value || '')
-    editForm.maSanPham = item.maSp || (productsList.value.find(p => p.id === item.idSanPham)?.maSanPham || selectedProductCode.value || '')
-    editForm.maCtsp = item.maCtsp || `SPCT0${item.id}`
+const openEditModal = (item) => {
+  editingVariantId.value = item.id
+  resetEditErrors()
+  isSubmittingEdit.value = false
 
-    let foundColorId = item.idMauSac
-    if (!foundColorId && item.color) {
-      const matchedColor = colorsList.value.find(c => (c.ten || c.tenMau) === item.color)
-      if (matchedColor) foundColorId = matchedColor.id
-    }
-    editForm.idMauSac = foundColorId || ''
+  editForm.idSanPham = item.idSanPham || null
+  editForm.tenSanPham = item.tenSp || (productsList.value.find(p => p.id === item.idSanPham)?.tenSanPham || selectedProductName.value || '')
+  editForm.maSanPham = item.maSp || (productsList.value.find(p => p.id === item.idSanPham)?.maSanPham || selectedProductCode.value || '')
+  editForm.maCtsp = item.maCtsp || `SPCT0${item.id}`
 
-    let foundSizeId = item.idKichCo
-    if (!foundSizeId && item.size) {
-      const matchedSize = sizesList.value.find(s => String(s.ten || s.tenKichCo) === String(item.size))
-      if (matchedSize) foundSizeId = matchedSize.id
-    }
-    editForm.idKichCo = foundSizeId || ''
+  let foundColorId = item.idMauSac
+  if (!foundColorId && item.color) {
+    const matchedColor = colorsList.value.find(c => (c.ten || c.tenMau) === item.color)
+    if (matchedColor) foundColorId = matchedColor.id
+  }
+  editForm.idMauSac = foundColorId || ''
 
-    editForm.stock = item.stock !== undefined && item.stock !== null ? Number(item.stock) : 10
-    editForm.price = item.price !== undefined && item.price !== null ? Number(item.price) : 1000000
-    editForm.trangThai = item.trangThai !== false
+  let foundSizeId = item.idKichCo
+  if (!foundSizeId && item.size) {
+    const matchedSize = sizesList.value.find(s => String(s.ten || s.tenKichCo) === String(item.size))
+    if (matchedSize) foundSizeId = matchedSize.id
+  }
+  editForm.idKichCo = foundSizeId || ''
 
-    editForm.imagePreview = null
-    editForm.existingColorImage = item.img || null
+  editForm.stock = item.stock !== undefined && item.stock !== null ? Number(item.stock) : 10
+  editForm.price = item.price !== undefined && item.price !== null ? Number(item.price) : 1000000
+  editForm.trangThai = item.trangThai !== false
 
-    isEditModalOpen.value = true
+  editForm.imagePreview = null
+  editForm.existingColorImage = item.img || null
+
+  isEditModalOpen.value = true
+}
+
+const onEditColorChange = () => {
+  editErrors.idMauSac = ''
+  formError.value = ''
+  if (!editForm.idMauSac) return
+  const targetSpId = editForm.idSanPham || filters.idSanPham || route.query.idSanPham
+  const match = variants.value.find(v =>
+    (!targetSpId || Number(v.idSanPham) === Number(targetSpId)) &&
+    Number(v.idMauSac) === Number(editForm.idMauSac) &&
+    v.img
+  )
+  if (match) {
+    editForm.existingColorImage = match.img
+  }
+}
+
+const triggerEditImageUpload = () => {
+  pickVariantImageFile((dataUrl) => {
+    editForm.imagePreview = dataUrl
+  })
+}
+
+const closeEditModal = () => {
+  isEditModalOpen.value = false
+  resetEditErrors()
+  isSubmittingEdit.value = false
+}
+
+const saveEditVariant = async () => {
+  if (!validateEditForm()) {
+    return
   }
 
-  const onEditColorChange = () => {
-    editErrors.idMauSac = ''
-    formError.value = ''
-    if (!editForm.idMauSac) return
-    const targetSpId = editForm.idSanPham || filters.idSanPham || route.query.idSanPham
-    const match = variants.value.find(v =>
-      (!targetSpId || Number(v.idSanPham) === Number(targetSpId)) &&
-      Number(v.idMauSac) === Number(editForm.idMauSac) &&
-      v.img
-    )
-    if (match) {
-      editForm.existingColorImage = match.img
-    }
-  }
+  const currentId = editingVariantId.value
+  const stockNum = Number(editForm.stock)
+  const priceNum = Number(editForm.price)
+  const targetSpId = editForm.idSanPham
 
-  const triggerEditImageUpload = () => {
-    pickVariantImageFile((dataUrl) => {
-      editForm.imagePreview = dataUrl
+  isSubmittingEdit.value = true
+  try {
+    const payload = {
+      idSanPham: targetSpId ? Number(targetSpId) : null,
+      idMauSac: Number(editForm.idMauSac),
+      idKichCo: Number(editForm.idKichCo),
+      soLuong: stockNum,
+      giaBan: priceNum,
+      trangThai: editForm.trangThai !== false,
+      maChiTietSanPham: editForm.maCtsp,
+      hinhAnh: editForm.imagePreview || editForm.existingColorImage || null
+    }
+
+    const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet/${currentId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
     })
-  }
 
-  const closeEditModal = () => {
-    isEditModalOpen.value = false
-    resetEditErrors()
+    if (res.ok) {
+      try {
+        localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()))
+      } catch {
+      }
+      isEditModalOpen.value = false
+      notifySuccess('Thành công', `Đã cập nhật biến thể "${editForm.maCtsp}" thành công!`)
+      fetchVariants(false)
+    } else {
+      const err = await res.json().catch(() => ({}))
+      const errorMsg = err.message || 'Không thể lưu thay đổi vào hệ thống'
+      formError.value = errorMsg
+      notifyError('Lỗi cập nhật', errorMsg)
+    }
+  } catch (e) {
+    console.error('Update variant error:', e)
+    formError.value = 'Không thể kết nối máy chủ'
+    notifyError('Lỗi kết nối', 'Không thể kết nối máy chủ')
+  } finally {
     isSubmittingEdit.value = false
   }
+}
 
-  const saveEditVariant = async () => {
-    if (!validateEditForm()) {
-      return
-    }
-
-    const currentId = editingVariantId.value
-    const stockNum = Number(editForm.stock)
-    const priceNum = Number(editForm.price)
-    const targetSpId = editForm.idSanPham
-
-    isSubmittingEdit.value = true
-    try {
-      const payload = {
-        idSanPham: targetSpId ? Number(targetSpId) : null,
-        idMauSac: Number(editForm.idMauSac),
-        idKichCo: Number(editForm.idKichCo),
-        soLuong: stockNum,
-        giaBan: priceNum,
-        trangThai: editForm.trangThai !== false,
-        maChiTietSanPham: editForm.maCtsp,
-        hinhAnh: editForm.imagePreview || editForm.existingColorImage || null
-      }
-
-      const res = await apiFetch(`${API_BASE}/san-pham-chi-tiet/${currentId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-
-      if (res.ok) {
-        try {
-          localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()))
-        } catch {
-          // Tín hiệu đồng bộ POS liên tab là tùy chọn.
-        }
-        isEditModalOpen.value = false
-        notifySuccess('Thành công', `Đã cập nhật biến thể "${editForm.maCtsp}" thành công!`)
-        fetchVariants(false)
-      } else {
-        const err = await res.json().catch(() => ({}))
-        const errorMsg = err.message || 'Không thể lưu thay đổi vào hệ thống'
-        formError.value = errorMsg
-        notifyError('Lỗi cập nhật', errorMsg)
-      }
-    } catch (e) {
-      console.error('Update variant error:', e)
-      formError.value = 'Không thể kết nối máy chủ'
-      notifyError('Lỗi kết nối', 'Không thể kết nối máy chủ')
-    } finally {
-      isSubmittingEdit.value = false
-    }
+const resetFilters = () => {
+  filters.search = ''
+  filters.idSanPham = ''
+  filters.idMauSac = ''
+  filters.idKichCo = ''
+  filters.trangThai = ''
+  currentPage.value = 0
+  if (route.query.idSanPham || route.query.tenSanPham || route.query.maSanPham) {
+    router.push({ path: '/san-pham/bien-the' })
+  } else {
+    fetchVariants(false)
   }
+}
 
-  const resetFilters = () => {
-    filters.search = ''
-    filters.idSanPham = ''
-    filters.idMauSac = ''
-    filters.idKichCo = ''
-    filters.trangThai = ''
-    currentPage.value = 0
-    if (route.query.idSanPham || route.query.tenSanPham || route.query.maSanPham) {
-      router.push({ path: '/san-pham/bien-the' })
-    } else {
-      fetchVariants(false)
-    }
-  }
+onMounted(() => {
+  loadPosPendingOrders()
+  window.addEventListener('storage', handlePosStorageSync)
+  window.addEventListener('focus', loadPosPendingOrders)
+  fetchFilterOptions()
+})
 
-  onMounted(() => {
-    loadPosPendingOrders()
-    window.addEventListener('storage', handlePosStorageSync)
-    window.addEventListener('focus', loadPosPendingOrders)
-    fetchFilterOptions()
-  })
-
-  onUnmounted(() => {
-    window.removeEventListener('storage', handlePosStorageSync)
-    window.removeEventListener('focus', loadPosPendingOrders)
-    if (debounceTimer) clearTimeout(debounceTimer)
-    if (currentAbortController) currentAbortController.abort()
-  })
+onUnmounted(() => {
+  window.removeEventListener('storage', handlePosStorageSync)
+  window.removeEventListener('focus', loadPosPendingOrders)
+  if (debounceTimer) clearTimeout(debounceTimer)
+  if (currentAbortController) currentAbortController.abort()
+})
 </script>
 
 <template>
@@ -1518,7 +1513,8 @@ const saveAddVariant = async () => {
                   <span class="stock-badge">
                     {{ formatNumber(getAvailableVariantStock(item)) }}
                   </span>
-                  <div v-if="getPosReservedForVariant(item) > 0" style="font-size: 11px; color: #d97706; font-weight: 600; margin-top: 2px;">
+                  <div v-if="getPosReservedForVariant(item) > 0"
+                    style="font-size: 11px; color: #d97706; font-weight: 600; margin-top: 2px;">
                     Giữ tại quầy: {{ getPosReservedForVariant(item) }} (Kho: {{ formatNumber(item.stock ?? 0) }})
                   </div>
                 </td>
@@ -1584,18 +1580,10 @@ const saveAddVariant = async () => {
 
       <!-- Pagination -->
       <div v-if="totalPages > 1" class="table-card-foot">
-        <PaginationBar
-          :page="currentPage"
-          :total-pages="totalPages"
-          :total-elements="totalElements"
-          :page-size="pageSize"
-          :sizes="pageSizeOptions"
-          :from="variants.length ? currentPage * pageSize + 1 : 0"
-          :to="currentPage * pageSize + variants.length"
-          label="biến thể"
-          @change="changePage"
-          @size-change="onSizeChange"
-        />
+        <PaginationBar :page="currentPage" :total-pages="totalPages" :total-elements="totalElements"
+          :page-size="pageSize" :sizes="pageSizeOptions" :from="variants.length ? currentPage * pageSize + 1 : 0"
+          :to="currentPage * pageSize + variants.length" label="biến thể" @change="changePage"
+          @size-change="onSizeChange" />
       </div>
     </div>
 
@@ -1661,7 +1649,6 @@ const saveAddVariant = async () => {
       </div>
     </transition>
 
-    <!-- Quick Edit Variant Modal -->
     <transition name="modal-fade">
       <div v-if="isEditModalOpen" class="modal-overlay">
         <div class="modal-dialog" @click.stop>
@@ -1697,7 +1684,11 @@ const saveAddVariant = async () => {
                   color-key="ma" placeholder="-- Chọn màu sắc --" search-placeholder="Tìm màu..."
                   @change="onEditColorChange" />
                 <span v-if="editErrors.idMauSac" class="field-error-msg">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
                   {{ editErrors.idMauSac }}
                 </span>
               </div>
@@ -1712,7 +1703,11 @@ const saveAddVariant = async () => {
                   prefix="Size " placeholder="-- Chọn kích cỡ --" search-placeholder="Tìm size..."
                   @change="editErrors.idKichCo = ''; formError = ''" />
                 <span v-if="editErrors.idKichCo" class="field-error-msg">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
                   {{ editErrors.idKichCo }}
                 </span>
               </div>
@@ -1721,9 +1716,14 @@ const saveAddVariant = async () => {
                 <label class="form-lbl">Số lượng tồn kho <span class="required">*</span></label>
                 <input v-model.number="editForm.stock" type="number" min="0" max="100000" class="modal-input"
                   :class="{ 'input-error': editErrors.stock }" placeholder="Nhập số lượng tồn..."
-                  @keydown="preventInvalidQtyKey" @focus="handleQtyFocus" @input="validateEditField('stock')" @blur="normalizeEditStock" />
+                  @keydown="preventInvalidQtyKey" @focus="handleQtyFocus" @input="validateEditField('stock')"
+                  @blur="normalizeEditStock" />
                 <span v-if="editErrors.stock" class="field-error-msg">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
                   {{ editErrors.stock }}
                 </span>
               </div>
@@ -1733,7 +1733,11 @@ const saveAddVariant = async () => {
                 <CurrencyInput v-model="editForm.price" placeholder="Nhập giá bán..." :has-error="!!editErrors.price"
                   @update:modelValue="handleEditPriceInput" @blur="validateEditField('price')" />
                 <span v-if="editErrors.price" class="field-error-msg">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
                   {{ editErrors.price }}
                 </span>
               </div>
@@ -1746,21 +1750,19 @@ const saveAddVariant = async () => {
                 ]" label-key="label" value-key="value" :allow-clear="false" />
               </div>
 
-              <!-- PHẦN HÌNH ẢNH BIẾN THỂ -->
               <div class="form-group span-2 image-section-box">
                 <label class="form-lbl">Hình ảnh biến thể / màu sắc</label>
 
-                <!-- Case 1: Đã chọn ảnh mới -->
                 <div v-if="editForm.imagePreview" class="new-image-preview-box">
                   <img :src="editForm.imagePreview" class="existing-img-thumb" />
                   <div class="existing-img-info">
                     <span class="badge-new-img">📷 Ảnh mới đã chọn</span>
                     <p class="img-hint">Ảnh này sẽ được lưu cho phân loại màu này.</p>
                   </div>
-                  <button type="button" class="btn-remove-img" @click="editForm.imagePreview = null">Hủy ảnh mới</button>
+                  <button type="button" class="btn-remove-img" @click="editForm.imagePreview = null">Hủy ảnh
+                    mới</button>
                 </div>
 
-                <!-- Case 2: Đang có ảnh hiện tại của biến thể -->
                 <div v-else-if="editForm.existingColorImage" class="existing-image-box">
                   <img :src="editForm.existingColorImage" class="existing-img-thumb" />
                   <div class="existing-img-info">
@@ -1770,7 +1772,6 @@ const saveAddVariant = async () => {
                   <button type="button" class="btn-change-img" @click="triggerEditImageUpload">Tải ảnh khác</button>
                 </div>
 
-                <!-- Case 3: Chưa có ảnh -->
                 <div v-else class="upload-image-box" @click="triggerEditImageUpload">
                   <div class="upload-icon">🖼</div>
                   <p class="upload-text">Nhấn để tải lên ảnh cho biến thể này (Tùy chọn)</p>
@@ -1791,7 +1792,6 @@ const saveAddVariant = async () => {
       </div>
     </transition>
 
-    <!-- Add Variant Modal -->
     <transition name="modal-fade">
       <div v-if="isAddModalOpen" class="modal-overlay">
         <div class="modal-dialog" @click.stop>
@@ -1799,7 +1799,9 @@ const saveAddVariant = async () => {
             <div class="modal-title-group">
               <h3 class="modal-title">Thêm biến thể mới</h3>
               <p class="modal-subtitle">
-                Sản phẩm: <strong>{{ selectedProductName || (productsList.find(p => p.id === addForm.idSanPham)?.tenSanPham) || 'Chọn sản phẩm' }}</strong>
+                Sản phẩm: <strong>{{selectedProductName || (productsList.find(p => p.id ===
+                  addForm.idSanPham)?.tenSanPham)
+                  || 'Chọn sản phẩm'}}</strong>
                 <span v-if="selectedProductCode" class="modal-code-tag">{{ selectedProductCode }}</span>
               </p>
             </div>
@@ -1812,7 +1814,6 @@ const saveAddVariant = async () => {
             </div>
 
             <div class="edit-grid">
-              <!-- Cho chọn sản phẩm rõ ràng, tiện lợi -->
               <div class="form-group span-2">
                 <label class="form-lbl">Sản phẩm áp dụng biến thể <span class="required">*</span></label>
                 <SearchableSelect v-model="addForm.idSanPham" :options="formattedProductsOptions" label-key="ten"
@@ -1844,7 +1845,8 @@ const saveAddVariant = async () => {
               <div class="form-group">
                 <label class="form-lbl">Số lượng tồn kho <span class="required">*</span></label>
                 <input v-model.number="addForm.stock" type="number" min="0" max="100000" class="modal-input"
-                  placeholder="Nhập số lượng..." @keydown="preventInvalidQtyKey" @focus="handleQtyFocus" @blur="normalizeAddStock" />
+                  placeholder="Nhập số lượng..." @keydown="preventInvalidQtyKey" @focus="handleQtyFocus"
+                  @blur="normalizeAddStock" />
               </div>
 
               <div class="form-group">
@@ -1852,11 +1854,9 @@ const saveAddVariant = async () => {
                 <CurrencyInput v-model="addForm.price" placeholder="Nhập giá bán..." />
               </div>
 
-              <!-- PHẦN HÌNH ẢNH BIẾN THỂ -->
               <div class="form-group span-2 image-section-box">
                 <label class="form-lbl">Hình ảnh đại diện cho màu sắc</label>
 
-                <!-- Case 1: Đã có ảnh cho màu này từ các biến thể trước -->
                 <div v-if="addForm.existingColorImage && !addForm.imagePreview" class="existing-image-box">
                   <img :src="addForm.existingColorImage" class="existing-img-thumb" />
                   <div class="existing-img-info">
@@ -1868,7 +1868,6 @@ const saveAddVariant = async () => {
                   <button type="button" class="btn-change-img" @click="triggerAddImageUpload">Tải ảnh khác</button>
                 </div>
 
-                <!-- Case 2: Đã chọn ảnh mới -->
                 <div v-else-if="addForm.imagePreview" class="new-image-preview-box">
                   <img :src="addForm.imagePreview" class="existing-img-thumb" />
                   <div class="existing-img-info">
@@ -1963,13 +1962,12 @@ const saveAddVariant = async () => {
                   PolyShoes</p>
               </div>
 
-              <!-- AI Results -->
               <div v-else-if="visualSearchResult" class="ai-results-wrapper">
                 <div class="ai-analysis-card">
                   <div class="card-title-row">
                     <span class="badge-gemini">✨ Kết quả nhận diện AI</span>
                     <span class="brand-tag" v-if="visualSearchResult.thuongHieu">{{ visualSearchResult.thuongHieu
-                      }}</span>
+                    }}</span>
                   </div>
                   <div class="tags-cloud">
                     <span class="detect-tag">
@@ -1988,7 +1986,6 @@ const saveAddVariant = async () => {
                   <p class="summary-text">{{ visualSearchResult.tomTat }}</p>
                 </div>
 
-                <!-- Matched Variants List -->
                 <div class="matched-section">
                   <h4 class="matched-section-title">
                     Biến thể khớp trong kho ({{ (visualSearchResult.matchingVariants || []).length }})
@@ -2007,8 +2004,8 @@ const saveAddVariant = async () => {
                           <span v-if="v.matchScore" class="match-score-pill"
                             :class="v.matchScore >= 80 ? 'high-match' : 'medium-match'">
                             {{ idx === 0 && v.matchScore >= 80 ? '⭐ Khớp ' + v.matchScore + '%' : 'Độ khớp ' +
-                            v.matchScore
-                            + '%' }}
+                              v.matchScore
+                              + '%' }}
                           </span>
                         </div>
                         <span class="card-name">{{ v.tenSp || selectedProductName || 'Sản phẩm' }}</span>
@@ -2044,7 +2041,6 @@ const saveAddVariant = async () => {
       </div>
     </transition>
 
-    <!-- Quick Add Modal for Color and Size -->
     <QuickAddModal :is-open="isQuickAddModalOpen" :type="quickAddModalType" @close="isQuickAddModalOpen = false"
       @add="handleQuickAttributeAdded" />
   </div>

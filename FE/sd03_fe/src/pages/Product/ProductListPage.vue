@@ -61,7 +61,22 @@ const loadPosPendingOrders = () => {
   }
 }
 
-const getPosReservedForProduct = () => 0
+const getPosReservedForProduct = (item) => {
+  if (!item || !Array.isArray(posPendingOrders.value)) return 0
+  let reserved = 0
+  for (const order of posPendingOrders.value) {
+    if (!Array.isArray(order.cart)) continue
+    for (const c of order.cart) {
+      const matchId = c.idSanPham && item.id && Number(c.idSanPham) === Number(item.id)
+      const matchCode = c.maSp && item.maSanPham && String(c.maSp).toUpperCase() === String(item.maSanPham).toUpperCase()
+      const matchName = !c.idSanPham && c.name && item.tenSanPham && String(c.name).trim() === String(item.tenSanPham).trim()
+      if (matchId || matchCode || matchName) {
+        reserved += Number(c.quantity || 0)
+      }
+    }
+  }
+  return reserved
+}
 
 const getAvailableProductStock = (item) => {
   const base = Number(item?.soLuong ?? 0)
@@ -131,31 +146,6 @@ const editForm = reactive({
   trangThai: true
 })
 
-const isQuickAddModalOpen = ref(false)
-const isSubmittingQuickAdd = ref(false)
-const quickAddErrors = reactive({
-  tenSanPham: '',
-  idThuongHieu: '',
-  idLoaiGiay: '',
-  idChatLieu: '',
-  idKieuDang: '',
-  idXuatXu: ''
-})
-
-const quickAddForm = reactive({
-  tenSanPham: '',
-  idThuongHieu: '',
-  idLoaiGiay: '',
-  idChatLieu: '',
-  idKieuDang: '',
-  idXuatXu: '',
-  doiTuong: 'Nam',
-  tinhNang: '',
-  moTa: '',
-  hinhAnh: null,
-  trangThai: true
-})
-
 let activeProductFileInput = null
 const triggerProductImageUpload = (targetForm) => {
   if (activeProductFileInput && activeProductFileInput.parentNode) {
@@ -184,7 +174,6 @@ const triggerProductImageUpload = (targetForm) => {
   }
   input.click()
 }
-
 const showToastNotice = (title, message, type = 'success') => {
   const content = message || title
   const heading = message && title ? title : ''
@@ -583,95 +572,6 @@ const submitQuickEdit = async () => {
     isUpdating.value = false
   }
 }
-
-const openQuickAdd = () => {
-  quickAddForm.tenSanPham = ''
-  quickAddForm.idThuongHieu = ''
-  quickAddForm.idLoaiGiay = ''
-  quickAddForm.idChatLieu = ''
-  quickAddForm.idKieuDang = ''
-  quickAddForm.idXuatXu = ''
-  quickAddForm.doiTuong = 'Nam'
-  quickAddForm.tinhNang = ''
-  quickAddForm.moTa = ''
-  quickAddForm.hinhAnh = null
-  quickAddForm.trangThai = true
-
-  Object.keys(quickAddErrors).forEach(k => (quickAddErrors[k] = ''))
-  isQuickAddModalOpen.value = true
-}
-
-const validateQuickAddForm = () => {
-  let valid = true
-  Object.keys(quickAddErrors).forEach(k => (quickAddErrors[k] = ''))
-
-  if (!quickAddForm.tenSanPham || !quickAddForm.tenSanPham.trim()) {
-    quickAddErrors.tenSanPham = 'Tên sản phẩm không được để trống'
-    valid = false
-  }
-  if (!quickAddForm.idThuongHieu) {
-    quickAddErrors.idThuongHieu = 'Vui lòng chọn Thương hiệu'
-    valid = false
-  }
-  if (!quickAddForm.idLoaiGiay) {
-    quickAddErrors.idLoaiGiay = 'Vui lòng chọn Loại giày'
-    valid = false
-  }
-  if (!quickAddForm.idChatLieu) {
-    quickAddErrors.idChatLieu = 'Vui lòng chọn Chất liệu'
-    valid = false
-  }
-  if (!quickAddForm.idKieuDang) {
-    quickAddErrors.idKieuDang = 'Vui lòng chọn Kiểu dáng'
-    valid = false
-  }
-  if (!quickAddForm.idXuatXu) {
-    quickAddErrors.idXuatXu = 'Vui lòng chọn Xuất xứ'
-    valid = false
-  }
-  return valid
-}
-
-const submitQuickAdd = async () => {
-  if (!validateQuickAddForm()) return
-
-  isSubmittingQuickAdd.value = true
-  const payload = {
-    tenSanPham: quickAddForm.tenSanPham.trim(),
-    idThuongHieu: Number(quickAddForm.idThuongHieu),
-    idLoaiGiay: Number(quickAddForm.idLoaiGiay),
-    idChatLieu: Number(quickAddForm.idChatLieu),
-    idKieuDang: Number(quickAddForm.idKieuDang),
-    idXuatXu: Number(quickAddForm.idXuatXu),
-    doiTuong: quickAddForm.doiTuong,
-    tinhNang: quickAddForm.tinhNang ? quickAddForm.tinhNang.trim() : '',
-    moTa: quickAddForm.moTa ? quickAddForm.moTa.trim() : '',
-    hinhAnh: quickAddForm.hinhAnh || null,
-    trangThai: quickAddForm.trangThai
-  }
-
-  try {
-    const res = await apiFetch(`${API_BASE}/san-pham`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-
-    if (res.ok) {
-      showToastNotice('Thành công', `Đã thêm sản phẩm "${quickAddForm.tenSanPham}" thành công!`, 'success')
-      isQuickAddModalOpen.value = false
-      fetchProducts()
-    } else {
-      const errData = await res.json().catch(() => ({}))
-      showToastNotice('Lỗi thêm sản phẩm', errData.message || 'Không thể tạo sản phẩm mới', 'danger')
-    }
-  } catch (err) {
-    showToastNotice('Lỗi kết nối', 'Không thể kết nối máy chủ', 'danger')
-  } finally {
-    isSubmittingQuickAdd.value = false
-  }
-}
-
 const isGeneratingAi = ref(false)
 
 const generateAiContent = async (targetForm) => {
@@ -1097,6 +997,7 @@ onUnmounted(() => {
         </div>
       </div>
     </transition>
+
 
   </div>
 </template>

@@ -50,12 +50,15 @@ BEGIN
     PRINT N'Da them lich_lam_viec.id_ca_lam';
 END;
 
-UPDATE l
-SET id_ca_lam = c.id
-FROM dbo.lich_lam_viec l
-JOIN dbo.danh_muc_ca_lam_viec d ON d.id = l.id_ca
-JOIN dbo.ca_lam c ON c.ma_ca = d.ma_ca
-WHERE l.id_ca_lam IS NULL;
+IF COL_LENGTH('dbo.lich_lam_viec', 'id_ca') IS NOT NULL
+BEGIN
+    EXEC('UPDATE l
+    SET id_ca_lam = c.id
+    FROM dbo.lich_lam_viec l
+    JOIN dbo.danh_muc_ca_lam_viec d ON d.id = l.id_ca
+    JOIN dbo.ca_lam c ON c.ma_ca = d.ma_ca
+    WHERE l.id_ca_lam IS NULL');
+END;
 
 -- 3b. ca_lam_viec.id_ca_lam (id_ca_danh_muc cu giu nguyen)
 IF COL_LENGTH('dbo.ca_lam_viec', 'id_ca_lam') IS NULL
@@ -74,10 +77,13 @@ IF NOT EXISTS (
 )
     CREATE INDEX ix_ca_lam_viec_ca_lam ON dbo.ca_lam_viec(id_ca_lam);
 
-UPDATE clv
-SET id_ca_lam = c.id
-FROM dbo.ca_lam_viec clv
-JOIN dbo.danh_muc_ca_lam_viec d ON d.id = clv.id_ca_danh_muc
-JOIN dbo.ca_lam c ON c.ma_ca = d.ma_ca
-WHERE clv.id_ca_lam IS NULL
-  AND clv.id_ca_danh_muc IS NOT NULL;
+IF COL_LENGTH('dbo.ca_lam_viec', 'id_ca_danh_muc') IS NOT NULL
+BEGIN
+    EXEC('UPDATE clv
+    SET id_ca_lam = c.id
+    FROM dbo.ca_lam_viec clv
+    JOIN dbo.danh_muc_ca_lam_viec d ON d.id = clv.id_ca_danh_muc
+    JOIN dbo.ca_lam c ON c.ma_ca = d.ma_ca
+    WHERE clv.id_ca_lam IS NULL
+      AND clv.id_ca_danh_muc IS NOT NULL');
+END;

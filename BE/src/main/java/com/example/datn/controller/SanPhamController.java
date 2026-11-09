@@ -35,6 +35,11 @@ public class SanPhamController {
         return ResponseEntity.ok(result);
     }
 
+    @GetMapping("/lua-chon")
+    public ResponseEntity<java.util.List<com.example.datn.dto.SanPham.SanPhamLuaChonDTO>> getDanhSachLuaChon() {
+        return ResponseEntity.ok(sanPhamService.getDanhSachLuaChon());
+    }
+
     @GetMapping
     public ResponseEntity<PageResponse<SanPhamResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,

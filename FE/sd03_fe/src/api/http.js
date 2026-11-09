@@ -14,7 +14,12 @@ export const API_ORIGIN = new URL(
 ).origin
 
 /** URL có trỏ tới API không (tương đối /api/... hoặc tuyệt đối cùng origin). */
-export const laUrlAPI = (url) => url.startsWith(API_BASE) || url.startsWith(API_ORIGIN)
+export const laUrlAPI = (url) => {
+  if (!url || typeof url !== 'string') return false
+  if (url.startsWith('/') || url.startsWith(API_BASE) || url.startsWith(API_ORIGIN)) return true
+  if (url.includes('localhost:8080') || url.includes('/api/')) return true
+  return false
+}
 
 // Các endpoint này phải gọi được độc lập với phiên hiện tại. Nếu token cũ hết hạn,
 // không refresh/điều hướng trước khi request đăng nhập được gửi lên máy chủ.
