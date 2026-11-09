@@ -18,7 +18,17 @@ import java.util.Optional;
 @Repository
 public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, Long> {
 
-    List<SanPhamChiTiet> findBySanPhamId(Long idSanPham);
+    @Query("SELECT s FROM SanPhamChiTiet s " +
+           "LEFT JOIN FETCH s.sanPham sp " +
+           "LEFT JOIN FETCH sp.thuongHieu " +
+           "LEFT JOIN FETCH sp.loaiGiay " +
+           "LEFT JOIN FETCH sp.chatLieu " +
+           "LEFT JOIN FETCH sp.kieuDang " +
+           "LEFT JOIN FETCH sp.xuatXu " +
+           "LEFT JOIN FETCH s.mauSac " +
+           "LEFT JOIN FETCH s.kichCo " +
+           "WHERE s.sanPham.id = :idSanPham")
+    List<SanPhamChiTiet> findBySanPhamId(@Param("idSanPham") Long idSanPham);
 
     List<SanPhamChiTiet> findBySanPhamIdIn(java.util.Collection<Long> idSanPhams);
 
@@ -37,6 +47,11 @@ public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, 
 
     @Query(value = "SELECT spct FROM SanPhamChiTiet spct " +
            "LEFT JOIN FETCH spct.sanPham sp " +
+           "LEFT JOIN FETCH sp.thuongHieu " +
+           "LEFT JOIN FETCH sp.loaiGiay " +
+           "LEFT JOIN FETCH sp.chatLieu " +
+           "LEFT JOIN FETCH sp.kieuDang " +
+           "LEFT JOIN FETCH sp.xuatXu " +
            "LEFT JOIN FETCH spct.mauSac ms " +
            "LEFT JOIN FETCH spct.kichCo kc " +
            "WHERE (:search IS NULL OR :search = '' OR spct.maChiTietSanPham LIKE CONCAT('%', :search, '%') " +

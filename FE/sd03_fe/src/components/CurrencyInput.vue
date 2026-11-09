@@ -18,6 +18,10 @@ const props = defineProps({
     type: Number,
     default: 1000000000
   },
+  align: {
+    type: String,
+    default: 'left' // 'left' hoặc 'right'
+  },
   disabled: {
     type: Boolean,
     default: false
@@ -51,7 +55,7 @@ const formatNumberString = (val) => {
 
 const displayValue = ref(formatNumberString(props.modelValue))
 
-// Đồng bộ khi modelValue thay đổi từ bên ngoài (ví dụ bấm nút "Đủ tiền", chọn gợi ý tiền mặt, đổi tab hóa đơn)
+// Đồng bộ khi modelValue thay đổi từ bên ngoài
 watch(
   () => props.modelValue,
   (newVal) => {
@@ -70,7 +74,6 @@ watch(
 )
 
 const handleMouseDown = () => {
-  // Nếu input chưa được focus trước đó, đánh dấu để bôi đen toàn bộ sau khi mouseup
   if (!isFocused.value) {
     isSelectAllOnMouseUp = true
   }
@@ -86,56 +89,36 @@ const handleMouseUp = (e) => {
   }
 }
 
-const handleFocus = (e) => {
-  isFocused.value = true
-  emit('focus', e)
-}
-
-const handleClear = () => {
-  displayValue.value = ''
+const handleClick = () => {
+  // Khi click vào input, nếu con trỏ ở vị trí 0 (khoảng trống hoặc đầu số), tự động bôi đen để thay thế ngay
   if (inputRef.value) {
-    inputRef.value.value = ''
-    inputRef.value.focus()
-  }
-  emit('update:modelValue', 0)
-  emit('change', 0)
-}
-
-const handleKeyDown = (e) => {
-  const el = inputRef.value
-  if (!el) return
-
-  // Khi người dùng bấm Backspace ngay sau dấu chấm phân tách (ví dụ "5.|000")
-  // Dịch con trỏ sang trái 1 bước để xóa chữ số thực thay vì xóa dấu chấm
-  if (e.key === 'Backspace') {
-    const start = el.selectionStart
-    const end = el.selectionEnd
-    if (start === end && start > 0 && el.value[start - 1] === '.') {
-      el.setSelectionRange(start - 1, start - 1)
+    if (inputRef.value.selectionStart === 0 && inputRef.value.selectionEnd === 0 && displayValue.value) {
+      inputRef.value.select()
     }
   }
 }
 
-const handleInput = (e) => {
-  const inputEl = e.target
-  const rawInput = inputEl.value || ''
-  const cursorPos = inputEl.selectionStart || 0
+const handleFocus = (e) => {
+  isFocused.value = true
+  setTimeout(() => {
+    if (inputRef.value) {
+      inputRef.value.select()
+    }
+  }, 25)
+  emit('focus', e)
+}
 
-  // 1. Đếm số lượng chữ số thực tế đứng trước con trỏ trước khi format lại
-  const digitsBeforeCursor = rawInput.slice(0, cursorPos).replace(/[^\d]/g, '').length
-
-  // 2. Lọc chỉ lấy các chữ số 0-9
-  let digits = rawInput.replace(/[^\d]/g, '')
+const updateValue = (rawInput, targetCursorDigits) => {
+  let digits = String(rawInput || '').replace(/[^\d]/g, '')
 
   if (!digits) {
     displayValue.value = ''
-    inputEl.value = ''
-    emit('update:modelValue', 0)
-    emit('change', 0)
+    if (inputRef.value) inputRef.value.value = ''
+    emit('update:modelValue', '')
+    emit('change', '')
     return
   }
 
-  // Giới hạn tối đa 12 chữ số để không bị tràn số
   if (digits.length > 12) {
     digits = digits.slice(0, 12)
   }
@@ -147,32 +130,94 @@ const handleInput = (e) => {
     num = props.max
   }
 
-  // 3. Format chuẩn theo tiền tệ Việt Nam (vi-VN)
   const formatted = new Intl.NumberFormat('vi-VN').format(num)
   displayValue.value = formatted
-  inputEl.value = formatted
+  if (inputRef.value) inputRef.value.value = formatted
 
   emit('update:modelValue', num)
   emit('change', num)
 
-  // 4. Tính toán chính xác vị trí con trỏ mới:
-  // Duyệt chuỗi formatted sao cho số chữ số đứng trước con trỏ bằng đúng digitsBeforeCursor
+  // Tính lại con trỏ chính xác theo số lượng chữ số trước con trỏ
   let newCursorPos = formatted.length
   let count = 0
   for (let i = 0; i < formatted.length; i++) {
     if (/\d/.test(formatted[i])) {
       count++
     }
-    if (count >= digitsBeforeCursor) {
+    if (count >= targetCursorDigits) {
       newCursorPos = i + 1
       break
     }
   }
 
   nextTick(() => {
-    if (!inputEl || !isFocused.value) return
-    inputEl.setSelectionRange(newCursorPos, newCursorPos)
+    if (!inputRef.value || !isFocused.value) return
+    inputRef.value.setSelectionRange(newCursorPos, newCursorPos)
   })
+}
+
+const handleClear = () => {
+  displayValue.value = ''
+  if (inputRef.value) {
+    inputRef.value.value = ''
+    inputRef.value.focus()
+  }
+  emit('update:modelValue', '')
+  emit('change', '')
+}
+
+const handleKeyDown = (e) => {
+  const el = inputRef.value
+  if (!el) return
+
+  // Cho phép phím điều khiển, phím tắt sao chép, điều hướng
+  if (e.ctrlKey || e.metaKey || ['Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
+    return
+  }
+
+  const start = el.selectionStart
+  const end = el.selectionEnd
+
+  // Phím Backspace khi con trỏ đứng ngay sau dấu chấm (ví dụ "100.|000")
+  if (e.key === 'Backspace' && start === end && start > 0) {
+    if (el.value[start - 1] === '.') {
+      e.preventDefault()
+      // Xóa chữ số đứng trước dấu chấm
+      const current = el.value
+      const nextVal = current.slice(0, Math.max(0, start - 2)) + current.slice(start)
+      const digitsBefore = nextVal.slice(0, Math.max(0, start - 2)).replace(/[^\d]/g, '').length
+      updateValue(nextVal, digitsBefore)
+      return
+    }
+  }
+
+  // Phím Delete khi con trỏ đứng ngay trước dấu chấm (ví dụ "100|.000")
+  if (e.key === 'Delete' && start === end && start < el.value.length) {
+    if (el.value[start] === '.') {
+      e.preventDefault()
+      // Xóa chữ số đứng sau dấu chấm
+      const current = el.value
+      const nextVal = current.slice(0, start) + current.slice(start + 2)
+      const digitsBefore = nextVal.slice(0, start).replace(/[^\d]/g, '').length
+      updateValue(nextVal, digitsBefore)
+      return
+    }
+  }
+
+  // Chặn phím không phải là chữ số và không phải phím xóa
+  if (!/^\d$/.test(e.key)) {
+    if (e.key === '.' || e.key === ',') {
+      e.preventDefault()
+    }
+  }
+}
+
+const handleInput = (e) => {
+  const inputEl = e.target
+  const rawInput = inputEl.value || ''
+  const cursorPos = inputEl.selectionStart || 0
+  const digitsBeforeCursor = rawInput.slice(0, cursorPos).replace(/[^\d]/g, '').length
+  updateValue(rawInput, digitsBeforeCursor)
 }
 
 const handleBlur = (e) => {
@@ -187,7 +232,7 @@ const handleBlur = (e) => {
     } else {
       displayValue.value = ''
       if (inputRef.value) inputRef.value.value = ''
-      emit('update:modelValue', 0)
+      emit('update:modelValue', '')
     }
   } else {
     let num = parseInt(raw, 10)
@@ -220,11 +265,13 @@ const handleBlur = (e) => {
       ref="inputRef"
       type="text" 
       class="currency-input"
+      :style="{ textAlign: align }"
       :value="displayValue"
       :placeholder="placeholder"
       :disabled="disabled"
       @mousedown="handleMouseDown"
       @mouseup="handleMouseUp"
+      @click="handleClick"
       @focus="handleFocus"
       @keydown="handleKeyDown"
       @input="handleInput"
@@ -256,7 +303,6 @@ const handleBlur = (e) => {
   width: 100%;
   padding: 8px 48px 8px 12px;
   font-size: 14px;
-  text-align: right;
   border: 1.5px solid #cbd5e1;
   border-radius: 8px;
   background-color: #ffffff;

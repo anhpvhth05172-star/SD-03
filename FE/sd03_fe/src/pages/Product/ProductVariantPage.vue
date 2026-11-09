@@ -985,9 +985,11 @@ const preventInvalidQtyKey = (e) => {
 }
 
 const handleQtyFocus = (e) => {
-  if (String(e.target.value) === '0') {
-    e.target.select()
-  }
+  setTimeout(() => {
+    if (e.target && typeof e.target.select === 'function') {
+      e.target.select()
+    }
+  }, 20)
 }
 
 const normalizeEditStock = () => {
@@ -1007,8 +1009,10 @@ const normalizeAddStock = () => {
   }
 }
 
-
-const handleEditPriceInput = () => {
+const handleEditPriceInput = (val) => {
+  if (val !== undefined) {
+    editForm.price = val
+  }
   const num = Number(editForm.price)
   if (!isNaN(num) && num >= 1000 && num <= 1000000000) {
     editErrors.price = ''
@@ -1202,7 +1206,6 @@ const saveEditVariant = async () => {
       try {
         localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()))
       } catch {
-        // Tín hiệu đồng bộ POS liên tab là tùy chọn.
       }
       isEditModalOpen.value = false
       notifySuccess('Thành công', `Đã cập nhật biến thể "${editForm.maCtsp}" thành công!`)
@@ -1646,7 +1649,6 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- Quick Edit Variant Modal -->
     <transition name="modal-fade">
       <div v-if="isEditModalOpen" class="modal-overlay">
         <div class="modal-dialog" @click.stop>
@@ -1748,11 +1750,9 @@ onUnmounted(() => {
                 ]" label-key="label" value-key="value" :allow-clear="false" />
               </div>
 
-              <!-- PHẦN HÌNH ẢNH BIẾN THỂ -->
               <div class="form-group span-2 image-section-box">
                 <label class="form-lbl">Hình ảnh biến thể / màu sắc</label>
 
-                <!-- Case 1: Đã chọn ảnh mới -->
                 <div v-if="editForm.imagePreview" class="new-image-preview-box">
                   <img :src="editForm.imagePreview" class="existing-img-thumb" />
                   <div class="existing-img-info">
@@ -1763,7 +1763,6 @@ onUnmounted(() => {
                     mới</button>
                 </div>
 
-                <!-- Case 2: Đang có ảnh hiện tại của biến thể -->
                 <div v-else-if="editForm.existingColorImage" class="existing-image-box">
                   <img :src="editForm.existingColorImage" class="existing-img-thumb" />
                   <div class="existing-img-info">
@@ -1773,7 +1772,6 @@ onUnmounted(() => {
                   <button type="button" class="btn-change-img" @click="triggerEditImageUpload">Tải ảnh khác</button>
                 </div>
 
-                <!-- Case 3: Chưa có ảnh -->
                 <div v-else class="upload-image-box" @click="triggerEditImageUpload">
                   <div class="upload-icon">🖼</div>
                   <p class="upload-text">Nhấn để tải lên ảnh cho biến thể này (Tùy chọn)</p>
@@ -1794,7 +1792,6 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- Add Variant Modal -->
     <transition name="modal-fade">
       <div v-if="isAddModalOpen" class="modal-overlay">
         <div class="modal-dialog" @click.stop>
@@ -1804,7 +1801,7 @@ onUnmounted(() => {
               <p class="modal-subtitle">
                 Sản phẩm: <strong>{{selectedProductName || (productsList.find(p => p.id ===
                   addForm.idSanPham)?.tenSanPham)
-                  || 'Chọn sản phẩm' }}</strong>
+                  || 'Chọn sản phẩm'}}</strong>
                 <span v-if="selectedProductCode" class="modal-code-tag">{{ selectedProductCode }}</span>
               </p>
             </div>
@@ -1817,7 +1814,6 @@ onUnmounted(() => {
             </div>
 
             <div class="edit-grid">
-              <!-- Cho chọn sản phẩm rõ ràng, tiện lợi -->
               <div class="form-group span-2">
                 <label class="form-lbl">Sản phẩm áp dụng biến thể <span class="required">*</span></label>
                 <SearchableSelect v-model="addForm.idSanPham" :options="formattedProductsOptions" label-key="ten"
@@ -1858,11 +1854,9 @@ onUnmounted(() => {
                 <CurrencyInput v-model="addForm.price" placeholder="Nhập giá bán..." />
               </div>
 
-              <!-- PHẦN HÌNH ẢNH BIẾN THỂ -->
               <div class="form-group span-2 image-section-box">
                 <label class="form-lbl">Hình ảnh đại diện cho màu sắc</label>
 
-                <!-- Case 1: Đã có ảnh cho màu này từ các biến thể trước -->
                 <div v-if="addForm.existingColorImage && !addForm.imagePreview" class="existing-image-box">
                   <img :src="addForm.existingColorImage" class="existing-img-thumb" />
                   <div class="existing-img-info">
@@ -1874,7 +1868,6 @@ onUnmounted(() => {
                   <button type="button" class="btn-change-img" @click="triggerAddImageUpload">Tải ảnh khác</button>
                 </div>
 
-                <!-- Case 2: Đã chọn ảnh mới -->
                 <div v-else-if="addForm.imagePreview" class="new-image-preview-box">
                   <img :src="addForm.imagePreview" class="existing-img-thumb" />
                   <div class="existing-img-info">
@@ -1969,7 +1962,6 @@ onUnmounted(() => {
                   PolyShoes</p>
               </div>
 
-              <!-- AI Results -->
               <div v-else-if="visualSearchResult" class="ai-results-wrapper">
                 <div class="ai-analysis-card">
                   <div class="card-title-row">
@@ -1994,7 +1986,6 @@ onUnmounted(() => {
                   <p class="summary-text">{{ visualSearchResult.tomTat }}</p>
                 </div>
 
-                <!-- Matched Variants List -->
                 <div class="matched-section">
                   <h4 class="matched-section-title">
                     Biến thể khớp trong kho ({{ (visualSearchResult.matchingVariants || []).length }})
@@ -2050,7 +2041,6 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- Quick Add Modal for Color and Size -->
     <QuickAddModal :is-open="isQuickAddModalOpen" :type="quickAddModalType" @close="isQuickAddModalOpen = false"
       @add="handleQuickAttributeAdded" />
   </div>
