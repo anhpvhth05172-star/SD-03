@@ -33,6 +33,14 @@ public class ThongKeService {
     private static final Set<String> TRANG_THAI_HUY_HOAN_TIEN = Set.of("DA_HUY", "DA_HOAN_TIEN");
     private static final Set<String> MA_HINH_THUC_TIEN_MAT = Set.of("TM", "CASH");
 
+    private static boolean laHuyHoanTien(String trangThai) {
+        return trangThai != null && TRANG_THAI_HUY_HOAN_TIEN.contains(trangThai);
+    }
+
+    private static boolean laTienMat(String maHinhThuc) {
+        return maHinhThuc != null && MA_HINH_THUC_TIEN_MAT.contains(maHinhThuc);
+    }
+
     private static final List<String> THU_TU_TRANG_THAI = List.of(
         "CHO_THANH_TOAN", "CHO_XAC_NHAN", "DA_XAC_NHAN", "CHO_GIAO_HANG", "DANG_GIAO_HANG",
         "GIAO_HANG_THAT_BAI", "DA_GIAO_HANG", "DA_HOAN_THANH", "DA_HUY", "DA_HOAN_TIEN"
@@ -66,7 +74,7 @@ public class ThongKeService {
     }
 
     public static boolean daThanhToan(HoaDonThongKeRow h) {
-        if (h.daXoa() || TRANG_THAI_HUY_HOAN_TIEN.contains(h.trangThai())) {
+        if (h.daXoa() || laHuyHoanTien(h.trangThai())) {
             return false;
         }
         String tt = h.trangThai();
@@ -74,7 +82,7 @@ public class ThongKeService {
             return true;
         }
         if ("ONLINE".equalsIgnoreCase(h.loaiDon())) {
-            boolean laTienMatCod = h.maHinhThuc() != null && MA_HINH_THUC_TIEN_MAT.contains(h.maHinhThuc());
+            boolean laTienMatCod = laTienMat(h.maHinhThuc());
             if (!laTienMatCod && !"CHO_THANH_TOAN".equals(tt)) {
                 return true;
             }
@@ -88,7 +96,7 @@ public class ThongKeService {
         long khachMoi
     ) {
         Set<Long> idHopLe = hoaDons.stream()
-            .filter(h -> !h.daXoa() && !TRANG_THAI_HUY_HOAN_TIEN.contains(h.trangThai()))
+            .filter(h -> !h.daXoa() && !laHuyHoanTien(h.trangThai()))
             .map(HoaDonThongKeRow::id)
             .collect(Collectors.toSet());
 
@@ -104,7 +112,7 @@ public class ThongKeService {
 
         long tienMat = hoaDons.stream()
             .filter(h -> idDaThanhToan.contains(h.id()))
-            .filter(h -> MA_HINH_THUC_TIEN_MAT.contains(h.maHinhThuc()))
+            .filter(h -> laTienMat(h.maHinhThuc()))
             .mapToLong(h -> Math.max(0, h.tienSauGiamGia().longValue()))
             .sum();
 
@@ -144,7 +152,7 @@ public class ThongKeService {
         String thuongHieuLower = thuongHieu.toLowerCase();
 
         Set<Long> idHopLe = hoaDons.stream()
-            .filter(h -> !h.daXoa() && !TRANG_THAI_HUY_HOAN_TIEN.contains(h.trangThai()))
+            .filter(h -> !h.daXoa() && !laHuyHoanTien(h.trangThai()))
             .map(HoaDonThongKeRow::id)
             .collect(Collectors.toSet());
 
@@ -199,7 +207,7 @@ public class ThongKeService {
 
         long tienMat = 0;
         for (HoaDonThongKeRow h : hoaDons) {
-            if (!idDaThanhToan.contains(h.id()) || !MA_HINH_THUC_TIEN_MAT.contains(h.maHinhThuc())) {
+            if (!idDaThanhToan.contains(h.id()) || !laTienMat(h.maHinhThuc())) {
                 continue;
             }
             BigDecimal tongTien = tongTienTungDon.get(h.id());
@@ -226,7 +234,7 @@ public class ThongKeService {
         LocalDateTime tuDT = tu.atStartOfDay();
         LocalDateTime denDT = den.plusDays(1).atStartOfDay();
         return thongKeRepository.findHoaDonTrongKhoang(tuDT, denDT).stream()
-            .filter(h -> !h.daXoa() && TRANG_THAI_HUY_HOAN_TIEN.contains(h.trangThai()))
+            .filter(h -> !h.daXoa() && laHuyHoanTien(h.trangThai()))
             .count();
     }
 
@@ -421,7 +429,7 @@ public class ThongKeService {
             if (r.ngayTao() == null || r.maSanPham() == null) {
                 continue;
             }
-            if (r.daXoa() || TRANG_THAI_HUY_HOAN_TIEN.contains(r.trangThai())) {
+            if (r.daXoa() || laHuyHoanTien(r.trangThai())) {
                 continue;
             }
             if (th != null && (r.tenThuongHieu() == null || !r.tenThuongHieu().trim().toLowerCase().equals(th))) {
