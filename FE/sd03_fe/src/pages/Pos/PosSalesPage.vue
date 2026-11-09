@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router'
 import QRCode from 'qrcode'
 import { Html5Qrcode } from 'html5-qrcode'
 import http from '@/api/http'
-import { getPosWaitingOrders, savePosWaitingOrder, cancelPosWaitingOrder, checkoutPosWaitingOrder } from '@/api/invoice'
 import { getProvinces, getWards, getServices, tinhPhi } from '@/api/shipping'
 import { DS_63_TINH_THANH } from '@/api/diaGioi'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
@@ -220,7 +219,6 @@ const allEmployeesFull = ref([])
 const staffSnapshotMap = new Map()
 const pendingSyncAlerts = ref([])
 let isSyncingHardCases = false
-let realtimePollTimer = null
 
 const staffUser = computed(() => staffUserRef.value)
 const activePosStaff = computed(() => {
@@ -316,8 +314,6 @@ const getReservedQtyAcrossOrders = (idCtsp, excludeOrderId = null) => {
   let total = 0
   for (const order of pendingOrders.value) {
     if (excludeOrderId !== null && order.id === excludeOrderId) continue
-    // Đơn chờ đã lưu trong DB thì tồn kho DB đã trừ trực tiếp, không trừ lặp ở giao diện
-    if (order.dbId) continue
     if (!Array.isArray(order.cart)) continue
     for (const item of order.cart) {
       if (Number(item.idCtsp) === Number(idCtsp)) {
@@ -487,7 +483,6 @@ const savePendingOrdersToStorage = () => {
   try {
     const serialized = pendingOrders.value.map(o => ({
       id: o.id,
-      dbId: o.dbId || null,
       code: o.code,
       title: o.title,
       cart: Array.isArray(o.cart) ? o.cart : [],
@@ -524,143 +519,6 @@ const savePendingOrdersToStorage = () => {
   }
 }
 
-let syncDbTimer = null
-const triggerSyncActiveOrderToDB = () => {
-  if (isRestoringOrders) return
-  if (syncDbTimer) clearTimeout(syncDbTimer)
-  syncDbTimer = setTimeout(async () => {
-    const order = currentOrder.value
-    if (!order) return
-    if (order.cart && order.cart.length > 0) {
-      if (!laAdmin() && !activeShift.value?.id) {
-        return
-      }
-      try {
-        const payload = {
-          id: order.dbId || null,
-          maHoaDon: order.code,
-          loaiDon: 'TAI_QUAY',
-          trangThai: 'CHO_XAC_NHAN',
-          phiVanChuyen: order.isDelivery ? Number(order.deliveryInfo?.shippingFee || 0) : 0,
-          tenKhachHang: order.isDelivery
-            ? (order.deliveryInfo?.recipientName?.trim() || 'Khách lẻ')
-            : (order.customer?.ten || order.customer?.tenKhachHang || 'Khách lẻ'),
-          soDienThoaiKhachHang: order.isDelivery
-            ? (order.deliveryInfo?.recipientPhone?.trim() || '')
-            : (order.customer?.soDienThoai || ''),
-          diaChiNhanHang: order.isDelivery
-            ? [order.deliveryInfo?.recipientAddress, order.deliveryInfo?.ward?.name, order.deliveryInfo?.province?.name].filter(Boolean).join(', ')
-            : '',
-          ghiChu: order.note || 'Hóa đơn chờ tại quầy POS',
-          idKhachHang: order.customer ? order.customer.id : null,
-          idNhanVien: selectedStaffId.value || staffUserRef.value?.idNhanVien || null,
-          idPhuongThucThanhToan: getPaymentMethodId(order.paymentMethod),
-          idPhieuGiamGia: order.selectedVoucher ? order.selectedVoucher.id : null,
-          idCaLamViec: activeShift.value?.id || null,
-          chiTiet: order.cart.map(item => ({
-            idSanPhamChiTiet: item.idCtsp,
-            soLuong: item.quantity,
-            donGia: item.price,
-            ghiChu: '',
-            trangThai: true
-          }))
-        }
-        const saved = await savePosWaitingOrder(payload)
-        if (saved && saved.id) {
-          order.dbId = saved.id
-          order.code = saved.maHoaDon
-          order.title = saved.maHoaDon
-        }
-      } catch (err) {
-        console.warn('Lỗi đồng bộ hóa đơn chờ vào DB:', err)
-      }
-    } else if (order.dbId) {
-      try {
-        await cancelPosWaitingOrder(order.dbId)
-        order.dbId = null
-      } catch (err) {
-        console.warn('Lỗi giải phóng đơn chờ rỗng trên DB:', err)
-      }
-    }
-  }, 450)
-}
-
-const loadPendingOrdersFromDB = async () => {
-  try {
-    const list = await getPosWaitingOrders()
-    if (Array.isArray(list) && list.length > 0) {
-      isRestoringOrders = true
-      pendingOrders.value = list.map((hd, idx) => {
-        const cartItems = (hd.hoaDonChiTietList || []).map(dt => ({
-          idCtsp: dt.idSanPhamChiTiet,
-          idSanPham: dt.idSanPham,
-          maCtsp: dt.maSanPhamChiTiet || `CTSP${dt.idSanPhamChiTiet}`,
-          name: dt.tenSanPham,
-          color: dt.mauSac || '---',
-          size: dt.kichCo || '---',
-          price: Number(dt.donGia || 0),
-          originalPrice: Number(dt.donGia || 0),
-          quantity: Number(dt.soLuong || 1),
-          img: dt.hinhAnh || null,
-          discount: null
-        }))
-
-        const isDelivery = Boolean(
-          (hd.diaChiGiaoHang && hd.diaChiGiaoHang.trim()) ||
-          (hd.phiGiaoHang && Number(hd.phiGiaoHang) > 0)
-        )
-
-        return {
-          id: hd.id,
-          dbId: hd.id,
-          code: hd.maHoaDon,
-          title: hd.maHoaDon || `Hóa đơn ${idx + 1}`,
-          cart: cartItems,
-          customer: hd.idKhachHang ? {
-            id: hd.idKhachHang,
-            ten: hd.tenKhachHang,
-            tenKhachHang: hd.tenKhachHang,
-            soDienThoai: hd.soDienThoaiKhachHang
-          } : null,
-          isDelivery: isDelivery,
-          deliveryInfo: {
-            recipientName: hd.tenNguoiNhan || hd.tenKhachHang || '',
-            recipientPhone: hd.sdtNguoiNhan || hd.soDienThoaiKhachHang || '',
-            recipientAddress: hd.diaChiGiaoHang || '',
-            province: null,
-            ward: null,
-            wardsLoading: false,
-            services: [],
-            servicesDistrictId: null,
-            serviceTypeId: null,
-            shippingFee: Number(hd.phiGiaoHang || 0),
-            feeLoading: false,
-            feeError: '',
-            legacy: null,
-            saveToCustomerProfile: false
-          },
-          paymentMethod: hd.phuongThucThanhToan || 'TIEN_MAT',
-          selectedVoucher: hd.idVoucher ? {
-            id: hd.idVoucher,
-            ma: hd.maVoucher
-          } : null,
-          cashGiven: Number(hd.khachThanhToan || 0),
-          transferGiven: 0,
-          note: hd.ghiChu || ''
-        }
-      })
-      activeOrderIndex.value = 0
-      recalculateAvailableStocks()
-      isRestoringOrders = false
-      savePendingOrdersToStorage()
-      return true
-    }
-  } catch (err) {
-    console.warn('Lỗi tải hóa đơn chờ từ DB:', err)
-  }
-  return false
-}
-
 const restorePendingOrdersFromStorage = () => {
   try {
     const raw = localStorage.getItem(POS_PENDING_STORAGE_KEY)
@@ -671,7 +529,6 @@ const restorePendingOrdersFromStorage = () => {
     isRestoringOrders = true
     pendingOrders.value = parsed.map((o, idx) => ({
       id: o.id || (Date.now() + idx),
-      dbId: o.dbId || null,
       code: o.code || generateOrderCode(),
       title: o.title || `Hóa đơn ${idx + 1}`,
       cart: Array.isArray(o.cart) ? o.cart : [],
@@ -717,7 +574,6 @@ const restorePendingOrdersFromStorage = () => {
 
 watch([pendingOrders, activeOrderIndex], () => {
   savePendingOrdersToStorage()
-  triggerSyncActiveOrderToDB()
 }, { deep: true })
 
 const generateOrderCode = () => {
@@ -736,7 +592,6 @@ const createNewOrder = (silent = false) => {
   const newIdx = pendingOrders.value.length + 1
   const newOrder = {
     id: Date.now() + Math.floor(Math.random() * 1000),
-    dbId: null,
     code: generateOrderCode(),
     title: `Hóa đơn ${newIdx}`,
     cart: [],
@@ -795,14 +650,6 @@ const closeOrderTab = async (index, event) => {
       'Giữ lại'
     )
     if (!ok) return
-  }
-
-  if (target.dbId) {
-    try {
-      await cancelPosWaitingOrder(target.dbId)
-    } catch (err) {
-      console.warn('Lỗi hủy hóa đơn chờ từ DB:', err)
-    }
   }
 
   pendingOrders.value.splice(index, 1)
@@ -3265,12 +3112,8 @@ const handleCheckout = async (options = {}) => {
     const soldCartSnapshot = currentOrder.value.cart.map(item => ({ ...item }))
     let invoiceRes
     const doCheckoutCall = async () => {
-      if (currentOrder.value.dbId) {
-        return await checkoutPosWaitingOrder(currentOrder.value.dbId, payload)
-      } else {
-        const res = await http.post('/hoa-don', payload)
-        return res?.data || res
-      }
+      const res = await http.post('/hoa-don', payload)
+      return res?.data || res
     }
     try {
       invoiceRes = await doCheckoutCall()
@@ -3342,10 +3185,6 @@ const handleCheckout = async (options = {}) => {
       changeDue: Math.max(0, changeDue.value),
       date: new Date().toLocaleString('vi-VN'),
       staffName: staffName.value || 'Nhân viên quầy'
-    }
-
-    if (currentOrder.value) {
-      currentOrder.value.dbId = null
     }
 
     completedInvoiceData.value = completedRecord
@@ -3748,10 +3587,7 @@ const loadInitialData = async () => {
   isLoadingData.value = true
   try {
     const hadStaffSnapshot = loadStaffSnapshotFromStorage()
-    let restoredOrders = await loadPendingOrdersFromDB()
-    if (!restoredOrders) {
-      restoredOrders = restorePendingOrdersFromStorage()
-    }
+    const restoredOrders = restorePendingOrdersFromStorage()
 
     const [formRes, prodRes, brandRes, catRes, colorRes, sizeRes, empRes] = await Promise.allSettled([
       http.get('/hoa-don/form-data'),
@@ -3931,11 +3767,6 @@ onMounted(async () => {
   window.addEventListener('polyshoes:open-ket-ca', openKetCaModal)
   window.addEventListener('polyshoes:open-mo-ca', openMoCaModal)
   window.addEventListener('polyshoes:discount-changed', handleDiscountChanged)
-  realtimePollTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') {
-      handleDiscountChanged()
-    }
-  }, 3000)
 })
 
 onUnmounted(() => {
@@ -3948,10 +3779,6 @@ onUnmounted(() => {
   window.removeEventListener('polyshoes:open-ket-ca', openKetCaModal)
   window.removeEventListener('polyshoes:open-mo-ca', openMoCaModal)
   window.removeEventListener('polyshoes:discount-changed', handleDiscountChanged)
-  if (realtimePollTimer) {
-    clearInterval(realtimePollTimer)
-    realtimePollTimer = null
-  }
   stopCameraScanner()
 })
 </script>
