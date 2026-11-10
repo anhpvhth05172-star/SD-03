@@ -130,8 +130,8 @@ const luuForm = async () => {
     formError.value = 'Vui lòng chọn giờ bắt đầu và giờ kết thúc'
     return
   }
-  if (f.batDau >= f.ketThuc) {
-    formError.value = 'Giờ kết thúc phải sau giờ bắt đầu'
+  if (f.batDau === f.ketThuc) {
+    formError.value = 'Giờ kết thúc không được trùng giờ bắt đầu'
     return
   }
   const payload = { ten, batDau: f.batDau, ketThuc: f.ketThuc }

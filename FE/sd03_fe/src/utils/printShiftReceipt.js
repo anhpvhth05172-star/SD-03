@@ -230,8 +230,12 @@ export const inBienLaiDoiSoatK80 = (caData, tongKetData) => {
 
         <!-- THÔNG TIN PHIÊN LÀM VIỆC -->
         <div class="row">
-          <span>Thu ngân trực:</span>
+          <span>Người mở ca:</span>
           <strong>${tenNhanVien}</strong>
+        </div>
+        <div class="row">
+          <span>Giao ca tiếp theo cho:</span>
+          <strong>${ca.tenNguoiNhan || 'Cuối ngày'}</strong>
         </div>
         <div class="row">
           <span>Mở ca:</span>

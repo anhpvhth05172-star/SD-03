@@ -39,6 +39,30 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
 
     Optional<HoaDon> findByMaHoaDon(String maHoaDon);
 
+    @Query("""
+        SELECT DISTINCT h FROM HoaDon h
+        LEFT JOIN FETCH h.khachHang kh
+        LEFT JOIN FETCH h.phuongThucThanhToan pt
+        LEFT JOIN FETCH h.phieuGiamGia pgg
+        LEFT JOIN FETCH h.dotGiamGia dgg
+        LEFT JOIN FETCH h.nhanVien nv
+        WHERE h.maHoaDon = :maHoaDon AND h.daXoa = false
+        """)
+    Optional<HoaDon> findByMaHoaDonPublic(@Param("maHoaDon") String maHoaDon);
+
+    @Query("""
+        SELECT DISTINCT h FROM HoaDon h
+        LEFT JOIN FETCH h.khachHang kh
+        LEFT JOIN FETCH h.phuongThucThanhToan pt
+        LEFT JOIN FETCH h.phieuGiamGia pgg
+        LEFT JOIN FETCH h.dotGiamGia dgg
+        LEFT JOIN FETCH h.nhanVien nv
+        WHERE h.daXoa = false
+          AND (h.soDienThoaiKhachHang = :phone OR (kh IS NOT NULL AND kh.soDienThoai = :phone))
+        ORDER BY h.ngayTao DESC, h.id DESC
+        """)
+    List<HoaDon> findByPhonePublic(@Param("phone") String phone);
+
     boolean existsByMaHoaDonAndIdNot(String maHoaDon, Long id);
 
     @Query("""

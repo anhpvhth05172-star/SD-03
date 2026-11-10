@@ -96,17 +96,38 @@ public class CaLamService {
         if (req.batDau() == null || req.ketThuc() == null) {
             throw new IllegalArgumentException("Thời gian bắt đầu và kết thúc không được để trống");
         }
-        if (!req.batDau().isBefore(req.ketThuc())) {
-            throw new IllegalArgumentException("Thời gian không hợp lệ: bắt đầu phải trước kết thúc");
+        if (req.batDau().equals(req.ketThuc())) {
+            throw new IllegalArgumentException("Thời gian bắt đầu và kết thúc không được trùng nhau");
         }
         List<CaLam> trungKhung = caLamRepository.findAll().stream()
             .filter(c -> !c.getId().equals(idHienTai))
-            .filter(c -> c.getBatDau().isBefore(req.ketThuc()) && c.getKetThuc().isAfter(req.batDau()))
+            .filter(c -> Boolean.TRUE.equals(c.getDangBat()))
+            .filter(c -> kiemTraTrungKhungGio(c.getBatDau(), c.getKetThuc(), req.batDau(), req.ketThuc()))
             .toList();
         if (!trungKhung.isEmpty()) {
             CaLam trung = trungKhung.get(0);
             throw new DuplicateRecordException(
                 "Ca \"" + trung.getTenCa() + "\" đang tồn tại - hãy bỏ ca trước");
+        }
+    }
+
+    public static boolean kiemTraTrungKhungGio(LocalTime bd1, LocalTime kt1, LocalTime bd2, LocalTime kt2) {
+        if (bd1 == null || kt1 == null || bd2 == null || kt2 == null) return false;
+        for (int m = 0; m < 1440; m++) {
+            LocalTime t = LocalTime.of(m / 60, m % 60);
+            if (thuocCa(t, bd1, kt1) && thuocCa(t, bd2, kt2)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean thuocCa(LocalTime t, LocalTime bd, LocalTime kt) {
+        if (kt.isAfter(bd)) {
+            return !t.isBefore(bd) && t.isBefore(kt);
+        } else {
+            // Ca qua đêm (ví dụ 22:00 - 08:00)
+            return !t.isBefore(bd) || t.isBefore(kt);
         }
     }
 

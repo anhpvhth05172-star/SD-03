@@ -61,8 +61,8 @@ const todayLocal = () => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-fTuNgay.value = todayLocal()
-fDenNgay.value = todayLocal()
+fTuNgay.value = ''
+fDenNgay.value = ''
 
 const parseDate = (value) => {
   const v = (value || '').trim()
@@ -155,8 +155,8 @@ const applyFilter = () => {
 
 const resetFilter = () => {
   fMa.value = ''
-  fTuNgay.value = todayLocal()
-  fDenNgay.value = todayLocal()
+  fTuNgay.value = ''
+  fDenNgay.value = ''
   fLoaiDon.value = ''
   activeTab.value = 'ALL'
   page.value = 0
@@ -261,6 +261,11 @@ const fmtNgayTao = (iso) => {
 const tongTienText = (v) => formatVnd(v)
 
 const xemChiTiet = (row) => router.push(`/hoa-don/${row.id}`)
+
+const coTheSua = (row) =>
+  row && (row.trangThai === 'Chờ xác nhận' || row.maTrangThai === 'CHO_XAC_NHAN')
+
+const suaHoaDon = (row) => router.push(`/hoa-don/${row.id}/sua`)
 
 onMounted(load)
 </script>
@@ -486,6 +491,18 @@ onMounted(load)
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                         <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    </button>
+                    <button
+                      v-if="coTheSua(row)"
+                      class="act-btn edit-btn"
+                      type="button"
+                      title="Sửa hóa đơn (Chờ xác nhận)"
+                      @click="suaHoaDon(row)"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                       </svg>
                     </button>
                   </div>

@@ -163,8 +163,12 @@ onMounted(loadData)
 
         <div class="info-grid">
           <div class="info-item">
-            <span class="info-k">Nhân viên trực ca:</span>
+            <span class="info-k">Người mở ca (Trực quầy):</span>
             <span class="info-v highlight-name">{{ caData?.tenNhanVien || tongKetData?.tenNhanVien || '—' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-k">Người nhận ca tiếp theo:</span>
+            <span class="info-v highlight-name text-indigo">{{ caData?.tenNguoiNhan || tongKetData?.tenNguoiNhan || 'Cuối ngày' }}</span>
           </div>
           <div class="info-item">
             <span class="info-k">Thời gian mở ca:</span>

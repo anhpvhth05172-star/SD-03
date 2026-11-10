@@ -84,6 +84,28 @@ const fetchActiveShift = async () => {
   }
 }
 
+const kiemTraTrongGioNhanCa = (ca) => {
+  if (!ca || !ca.batDau || !ca.ketThuc) return false
+  const now = new Date()
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
+
+  const [bdH, bdM] = ca.batDau.split(':').map(Number)
+  const [ktH, ktM] = ca.ketThuc.split(':').map(Number)
+  const bdMinutes = bdH * 60 + bdM
+  const ktMinutes = ktH * 60 + ktM
+
+  // Cho phép nhận ca trước 30 phút
+  const bdChoPhep = (bdMinutes - 30 + 1440) % 1440
+
+  if (ktMinutes > bdMinutes) {
+    // Ca trong ngày (ví dụ 08:00 - 15:00 -> nhận ca từ 07:30 đến 15:00)
+    return nowMinutes >= bdChoPhep && nowMinutes < ktMinutes
+  } else {
+    // Ca qua đêm (ví dụ 22:00 - 08:00 -> nhận ca từ 21:30 đến 08:00 hôm sau)
+    return nowMinutes >= bdChoPhep || nowMinutes < ktMinutes
+  }
+}
+
 const openMoCaModal = async () => {
   moCaForm.tienDauCa = ''
   moCaForm.ghiChu = ''
@@ -93,7 +115,11 @@ const openMoCaModal = async () => {
     const list = await getDanhSachCaLam()
     dsCaChiaSan.value = list || []
     if (list && list.length > 0) {
-      if (!moCaForm.idCaLich || !list.some((c) => c.id === moCaForm.idCaLich)) {
+      // Ưu tiên tự động chọn ca đang trong thời gian nhận ca
+      const caHopLe = list.find((c) => kiemTraTrongGioNhanCa(c))
+      if (caHopLe) {
+        moCaForm.idCaLich = caHopLe.id
+      } else if (!moCaForm.idCaLich || !list.some((c) => c.id === moCaForm.idCaLich)) {
         moCaForm.idCaLich = list[0].id
       }
     }
@@ -112,6 +138,13 @@ const handleMoCaSubmit = async () => {
   }
   if (!moCaForm.idCaLich && dsCaChiaSan.value.length > 0) {
     notifyWarning('Chưa chọn ca làm việc', 'Vui lòng chọn một ca được chia sẵn để bắt đầu ca làm!')
+    return
+  }
+  if (!laAdmin() && selectedCa.value && !kiemTraTrongGioNhanCa(selectedCa.value)) {
+    notifyWarning(
+      'Không trong thời gian nhận ca',
+      `Hiện tại không trong thời gian nhận ${selectedCa.value.ten} (${selectedCa.value.batDau?.substring(0, 5)} - ${selectedCa.value.ketThuc?.substring(0, 5)}). Bạn chỉ có quyền tra cứu thông tin (Chế độ chỉ xem).`
+    )
     return
   }
   moCaSubmitting.value = true
@@ -3216,33 +3249,21 @@ const handleCheckout = async (options = {}) => {
 
     validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: true })
 
-    // Tự động hỏi in hóa đơn sau khi thanh toán
-    let wantPrint = false
-    if (options?.autoPrint) {
-      wantPrint = true
-    } else {
-      wantPrint = await notifyConfirm(
-        isDeliveryOrder ? 'Tạo đơn giao hàng thành công!' : 'Thanh toán thành công!',
-        `Đã hoàn tất hóa đơn "${completedRecord.code}". Bạn có muốn in hóa đơn không?`,
-        'In hóa đơn',
-        'Không in',
-        'success'
-      )
-    }
+    // Tự động in hóa đơn ngay sau khi thanh toán xác nhận tại quầy
+    notifySuccess(
+      isDeliveryOrder ? 'Tạo đơn giao hàng thành công!' : 'Thanh toán thành công!',
+      `Đã hoàn tất hóa đơn "${completedRecord.code}".`
+    )
 
-    if (wantPrint) {
-      isReceiptModalOpen.value = true
-      await nextTick()
-      printReceipt()
-    } else {
-      notifySuccess('Thanh toán thành công!', `Đã hoàn tất hóa đơn ${completedRecord.code}`)
-    }
+    isReceiptModalOpen.value = true
+    await nextTick()
+    printReceipt()
 
     // Tự động chuyển sang trang hóa đơn chi tiết của hóa đơn đó
     if (completedRecord?.id) {
       setTimeout(() => {
         router.push(`/hoa-don/${completedRecord.id}`)
-      }, wantPrint ? 600 : 250)
+      }, 600)
     }
 
   } catch (err) {
@@ -5573,20 +5594,50 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <!-- Ca trong lịch của nhân viên được chọn tự động; không yêu cầu chọn bằng combobox. -->
+            <!-- Danh sách ca làm việc -->
             <div class="pos-shift-field-group">
               <label class="pos-shift-label">
-                <span>Ca đang trực theo lịch hôm nay</span>
+                <span>Chọn ca làm việc</span>
+                <span class="pos-shift-required">*</span>
               </label>
 
               <div v-if="isLoadingCaChiaSan" class="shift-cards-loading">
                 <span class="loading-spinner"></span> Đang tải danh sách ca làm...
               </div>
 
-              <div v-else-if="selectedCa" class="shift-cards-empty">
-                {{ selectedCa.ten }} · {{ selectedCa.batDau?.substring(0, 5) }} — {{ selectedCa.ketThuc?.substring(0, 5) }}
+              <div v-else-if="dsCaChiaSan && dsCaChiaSan.length > 0" class="pos-shift-cards-grid">
+                <div
+                  v-for="c in dsCaChiaSan"
+                  :key="c.id"
+                  class="pos-shift-pick-card"
+                  :class="{
+                    'is-selected': moCaForm.idCaLich === c.id,
+                    'is-valid-window': kiemTraTrongGioNhanCa(c),
+                    'is-invalid-window': !kiemTraTrongGioNhanCa(c)
+                  }"
+                  @click="moCaForm.idCaLich = c.id"
+                >
+                  <div class="pick-card-top">
+                    <span class="pick-card-name">{{ c.ten }}</span>
+                    <span v-if="kiemTraTrongGioNhanCa(c)" class="badge-time-status is-active">Đang nhận ca</span>
+                    <span v-else class="badge-time-status is-inactive">Chưa đến giờ</span>
+                  </div>
+                  <div class="pick-card-time">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span>{{ c.batDau?.substring(0, 5) }} — {{ c.ketThuc?.substring(0, 5) }}</span>
+                  </div>
+                </div>
               </div>
-              <div v-else class="shift-cards-empty">Hôm nay bạn chưa được xếp lịch ca.</div>
+              <div v-else class="shift-cards-empty">Không có ca làm việc nào đang kích hoạt.</div>
+
+              <!-- Cảnh báo nếu ca được chọn không trong thời gian nhận ca -->
+              <div v-if="selectedCa && !kiemTraTrongGioNhanCa(selectedCa) && !laAdmin()" class="shift-time-alert-box">
+                <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+                <span>Hiện không trong thời gian nhận <strong>{{ selectedCa.ten }}</strong>. Chỉ được mở ca trước giờ bắt đầu tối đa 30 phút và trước khi ca kết thúc. Bạn đang ở <strong>Chế độ chỉ xem</strong>.</span>
+              </div>
             </div>
 
             <div class="pos-shift-field-group">
@@ -5626,7 +5677,12 @@ onUnmounted(() => {
             <button type="button" class="btn-shift-cancel" @click="isMoCaModalOpen = false" :disabled="moCaSubmitting">
               Hủy bỏ
             </button>
-            <button type="button" class="btn-shift-confirm-open" @click="handleMoCaSubmit" :disabled="moCaSubmitting">
+            <button
+              type="button"
+              class="btn-shift-confirm-open"
+              @click="handleMoCaSubmit"
+              :disabled="moCaSubmitting || (!laAdmin() && (!selectedCa || !kiemTraTrongGioNhanCa(selectedCa)))"
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>

@@ -68,10 +68,10 @@ class CaLamServiceTest {
     }
 
     @Test
-    void create_ketThucTruocBatDauBi400() {
+    void create_batDauBangKetThucBi400() {
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-            () -> service().create(new CaLamRequest("Ca test", LocalTime.of(12, 0), LocalTime.of(8, 0))));
-        assertTrue(ex.getMessage().contains("không hợp lệ"));
+            () -> service().create(new CaLamRequest("Ca test", LocalTime.of(8, 0), LocalTime.of(8, 0))));
+        assertTrue(ex.getMessage().contains("trùng nhau"));
     }
 
     @Test
