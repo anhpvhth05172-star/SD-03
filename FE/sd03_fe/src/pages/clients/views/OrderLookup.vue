@@ -187,9 +187,8 @@ async function fetchById(id) {
   return o;
 }
 
-/* ================= ĐƠN GẦN ĐÂY (đồng bộ trạng thái từ BE) ================= */
-// localStorage chỉ giữ tham chiếu (mã + id) để biết khách đã đặt đơn nào,
-// toàn bộ dữ liệu hiển thị được tải lại từ back-end.
+/* ================= ĐƠN GẦN ĐÂY (chỉ hiện khi đã đăng nhập) ================= */
+// localStorage chỉ giữ tham chiếu (mã + id) để làm dự phòng khi tra cứu theo mã.
 const storedRefs = () => {
   try {
     const list = JSON.parse(localStorage.getItem("ps_orders")) || [];
@@ -203,43 +202,31 @@ const recentOrders = ref([]);
 const loadingRecent = ref(false);
 
 async function loadRecent() {
+  // Chưa đăng nhập -> không hiện danh sách đơn đã đặt
+  if (!isLoggedIn.value || !myId.value) {
+    recentOrders.value = [];
+    loadingRecent.value = false;
+    return;
+  }
+
   loadingRecent.value = true;
   try {
-    // 1) Nếu đã đăng nhập: lấy danh sách đơn của khách hàng từ BE
-    if (myId.value) {
-      const page = await getJson(
-        `${HOA_DON_API}?idKhachHang=${encodeURIComponent(myId.value)}&size=50`,
-      );
-      const list = (page.content || page || [])
-        .map(normalize)
-        .filter(isMine)
-        .sort((a, b) => b.ts - a.ts)
-        .slice(0, 10);
+    const page = await getJson(
+      `${HOA_DON_API}?idKhachHang=${encodeURIComponent(myId.value)}&size=50`,
+    );
+    const list = (page.content || page || [])
+      .map(normalize)
+      .filter(isMine)
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 10);
 
-      const full = await Promise.all(
-        list.map((o) => (o.hasItems ? o : fetchById(o.id).catch(() => null))),
-      );
-      recentOrders.value = full.filter(Boolean);
-      return;
-    }
-
-    // 2) Khách vãng lai: Đọc từ localStorage (ps_orders) và đồng bộ trạng thái mới nhất từ BE
-    const refs = storedRefs().slice(0, 10);
-    if (refs.length) {
-      const results = await Promise.all(
-        refs.map((r) => fetchById(r.orderId).catch(() => null)),
-      );
-      recentOrders.value = results.filter(Boolean);
-    } else {
-      recentOrders.value = [];
-    }
+    const full = await Promise.all(
+      list.map((o) => (o.hasItems ? o : fetchById(o.id).catch(() => null))),
+    );
+    recentOrders.value = full.filter(Boolean);
   } catch (e) {
     console.warn("[TraCuu] Không tải được danh sách đơn:", e.message);
-    const refs = storedRefs().slice(0, 10);
-    const results = await Promise.all(
-      refs.map((r) => fetchById(r.orderId).catch(() => null)),
-    );
-    recentOrders.value = results.filter(Boolean);
+    recentOrders.value = []; // không dùng localStorage làm dự phòng nữa
   } finally {
     loadingRecent.value = false;
   }
@@ -271,13 +258,17 @@ async function findOrder(query) {
     : `${HOA_DON_API}?ma=${encodeURIComponent(query)}&size=50`;
   const page = await getJson(url);
   const list = page.content || page || [];
-  
+
   // Lọc khớp mã hóa đơn hoặc số điện thoại
   const matches = list.filter((h) => {
-    const codeMatch = String(HD.code(h)).toUpperCase() === query || String(HD.id(h)) === query;
+    const codeMatch =
+      String(HD.code(h)).toUpperCase() === query || String(HD.id(h)) === query;
     const phoneMatch = isPhone(query) && HD.phone(h) === query;
     if (myId.value) {
-      return (codeMatch || phoneMatch) && String(HD.customerId(h)) === String(myId.value);
+      return (
+        (codeMatch || phoneMatch) &&
+        String(HD.customerId(h)) === String(myId.value)
+      );
     }
     return codeMatch || phoneMatch;
   });
@@ -285,7 +276,10 @@ async function findOrder(query) {
   if (!matches.length) {
     // Dự phòng tìm kiếm trong danh sách đơn cục bộ lưu trên trình duyệt (ps_orders)
     const local = storedRefs().find(
-      (r) => String(r.id).toUpperCase() === query || String(r.orderId) === query || r.info?.phone === query,
+      (r) =>
+        String(r.id).toUpperCase() === query ||
+        String(r.orderId) === query ||
+        r.info?.phone === query,
     );
     if (local && local.orderId) {
       return await fetchById(local.orderId);
@@ -451,8 +445,10 @@ async function copyCode(code) {
 }
 
 onMounted(async () => {
-  myId.value = await resolveCustomerId();
-  loadRecent();
+  if (isLoggedIn.value) {
+    myId.value = await resolveCustomerId();
+    await loadRecent();
+  }
   if (route.query.code) doSearch(route.query.code);
 });
 </script>
@@ -482,8 +478,8 @@ onMounted(async () => {
           <span>cùng Poly Shoes</span>
         </h1>
         <p class="ol-hero-sub">
-          Nhập mã đơn hàng (ví dụ: <strong>HD123456</strong>) hoặc số điện thoại
-          đặt hàng để xem tình trạng vận chuyển và chi tiết đơn.
+          Nhập mã đơn hàng (ví dụ: <strong>HD123456</strong>) để xem tình trạng
+          vận chuyển và chi tiết đơn.
         </p>
 
         <div class="ol-search">
@@ -491,7 +487,7 @@ onMounted(async () => {
           <input
             v-model="searchInput"
             class="ol-search-input"
-            placeholder="Nhập mã đơn hàng hoặc số điện thoại..."
+            placeholder="Vui lòng nhập mã đơn hàng để tra cứu"
             @keyup.enter="doSearch()"
           />
           <button
@@ -519,21 +515,6 @@ onMounted(async () => {
         <div v-if="errorMessage" class="ol-error">
           <i class="bi bi-exclamation-circle me-1"></i>{{ errorMessage }}
         </div>
-
-        <div v-if="recentOrders.length" class="ol-recent">
-          <span class="ol-recent-label">Đơn bạn đã đặt gần đây:</span>
-          <div class="d-flex flex-wrap gap-2 mt-2">
-            <button
-              v-for="o in recentOrders.slice(0, 4)"
-              :key="o.id"
-              type="button"
-              class="ol-chip"
-              @click="doSearch(o.code)"
-            >
-              <i class="bi bi-receipt me-1"></i>#{{ o.code }}
-            </button>
-          </div>
-        </div>
       </div>
     </section>
 
@@ -552,8 +533,8 @@ onMounted(async () => {
       </div>
     </section>
 
-    <!-- ================= DANH SÁCH ĐƠN ================= -->
-    <section v-if="!searched && loadingRecent" class="mb-5">
+    <!-- ================= DANH SÁCH ĐƠN (chỉ khi đã đăng nhập) ================= -->
+    <section v-if="isLoggedIn && !searched && loadingRecent" class="mb-5">
       <div class="d-flex flex-column gap-3">
         <div v-for="n in 3" :key="n" class="ol-skel">
           <div class="sk sk-h"></div>
@@ -563,7 +544,10 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section v-else-if="!searched && recentOrders.length" class="mb-5">
+    <section
+      v-else-if="isLoggedIn && !searched && recentOrders.length"
+      class="mb-5"
+    >
       <!-- Thống kê -->
       <div class="ol-stats mb-4">
         <div class="ol-stat">
@@ -1183,32 +1167,6 @@ onMounted(async () => {
   margin-top: 0.75rem;
   font-size: 0.85rem;
   color: #ffb4b9;
-}
-.ol-recent {
-  margin-top: 1.5rem;
-  padding-top: 1.1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
-}
-.ol-recent-label {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
-}
-.ol-chip {
-  padding: 0.4rem 0.9rem;
-  font-size: 0.8rem;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 999px;
-  transition:
-    background-color 0.15s,
-    border-color 0.15s;
-  cursor: pointer;
-}
-.ol-chip:hover {
-  background: var(--ol-red);
-  border-color: var(--ol-red);
 }
 
 /* ---------- Stats ---------- */

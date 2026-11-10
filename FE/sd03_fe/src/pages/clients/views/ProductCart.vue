@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, computed, watch } from "vue";
+import { onMounted, onBeforeUnmount, ref, computed, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   cart,
@@ -12,11 +12,99 @@ import {
   fetchCart,
 } from "../store";
 import { getUser } from "@/utils/auth";
+import {
+  startGuestCartTimer,
+  clearGuestCartTimer,
+  getGuestCartRemaining,
+} from "@/utils/guestCart";
 
 const router = useRouter();
 const user = ref(getUser());
 const actionLoadingId = ref(null);
 const actionError = ref("");
+
+// ===== Giỏ hàng khách vãng lai: tự xóa sau 30 phút =====
+const remainingMs = ref(0);
+const expiredNotice = ref(false);
+let tickTimer = null;
+
+const countdownText = computed(() => {
+  const s = Math.max(0, Math.ceil(remainingMs.value / 1000));
+  const mm = String(Math.floor(s / 60)).padStart(2, "0");
+  const ss = String(s % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
+});
+
+function stopTick() {
+  if (tickTimer) {
+    clearInterval(tickTimer);
+    tickTimer = null;
+  }
+}
+
+async function expireGuestCart() {
+  stopTick();
+  remainingMs.value = 0;
+  try {
+    await clearCart();
+  } catch (e) {
+    console.warn("[Cart] Không xóa được giỏ hàng hết hạn:", e);
+  }
+  clearGuestCartTimer();
+  expiredNotice.value = true;
+}
+
+function updateRemaining() {
+  const r = getGuestCartRemaining();
+  if (r === null) {
+    remainingMs.value = 0;
+    return;
+  }
+  if (r <= 0) {
+    expireGuestCart();
+    return;
+  }
+  remainingMs.value = r;
+}
+
+function startTick() {
+  stopTick();
+  updateRemaining();
+  tickTimer = setInterval(updateRemaining, 1000);
+}
+
+// Kiểm tra trạng thái bộ đếm của khách vãng lai
+function initGuestTimer() {
+  if (user.value) return;
+  const r = getGuestCartRemaining();
+  if (r !== null && r <= 0) {
+    // cookie đã hết hạn -> xóa giỏ hàng
+    if (cart.items.length) expireGuestCart();
+    else clearGuestCartTimer();
+    return;
+  }
+  if (r === null && cart.items.length) {
+    // giỏ cũ chưa có bộ đếm -> bắt đầu tính 30 phút
+    startGuestCartTimer();
+  }
+  if (cart.items.length) startTick();
+}
+
+// Giỏ thay đổi (thêm / xóa sản phẩm)
+watch(
+  () => cart.items.length,
+  (len) => {
+    if (user.value) return;
+    if (len === 0) {
+      stopTick();
+      remainingMs.value = 0;
+      return;
+    }
+    expiredNotice.value = false;
+    if (getGuestCartRemaining() === null) startGuestCartTimer();
+    if (!tickTimer) startTick();
+  },
+);
 
 // ===== Voucher Logic =====
 const VOUCHER_API = "http://localhost:8080/admin/phieu-giam-gia";
@@ -198,12 +286,17 @@ const imgFailed = ref({});
 // ===== Không bắt buộc đăng nhập để xem giỏ hàng =====
 const LOGIN_URL = "/dang-nhap?redirect=/gio-hang";
 
-onMounted(() => {
-  fetchCart();
+onMounted(async () => {
+  await fetchCart();
   if (user.value) {
+    clearGuestCartTimer(); // đã đăng nhập -> không còn là giỏ vãng lai
     loadVouchers();
+  } else {
+    initGuestTimer();
   }
 });
+
+onBeforeUnmount(stopTick);
 
 const handleQtyChange = async (item, delta) => {
   const newQty = item.qty + delta;
@@ -248,6 +341,7 @@ const handleClear = async () => {
   actionError.value = "";
   try {
     await clearCart();
+    if (!user.value) clearGuestCartTimer();
   } catch (err) {
     actionError.value = err.message || "Không thể xóa giỏ hàng";
     setTimeout(() => (actionError.value = ""), 3000);
@@ -283,7 +377,10 @@ const handleClear = async () => {
       <div v-if="!user" class="small text-muted-ps mt-2">
         <i class="bi bi-info-circle me-1"></i>
         Bạn đang mua hàng với tư cách khách vãng lai.
-        <RouterLink to="/dang-nhap?redirect=/gio-hang" class="text-primary fw-semibold text-decoration-none">
+        <RouterLink
+          :to="LOGIN_URL"
+          class="text-primary fw-semibold text-decoration-none"
+        >
           Đăng nhập
         </RouterLink>
         để lưu giỏ hàng lâu dài và nhận thêm ưu đãi.
@@ -298,275 +395,296 @@ const handleClear = async () => {
       </button>
     </div>
 
+    <!-- Khách vãng lai: đếm ngược thời gian lưu giỏ hàng -->
+    <div
+      v-if="!user && cart.items.length && remainingMs > 0"
+      class="guest-timer mb-3"
+    >
+      <i class="bi bi-hourglass-split me-1"></i>
+      Giỏ hàng của khách vãng lai sẽ tự xóa sau
+      <strong>{{ countdownText }}</strong
+      >. Hãy đặt hàng hoặc
+      <RouterLink :to="LOGIN_URL" class="fw-semibold">đăng nhập</RouterLink>
+      để lưu lâu dài.
+    </div>
+
+    <!-- Giỏ hàng đã hết hạn -->
+    <div v-if="expiredNotice" class="notice notice-warn mb-3">
+      <div class="small">
+        <i class="bi bi-clock-history me-1"></i>
+        Giỏ hàng đã quá 30 phút không đặt hàng nên đã được xóa tự động.
+      </div>
+    </div>
+
     <!-- Lỗi thao tác -->
-      <div v-if="actionError" class="notice notice-danger mb-3">
-        <div class="small">
-          <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ actionError }}
-        </div>
+    <div v-if="actionError" class="notice notice-danger mb-3">
+      <div class="small">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ actionError }}
       </div>
+    </div>
 
-      <!-- Có sản phẩm hết hàng -->
-      <div v-if="hasOutOfStock" class="notice notice-danger mb-3">
-        <div class="small">
-          <i class="bi bi-exclamation-octagon-fill me-1"></i>
-          Giỏ hàng có sản phẩm đã hết hàng, vui lòng xóa hoặc đổi sản phẩm khác
-          trước khi đặt hàng.
-        </div>
+    <!-- Có sản phẩm hết hàng -->
+    <div v-if="hasOutOfStock" class="notice notice-danger mb-3">
+      <div class="small">
+        <i class="bi bi-exclamation-octagon-fill me-1"></i>
+        Giỏ hàng có sản phẩm đã hết hàng, vui lòng xóa hoặc đổi sản phẩm khác
+        trước khi đặt hàng.
       </div>
+    </div>
 
-      <!-- Loading skeleton -->
-      <div v-if="cart.loading && !cart.items.length" class="row g-4">
-        <div class="col-lg-8">
-          <div v-for="n in 3" :key="n" class="skel-row">
-            <div class="sk sk-img"></div>
-            <div class="flex-grow-1">
-              <div class="sk sk-line w-50"></div>
-              <div class="sk sk-line w-75"></div>
-              <div class="sk sk-line w-25"></div>
-            </div>
-          </div>
-        </div>
-        <div class="col-lg-4">
-          <div class="summary-card">
+    <!-- Loading skeleton -->
+    <div v-if="cart.loading && !cart.items.length" class="row g-4">
+      <div class="col-lg-8">
+        <div v-for="n in 3" :key="n" class="skel-row">
+          <div class="sk sk-img"></div>
+          <div class="flex-grow-1">
             <div class="sk sk-line w-50"></div>
-            <div class="sk sk-line"></div>
-            <div class="sk sk-line"></div>
-            <div class="sk sk-btn"></div>
+            <div class="sk sk-line w-75"></div>
+            <div class="sk sk-line w-25"></div>
           </div>
         </div>
       </div>
+      <div class="col-lg-4">
+        <div class="summary-card">
+          <div class="sk sk-line w-50"></div>
+          <div class="sk sk-line"></div>
+          <div class="sk sk-line"></div>
+          <div class="sk sk-btn"></div>
+        </div>
+      </div>
+    </div>
 
-      <!-- Giỏ hàng có sản phẩm -->
-      <div v-else-if="cart.items.length" class="row g-4">
-        <!-- Danh sách sản phẩm -->
-        <div class="col-lg-8">
-          <div class="d-flex flex-column gap-3">
-            <article
-              v-for="(i, idx) in cart.items"
-              :key="rowKey(i)"
-              class="cart-item"
-              :class="{ 'is-out': i.conHang === false }"
-            >
-              <!-- Ảnh -->
-              <div class="item-thumb">
-                <img
-                  v-if="i.img && !imgFailed[rowKey(i)]"
-                  :src="i.img"
-                  :alt="i.name"
-                  @error="imgFailed[rowKey(i)] = true"
-                />
-                <span v-else class="item-thumb-fallback">👟</span>
-                <span v-if="i.conHang === false" class="item-out-badge"
-                  >Hết hàng</span
+    <!-- Giỏ hàng có sản phẩm -->
+    <div v-else-if="cart.items.length" class="row g-4">
+      <!-- Danh sách sản phẩm -->
+      <div class="col-lg-8">
+        <div class="d-flex flex-column gap-3">
+          <article
+            v-for="(i, idx) in cart.items"
+            :key="rowKey(i)"
+            class="cart-item"
+            :class="{ 'is-out': i.conHang === false }"
+          >
+            <!-- Ảnh -->
+            <div class="item-thumb">
+              <img
+                v-if="i.img && !imgFailed[rowKey(i)]"
+                :src="i.img"
+                :alt="i.name"
+                @error="imgFailed[rowKey(i)] = true"
+              />
+              <span v-else class="item-thumb-fallback">👟</span>
+              <span v-if="i.conHang === false" class="item-out-badge"
+                >Hết hàng</span
+              >
+            </div>
+
+            <!-- Thông tin -->
+            <div class="item-info">
+              <div v-if="i.brand" class="item-brand">{{ i.brand }}</div>
+              <div class="item-name" :title="i.name">{{ i.name }}</div>
+
+              <div class="item-tags">
+                <span v-if="i.color" class="item-tag">
+                  <i class="bi bi-palette2"></i>{{ i.color }}
+                </span>
+                <span v-if="i.size" class="item-tag">
+                  <i class="bi bi-rulers"></i>Size {{ i.size }}
+                </span>
+                <span
+                  v-if="
+                    i.stock != null &&
+                    i.conHang !== false &&
+                    i.stock <= LOW_STOCK
+                  "
+                  class="item-tag tag-low"
                 >
+                  <i class="bi bi-fire"></i>Chỉ còn {{ i.stock }} sản phẩm
+                </span>
               </div>
 
-              <!-- Thông tin -->
-              <div class="item-info">
-                <div v-if="i.brand" class="item-brand">{{ i.brand }}</div>
-                <div class="item-name" :title="i.name">{{ i.name }}</div>
-
-                <div class="item-tags">
-                  <span v-if="i.color" class="item-tag">
-                    <i class="bi bi-palette2"></i>{{ i.color }}
-                  </span>
-                  <span v-if="i.size" class="item-tag">
-                    <i class="bi bi-rulers"></i>Size {{ i.size }}
-                  </span>
-                  <span
-                    v-if="
-                      i.stock != null &&
-                      i.conHang !== false &&
-                      i.stock <= LOW_STOCK
-                    "
-                    class="item-tag tag-low"
-                  >
-                    <i class="bi bi-fire"></i>Chỉ còn {{ i.stock }} sản phẩm
-                  </span>
-                </div>
-
-                <div class="item-unit">
-                  Đơn giá: <strong>{{ money(i.price) }}</strong>
-                </div>
-
-                <div v-if="i.canhBao" class="item-warn">
-                  <i class="bi bi-exclamation-triangle-fill me-1"></i
-                  >{{ i.canhBao }}
-                </div>
+              <div class="item-unit">
+                Đơn giá: <strong>{{ money(i.price) }}</strong>
               </div>
 
-              <!-- Bên phải: số lượng, thành tiền, xóa -->
-              <div class="item-side">
-                <div class="item-line-total">{{ money(lineTotal(i)) }}</div>
+              <div v-if="i.canhBao" class="item-warn">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i
+                >{{ i.canhBao }}
+              </div>
+            </div>
 
-                <div class="qty-pill">
-                  <button
-                    type="button"
-                    class="qty-btn"
-                    :disabled="actionLoadingId === rowId(i) || i.qty <= 1"
-                    @click="handleQtyChange(i, -1)"
-                  >
-                    −
-                  </button>
-                  <span class="qty-val">
-                    <span
-                      v-if="actionLoadingId === rowId(i)"
-                      class="spinner-border spinner-border-sm"
-                    ></span>
-                    <template v-else>{{ i.qty }}</template>
-                  </span>
-                  <button
-                    type="button"
-                    class="qty-btn"
-                    :disabled="
-                      actionLoadingId === rowId(i) ||
-                      (i.stock != null && i.qty >= i.stock)
-                    "
-                    @click="handleQtyChange(i, 1)"
-                  >
-                    +
-                  </button>
-                </div>
+            <!-- Bên phải: số lượng, thành tiền, xóa -->
+            <div class="item-side">
+              <div class="item-line-total">{{ money(lineTotal(i)) }}</div>
 
+              <div class="qty-pill">
                 <button
                   type="button"
-                  class="item-remove"
-                  :disabled="actionLoadingId === rowId(i)"
-                  title="Xóa sản phẩm"
-                  @click="handleRemove(i, idx)"
+                  class="qty-btn"
+                  :disabled="actionLoadingId === rowId(i) || i.qty <= 1"
+                  @click="handleQtyChange(i, -1)"
                 >
-                  <i class="bi bi-trash3"></i><span>Xóa</span>
+                  −
+                </button>
+                <span class="qty-val">
+                  <span
+                    v-if="actionLoadingId === rowId(i)"
+                    class="spinner-border spinner-border-sm"
+                  ></span>
+                  <template v-else>{{ i.qty }}</template>
+                </span>
+                <button
+                  type="button"
+                  class="qty-btn"
+                  :disabled="
+                    actionLoadingId === rowId(i) ||
+                    (i.stock != null && i.qty >= i.stock)
+                  "
+                  @click="handleQtyChange(i, 1)"
+                >
+                  +
                 </button>
               </div>
-            </article>
-          </div>
 
-          <RouterLink to="/cua-hang" class="back-shop">
-            <i class="bi bi-arrow-left me-1"></i>Tiếp tục mua hàng
-          </RouterLink>
+              <button
+                type="button"
+                class="item-remove"
+                :disabled="actionLoadingId === rowId(i)"
+                title="Xóa sản phẩm"
+                @click="handleRemove(i, idx)"
+              >
+                <i class="bi bi-trash3"></i><span>Xóa</span>
+              </button>
+            </div>
+          </article>
         </div>
 
-        <!-- Tóm tắt đơn hàng -->
-        <div class="col-lg-4">
-          <aside class="summary-card">
-            <h5 class="summary-title">
-              <i class="bi bi-receipt-cutoff me-2"></i>Tóm tắt đơn hàng
-            </h5>
-
-            <!-- Voucher đang áp dụng -->
-            <div v-if="selectedVoucher" class="voucher-box applied">
-              <div class="voucher-ico">
-                <i class="bi bi-ticket-perforated-fill"></i>
-              </div>
-              <div class="flex-grow-1 min-w-0">
-                <div class="voucher-code">
-                  {{ selectedVoucher.code }}
-                  <span class="voucher-badge">Ưu đãi tốt nhất</span>
-                </div>
-                <div v-if="selectedVoucher.name" class="voucher-name">
-                  {{ selectedVoucher.name }}
-                </div>
-                <div class="voucher-desc">
-                  {{
-                    selectedVoucher.type === "percent"
-                      ? `Giảm ${selectedVoucher.value}%`
-                      : `Giảm ${money(selectedVoucher.value)}`
-                  }}
-                  <template v-if="selectedVoucher.max > 0">
-                    · tối đa {{ money(selectedVoucher.max) }}
-                  </template>
-                  <template v-if="selectedVoucher.min > 0">
-                    · đơn từ {{ money(selectedVoucher.min) }}
-                  </template>
-                </div>
-              </div>
-              <div class="voucher-save">-{{ money(discountAmount) }}</div>
-            </div>
-
-            <!-- Gợi ý mua thêm -->
-            <div v-if="nextVoucherHint" class="voucher-box hint">
-              <div class="voucher-ico"><i class="bi bi-gift-fill"></i></div>
-              <div class="small">
-                Mua thêm <strong>{{ money(nextVoucherHint.need) }}</strong> để
-                dùng mã
-                <strong>{{ nextVoucherHint.v.code }}</strong>
-                (giảm
-                {{
-                  nextVoucherHint.v.type === "percent"
-                    ? `${nextVoucherHint.v.value}%`
-                    : money(nextVoucherHint.v.value)
-                }})
-              </div>
-            </div>
-
-            <div v-if="loadingVouchers" class="small text-muted-ps mb-2">
-              <span class="spinner-border spinner-border-sm me-1"></span>Đang
-              tìm mã giảm giá...
-            </div>
-
-            <!-- Bảng giá -->
-            <div class="sum-row">
-              <span>Tạm tính ({{ totalQty }} sản phẩm)</span>
-              <strong>{{ money(cartTotal) }}</strong>
-            </div>
-            <div
-              v-if="selectedVoucher && discountAmount > 0"
-              class="sum-row text-success"
-            >
-              <span>Giảm giá voucher</span>
-              <strong>-{{ money(discountAmount) }}</strong>
-            </div>
-            <div class="sum-row">
-              <span>Phí vận chuyển</span>
-              <span class="text-muted-ps small">Tính ở bước thanh toán</span>
-            </div>
-
-            <div class="sum-total">
-              <span>Tổng cộng</span>
-              <span class="price">{{ money(finalCartTotal) }}</span>
-            </div>
-            <div v-if="discountAmount > 0" class="sum-saved">
-              <i class="bi bi-piggy-bank-fill me-1"></i>Bạn đã tiết kiệm
-              <strong>{{ money(discountAmount) }}</strong>
-            </div>
-
-            <component
-              :is="hasOutOfStock ? 'button' : 'RouterLink'"
-              v-bind="
-                hasOutOfStock
-                  ? { disabled: true, type: 'button' }
-                  : { to: '/thanh-toan' }
-              "
-              class="btn btn-primary w-100 py-3 rounded-pill fw-bold checkout-btn"
-            >
-              Tiến hành đặt hàng <i class="bi bi-arrow-right ms-1"></i>
-            </component>
-
-            <!-- Cam kết -->
-            <div class="perks">
-              <div class="perk">
-                <i class="bi bi-shield-lock-fill text-success"></i>Bảo mật thanh
-                toán
-              </div>
-              <div class="perk">
-                <i class="bi bi-box-seam-fill text-danger"></i>Kiểm tra khi nhận
-              </div>
-              <div class="perk">
-                <i class="bi bi-arrow-repeat text-primary"></i>Đổi size 7 ngày
-              </div>
-            </div>
-          </aside>
-        </div>
+        <RouterLink to="/cua-hang" class="back-shop">
+          <i class="bi bi-arrow-left me-1"></i>Tiếp tục mua hàng
+        </RouterLink>
       </div>
 
-      <!-- Giỏ hàng trống -->
-      <div v-else class="empty-cart">
-        <div class="empty-ico">🛒</div>
-        <h4 class="fw-bold">Giỏ hàng của bạn đang trống</h4>
-        <p class="text-muted-ps mb-4 mx-auto" style="max-width: 420px">
-          Hãy chọn một đôi giày bạn ưng ý nhất để tự tin sải bước cùng Poly
-          Shoes nhé!
-        </p>
+      <!-- Tóm tắt đơn hàng -->
+      <div class="col-lg-4">
+        <aside class="summary-card">
+          <h5 class="summary-title">
+            <i class="bi bi-receipt-cutoff me-2"></i>Tóm tắt đơn hàng
+          </h5>
+
+          <!-- Voucher đang áp dụng -->
+          <div v-if="selectedVoucher" class="voucher-box applied">
+            <div class="voucher-ico">
+              <i class="bi bi-ticket-perforated-fill"></i>
+            </div>
+            <div class="flex-grow-1 min-w-0">
+              <div class="voucher-code">
+                {{ selectedVoucher.code }}
+                <span class="voucher-badge">Ưu đãi tốt nhất</span>
+              </div>
+              <div v-if="selectedVoucher.name" class="voucher-name">
+                {{ selectedVoucher.name }}
+              </div>
+              <div class="voucher-desc">
+                {{
+                  selectedVoucher.type === "percent"
+                    ? `Giảm ${selectedVoucher.value}%`
+                    : `Giảm ${money(selectedVoucher.value)}`
+                }}
+                <template v-if="selectedVoucher.max > 0">
+                  · tối đa {{ money(selectedVoucher.max) }}
+                </template>
+                <template v-if="selectedVoucher.min > 0">
+                  · đơn từ {{ money(selectedVoucher.min) }}
+                </template>
+              </div>
+            </div>
+            <div class="voucher-save">-{{ money(discountAmount) }}</div>
+          </div>
+
+          <!-- Gợi ý mua thêm -->
+          <div v-if="nextVoucherHint" class="voucher-box hint">
+            <div class="voucher-ico"><i class="bi bi-gift-fill"></i></div>
+            <div class="small">
+              Mua thêm <strong>{{ money(nextVoucherHint.need) }}</strong> để
+              dùng mã
+              <strong>{{ nextVoucherHint.v.code }}</strong>
+              (giảm
+              {{
+                nextVoucherHint.v.type === "percent"
+                  ? `${nextVoucherHint.v.value}%`
+                  : money(nextVoucherHint.v.value)
+              }})
+            </div>
+          </div>
+
+          <div v-if="loadingVouchers" class="small text-muted-ps mb-2">
+            <span class="spinner-border spinner-border-sm me-1"></span>Đang tìm
+            mã giảm giá...
+          </div>
+
+          <!-- Bảng giá -->
+          <div class="sum-row">
+            <span>Tạm tính ({{ totalQty }} sản phẩm)</span>
+            <strong>{{ money(cartTotal) }}</strong>
+          </div>
+          <div
+            v-if="selectedVoucher && discountAmount > 0"
+            class="sum-row text-success"
+          >
+            <span>Giảm giá voucher</span>
+            <strong>-{{ money(discountAmount) }}</strong>
+          </div>
+          <div class="sum-row">
+            <span>Phí vận chuyển</span>
+            <span class="text-muted-ps small">Tính ở bước thanh toán</span>
+          </div>
+
+          <div class="sum-total">
+            <span>Tổng cộng</span>
+            <span class="price">{{ money(finalCartTotal) }}</span>
+          </div>
+          <div v-if="discountAmount > 0" class="sum-saved">
+            <i class="bi bi-piggy-bank-fill me-1"></i>Bạn đã tiết kiệm
+            <strong>{{ money(discountAmount) }}</strong>
+          </div>
+
+          <component
+            :is="hasOutOfStock ? 'button' : 'RouterLink'"
+            v-bind="
+              hasOutOfStock
+                ? { disabled: true, type: 'button' }
+                : { to: '/thanh-toan' }
+            "
+            class="btn btn-primary w-100 py-3 rounded-pill fw-bold checkout-btn"
+          >
+            Tiến hành đặt hàng <i class="bi bi-arrow-right ms-1"></i>
+          </component>
+
+          <!-- Cam kết -->
+          <div class="perks">
+            <div class="perk">
+              <i class="bi bi-shield-lock-fill text-success"></i>Bảo mật thanh
+              toán
+            </div>
+            <div class="perk">
+              <i class="bi bi-box-seam-fill text-danger"></i>Kiểm tra khi nhận
+            </div>
+            <div class="perk">
+              <i class="bi bi-arrow-repeat text-primary"></i>Đổi size 7 ngày
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- Giỏ hàng trống -->
+    <div v-else class="empty-cart">
+      <div class="empty-ico">🛒</div>
+      <h4 class="fw-bold">Giỏ hàng của bạn đang trống</h4>
+      <p class="text-muted-ps mb-4 mx-auto" style="max-width: 420px">
+        Hãy chọn một đôi giày bạn ưng ý nhất để tự tin sải bước cùng Poly Shoes
+        nhé!
+      </p>
       <RouterLink
         to="/cua-hang"
         class="btn btn-primary rounded-pill px-4 py-2 fw-bold"
@@ -580,6 +698,19 @@ const handleClear = async () => {
 <style scoped>
 .min-w-0 {
   min-width: 0;
+}
+
+/* ===== Guest timer ===== */
+.guest-timer {
+  padding: 10px 16px;
+  font-size: 0.88rem;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 14px;
+}
+.guest-timer strong {
+  font-variant-numeric: tabular-nums;
 }
 
 /* ===== Login required ===== */

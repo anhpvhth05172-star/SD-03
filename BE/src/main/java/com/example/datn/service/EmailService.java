@@ -411,11 +411,6 @@ public class EmailService {
     }
 
     // ======================= ĐẶT HÀNG ONLINE THÀNH CÔNG =======================
-
-    /**
-     * Gửi email xác nhận đặt hàng online thành công (COD, VNPay, chuyển khoản...).
-     * Được gọi từ DonHangMailListener sau khi transaction commit.
-     */
     @Async
     public void guiMailDatHangThanhCong(
             String toEmail,

@@ -162,7 +162,7 @@ public class VNPayService {
                         String soTienStr = String.format("%,.0f", amount);
                         String diaChi = hoaDon.getDiaChiNhanHang() != null ? hoaDon.getDiaChiNhanHang() : "Không có";
                         emailService.guiMailDatHangThanhCong(
-                            kh.getEmail(), tenKH, maHoaDon, soTienStr, "VNPay QR", diaChi
+                            kh.getEmail(), tenKH, maHoaDon, soTienStr, "VNPay", diaChi
                         );
                     }
                 } catch (Exception ex) {

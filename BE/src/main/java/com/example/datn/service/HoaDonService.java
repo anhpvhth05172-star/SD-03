@@ -38,12 +38,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class HoaDonService {
 
     // ===== rule validation tung field (khong dung mot regex cho tat ca) =====
@@ -99,6 +101,7 @@ public class HoaDonService {
     private final SanPhamChiTietRepository sanPhamChiTietRepository;
     private final LichSuHoaDonRepository lichSuHoaDonRepository;
     private final LichSuSuDungPhieuGiamGiaRepository lichSuSuDungRepository;
+    private final EmailService emailService;
 
     @Transactional(readOnly = true)
     public PageResponse<HoaDonDTO> list(
@@ -285,6 +288,33 @@ public class HoaDonService {
         if (phieu != null) {
             ghiLichSuSuDung(hoaDon, phieu);
         }
+
+        // Gửi email xác nhận đơn hàng COD (ONLINE + CHO_XAC_NHAN)
+        // Đơn VNPay trạng thái là CHO_THANH_TOAN, sẽ gửi mail sau khi callback thành công
+        try {
+            boolean isOnline = "ONLINE".equals(hoaDon.getLoaiDon());
+            boolean isCOD = "CHO_XAC_NHAN".equals(hoaDon.getTrangThai());
+            KhachHang kh = hoaDon.getKhachHang();
+            if (isOnline && isCOD && kh != null
+                    && kh.getEmail() != null && !kh.getEmail().isBlank()) {
+                String tenKH = kh.getTenKhachHang() != null ? kh.getTenKhachHang() : "Quý khách";
+                String soTienStr = hoaDon.getTienSauGiamGia() != null
+                        ? String.format("%,.0f", hoaDon.getTienSauGiamGia())
+                        : "0";
+                String diaChi = hoaDon.getDiaChiNhanHang() != null
+                        ? hoaDon.getDiaChiNhanHang() : "Không có";
+                String phuongThuc = hoaDon.getPhuongThucThanhToan() != null
+                        ? hoaDon.getPhuongThucThanhToan().getTenPhuongThuc() : "COD";
+                emailService.guiMailDatHangThanhCong(
+                        kh.getEmail(), tenKH, hoaDon.getMaHoaDon(),
+                        soTienStr, phuongThuc, diaChi
+                );
+                log.info("[MAIL-COD] Đã gửi email xác nhận đơn COD {} đến {}", hoaDon.getMaHoaDon(), kh.getEmail());
+            }
+        } catch (Exception ex) {
+            log.warn("[MAIL-COD] Lỗi gửi email xác nhận đơn COD {}: {}", hoaDon.getMaHoaDon(), ex.getMessage());
+        }
+
         return toFullDTO(hoaDon);
     }
 
@@ -369,9 +399,9 @@ public class HoaDonService {
 
         // [KHO] COD: nhan vien xac nhan don (CHO_XAC_NHAN -> DA_XAC_NHAN) -> tru kho.
         // VNPay da DA_XAC_NHAN ngay tu dau nen khong di qua day lan nua (TRANSITION_MAP khong cho quay lai).
-        if ("DA_XAC_NHAN".equals(maMoi)) {
-            truKho(hoaDon);
-        }
+//        if ("DA_XAC_NHAN".equals(maMoi)) {
+//            truKho(hoaDon);
+//        }
         // [KHO] Huy don: chi hoan kho neu don dang o trang thai DA tru kho
         // (DA_XAC_NHAN, CHO_GIAO_HANG). Huy tu CHO_THANH_TOAN / CHO_XAC_NHAN thi chua tru nen khong hoan.
         if ("DA_HUY".equals(maMoi)
@@ -706,10 +736,7 @@ public class HoaDonService {
         }
         return phieu;
     }
-
-    /**
-     * Dem so lan tai khoan da su dung phieu (lich su) va kiem tra khong ghi trung tren cung hoa don.
-     */
+    
     private void kiemTraGioiHanSuDung(PhieuGiamGia phieu, Long idKhachHang, Long idHoaDon) {
         int gioiHan = phieu.getGioiHanMoiTaiKhoan() != null ? phieu.getGioiHanMoiTaiKhoan() : 1;
         long daDung = lichSuSuDungRepository.countByKhachHangIdAndPhieuGiamGiaId(idKhachHang, phieu.getId());
@@ -777,20 +804,20 @@ public class HoaDonService {
      * Tru kho cho hoa don. Goi dung 1 lan tai thoi diem chuyen sang DA_XAC_NHAN
      * (khong lap vi hoa don da bi khoa va kiem tra trang thai truoc khi goi).
      */
-    private void truKho(HoaDon hoaDon) {
-        List<ChiTietHoaDon> lines = chiTietHoaDonRepository.findByHoaDonId(hoaDon.getId());
-        Map<Long, SanPhamChiTiet> spctMap = khoaSanPham(lines);
-        for (ChiTietHoaDon l : lines) {
-            SanPhamChiTiet s = spctMap.get(l.getSanPhamChiTiet().getId());
-            int ton = s.getSoLuong() != null ? s.getSoLuong() : 0;
-            if (l.getSoLuong() > ton) {
-                throw new IllegalArgumentException(
-                        "Sản phẩm " + s.getMaChiTietSanPham() + " chỉ còn " + ton + " trong kho");
-            }
-            s.setSoLuong(ton - l.getSoLuong());
-        }
-        sanPhamChiTietRepository.saveAll(spctMap.values());
-    }
+//    private void truKho(HoaDon hoaDon) {
+//        List<ChiTietHoaDon> lines = chiTietHoaDonRepository.findByHoaDonId(hoaDon.getId());
+//        Map<Long, SanPhamChiTiet> spctMap = khoaSanPham(lines);
+//        for (ChiTietHoaDon l : lines) {
+//            SanPhamChiTiet s = spctMap.get(l.getSanPhamChiTiet().getId());
+//            int ton = s.getSoLuong() != null ? s.getSoLuong() : 0;
+//            if (l.getSoLuong() > ton) {
+//                throw new IllegalArgumentException(
+//                        "Sản phẩm " + s.getMaChiTietSanPham() + " chỉ còn " + ton + " trong kho");
+//            }
+//            s.setSoLuong(ton - l.getSoLuong());
+//        }
+//        sanPhamChiTietRepository.saveAll(spctMap.values());
+//    }
 
     /** Hoan kho cho hoa don da bi tru (caller chi goi khi don dang o trang thai da tru kho). */
     private void hoanKho(HoaDon hoaDon) {
@@ -931,11 +958,6 @@ public class HoaDonService {
         }
         return ma;
     }
-
-    /**
-     * Huy don CHO_THANH_TOAN (VNPay that bai) - hard delete de gio hang giu nguyen.
-     * Don CHO_THANH_TOAN chua tru kho nen khong can hoan kho.
-     */
     @Transactional
     public void huyDonChoThanhToan(Long id) {
         HoaDon hoaDon = hoaDonRepository.findByIdForUpdate(id).orElse(null);
@@ -948,10 +970,6 @@ public class HoaDonService {
         hoaDonRepository.deleteById(id);
     }
 
-    /**
-     * VNPay thanh cong: CHO_THANH_TOAN -> DA_XAC_NHAN va tru kho ngay.
-     * Idempotent: return URL + IPN goi 2 lan thi lan sau thoat som, khong tru kho lai.
-     */
     @Transactional
     public HoaDonDTO xacNhanThanhToanVNPay(Long id) {
         HoaDon hoaDon = hoaDonRepository.findByIdForUpdate(id)
@@ -960,12 +978,12 @@ public class HoaDonService {
             return toFullDTO(hoaDon);
         }
         String tu = hoaDon.getTrangThai();
-        truKho(hoaDon);
-        hoaDon.setTrangThai("DA_XAC_NHAN");
+//        truKho(hoaDon);
+        hoaDon.setTrangThai("CHO_XAC_NHAN");
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         hoaDon.setNguoiCapNhat("VNPAY");
         HoaDon saved = hoaDonRepository.save(hoaDon);
-        ghiLichSuTrangThai(saved, tu, "DA_XAC_NHAN");
+        ghiLichSuTrangThai(saved, tu, "CHO_XAC_NHAN");
         return toFullDTO(saved);
     }
 
