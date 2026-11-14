@@ -3,6 +3,7 @@ package com.example.datn.controller;
 import com.example.datn.dto.HoaDon.HoaDonDTO;
 import com.example.datn.service.HoaDonService;
 import lombok.RequiredArgsConstructor;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,10 +18,10 @@ public class HoaDonPublicController {
     private final HoaDonService hoaDonService;
 
     @GetMapping("/tra-cuu")
-    public ResponseEntity<HoaDonDTO> traCuuPublic(@RequestParam String maHoaDon) {
+    public ResponseEntity<List<HoaDonDTO>> traCuuPublic(@RequestParam String maHoaDon) {
         if (maHoaDon == null || maHoaDon.trim().isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
-        return ResponseEntity.ok(hoaDonService.traCuuPublic(maHoaDon.trim()));
+        return ResponseEntity.ok(hoaDonService.traCuuPublicDanhSach(maHoaDon.trim()));
     }
 }

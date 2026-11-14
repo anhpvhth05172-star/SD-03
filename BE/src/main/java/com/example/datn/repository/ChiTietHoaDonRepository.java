@@ -11,6 +11,16 @@ public interface ChiTietHoaDonRepository extends JpaRepository<ChiTietHoaDon, Lo
 
     List<ChiTietHoaDon> findByHoaDonId(Long idHoaDon);
 
+    @Query("""
+        SELECT c FROM ChiTietHoaDon c
+        LEFT JOIN FETCH c.sanPhamChiTiet spct
+        LEFT JOIN FETCH spct.sanPham sp
+        LEFT JOIN FETCH spct.kichCo kc
+        LEFT JOIN FETCH spct.mauSac ms
+        WHERE c.hoaDon.id IN :hoaDonIds
+        """)
+    List<ChiTietHoaDon> findWithDetailsByHoaDonIdIn(@Param("hoaDonIds") List<Long> hoaDonIds);
+
     @Modifying
     @Query("DELETE FROM ChiTietHoaDon c WHERE c.hoaDon.id = :idHoaDon")
     void deleteByHoaDonId(@Param("idHoaDon") Long idHoaDon);

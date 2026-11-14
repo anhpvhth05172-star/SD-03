@@ -1,6 +1,7 @@
 package com.example.datn.service;
 
 import java.util.Objects;
+import java.util.stream.Collectors;
 import com.example.datn.dto.CaLamViecDto;
 import com.example.datn.dto.HoaDon.ChiTietHoaDonDTO;
 import com.example.datn.dto.HoaDon.ChiTietHoaDonRequest;
@@ -510,10 +511,15 @@ public class HoaDonService {
         if (phieu != null) {
             ghiLichSuSuDung(hoaDon, phieu);
         }
+        ghiLichSuCapNhat(hoaDon, req.getGhiChu());
         if (!"CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
             guiEmailHoaDonTuDong(hoaDon, req.getEmail());
         }
         return toFullDTO(hoaDon);
+    }
+
+    private void ghiLichSuCapNhat(HoaDon hoaDon, String ghiChu) {
+        ghiLichSuCapNhat(hoaDon, ghiChu, null, null);
     }
 
     private void phanCongNhanVienDonOnline(HoaDonRequest req) {
@@ -606,7 +612,18 @@ public class HoaDonService {
                 "Hãy sử dụng PUT /api/hoa-don/{id}/trang-thai để đổi trạng thái hóa đơn"
             );
         }
-        xacDinhPhiVanChuyenOnline(req);
+        if (req.getToProvinceId() == null && hoaDon.getToProvinceId() != null) {
+            req.setToProvinceId(hoaDon.getToProvinceId());
+            req.setToDistrictId(hoaDon.getToDistrictId());
+            req.setToWardCode(hoaDon.getToWardCode());
+        }
+        if (req.getPhiVanChuyen() == null) {
+            xacDinhPhiVanChuyenOnline(req);
+        } else if ("ONLINE".equals(toMaLoaiDon(req.getLoaiDon()))) {
+            if (req.getToProvinceId() == null) req.setToProvinceId(201);
+            if (req.getToDistrictId() == null) req.setToDistrictId(1);
+            if (isBlank(req.getToWardCode())) req.setToWardCode("001");
+        }
         fillHeader(hoaDon, req);
         PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
         lichSuSuDungRepository.deleteByHoaDonId(hoaDon.getId());
@@ -626,13 +643,40 @@ public class HoaDonService {
         if (daTruKho(hoaDon)) {
             hoanTonKho(hoaDon.getId());
         }
+        BigDecimal tienSauGiamCu = hoaDon.getTienSauGiamGia() != null ? hoaDon.getTienSauGiamGia() : BigDecimal.ZERO;
         List<DongTinh> lines = tinhToanVaLuu(hoaDon, req);
         chiTietHoaDonRepository.deleteByHoaDonId(hoaDon.getId());
         luuCacDong(hoaDon, lines, req);
         if (phieu != null) {
             ghiLichSuSuDung(hoaDon, phieu);
         }
+        BigDecimal tienSauGiamMoi = hoaDon.getTienSauGiamGia() != null ? hoaDon.getTienSauGiamGia() : BigDecimal.ZERO;
+        ghiLichSuCapNhat(hoaDon, req.getGhiChu(), tienSauGiamCu, tienSauGiamMoi);
         return toFullDTO(hoaDon);
+    }
+
+    private void ghiLichSuCapNhat(HoaDon hoaDon, String ghiChu, BigDecimal tienCu, BigDecimal tienMoi) {
+        LichSuHoaDon lichSu = new LichSuHoaDon();
+        lichSu.setHoaDon(hoaDon);
+        lichSu.setTrangThai(hoaDon.getTrangThai());
+        lichSu.setHanhDong("CAP_NHAT_DON_HANG");
+        StringBuilder sb = new StringBuilder("Cập nhật thông tin đơn hàng khi Chờ xác nhận");
+        if (tienCu != null && tienMoi != null) {
+            BigDecimal diff = tienMoi.subtract(tienCu);
+            if (diff.compareTo(BigDecimal.ZERO) > 0) {
+                sb.append(String.format(" (Phát sinh phụ phí thu thêm: +%,.0f đ)", diff));
+            } else if (diff.compareTo(BigDecimal.ZERO) < 0) {
+                sb.append(String.format(" (Phát sinh hoàn phí cho khách: -%,.0f đ)", diff.abs()));
+            } else {
+                sb.append(" (Tổng tiền không đổi)");
+            }
+        }
+        if (!isBlank(ghiChu)) {
+            sb.append(". ").append(ghiChu.trim());
+        }
+        lichSu.setGhiChu(sb.toString());
+        lichSu.setNguoiThaoTac(tenNguoiThaoTacHienTai());
+        lichSuHoaDonRepository.save(lichSu);
     }
 
     @Transactional
@@ -1782,14 +1826,41 @@ private NhanVien timNhanVien(Long id) {
     }
 
     @Transactional(readOnly = true)
-    public HoaDonDTO traCuuPublic(String maHoaDon) {
+    public List<HoaDonDTO> traCuuPublicDanhSach(String maHoaDon) {
         if (isBlank(maHoaDon)) {
-            throw new IllegalArgumentException("Mã hóa đơn không được để trống");
+            throw new IllegalArgumentException("Mã hóa đơn hoặc số điện thoại không được để trống");
         }
-        HoaDon h = hoaDonRepository.findByMaHoaDon(maHoaDon.trim())
-            .filter(x -> !x.isDaXoa())
-            .orElseThrow(() -> new com.example.datn.exception.ResourceNotFoundException("Không tìm thấy đơn hàng: " + maHoaDon));
-        HoaDonDTO dto = toFullDTO(h);
+        String clean = maHoaDon.trim();
+        List<HoaDon> hoaDons;
+        var byMa = hoaDonRepository.findByMaHoaDonPublic(clean);
+        if (byMa.isPresent()) {
+            hoaDons = List.of(byMa.get());
+        } else {
+            hoaDons = hoaDonRepository.findByPhonePublic(clean);
+        }
+
+        if (hoaDons.isEmpty()) {
+            throw new com.example.datn.exception.ResourceNotFoundException("Không tìm thấy đơn hàng: " + clean);
+        }
+
+        List<Long> hdIds = hoaDons.stream().map(HoaDon::getId).toList();
+        List<ChiTietHoaDon> allChiTiet = chiTietHoaDonRepository.findWithDetailsByHoaDonIdIn(hdIds);
+        Map<Long, List<ChiTietHoaDonDTO>> linesByHdId = allChiTiet.stream()
+            .collect(Collectors.groupingBy(
+                c -> c.getHoaDon().getId(),
+                Collectors.mapping(this::toLineDTO, Collectors.toList())
+            ));
+
+        return hoaDons.stream().map(h -> {
+            HoaDonDTO dto = toDTO(h);
+            dto.setChiTiet(linesByHdId.getOrDefault(h.getId(), List.of()));
+            dto.setTrangThaiTiepTheo(tenTrangThaiTiepTheo(h));
+            enrichGhiChuHuy(h, dto);
+            return dto;
+        }).toList();
+    }
+
+    private void enrichGhiChuHuy(HoaDon h, HoaDonDTO dto) {
         if ("DA_HUY".equals(h.getTrangThai())) {
             var lichSu = lichSuHoaDonRepository.findByIdHoaDonOrderByThoiGianDescIdDesc(h.getId());
             lichSu.stream()
@@ -1797,7 +1868,11 @@ private NhanVien timNhanVien(Long id) {
                 .findFirst()
                 .ifPresent(item -> dto.setGhiChu(item.getGhiChu()));
         }
-        return dto;
+    }
+
+    @Transactional(readOnly = true)
+    public HoaDonDTO traCuuPublic(String maHoaDon) {
+        return traCuuPublicDanhSach(maHoaDon).get(0);
     }
 
     private String taoMaPosChoMoi() {

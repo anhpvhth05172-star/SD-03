@@ -262,6 +262,56 @@ async function findOrder(query) {
   return n;
 }
 
+const phoneOrders = ref([]);
+const phoneFilter = ref("PENDING"); // 'PENDING' (chưa hoàn thành) | 'COMPLETED' (đã hoàn thành)
+
+const isPendingOrder = (o) => {
+  const s = String(o?.status || "").toUpperCase();
+  const finished =
+    s.includes("HOÀN THÀNH") ||
+    s.includes("HOAN_THANH") ||
+    (s.includes("GIAO HÀNG") && s.includes("ĐÃ")) ||
+    s.includes("DA_GIAO_HANG") ||
+    s.includes("HỦY") ||
+    s.includes("HUY") ||
+    s.includes("HOÀN TIỀN") ||
+    s.includes("HOAN_TIEN");
+  return !finished;
+};
+
+const isCompletedOrder = (o) => !isPendingOrder(o);
+
+const pendingCount = computed(() =>
+  phoneOrders.value.filter(isPendingOrder).length
+);
+
+const completedCount = computed(() =>
+  phoneOrders.value.filter(isCompletedOrder).length
+);
+
+// Mặc định chỉ hiển thị đơn chưa hoàn thành; đơn hoàn thành chỉ hiện khi khách bấm chọn bộ lọc
+const displayedPhoneOrders = computed(() => {
+  if (phoneFilter.value === "COMPLETED") {
+    return phoneOrders.value.filter(isCompletedOrder);
+  }
+  return phoneOrders.value.filter(isPendingOrder);
+});
+
+function selectOrder(o) {
+  currentResult.value = o;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function backFromDetail() {
+  if (phoneOrders.value.length > 1) {
+    currentResult.value = null;
+  } else {
+    backToList();
+  }
+}
+
+const searchCache = new Map();
+
 const doSearch = async (codeToSearch) => {
   if (searching.value) return;
   const raw = String(codeToSearch ?? searchInput.value ?? "").trim();
@@ -270,48 +320,50 @@ const doSearch = async (codeToSearch) => {
     errorMessage.value = "Vui lòng nhập mã đơn hàng hoặc số điện thoại.";
     return;
   }
-  if (!myId.value) {
-    if (isPhone(query)) {
-      errorMessage.value = "Vui lòng đăng nhập để tra cứu đơn hàng theo số điện thoại.";
-      return;
-    }
-    // Khách vãng lai tra cứu chính xác theo mã đơn hàng
-    errorMessage.value = "";
-    searchInput.value = query;
-    searched.value = true;
-    searching.value = true;
-    currentResult.value = null;
-    try {
-      const data = await getJson(`/api/v1/hoa-don/tra-cuu?maHoaDon=${encodeURIComponent(query)}`);
-      currentResult.value = normalize(data);
-    } catch (e) {
-      if (e.status === 404) {
-        currentResult.value = null;
-      } else {
-        errorMessage.value = "Không tra cứu được đơn hàng, vui lòng thử lại.";
-      }
-    } finally {
-      searching.value = false;
-    }
-    return;
-  }
   errorMessage.value = "";
   searchInput.value = query;
   searched.value = true;
-  searching.value = true;
   currentResult.value = null;
+  phoneOrders.value = [];
 
+  // Trả về ngay lập tức nếu đã có trong bộ nhớ đệm
+  if (searchCache.has(query)) {
+    const cached = searchCache.get(query);
+    if (cached.length === 1) {
+      currentResult.value = cached[0];
+    } else {
+      phoneOrders.value = cached;
+      const hasPending = cached.some(isPendingOrder);
+      phoneFilter.value = hasPending ? "PENDING" : "COMPLETED";
+    }
+    return;
+  }
+
+  searching.value = true;
   try {
-    currentResult.value = await findOrder(query);
+    const data = await getJson(`/api/v1/hoa-don/tra-cuu?maHoaDon=${encodeURIComponent(query)}`);
+    const list = (Array.isArray(data) ? data : [data]).map(normalize);
+    if (!list.length) {
+      currentResult.value = null;
+      phoneOrders.value = [];
+    } else if (list.length === 1) {
+      currentResult.value = list[0];
+      phoneOrders.value = [];
+      searchCache.set(query, list);
+    } else {
+      phoneOrders.value = list;
+      currentResult.value = null;
+      const hasPending = list.some(isPendingOrder);
+      phoneFilter.value = hasPending ? "PENDING" : "COMPLETED";
+      searchCache.set(query, list);
+    }
   } catch (e) {
-    console.error("[TraCuu] Lỗi tra cứu:", e);
-    searched.value = false;
-    errorMessage.value =
-      e.message === "Failed to fetch"
-        ? "Không kết nối được máy chủ, vui lòng thử lại."
-        : e.status === 401 || e.status === 403
-          ? "Bạn chưa có quyền tra cứu, vui lòng đăng nhập và thử lại."
-          : "Không tra cứu được đơn hàng, vui lòng thử lại.";
+    if (e.status === 404) {
+      currentResult.value = null;
+      phoneOrders.value = [];
+    } else {
+      errorMessage.value = "Không tra cứu được đơn hàng, vui lòng thử lại.";
+    }
   } finally {
     searching.value = false;
   }
@@ -321,6 +373,8 @@ function backToList() {
   searched.value = false;
   searchInput.value = "";
   currentResult.value = null;
+  phoneOrders.value = [];
+  phoneFilter.value = "PENDING";
   loadRecent(); // làm mới trạng thái đơn
 }
 
@@ -528,20 +582,7 @@ onUnmounted(() => window.clearInterval(refreshTimer));
       </div>
     </section>
 
-    <!-- ================= CHƯA ĐĂNG NHẬP ================= -->
-    <section v-if="!isLoggedIn" class="mb-5">
-      <div class="ol-state">
-        <div class="ol-empty-ico"><i class="bi bi-person-lock"></i></div>
-        <h4 class="fw-bold mb-2">Đăng nhập để xem đơn hàng của bạn</h4>
-        <p class="text-muted-ps mb-4 mx-auto" style="max-width: 450px">
-          Để bảo mật thông tin, bạn chỉ có thể tra cứu những đơn hàng thuộc tài
-          khoản của mình.
-        </p>
-        <RouterLink to="/khach-hang" class="btn btn-primary ol-pill-btn px-4"
-          >Đăng nhập</RouterLink
-        >
-      </div>
-    </section>
+
 
     <!-- ================= DANH SÁCH ĐƠN ================= -->
     <section v-if="!searched && loadingRecent" class="mb-5">
@@ -742,8 +783,9 @@ onUnmounted(() => window.clearInterval(refreshTimer));
 
     <!-- ================= KẾT QUẢ TRA CỨU ================= -->
     <section v-if="searched" class="mb-5">
-      <button class="ol-back" @click="backToList">
-        <i class="bi bi-arrow-left me-1"></i>Quay lại danh sách đơn hàng
+      <button class="ol-back" @click="backFromDetail">
+        <i class="bi bi-arrow-left me-1"></i>
+        {{ currentResult && phoneOrders.length > 1 ? `Quay lại danh sách đơn (${phoneOrders.length} đơn)` : 'Quay lại tìm kiếm' }}
       </button>
 
       <!-- Loading -->
@@ -754,6 +796,184 @@ onUnmounted(() => window.clearInterval(refreshTimer));
         <div class="sk sk-row w-50"></div>
       </div>
 
+      <!-- Trường hợp 1: Có nhiều đơn hàng theo SĐT và đang hiển thị danh sách để chọn -->
+      <div v-else-if="!currentResult && phoneOrders.length > 1">
+        <div class="ol-head d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+          <div>
+            <div class="ol-eyebrow">/ Kết quả tra cứu số điện thoại</div>
+            <h3 class="ol-h">Tìm thấy {{ phoneOrders.length }} đơn hàng của số <span>{{ searchInput }}</span></h3>
+            <div class="text-muted-ps small">
+              Chọn bất kỳ đơn hàng nào bên dưới để xem chi tiết và theo dõi tiến độ giao nhận.
+            </div>
+          </div>
+          <div class="d-flex align-items-center flex-wrap gap-2">
+            <button
+              type="button"
+              class="btn btn-sm rounded-pill px-3"
+              :class="phoneFilter === 'PENDING' ? 'btn-primary' : 'btn-outline-secondary'"
+              @click="phoneFilter = 'PENDING'"
+            >
+              <i class="bi bi-hourglass-split me-1"></i>
+              Chưa hoàn thành
+              <span class="badge ms-1" :class="phoneFilter === 'PENDING' ? 'bg-white text-primary' : 'bg-secondary'">{{ pendingCount }}</span>
+            </button>
+            <button
+              v-if="completedCount > 0"
+              type="button"
+              class="btn btn-sm rounded-pill px-3"
+              :class="phoneFilter === 'COMPLETED' ? 'btn-primary' : 'btn-outline-secondary'"
+              @click="phoneFilter = 'COMPLETED'"
+            >
+              <i class="bi bi-check2-circle me-1"></i>
+              Đã hoàn thành
+              <span class="badge ms-1" :class="phoneFilter === 'COMPLETED' ? 'bg-white text-primary' : 'bg-secondary'">{{ completedCount }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="displayedPhoneOrders.length" class="d-flex flex-column gap-3">
+          <article
+            v-for="o in displayedPhoneOrders"
+            :key="o.id"
+            class="ol-order"
+            :class="o.statusInfo.tone"
+          >
+            <!-- Đầu thẻ -->
+            <div class="ol-order-top">
+              <div>
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                  <span class="ol-order-code">#{{ o.code }}</span>
+                  <button
+                    type="button"
+                    class="ol-copy"
+                    :title="copiedCode === o.code ? 'Đã sao chép' : 'Sao chép mã'"
+                    @click="copyCode(o.code)"
+                  >
+                    <i
+                      class="bi"
+                      :class="copiedCode === o.code ? 'bi-check2' : 'bi-copy'"
+                    ></i>
+                  </button>
+                  <span class="ol-status" :class="o.statusInfo.tone">
+                    <i class="bi bi-dot"></i>{{ o.statusInfo.label }}
+                  </span>
+                </div>
+                <div class="text-muted-ps small mt-1">
+                  <i class="bi bi-clock me-1"></i>{{ o.date }} ·
+                  {{ itemCount(o) }} sản phẩm
+                </div>
+              </div>
+              <div class="text-sm-end">
+                <div class="text-muted-ps small">Tổng tiền</div>
+                <span class="price fs-5">{{ money(o.total) }}</span>
+              </div>
+            </div>
+
+            <!-- Tiến độ mini -->
+            <div v-if="!isEnded(o)" class="ol-mini" :class="o.statusInfo.tone">
+              <span
+                v-for="i in 4"
+                :key="i"
+                class="ol-mini-seg"
+                :class="{ on: miniActive(o, i - 1) }"
+              ></span>
+            </div>
+            <div v-else class="ol-mini-cancel">
+              <i class="bi bi-x-circle me-1"></i>{{ endedText(o) }}
+            </div>
+
+            <!-- Sản phẩm -->
+            <div class="ol-items">
+              <div
+                v-for="(item, idx) in visibleItems(o)"
+                :key="idx + '-' + item.size"
+                class="ol-item"
+              >
+                <div class="ol-thumb">
+                  <img
+                    v-if="item.image"
+                    :src="item.image"
+                    :alt="item.name"
+                    class="ol-thumb-img"
+                  />
+                  <template v-else>👟</template>
+                </div>
+                <div class="flex-grow-1 min-w-0">
+                  <div class="fw-semibold text-dark small ol-item-name">
+                    {{ item.name }}
+                  </div>
+                  <div class="small text-muted-ps">
+                    <span class="ol-tag">Size {{ item.size }}</span>
+                    <span class="ms-1">× {{ item.qty }}</span>
+                  </div>
+                </div>
+                <span class="fw-semibold text-dark small">{{
+                  money(item.price * item.qty)
+                }}</span>
+              </div>
+
+              <button
+                v-if="o.items.length > MAX_ITEMS"
+                type="button"
+                class="ol-more"
+                @click="toggleExpand(o)"
+              >
+                <template v-if="expandedIds[o.id]">
+                  Thu gọn <i class="bi bi-chevron-up ms-1"></i>
+                </template>
+                <template v-else>
+                  Xem thêm {{ o.items.length - MAX_ITEMS }} sản phẩm
+                  <i class="bi bi-chevron-down ms-1"></i>
+                </template>
+              </button>
+            </div>
+
+            <!-- Chân thẻ -->
+            <div class="ol-order-foot">
+              <div class="small text-muted-ps ol-foot-info">
+                <i class="bi bi-geo-alt-fill text-primary me-1"></i>
+                <span class="fw-semibold text-dark">{{ o.name }}</span> ·
+                {{ o.phone }}
+                <span
+                  v-if="o.address"
+                  class="text-truncate d-inline-block align-bottom ol-addr"
+                >
+                  · {{ o.address }}
+                </span>
+              </div>
+              <button
+                class="btn btn-primary btn-sm ol-pill-btn"
+                @click="selectOrder(o)"
+              >
+                <i class="bi bi-geo me-1"></i>Theo dõi tiến độ
+              </button>
+            </div>
+          </article>
+        </div>
+
+        <div v-else class="ol-state ol-state-sm">
+          <div class="ol-empty-ico"><i class="bi bi-inbox"></i></div>
+          <h6 class="fw-bold mb-1">
+            {{ phoneFilter === 'PENDING' ? 'Không có đơn hàng nào đang chờ xử lý' : 'Không có đơn hàng nào đã hoàn thành' }}
+          </h6>
+          <button
+            v-if="phoneFilter === 'PENDING' && completedCount > 0"
+            class="btn btn-link btn-sm text-decoration-none"
+            @click="phoneFilter = 'COMPLETED'"
+          >
+            Xem {{ completedCount }} đơn đã hoàn thành
+          </button>
+          <button
+            v-else-if="phoneFilter === 'COMPLETED' && pendingCount > 0"
+            class="btn btn-link btn-sm text-decoration-none"
+            @click="phoneFilter = 'PENDING'"
+          >
+            Xem {{ pendingCount }} đơn chưa hoàn thành
+          </button>
+        </div>
+      </div>
+
+      <!-- Trường hợp 2: Xem chi tiết 1 đơn hàng -->
       <div v-else-if="currentResult" class="ol-result">
         <!-- Đầu kết quả -->
         <div class="ol-result-top" :class="currentResult.statusInfo.tone">
@@ -960,45 +1180,7 @@ onUnmounted(() => window.clearInterval(refreshTimer));
       </div>
     </section>
 
-    <!-- ================= HỎI ĐÁP ================= -->
-    <section class="mb-5">
-      <div class="ol-head">
-        <div class="ol-eyebrow">/ Hỏi đáp</div>
-        <h3 class="ol-h">Câu hỏi thường gặp về giao hàng</h3>
-      </div>
-      <div class="row g-3">
-        <div class="col-md-4">
-          <div class="ol-faq h-100">
-            <div class="ol-faq-ico"><i class="bi bi-truck"></i></div>
-            <h6 class="fw-bold mb-2">Thời gian nhận hàng mất bao lâu?</h6>
-            <p class="text-muted-ps small mb-0">
-              Giao hàng tiêu chuẩn từ 1–3 ngày làm việc trên toàn quốc, nội
-              thành Hà Nội &amp; TP.HCM từ 24h.
-            </p>
-          </div>
-        </div>
-        <div class="col-md-4">
-          <div class="ol-faq h-100">
-            <div class="ol-faq-ico"><i class="bi bi-box-seam"></i></div>
-            <h6 class="fw-bold mb-2">Có được kiểm tra hàng trước không?</h6>
-            <p class="text-muted-ps small mb-0">
-              Có. Poly Shoes cho phép khách mở hộp kiểm tra đúng mẫu, đúng size
-              trước khi thanh toán cho shipper.
-            </p>
-          </div>
-        </div>
-        <div class="col-md-4">
-          <div class="ol-faq h-100">
-            <div class="ol-faq-ico"><i class="bi bi-headset"></i></div>
-            <h6 class="fw-bold mb-2">Đổi thông tin nhận hàng bằng cách nào?</h6>
-            <p class="text-muted-ps small mb-0">
-              Vui lòng gọi hotline <strong>1900 1234</strong> kèm mã đơn hàng để
-              nhân viên cập nhật kịp thời.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
+
   </div>
 </template>
 
@@ -1817,32 +1999,7 @@ onUnmounted(() => window.clearInterval(refreshTimer));
   }
 }
 
-/* ---------- FAQ ---------- */
-.ol-faq {
-  padding: 1.4rem;
-  background: #fff;
-  border: 1px solid var(--ol-border);
-  border-radius: 18px;
-  box-shadow: var(--ol-shadow);
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
-}
-.ol-faq:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.1);
-}
-.ol-faq-ico {
-  width: 46px;
-  height: 46px;
-  margin-bottom: 0.9rem;
-  display: grid;
-  place-items: center;
-  font-size: 1.3rem;
-  color: var(--ol-red);
-  background: var(--ol-red-soft);
-  border-radius: 12px;
-}
+
 
 /* ---------- Responsive ---------- */
 @media (max-width: 991.98px) {

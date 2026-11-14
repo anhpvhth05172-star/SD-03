@@ -16,8 +16,11 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -91,13 +94,7 @@ public class GiaoCaService {
                 .filter(lich -> {
                     com.example.datn.entity.CaLam c = lich.getCaLam();
                     if (c == null || c.getBatDau() == null || c.getKetThuc() == null) return false;
-                    LocalTime bd = c.getBatDau().minusMinutes(30);
-                    LocalTime kt = c.getKetThuc();
-                    if (!kt.isBefore(c.getBatDau())) {
-                        return !gioHienTai.isBefore(bd) && gioHienTai.isBefore(kt);
-                    } else {
-                        return !gioHienTai.isBefore(bd) || gioHienTai.isBefore(kt);
-                    }
+                    return trongThoiGianNhanCa(gioHienTai, c.getBatDau(), c.getKetThuc());
                 })
                 .toList();
 
@@ -109,6 +106,20 @@ public class GiaoCaService {
                 // Tự động gán vào ca làm việc hiện tại của cửa hàng
                 caTheoLich = timCaTheoGioHienTai(gioHienTai);
             }
+        }
+
+        if (caTheoLich == null) {
+            throw bad("KHONG_TRONG_THOI_GIAN_NHAN_CA",
+                "Hiện tại (" + gioHienTai.format(DateTimeFormatter.ofPattern("HH:mm"))
+                + ") không trong thời gian nhận ca làm việc nào. Bạn chỉ có thể vào ca trước giờ bắt đầu tối đa 30 phút và trước khi ca kết thúc.");
+        }
+
+        // Nếu là Nhân viên thông thường, kiểm tra nghiêm ngặt ca có đang trong thời gian nhận ca không
+        if (!laAdmin() && !trongThoiGianNhanCa(gioHienTai, caTheoLich.getBatDau(), caTheoLich.getKetThuc())) {
+            throw bad("KHONG_TRONG_THOI_GIAN_NHAN_CA",
+                "Hiện tại (" + gioHienTai.format(DateTimeFormatter.ofPattern("HH:mm")) + ") không trong thời gian nhận "
+                + caTheoLich.getTenCa() + " (" + caTheoLich.getBatDau() + " - " + caTheoLich.getKetThuc()
+                + "). Bạn chỉ có thể vào ca trước giờ bắt đầu tối đa 30 phút và trước khi ca kết thúc.");
         }
 
         CaLamViec ca = new CaLamViec();
@@ -160,6 +171,11 @@ public class GiaoCaService {
     @Transactional
     public CaLamViecDto ketCa(Long id, Long tienThucTe, Long tienChi, String lyDoLech, String ghiChu) {
         CaLamViec ca = timVaKiemQuyen(id);
+        Long idNguoiGoi = idNhanVienHienTai();
+        boolean admin = laAdmin();
+        if (!admin && !ca.getNhanVien().getId().equals(idNguoiGoi)) {
+            throw new KhongCoQuyenException("Chỉ người trực ca hoặc Quản lý mới có quyền kết thúc ca này");
+        }
         TongKetDto tongKet = toTongKet(ca);
         kiemTraHoaDonDangXuLy(id);
 
@@ -273,29 +289,49 @@ public class GiaoCaService {
 
     private String timNguoiNhanTiepTheo(CaLamViec ca, LocalDateTime thoiGianKet) {
         if (ca.getCaTheoLich() == null) return "Cuối ngày";
-        return lichLamViecRepository.findByNgayLamBetween(thoiGianKet.toLocalDate(), thoiGianKet.toLocalDate()).stream()
+        LocalDate ngay = thoiGianKet != null ? thoiGianKet.toLocalDate() : LocalDate.now();
+
+        // 1. Tìm trong ngày hiện tại
+        Optional<String> nguoiNhanHomNay = lichLamViecRepository.findByNgayLamBetween(ngay, ngay).stream()
             .filter(l -> Boolean.TRUE.equals(l.getCaLam().getDangBat()))
+            .filter(l -> !l.getCaLam().getId().equals(ca.getCaTheoLich().getId()))
             .filter(l -> l.getCaLam().getBatDau() != null && ca.getCaTheoLich().getKetThuc() != null
                 && !l.getCaLam().getBatDau().isBefore(ca.getCaTheoLich().getKetThuc()))
-            .sorted(java.util.Comparator.comparing(l -> l.getCaLam().getBatDau()))
-            .map(l -> l.getNhanVien().getTenTaiKhoan())
-            .findFirst()
-            .orElse("Cuối ngày");
+            .sorted(Comparator.comparing(l -> l.getCaLam().getBatDau()))
+            .map(l -> l.getNhanVien().getTenTaiKhoan() + " (" + l.getCaLam().getTenCa() + ")")
+            .findFirst();
+        if (nguoiNhanHomNay.isPresent()) {
+            return nguoiNhanHomNay.get();
+        }
+
+        // 2. Tìm ca đầu tiên của ngày hôm sau (cho ca đêm hoặc ca cuối ngày)
+        Optional<String> nguoiNhanNgayMai = lichLamViecRepository.findByNgayLamBetween(ngay.plusDays(1), ngay.plusDays(1)).stream()
+            .filter(l -> Boolean.TRUE.equals(l.getCaLam().getDangBat()))
+            .sorted(Comparator.comparing(l -> l.getCaLam().getBatDau()))
+            .map(l -> l.getNhanVien().getTenTaiKhoan() + " (" + l.getCaLam().getTenCa() + ")")
+            .findFirst();
+        if (nguoiNhanNgayMai.isPresent()) {
+            return nguoiNhanNgayMai.get();
+        }
+
+        // 3. Nếu chưa có nhân viên được xếp lịch, tìm ca kế tiếp theo danh mục ca
+        List<com.example.datn.entity.CaLam> dsCa = caLamRepository.findByDangBatTrueOrderByBatDauAsc();
+        if (!dsCa.isEmpty()) {
+            for (int i = 0; i < dsCa.size(); i++) {
+                if (dsCa.get(i).getId().equals(ca.getCaTheoLich().getId())) {
+                    com.example.datn.entity.CaLam caKe = dsCa.get((i + 1) % dsCa.size());
+                    return "Chờ bàn giao: " + caKe.getTenCa();
+                }
+            }
+        }
+        return "Cuối ngày";
     }
 
     // ---- helpers ----
 
     private CaLamViec timVaKiemQuyen(Long id) {
-        CaLamViec ca = caLamViecRepository.findByIdAndDaXoaFalse(id)
+        return caLamViecRepository.findByIdAndDaXoaFalse(id)
             .orElseThrow(() -> bad("CA_KHONG_TON_TAI", "Không tìm thấy ca làm việc"));
-        Long idNguoiGoi = idNhanVienHienTai();
-        boolean admin = laAdmin();
-        if (!admin && !ca.getNhanVien().getId().equals(idNguoiGoi)) {
-            if (!TRANG_THAI_DANG_MO.equals(ca.getTrangThai())) {
-                throw new KhongCoQuyenException("Không có quyền thao tác ca này");
-            }
-        }
-        return ca;
     }
 
     private void kiemTraHoaDonDangXuLy(Long idCa) {
@@ -437,26 +473,29 @@ public class GiaoCaService {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, ma + ": " + message);
     }
 
-        private com.example.datn.entity.CaLam timCaTheoGioHienTai(LocalTime gioHienTai) {
+    public static boolean trongThoiGianNhanCa(LocalTime gioHienTai, LocalTime batDau, LocalTime ketThuc) {
+        if (batDau == null || ketThuc == null) return false;
+        LocalTime bdChoPhep = batDau.minusMinutes(30);
+        if (ketThuc.isAfter(batDau)) {
+            // Ca trong ngày (ví dụ 08:00 - 15:00 -> nhận ca từ 07:30 đến 15:00)
+            return !gioHienTai.isBefore(bdChoPhep) && gioHienTai.isBefore(ketThuc);
+        } else {
+            // Ca qua đêm (ví dụ 22:00 - 08:00 -> nhận ca từ 21:30 đến 08:00 hôm sau)
+            return !gioHienTai.isBefore(bdChoPhep) || gioHienTai.isBefore(ketThuc);
+        }
+    }
+
+    private com.example.datn.entity.CaLam timCaTheoGioHienTai(LocalTime gioHienTai) {
         List<com.example.datn.entity.CaLam> caLamList = caLamRepository.findByDangBatTrueOrderByBatDauAsc();
         if (caLamList.isEmpty()) {
             return null;
         }
         for (com.example.datn.entity.CaLam c : caLamList) {
-            LocalTime bd = c.getBatDau();
-            LocalTime kt = c.getKetThuc();
-            if (bd == null || kt == null) continue;
-            if (kt.isAfter(bd)) {
-                if (!gioHienTai.isBefore(bd) && !gioHienTai.isAfter(kt)) {
-                    return c;
-                }
-            } else {
-                if (!gioHienTai.isBefore(bd) || !gioHienTai.isAfter(kt)) {
-                    return c;
-                }
+            if (trongThoiGianNhanCa(gioHienTai, c.getBatDau(), c.getKetThuc())) {
+                return c;
             }
         }
-        return caLamList.get(0);
+        return null;
     }
 
     private static String chuanHoaGhiChu(String ghiChu) {

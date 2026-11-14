@@ -1,37 +1,87 @@
 package com.example.datn.service;
 
 import com.example.datn.dto.ThongKe.ChiTietThongKeRow;
+import com.example.datn.dto.ThongKe.DonHangThongKeDTO;
+import com.example.datn.dto.ThongKe.HoaDonChiTietThongKeRow;
 import com.example.datn.dto.ThongKe.HoaDonThongKeRow;
 import com.example.datn.dto.ThongKe.KySoSanhDTO;
+import com.example.datn.dto.ThongKe.SanPhamDaBanChiTietDTO;
+import com.example.datn.dto.ThongKe.SanPhamDaBanChiTietRow;
+import com.example.datn.dto.ThongKe.SanPhamTheoNgayDTO;
 import com.example.datn.dto.ThongKe.SanPhamThongKeRow;
 import com.example.datn.dto.ThongKe.SoSanhDTO;
+import com.example.datn.dto.ThongKe.ThongKeSanPhamBangDTO;
 import com.example.datn.dto.ThongKe.TongQuanDTO;
 import com.example.datn.dto.ThongKe.TopSanPhamKyDTO;
 import com.example.datn.dto.ThongKe.TrangThaiDonDTO;
+import com.example.datn.dto.ThongKe.ThuongHieuThongKeResponse;
+import com.example.datn.entity.HinhAnhSanPham;
+import com.example.datn.entity.SanPham;
+import com.example.datn.entity.SanPhamChiTiet;
+import com.example.datn.repository.HinhAnhSanPhamRepository;
+import com.example.datn.repository.SanPhamChiTietRepository;
+import com.example.datn.repository.SanPhamRepository;
 import com.example.datn.repository.ThongKeRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Year;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
-@RequiredArgsConstructor
 public class ThongKeService {
 
     private final ThongKeRepository thongKeRepository;
+    private final SanPhamRepository sanPhamRepository;
+    private final SanPhamChiTietRepository sanPhamChiTietRepository;
+    private final HinhAnhSanPhamRepository hinhAnhSanPhamRepository;
+
+    @Autowired
+    public ThongKeService(
+        ThongKeRepository thongKeRepository,
+        SanPhamRepository sanPhamRepository,
+        SanPhamChiTietRepository sanPhamChiTietRepository,
+        HinhAnhSanPhamRepository hinhAnhSanPhamRepository
+    ) {
+        this.thongKeRepository = thongKeRepository;
+        this.sanPhamRepository = sanPhamRepository;
+        this.sanPhamChiTietRepository = sanPhamChiTietRepository;
+        this.hinhAnhSanPhamRepository = hinhAnhSanPhamRepository;
+    }
+
+    public ThongKeService(ThongKeRepository thongKeRepository) {
+        this(thongKeRepository, null, null, null);
+    }
 
     private static final Set<String> TRANG_THAI_HUY_HOAN_TIEN = Set.of("DA_HUY", "DA_HOAN_TIEN");
     private static final Set<String> MA_HINH_THUC_TIEN_MAT = Set.of("TM", "CASH");
+
+    private static boolean laHuyHoanTien(String trangThai) {
+        return trangThai != null && TRANG_THAI_HUY_HOAN_TIEN.contains(trangThai);
+    }
+
+    private static boolean laTienMat(String maHinhThuc) {
+        return maHinhThuc != null && MA_HINH_THUC_TIEN_MAT.contains(maHinhThuc);
+    }
+
+    private static long giaTriTien(BigDecimal tien) {
+        return tien == null ? 0L : Math.max(0, tien.longValue());
+    }
+
+    private static BigDecimal giaTriBigDecimal(BigDecimal tien) {
+        return tien == null ? BigDecimal.ZERO : tien;
+    }
 
     private static final List<String> THU_TU_TRANG_THAI = List.of(
         "CHO_THANH_TOAN", "CHO_XAC_NHAN", "DA_XAC_NHAN", "CHO_GIAO_HANG", "DANG_GIAO_HANG",
@@ -66,15 +116,18 @@ public class ThongKeService {
     }
 
     public static boolean daThanhToan(HoaDonThongKeRow h) {
-        if (h.daXoa() || TRANG_THAI_HUY_HOAN_TIEN.contains(h.trangThai())) {
+        return daThanhToan(h.trangThai(), h.loaiDon(), h.maHinhThuc(), h.daXoa());
+    }
+
+    public static boolean daThanhToan(String tt, String loaiDon, String maHinhThuc, boolean daXoa) {
+        if (daXoa || laHuyHoanTien(tt)) {
             return false;
         }
-        String tt = h.trangThai();
         if ("DA_HOAN_THANH".equals(tt) || "DA_GIAO_HANG".equals(tt)) {
             return true;
         }
-        if ("ONLINE".equalsIgnoreCase(h.loaiDon())) {
-            boolean laTienMatCod = h.maHinhThuc() != null && MA_HINH_THUC_TIEN_MAT.contains(h.maHinhThuc());
+        if ("ONLINE".equalsIgnoreCase(loaiDon)) {
+            boolean laTienMatCod = laTienMat(maHinhThuc);
             if (!laTienMatCod && !"CHO_THANH_TOAN".equals(tt)) {
                 return true;
             }
@@ -88,7 +141,7 @@ public class ThongKeService {
         long khachMoi
     ) {
         Set<Long> idHopLe = hoaDons.stream()
-            .filter(h -> !h.daXoa() && !TRANG_THAI_HUY_HOAN_TIEN.contains(h.trangThai()))
+            .filter(h -> !h.daXoa() && !laHuyHoanTien(h.trangThai()))
             .map(HoaDonThongKeRow::id)
             .collect(Collectors.toSet());
 
@@ -99,20 +152,20 @@ public class ThongKeService {
 
         long doanhThu = hoaDons.stream()
             .filter(h -> idDaThanhToan.contains(h.id()))
-            .mapToLong(h -> Math.max(0, h.tienSauGiamGia().longValue()))
+            .mapToLong(h -> giaTriTien(h.tienSauGiamGia()))
             .sum();
 
         long tienMat = hoaDons.stream()
             .filter(h -> idDaThanhToan.contains(h.id()))
-            .filter(h -> MA_HINH_THUC_TIEN_MAT.contains(h.maHinhThuc()))
-            .mapToLong(h -> Math.max(0, h.tienSauGiamGia().longValue()))
+            .filter(h -> laTienMat(h.maHinhThuc()))
+            .mapToLong(h -> giaTriTien(h.tienSauGiamGia()))
             .sum();
 
         long tienChuyenKhoan = Math.max(0, doanhThu - tienMat);
 
         long doanhThuDuKien = hoaDons.stream()
             .filter(h -> idHopLe.contains(h.id()) && !idDaThanhToan.contains(h.id()))
-            .mapToLong(h -> Math.max(0, h.tienSauGiamGia().longValue()))
+            .mapToLong(h -> giaTriTien(h.tienSauGiamGia()))
             .sum();
 
         long soDon = idHopLe.size();
@@ -144,7 +197,7 @@ public class ThongKeService {
         String thuongHieuLower = thuongHieu.toLowerCase();
 
         Set<Long> idHopLe = hoaDons.stream()
-            .filter(h -> !h.daXoa() && !TRANG_THAI_HUY_HOAN_TIEN.contains(h.trangThai()))
+            .filter(h -> !h.daXoa() && !laHuyHoanTien(h.trangThai()))
             .map(HoaDonThongKeRow::id)
             .collect(Collectors.toSet());
 
@@ -160,12 +213,12 @@ public class ThongKeService {
 
         long doanhThu = dongThuongHieu.stream()
             .filter(c -> idDaThanhToan.contains(c.idHoaDon()))
-            .mapToLong(c -> Math.max(0, c.thanhTien().longValue()))
+            .mapToLong(c -> giaTriTien(c.thanhTien()))
             .sum();
 
         long doanhThuDuKien = dongThuongHieu.stream()
             .filter(c -> !idDaThanhToan.contains(c.idHoaDon()))
-            .mapToLong(c -> Math.max(0, c.thanhTien().longValue()))
+            .mapToLong(c -> giaTriTien(c.thanhTien()))
             .sum();
 
         long sanPhamBan = dongThuongHieu.stream()
@@ -186,20 +239,20 @@ public class ThongKeService {
         Map<Long, BigDecimal> tongTienTungDon = new LinkedHashMap<>();
         for (ChiTietThongKeRow c : chiTiets) {
             if (idDaThanhToan.contains(c.idHoaDon())) {
-                tongTienTungDon.merge(c.idHoaDon(), c.thanhTien(), BigDecimal::add);
+                tongTienTungDon.merge(c.idHoaDon(), giaTriBigDecimal(c.thanhTien()), BigDecimal::add);
             }
         }
 
         Map<Long, BigDecimal> tienThuongHieuTungDon = new LinkedHashMap<>();
         for (ChiTietThongKeRow c : dongThuongHieu) {
             if (idDaThanhToan.contains(c.idHoaDon())) {
-                tienThuongHieuTungDon.merge(c.idHoaDon(), c.thanhTien(), BigDecimal::add);
+                tienThuongHieuTungDon.merge(c.idHoaDon(), giaTriBigDecimal(c.thanhTien()), BigDecimal::add);
             }
         }
 
         long tienMat = 0;
         for (HoaDonThongKeRow h : hoaDons) {
-            if (!idDaThanhToan.contains(h.id()) || !MA_HINH_THUC_TIEN_MAT.contains(h.maHinhThuc())) {
+            if (!idDaThanhToan.contains(h.id()) || !laTienMat(h.maHinhThuc())) {
                 continue;
             }
             BigDecimal tongTien = tongTienTungDon.get(h.id());
@@ -208,7 +261,7 @@ public class ThongKeService {
                 continue;
             }
             BigDecimal tyTrong = tienThuongHieu.divide(tongTien, 10, RoundingMode.HALF_UP);
-            tienMat += h.tienSauGiamGia().multiply(tyTrong).setScale(0, RoundingMode.HALF_UP).longValue();
+            tienMat += giaTriBigDecimal(h.tienSauGiamGia()).multiply(tyTrong).setScale(0, RoundingMode.HALF_UP).longValue();
         }
 
         long aov = soDonDaTra > 0 ? Math.round((double) doanhThu / soDonDaTra) : 0;
@@ -226,7 +279,7 @@ public class ThongKeService {
         LocalDateTime tuDT = tu.atStartOfDay();
         LocalDateTime denDT = den.plusDays(1).atStartOfDay();
         return thongKeRepository.findHoaDonTrongKhoang(tuDT, denDT).stream()
-            .filter(h -> !h.daXoa() && TRANG_THAI_HUY_HOAN_TIEN.contains(h.trangThai()))
+            .filter(h -> !h.daXoa() && laHuyHoanTien(h.trangThai()))
             .count();
     }
 
@@ -256,9 +309,12 @@ public class ThongKeService {
                 .map(HoaDonThongKeRow::id)
                 .collect(Collectors.toSet());
 
-            Map<Long, String> trangThaiTheoId = hoaDons.stream()
-                .filter(h -> idHopLe.contains(h.id()))
-                .collect(Collectors.toMap(HoaDonThongKeRow::id, HoaDonThongKeRow::trangThai));
+            Map<Long, String> trangThaiTheoId = new LinkedHashMap<>();
+            for (HoaDonThongKeRow h : hoaDons) {
+                if (h.id() != null && idHopLe.contains(h.id())) {
+                    trangThaiTheoId.put(h.id(), h.trangThai());
+                }
+            }
 
             Set<Long> idDonChuaThuongHieu = chiTiets.stream()
                 .filter(c -> idHopLe.contains(c.idHoaDon()))
@@ -421,7 +477,7 @@ public class ThongKeService {
             if (r.ngayTao() == null || r.maSanPham() == null) {
                 continue;
             }
-            if (r.daXoa() || TRANG_THAI_HUY_HOAN_TIEN.contains(r.trangThai())) {
+            if (r.daXoa() || laHuyHoanTien(r.trangThai())) {
                 continue;
             }
             if (th != null && (r.tenThuongHieu() == null || !r.tenThuongHieu().trim().toLowerCase().equals(th))) {
@@ -483,5 +539,332 @@ public class ThongKeService {
         }
 
         return new SoSanhDTO(ky, top);
+    }
+
+    /* ---------------------------------- Thống kê theo ngày, thương hiệu, chi tiết đơn & bảng sản phẩm ---------------------------------- */
+
+    public List<SanPhamTheoNgayDTO> sanPhamTheoNgay(LocalDate tu, LocalDate den, String thuongHieu) {
+        LocalDateTime tuDT = tu.atStartOfDay();
+        LocalDateTime denDT = den.plusDays(1).atStartOfDay();
+
+        List<SanPhamThongKeRow> sanPhams = thongKeRepository.findSanPhamTrongKhoang(tuDT, denDT);
+        List<HoaDonChiTietThongKeRow> hoaDons = thongKeRepository.findHoaDonChiTietTrongKhoang(tuDT, denDT);
+
+        String th = (thuongHieu != null && !thuongHieu.isBlank()) ? thuongHieu.trim().toLowerCase() : null;
+
+        Map<LocalDate, Long> soLuongTheoNgay = new LinkedHashMap<>();
+        Map<LocalDate, Long> doanhThuTheoNgay = new LinkedHashMap<>();
+        Map<LocalDate, Long> soDonTheoNgay = new LinkedHashMap<>();
+
+        LocalDate cur = tu;
+        while (!cur.isAfter(den)) {
+            soLuongTheoNgay.put(cur, 0L);
+            doanhThuTheoNgay.put(cur, 0L);
+            soDonTheoNgay.put(cur, 0L);
+            cur = cur.plusDays(1);
+        }
+
+        for (SanPhamThongKeRow sp : sanPhams) {
+            if (sp.daXoa() || laHuyHoanTien(sp.trangThai()) || sp.ngayTao() == null) {
+                continue;
+            }
+            if (th != null && (sp.tenThuongHieu() == null || !sp.tenThuongHieu().trim().toLowerCase().equals(th))) {
+                continue;
+            }
+            LocalDate ngay = sp.ngayTao().toLocalDate();
+            if (soLuongTheoNgay.containsKey(ngay)) {
+                long sl = sp.soLuong() != null ? sp.soLuong() : 0;
+                long tt = sp.thanhTien() != null ? sp.thanhTien().longValue() : 0;
+                soLuongTheoNgay.merge(ngay, sl, Long::sum);
+                doanhThuTheoNgay.merge(ngay, tt, Long::sum);
+            }
+        }
+
+        for (HoaDonChiTietThongKeRow hd : hoaDons) {
+            if (hd.daXoa() || laHuyHoanTien(hd.trangThai()) || hd.ngayTao() == null) {
+                continue;
+            }
+            LocalDate ngay = hd.ngayTao().toLocalDate();
+            if (soDonTheoNgay.containsKey(ngay)) {
+                soDonTheoNgay.merge(ngay, 1L, Long::sum);
+            }
+        }
+
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM");
+        List<SanPhamTheoNgayDTO> result = new ArrayList<>();
+        cur = tu;
+        while (!cur.isAfter(den)) {
+            result.add(new SanPhamTheoNgayDTO(
+                cur,
+                cur.format(fmt),
+                soLuongTheoNgay.getOrDefault(cur, 0L),
+                doanhThuTheoNgay.getOrDefault(cur, 0L),
+                soDonTheoNgay.getOrDefault(cur, 0L)
+            ));
+            cur = cur.plusDays(1);
+        }
+        return result;
+    }
+
+    public ThuongHieuThongKeResponse thuongHieuThongKe(LocalDate tu, LocalDate den) {
+        LocalDateTime tuDT = tu.atStartOfDay();
+        LocalDateTime denDT = den.plusDays(1).atStartOfDay();
+
+        List<SanPhamThongKeRow> rows = thongKeRepository.findSanPhamTrongKhoang(tuDT, denDT);
+
+        Map<String, long[]> thMap = new LinkedHashMap<>();
+        long tongDt = 0;
+        long tongSl = 0;
+
+        for (SanPhamThongKeRow r : rows) {
+            if (r.daXoa() || laHuyHoanTien(r.trangThai())) {
+                continue;
+            }
+            String th = (r.tenThuongHieu() != null && !r.tenThuongHieu().isBlank()) ? r.tenThuongHieu().trim() : "Khác";
+            long dt = r.thanhTien() != null ? r.thanhTien().longValue() : 0;
+            long sl = r.soLuong() != null ? r.soLuong() : 0;
+
+            long[] val = thMap.computeIfAbsent(th, k -> new long[2]);
+            val[0] += dt;
+            val[1] += sl;
+            tongDt += dt;
+            tongSl += sl;
+        }
+
+        String[] palette = { "#926c45", "#2563eb", "#16a34a", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4" };
+        List<ThuongHieuThongKeResponse.ThuongHieuItemDTO> list = new ArrayList<>();
+        int colorIdx = 0;
+        for (Map.Entry<String, long[]> e : thMap.entrySet()) {
+            long dt = e.getValue()[0];
+            long sl = e.getValue()[1];
+            double tyLe = tongDt > 0 ? Math.round((dt * 100.0 / tongDt) * 10.0) / 10.0 : 0.0;
+            String color = palette[colorIdx % palette.length];
+            colorIdx++;
+            list.add(new ThuongHieuThongKeResponse.ThuongHieuItemDTO(e.getKey(), dt, sl, tyLe, color));
+        }
+
+        list.sort((a, b) -> Long.compare(b.doanhThu(), a.doanhThu()));
+        return new ThuongHieuThongKeResponse(tongDt, tongSl, list);
+    }
+
+    public List<ThongKeSanPhamBangDTO> sanPhamBang(LocalDate tu, LocalDate den, String thuongHieu, String keyword) {
+        LocalDateTime tuDT = tu.atStartOfDay();
+        LocalDateTime denDT = den.plusDays(1).atStartOfDay();
+
+        List<SanPhamThongKeRow> rows = thongKeRepository.findSanPhamTrongKhoang(tuDT, denDT);
+
+        Map<String, long[]> banTheoSp = new LinkedHashMap<>();
+        for (SanPhamThongKeRow r : rows) {
+            if (r.daXoa() || laHuyHoanTien(r.trangThai()) || r.maSanPham() == null) {
+                continue;
+            }
+            long sl = r.soLuong() != null ? r.soLuong() : 0;
+            long dt = r.thanhTien() != null ? r.thanhTien().longValue() : 0;
+            long[] b = banTheoSp.computeIfAbsent(r.maSanPham(), k -> new long[2]);
+            b[0] += sl;
+            b[1] += dt;
+        }
+
+        List<SanPham> sanPhamList = sanPhamRepository != null ? sanPhamRepository.findAll() : List.of();
+        List<SanPhamChiTiet> chiTietList = sanPhamChiTietRepository != null ? sanPhamChiTietRepository.findAllWithDetails() : List.of();
+
+        Map<Long, Long> tonKhoMap = new LinkedHashMap<>();
+        Map<Long, Set<String>> sizeMap = new LinkedHashMap<>();
+        for (SanPhamChiTiet ct : chiTietList) {
+            if (ct.getSanPham() == null || ct.getSanPham().getId() == null) continue;
+            Long idSp = ct.getSanPham().getId();
+            tonKhoMap.merge(idSp, ct.getSoLuong() != null ? ct.getSoLuong().longValue() : 0L, Long::sum);
+            if (ct.getKichCo() != null && ct.getKichCo().getTenKichCo() != null) {
+                sizeMap.computeIfAbsent(idSp, k -> new LinkedHashSet<>()).add(ct.getKichCo().getTenKichCo().trim());
+            }
+        }
+
+        Map<Long, String> anhMap = new LinkedHashMap<>();
+        if (hinhAnhSanPhamRepository != null) {
+            List<HinhAnhSanPham> anhList = hinhAnhSanPhamRepository.findAll();
+            for (HinhAnhSanPham h : anhList) {
+                if (h.getSanPham() != null && h.getSanPham().getId() != null) {
+                    anhMap.putIfAbsent(h.getSanPham().getId(), h.getDuongDan());
+                }
+            }
+        }
+
+        String th = (thuongHieu != null && !thuongHieu.isBlank()) ? thuongHieu.trim().toLowerCase() : null;
+        String kw = (keyword != null && !keyword.isBlank()) ? keyword.trim().toLowerCase() : null;
+
+        List<ThongKeSanPhamBangDTO> result = new ArrayList<>();
+        for (SanPham sp : sanPhamList) {
+            String tenTH = sp.getThuongHieu() != null ? sp.getThuongHieu().getTenThuongHieu() : "Khác";
+            if (th != null && !tenTH.trim().toLowerCase().equals(th)) {
+                continue;
+            }
+            if (kw != null) {
+                String ma = sp.getMaSanPham() != null ? sp.getMaSanPham().toLowerCase() : "";
+                String ten = sp.getTenSanPham() != null ? sp.getTenSanPham().toLowerCase() : "";
+                if (!ma.contains(kw) && !ten.contains(kw)) {
+                    continue;
+                }
+            }
+
+            long[] stats = banTheoSp.getOrDefault(sp.getMaSanPham(), new long[]{0, 0});
+            long ton = tonKhoMap.getOrDefault(sp.getId(), 0L);
+            Set<String> sizes = sizeMap.getOrDefault(sp.getId(), Set.of());
+            String bienThe = sizes.isEmpty() ? "Tiêu chuẩn" : "Size: " + String.join(", ", sizes);
+            String anh = anhMap.getOrDefault(sp.getId(), null);
+
+            result.add(new ThongKeSanPhamBangDTO(
+                sp.getId(),
+                sp.getMaSanPham(),
+                sp.getTenSanPham(),
+                anh,
+                bienThe,
+                tenTH,
+                stats[0],
+                0L,
+                stats[1],
+                ton
+            ));
+        }
+
+        result.sort((a, b) -> {
+            if (b.daBan() != a.daBan()) return Long.compare(b.daBan(), a.daBan());
+            return Long.compare(b.doanhThu(), a.doanhThu());
+        });
+        return result;
+    }
+
+    public List<DonHangThongKeDTO> donHangChiTiet(
+        LocalDate tu, LocalDate den, String kpiType, String loaiDon, String hinhThucTT,
+        String trangThai, String keyword, String thuongHieu
+    ) {
+        LocalDateTime tuDT = tu.atStartOfDay();
+        LocalDateTime denDT = den.plusDays(1).atStartOfDay();
+
+        List<HoaDonChiTietThongKeRow> rows = thongKeRepository.findHoaDonChiTietTrongKhoang(tuDT, denDT);
+
+        String kw = (keyword != null && !keyword.isBlank()) ? keyword.trim().toLowerCase() : null;
+        String ld = (loaiDon != null && !loaiDon.isBlank() && !"ALL".equalsIgnoreCase(loaiDon)) ? loaiDon.trim().toUpperCase() : null;
+        String ht = (hinhThucTT != null && !hinhThucTT.isBlank() && !"ALL".equalsIgnoreCase(hinhThucTT)) ? hinhThucTT.trim().toUpperCase() : null;
+        String tt = (trangThai != null && !trangThai.isBlank() && !"ALL".equalsIgnoreCase(trangThai)) ? trangThai.trim() : null;
+
+        List<DonHangThongKeDTO> result = new ArrayList<>();
+        for (HoaDonChiTietThongKeRow r : rows) {
+            if (r.daXoa()) {
+                continue;
+            }
+
+            boolean daTT = daThanhToan(r.trangThai(), r.loaiDon(), r.maHinhThuc(), r.daXoa());
+            boolean laHuy = laHuyHoanTien(r.trangThai());
+
+            if ("DOANH_THU_THUC_TE".equalsIgnoreCase(kpiType) && !daTT) {
+                continue;
+            }
+            if ("DOANH_THU_DU_KIEN".equalsIgnoreCase(kpiType) && (daTT || laHuy)) {
+                continue;
+            }
+            if ("TIEN_MAT".equalsIgnoreCase(kpiType) && (!daTT || !laTienMat(r.maHinhThuc()))) {
+                continue;
+            }
+            if ("CHUYEN_KHOAN".equalsIgnoreCase(kpiType) && (!daTT || laTienMat(r.maHinhThuc()))) {
+                continue;
+            }
+            if ("ALL_VALID".equalsIgnoreCase(kpiType) && laHuy) {
+                continue;
+            }
+
+            if (ld != null) {
+                String rowLd = r.loaiDon() != null ? r.loaiDon().toUpperCase() : "";
+                if ("TAI_QUAY".equals(ld) && !rowLd.contains("TAI_QUAY") && !rowLd.contains("TẠI QUẦY")) {
+                    continue;
+                }
+                if ("ONLINE".equals(ld) && !rowLd.contains("ONLINE")) {
+                    continue;
+                }
+            }
+
+            if (ht != null) {
+                boolean tm = laTienMat(r.maHinhThuc());
+                if ("TIEN_MAT".equals(ht) && !tm) continue;
+                if ("CHUYEN_KHOAN".equals(ht) && tm) continue;
+            }
+
+            if (tt != null && !tt.equalsIgnoreCase(r.trangThai()) && !tt.equalsIgnoreCase(NHAN_TRANG_THAI.get(r.trangThai()))) {
+                continue;
+            }
+
+            if (kw != null) {
+                String maHd = r.maHoaDon() != null ? r.maHoaDon().toLowerCase() : "";
+                String tenKh = r.tenKhachHang() != null ? r.tenKhachHang().toLowerCase() : "";
+                String sdt = r.soDienThoaiKhachHang() != null ? r.soDienThoaiKhachHang().toLowerCase() : "";
+                if (!maHd.contains(kw) && !tenKh.contains(kw) && !sdt.contains(kw)) {
+                    continue;
+                }
+            }
+
+            String trangThaiThanhToan = daTT ? "Đã thanh toán" : "Chưa thanh toán";
+            String tenNv = (r.tenNhanVien() != null && !r.tenNhanVien().isBlank()) ? r.tenNhanVien() : "Khách hàng online";
+            String tenKh = (r.tenKhachHang() != null && !r.tenKhachHang().isBlank()) ? r.tenKhachHang() : "Khách lẻ";
+            String hinhThucDisplay = laTienMat(r.maHinhThuc()) ? "Tiền mặt" : "Chuyển khoản";
+            String trangThaiDisplay = NHAN_TRANG_THAI.getOrDefault(r.trangThai(), r.trangThai());
+
+            result.add(new DonHangThongKeDTO(
+                r.id(),
+                r.maHoaDon(),
+                r.ngayTao(),
+                tenKh,
+                r.soDienThoaiKhachHang(),
+                tenNv,
+                r.loaiDon(),
+                hinhThucDisplay,
+                trangThaiDisplay,
+                trangThaiThanhToan,
+                r.tienSauGiamGia()
+            ));
+        }
+
+        return result;
+    }
+
+    public List<SanPhamDaBanChiTietDTO> sanPhamDaBanChiTiet(
+        LocalDate tu, LocalDate den, String thuongHieu, String keyword
+    ) {
+        LocalDateTime tuDT = tu.atStartOfDay();
+        LocalDateTime denDT = den.plusDays(1).atStartOfDay();
+
+        List<SanPhamDaBanChiTietRow> rows = thongKeRepository.findSanPhamDaBanChiTietTrongKhoang(tuDT, denDT);
+
+        String kw = (keyword != null && !keyword.isBlank()) ? keyword.trim().toLowerCase() : null;
+        String th = (thuongHieu != null && !thuongHieu.isBlank()) ? thuongHieu.trim().toLowerCase() : null;
+
+        List<SanPhamDaBanChiTietDTO> result = new ArrayList<>();
+        for (SanPhamDaBanChiTietRow r : rows) {
+            if (r.daXoa() || laHuyHoanTien(r.trangThai())) {
+                continue;
+            }
+            if (th != null && (r.tenThuongHieu() == null || !r.tenThuongHieu().trim().toLowerCase().equals(th))) {
+                continue;
+            }
+            if (kw != null) {
+                String ma = r.maSanPham() != null ? r.maSanPham().toLowerCase() : "";
+                String ten = r.tenSanPham() != null ? r.tenSanPham().toLowerCase() : "";
+                String maHd = r.maHoaDon() != null ? r.maHoaDon().toLowerCase() : "";
+                if (!ma.contains(kw) && !ten.contains(kw) && !maHd.contains(kw)) {
+                    continue;
+                }
+            }
+            result.add(new SanPhamDaBanChiTietDTO(
+                r.idHoaDon(),
+                r.maHoaDon(),
+                r.ngayTao(),
+                r.maSanPham(),
+                r.tenSanPham(),
+                r.bienThe(),
+                r.tenThuongHieu(),
+                r.soLuong(),
+                r.donGia(),
+                r.thanhTien()
+            ));
+        }
+        return result;
     }
 }

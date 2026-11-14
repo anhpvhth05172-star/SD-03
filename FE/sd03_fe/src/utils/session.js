@@ -22,7 +22,11 @@ const ghi = (key, value) => {
 
 export const vaiTroHienTai = ref((doc(khoaVaiTro) || '').toUpperCase())
 
-export const laAdmin = () => String(getUser()?.vaiTro || '').toUpperCase() === 'ADMIN'
+export const laAdmin = () => {
+  const vt = String(getUser()?.vaiTro || '').trim().toUpperCase()
+  const vSession = String(vaiTroHienTai.value || doc(khoaVaiTro) || '').trim().toUpperCase()
+  return vt === 'ADMIN' || vt === 'ROLE_ADMIN' || vSession === 'ADMIN' || vSession === 'ROLE_ADMIN'
+}
 
 export const datVaiTro = (vaiTro) => {
   const v = String(vaiTro || '').toUpperCase()

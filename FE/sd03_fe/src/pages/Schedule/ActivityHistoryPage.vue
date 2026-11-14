@@ -6,9 +6,11 @@ import { listCaLam } from '@/api/schedule'
 import { listEmployees } from '@/api/employee'
 import { formatVnd } from '@/utils/format'
 import { notifyError } from '@/utils/notify'
+import { laAdmin } from '@/utils/session'
 import PaginationBar from '@/components/PaginationBar.vue'
 
 const router = useRouter()
+const isAdmin = computed(() => laAdmin())
 const pad2 = (x) => String(x).padStart(2, '0')
 
 const caHienTai = ref(null)
@@ -175,7 +177,7 @@ onMounted(async () => {
 
 <template>
   <div class="activity-history-page">
-    <div v-if="!caHienTai" class="shift-alert-banner">
+    <div v-if="!isAdmin && !caHienTai" class="shift-alert-banner">
       <div class="shift-alert-left">
         <span class="badge-mode">CHẾ ĐỘ XEM</span>
         <span class="shift-alert-text">
@@ -187,7 +189,7 @@ onMounted(async () => {
         Vào ca làm việc ngay
       </button>
     </div>
-    >
+
     <div class="schedule-breadcrumbs">
       <span class="crumb-parent">Lịch làm việc</span>
       <span class="crumb-separator">/</span>

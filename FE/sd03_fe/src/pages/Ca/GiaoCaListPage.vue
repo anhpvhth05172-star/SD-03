@@ -28,9 +28,49 @@ const currentUser = computed(() => getUser())
 const currentStaffId = computed(() => currentUser.value?.idNhanVien)
 const caTruoc = computed(() => list.value.find((row) => row.trangThai === 'DA_KET_CA'))
 const caHienTai = ref(null)
-const moCaForm = reactive({ tienDauCa: '', ghiChu: '' })
+const dsCaChiaSan = ref([])
+const moCaForm = reactive({ tienDauCa: '', ghiChu: '', idCaLich: null })
 const moCaLoading = ref(false)
 const moCaError = ref('')
+
+const kiemTraTrongGioNhanCa = (ca) => {
+  if (!ca || !ca.batDau || !ca.ketThuc) return false
+  const now = new Date()
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
+
+  const [bdH, bdM] = ca.batDau.split(':').map(Number)
+  const [ktH, ktM] = ca.ketThuc.split(':').map(Number)
+  const bdMinutes = bdH * 60 + bdM
+  const ktMinutes = ktH * 60 + ktM
+
+  const bdChoPhep = (bdMinutes - 30 + 1440) % 1440
+
+  if (ktMinutes > bdMinutes) {
+    return nowMinutes >= bdChoPhep && nowMinutes < ktMinutes
+  } else {
+    return nowMinutes >= bdChoPhep || nowMinutes < ktMinutes
+  }
+}
+
+const selectedCa = computed(() => {
+  return dsCaChiaSan.value.find((c) => c.id === moCaForm.idCaLich) || null
+})
+
+const loadDanhSachCa = async () => {
+  try {
+    dsCaChiaSan.value = (await getDanhSachCaLam()) || []
+    if (dsCaChiaSan.value.length > 0) {
+      const caHopLe = dsCaChiaSan.value.find((c) => kiemTraTrongGioNhanCa(c))
+      if (caHopLe) {
+        moCaForm.idCaLich = caHopLe.id
+      } else {
+        moCaForm.idCaLich = dsCaChiaSan.value[0].id
+      }
+    }
+  } catch {
+    dsCaChiaSan.value = []
+  }
+}
 
 const emptyFilter = () => ({
   tuNgay: '',
@@ -110,6 +150,10 @@ const batDauCa = async () => {
     moCaError.value = 'Tiền đầu ca phải là số không âm'
     return
   }
+  if (!isAdmin.value && selectedCa.value && !kiemTraTrongGioNhanCa(selectedCa.value)) {
+    moCaError.value = `Hiện không trong thời gian nhận ${selectedCa.value.ten} (${selectedCa.value.batDau?.substring(0, 5)} - ${selectedCa.value.ketThuc?.substring(0, 5)}). Bạn chỉ có quyền tra cứu thông tin (Chế độ chỉ xem).`
+    return
+  }
   moCaLoading.value = true
   try {
     caHienTai.value = await moCa({ idCaLich: moCaForm.idCaLich, tienDauCa, ghiChu: moCaForm.ghiChu.trim() || null })
@@ -175,7 +219,7 @@ onMounted(async () => {
     filter.idNhanVien = currentStaffId.value
     applied.idNhanVien = currentStaffId.value
   }
-  await Promise.all([loadData(0), loadCaHienTai()])
+  await Promise.all([loadData(0), loadCaHienTai(), loadDanhSachCa()])
 })
 
 watch(() => route.fullPath, () => {
@@ -320,21 +364,30 @@ watch(() => route.fullPath, () => {
 
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Mã giao ca</th><th>Ca được xếp</th><th>Người giao</th><th>Quầy</th><th>Thời gian mở</th><th>Thời gian đóng</th><th style="text-align:right">Tiền cuối ca</th><th style="text-align:right">Chênh lệch</th><th>Trạng thái</th><th style="text-align:center">Biên bản</th></tr></thead>
+        <thead><tr><th>Mã giao ca</th><th>Ca được xếp</th><th>Người mở ca</th><th>Người nhận tiếp theo</th><th>Quầy</th><th>Thời gian mở</th><th>Thời gian đóng</th><th style="text-align:right">Tiền cuối ca</th><th style="text-align:right">Chênh lệch</th><th>Trạng thái</th><th style="text-align:center">In biên lai</th></tr></thead>
         <tbody>
-          <tr v-if="loading"><td colspan="10" class="text-center py-4">Đang tải dữ liệu...</td></tr>
-          <tr v-else-if="list.length === 0"><td colspan="10" class="text-center py-4">Chưa có ca làm việc nào</td></tr>
+          <tr v-if="loading"><td colspan="11" class="text-center py-4">Đang tải dữ liệu...</td></tr>
+          <tr v-else-if="list.length === 0"><td colspan="11" class="text-center py-4">Chưa có ca làm việc nào</td></tr>
           <tr v-for="(row, idx) in list" v-else :key="row.id || idx">
             <td class="cell-code">{{ row.maCa }}</td>
-            <td>{{ row.tenCaLich || '—' }}</td>
-            <td>{{ row.tenNhanVien || row.maNhanVien || '—' }}</td>
+            <td><span class="badge-ca">{{ row.tenCaLich || '—' }}</span></td>
+            <td><strong>{{ row.tenNhanVien || row.maNhanVien || '—' }}</strong></td>
+            <td><span class="badge-receiver" style="font-weight:600; color:#2563eb;">{{ row.tenNguoiNhan || 'Cuối ngày' }}</span></td>
             <td>{{ row.tenQuay || row.maQuay || row.tenQuy || '—' }}</td>
             <td>{{ formatDateTime(row.thoiGianMo) }}</td>
             <td>{{ row.thoiGianKet ? formatDateTime(row.thoiGianKet) : '—' }}</td>
             <td style="text-align:right">{{ formatVnd(row.tienThucTe ?? row.tienDauCa) }}</td>
             <td style="text-align:right" :class="{ 'text-red': Number(row.chenhLech || 0) !== 0 }">{{ formatVnd(row.chenhLech) }}</td>
             <td><span class="status-badge" :class="trangThaiClass(row.trangThai)">{{ getTrangThaiLabel(row.trangThai) }}</span></td>
-            <td style="text-align:center"><button class="btn-action-circle is-view" type="button" title="Xem biên bản giao ca" @click="navigateToDoiSoat(row.id)" :disabled="!row.id"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg></button></td>
+            <td style="text-align:center">
+              <button class="btn-action-circle is-view" type="button" title="Xem đối soát & In biên lai (K80 / A4 / PDF)" @click="navigateToDoiSoat(row.id)" :disabled="!row.id">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                  <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>

@@ -1,7 +1,9 @@
 package com.example.datn.repository;
 
 import com.example.datn.dto.ThongKe.ChiTietThongKeRow;
+import com.example.datn.dto.ThongKe.HoaDonChiTietThongKeRow;
 import com.example.datn.dto.ThongKe.HoaDonThongKeRow;
+import com.example.datn.dto.ThongKe.SanPhamDaBanChiTietRow;
 import com.example.datn.dto.ThongKe.SanPhamThongKeRow;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -59,6 +61,48 @@ public interface ThongKeRepository extends JpaRepository<com.example.datn.entity
         WHERE h.ngayTao >= :tu AND h.ngayTao < :den
         """)
     List<SanPhamThongKeRow> findSanPhamTrongKhoang(
+        @Param("tu") LocalDateTime tu,
+        @Param("den") LocalDateTime den
+    );
+
+    @Query("""
+        SELECT new com.example.datn.dto.ThongKe.HoaDonChiTietThongKeRow(
+            h.id, h.maHoaDon, h.ngayTao, h.tenKhachHang, h.soDienThoaiKhachHang,
+            nv.tenTaiKhoan, h.loaiDon,
+            COALESCE(htt.tenHinhThuc, ptt.tenPhuongThuc, 'Chưa xác định'),
+            htt.maHinhThuc,
+            h.trangThai, h.tienSauGiamGia, h.daXoa)
+        FROM HoaDon h
+        LEFT JOIN h.nhanVien nv
+        LEFT JOIN h.phuongThucThanhToan ptt
+        LEFT JOIN ptt.hinhThucThanhToan htt
+        WHERE h.ngayTao >= :tu AND h.ngayTao < :den
+        ORDER BY h.ngayTao DESC
+        """)
+    List<HoaDonChiTietThongKeRow> findHoaDonChiTietTrongKhoang(
+        @Param("tu") LocalDateTime tu,
+        @Param("den") LocalDateTime den
+    );
+
+    @Query("""
+        SELECT new com.example.datn.dto.ThongKe.SanPhamDaBanChiTietRow(
+            h.id, h.maHoaDon, h.ngayTao,
+            sp.maSanPham, sp.tenSanPham,
+            kc.tenKichCo, ms.tenMau,
+            th.tenThuongHieu,
+            c.soLuong, c.donGia, c.thanhTien,
+            h.trangThai, h.daXoa)
+        FROM ChiTietHoaDon c
+        JOIN c.hoaDon h
+        JOIN c.sanPhamChiTiet spct
+        JOIN spct.sanPham sp
+        LEFT JOIN spct.kichCo kc
+        LEFT JOIN spct.mauSac ms
+        LEFT JOIN sp.thuongHieu th
+        WHERE h.ngayTao >= :tu AND h.ngayTao < :den
+        ORDER BY h.ngayTao DESC
+        """)
+    List<SanPhamDaBanChiTietRow> findSanPhamDaBanChiTietTrongKhoang(
         @Param("tu") LocalDateTime tu,
         @Param("den") LocalDateTime den
     );
