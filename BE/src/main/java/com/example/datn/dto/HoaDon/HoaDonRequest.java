@@ -19,6 +19,7 @@ public class HoaDonRequest {
     private BigDecimal phiVanChuyen;
     private String tenKhachHang;
     private String soDienThoaiKhachHang;
+    private String email;
     private String diaChiNhanHang;
     private String trangThai;
     private String ghiChu;

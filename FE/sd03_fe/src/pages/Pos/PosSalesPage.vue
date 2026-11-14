@@ -497,6 +497,8 @@ const savePendingOrdersToStorage = () => {
   }
 }
 
+const MAX_PENDING_ORDERS = 5
+
 const restorePendingOrdersFromStorage = () => {
   try {
     const raw = localStorage.getItem(POS_PENDING_STORAGE_KEY)
@@ -505,7 +507,7 @@ const restorePendingOrdersFromStorage = () => {
     if (!Array.isArray(parsed) || parsed.length === 0) return false
 
     isRestoringOrders = true
-    pendingOrders.value = parsed.map((o, idx) => ({
+    pendingOrders.value = parsed.slice(0, MAX_PENDING_ORDERS).map((o, idx) => ({
       id: o.id || (Date.now() + idx),
       code: o.code || generateOrderCode(),
       title: o.title || `Hóa đơn ${idx + 1}`,
@@ -566,6 +568,15 @@ const createNewOrder = (silent = false) => {
   const isSilentBool = typeof silent === 'boolean' && silent
   if (!isSilentBool && !kiemTraQuyenBanHang('tạo hóa đơn mới')) return
 
+  if (pendingOrders.value.length >= MAX_PENDING_ORDERS) {
+    if (!silent) {
+      notifyWarning(
+        'Giới hạn hóa đơn chờ',
+        `Hệ thống cho phép tối đa ${MAX_PENDING_ORDERS} hóa đơn chờ cùng lúc. Vui lòng thanh toán hoặc xóa bớt hóa đơn chờ trước khi tạo thêm!`
+      )
+    }
+    return
+  }
 
   const newIdx = pendingOrders.value.length + 1
   const newOrder = {
@@ -665,11 +676,18 @@ const discountAmount = computed(() => {
   return Math.min(discount, subTotal.value)
 })
 
+const FREE_SHIP_THRESHOLD = 10000000 // Hóa đơn > 10 triệu đồng được Free Ship
+
+const isFreeShipEligible = computed(() => {
+  return Number(subTotal.value || 0) >= FREE_SHIP_THRESHOLD
+})
+
 const finalTotal = computed(() => {
   if (!currentOrder.value) return 0
   let total = subTotal.value - discountAmount.value
   if (currentOrder.value.isDelivery) {
-    total += Number(currentOrder.value.deliveryInfo.shippingFee || 0)
+    const fee = isFreeShipEligible.value ? 0 : Number(currentOrder.value.deliveryInfo.shippingFee || 0)
+    total += fee
   }
   return Math.max(0, total)
 })
@@ -1189,6 +1207,156 @@ const saveDeliveryAddressToCustomerProfile = async (silent = false) => {
     return false
   } finally {
     isSavingCustomerAddress.value = false
+  }
+}
+
+// ==========================================
+// THÊM NHANH ĐỊA CHỈ CHO PHẦN GIAO HÀNG (POS)
+// ==========================================
+const isQuickAddAddressModalOpen = ref(false)
+const isSavingQuickAddress = ref(false)
+const quickAddAddressWards = ref([])
+const isQuickAddWardsLoading = ref(false)
+const quickAddressForm = reactive({
+  recipientName: '',
+  recipientPhone: '',
+  addressName: 'Địa chỉ nhận hàng',
+  province: null,
+  ward: null,
+  streetAddress: '',
+  isDefault: true,
+  saveToCustomerProfile: true
+})
+
+const openQuickAddAddressModal = async () => {
+  if (!provincesList.value || provincesList.value.length === 0) {
+    await loadProvinces()
+  }
+  const cust = currentOrder.value?.customer
+  const d = currentOrder.value?.deliveryInfo
+
+  quickAddressForm.recipientName = cust?.ten || cust?.tenKhachHang || d?.recipientName || ''
+  quickAddressForm.recipientPhone = cust?.soDienThoai || d?.recipientPhone || ''
+  quickAddressForm.addressName = 'Địa chỉ nhận hàng'
+  quickAddressForm.province = null
+  quickAddressForm.ward = null
+  quickAddressForm.streetAddress = ''
+  quickAddAddressWards.value = []
+  quickAddressForm.isDefault = true
+  quickAddressForm.saveToCustomerProfile = Boolean(cust?.id)
+
+  isQuickAddAddressModalOpen.value = true
+}
+
+const onQuickAddressProvinceChange = async () => {
+  quickAddressForm.ward = null
+  quickAddAddressWards.value = []
+  if (!quickAddressForm.province) return
+
+  isQuickAddWardsLoading.value = true
+  try {
+    const res = await fetch(`https://provinces.open-api.vn/api/v2/p/${quickAddressForm.province.id}?depth=2`)
+    if (res.ok) {
+      const pData = await res.json()
+      if (pData && Array.isArray(pData.wards) && pData.wards.length > 0) {
+        quickAddAddressWards.value = pData.wards.map(w => ({
+          id: w.code,
+          name: w.name
+        }))
+        isQuickAddWardsLoading.value = false
+        return
+      }
+    }
+  } catch {
+    // fallback
+  }
+
+  try {
+    const list = await getWards(quickAddressForm.province.id)
+    const isDummy = Array.isArray(list) && list.length === 2 && list[0]?.id === 1 && list[1]?.id === 2
+    if (Array.isArray(list) && list.length > 0 && !isDummy) {
+      quickAddAddressWards.value = list.map(w => ({
+        id: w.id,
+        name: String(w.name || '').replace(/\s*\([^)]*\)\s*$/, '').trim() || w.name
+      }))
+      isQuickAddWardsLoading.value = false
+      return
+    }
+  } catch {
+    // fallback
+  }
+
+  quickAddAddressWards.value = [
+    { id: 1, name: 'Phường/Xã trung tâm' },
+    { id: 2, name: 'Khu vực nội thành' }
+  ]
+  isQuickAddWardsLoading.value = false
+}
+
+const submitQuickAddAddress = async () => {
+  if (!quickAddressForm.recipientName?.trim()) {
+    notifyWarning('Thiếu thông tin', 'Vui lòng nhập họ tên người nhận hàng!')
+    return
+  }
+  const phoneClean = (quickAddressForm.recipientPhone || '').trim().replace(/\D/g, '')
+  if (!phoneClean || phoneClean.length < 10 || phoneClean.length > 11) {
+    notifyWarning('SĐT không hợp lệ', 'Vui lòng nhập số điện thoại người nhận hợp lệ (10-11 chữ số)!')
+    return
+  }
+  if (!quickAddressForm.province) {
+    notifyWarning('Thiếu thông tin', 'Vui lòng chọn Tỉnh / Thành phố!')
+    return
+  }
+  if (!quickAddressForm.ward) {
+    notifyWarning('Thiếu thông tin', 'Vui lòng chọn Phường / Xã!')
+    return
+  }
+  if (!quickAddressForm.streetAddress?.trim()) {
+    notifyWarning('Thiếu thông tin', 'Vui lòng nhập địa chỉ cụ thể (số nhà, tên đường...)!')
+    return
+  }
+
+  isSavingQuickAddress.value = true
+  try {
+    const cust = currentOrder.value?.customer
+    const d = currentOrder.value?.deliveryInfo
+
+    if (cust && cust.id && quickAddressForm.saveToCustomerProfile) {
+      const payload = {
+        tenDiaChi: quickAddressForm.addressName?.trim() || 'Địa chỉ giao hàng',
+        tinhThanhPho: quickAddressForm.province.name,
+        phuong: quickAddressForm.ward.name,
+        diaChiCuThe: quickAddressForm.streetAddress.trim(),
+        macDinh: Boolean(quickAddressForm.isDefault),
+        trangThai: true
+      }
+      await http.post(`/khach-hang/${cust.id}/dia-chi`, payload)
+      await fetchAndSyncCustomerAddresses(cust, false, false)
+    }
+
+    if (d) {
+      d.recipientName = quickAddressForm.recipientName.trim()
+      d.recipientPhone = quickAddressForm.recipientPhone.trim()
+      d.province = quickAddressForm.province
+      wardsList.value = [...quickAddAddressWards.value]
+      d.ward = quickAddressForm.ward
+      d.recipientAddress = quickAddressForm.streetAddress.trim()
+      d.saveToCustomerProfile = false
+
+      await tinhPhiVanChuyen()
+    }
+
+    isQuickAddAddressModalOpen.value = false
+    notifySuccess(
+      'Thành công',
+      `Đã thêm và áp dụng địa chỉ giao hàng: ${quickAddressForm.streetAddress.trim()}, ${quickAddressForm.ward.name}, ${quickAddressForm.province.name}!`,
+      2500
+    )
+  } catch (err) {
+    console.error('Lỗi khi thêm nhanh địa chỉ:', err)
+    notifyError('Lỗi', err.message || 'Không thể lưu địa chỉ mới. Vui lòng thử lại!')
+  } finally {
+    isSavingQuickAddress.value = false
   }
 }
 
@@ -2209,7 +2377,9 @@ const tinhPhiVanChuyen = async () => {
       toWardName: d.ward.name,
       serviceTypeId: d.serviceTypeId || undefined
     })
-    d.shippingFee = res.shippingFee || 30000
+    const rawFee = res.shippingFee || 30000
+    d.rawShippingFee = rawFee
+    d.shippingFee = isFreeShipEligible.value ? 0 : rawFee
     d.legacy = {
       toProvinceId: res.toProvinceId || d.province.id || 1,
       toDistrictId: res.toDistrictId || 1,
@@ -2224,7 +2394,9 @@ const tinhPhiVanChuyen = async () => {
       }
     }
   } catch (e) {
-    d.shippingFee = 30000
+    const fallbackFee = 30000
+    d.rawShippingFee = fallbackFee
+    d.shippingFee = isFreeShipEligible.value ? 0 : fallbackFee
     d.legacy = {
       toProvinceId: d.province.id || 1,
       toDistrictId: 1,
@@ -2236,6 +2408,20 @@ const tinhPhiVanChuyen = async () => {
     d.feeLoading = false
   }
 }
+
+watch(isFreeShipEligible, (isFree) => {
+  const d = currentOrder.value?.deliveryInfo
+  if (d && currentOrder.value?.isDelivery) {
+    if (isFree) {
+      if (!d.rawShippingFee && d.shippingFee > 0) d.rawShippingFee = d.shippingFee
+      d.shippingFee = 0
+    } else {
+      if (d.shippingFee === 0 && d.rawShippingFee > 0) {
+        d.shippingFee = d.rawShippingFee
+      }
+    }
+  }
+})
 
 const onWardChange = () => { tinhPhiVanChuyen() }
 const onServiceChange = () => { tinhPhiVanChuyen() }
@@ -2564,6 +2750,8 @@ const nextVoucherSuggestion = computed(() => {
   }
 })
 
+let isConfirmingVoucherUpgrade = false
+
 // Tự động áp dụng phiếu giảm giá tốt nhất đủ điều kiện (hoàn toàn tự động)
 watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrder.value?.customer?.id], ([newSubTotal, newBest], [, , oldCustId]) => {
   if (!currentOrder.value) return
@@ -2606,15 +2794,41 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
     return
   }
 
-  // 3. Tự động áp dụng mã tốt nhất và nâng cấp mốc cao hơn khi đạt điều kiện
+  // 3. Tự động áp dụng mã tốt nhất và cảnh báo xác nhận khi có mã mới tốt hơn
   if (!currentOrder.value.selectedVoucher) {
     if (newBest?.voucher) {
       currentOrder.value.selectedVoucher = newBest.voucher
       currentOrder.value.userSelectedVoucherManually = false
     }
-  } else if (newBest?.voucher) {
-    if (currentOrder.value.selectedVoucher.id !== newBest.voucher.id) {
-      currentOrder.value.selectedVoucher = newBest.voucher
+  } else if (newBest?.voucher && currentOrder.value.selectedVoucher.id !== newBest.voucher.id) {
+    const curV = currentOrder.value.selectedVoucher
+    const curDisc = calculateVoucherDiscount(curV, newSubTotal)
+    const newDisc = calculateVoucherDiscount(newBest.voucher, newSubTotal)
+
+    // Nếu mã mới có mức giảm tốt hơn mã đang áp dụng: hiện thông báo warning hỏi xác nhận
+    if (newDisc > curDisc && !isConfirmingVoucherUpgrade) {
+      isConfirmingVoucherUpgrade = true
+      const curCode = curV.ma || curV.maPhieuGiamGia || 'Mã hiện tại'
+      const newCode = newBest.voucher.ma || newBest.voucher.maPhieuGiamGia || 'Mã mới'
+
+      notifyConfirm(
+        'Phát hiện mã giảm giá tốt hơn!',
+        `Đơn hàng đang áp dụng mã "${curCode}" (giảm ${formatVnd(curDisc)}). Khi thêm sản phẩm, mã "${newCode}" có mức giảm tốt hơn (giảm ${formatVnd(newDisc)}). Bạn có muốn đổi sang dùng mã giảm giá mới không?`,
+        'Dùng mã mới',
+        'Giữ mã cũ'
+      ).then((ok) => {
+        isConfirmingVoucherUpgrade = false
+        if (ok && currentOrder.value) {
+          currentOrder.value.selectedVoucher = newBest.voucher
+          currentOrder.value.userSelectedVoucherManually = false
+          notifySuccess('Đổi mã thành công', `Đã chuyển sang dùng mã "${newCode}" (giảm ${formatVnd(newDisc)})!`)
+        } else if (currentOrder.value) {
+          // Người dùng chọn giữ mã cũ
+          currentOrder.value.userSelectedVoucherManually = true
+        }
+      }).catch(() => {
+        isConfirmingVoucherUpgrade = false
+      })
     }
   }
 }, { immediate: true })
@@ -2836,6 +3050,7 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
       isVoucherModalOpen.value ||
       isQrModalOpen.value ||
       isAddCustomerModalOpen.value ||
+      isQuickAddAddressModalOpen.value ||
       isReceiptModalOpen.value ||
       isRecentInvoicesModalOpen.value ||
       isProcessingCheckout.value
@@ -3057,13 +3272,40 @@ const openVoucherModal = () => {
   validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: true })
 }
 
-const applyVoucher = (voucher) => {
+const applyVoucher = async (voucher) => {
   if (!kiemTraQuyenBanHang('áp dụng voucher')) return
   if (!currentOrder.value) return
   if (!isVoucherEligible(voucher)) {
     notifyWarning('Chưa đủ điều kiện', getVoucherIneligibilityReason(voucher))
     return
   }
+
+  // Nếu đơn hàng đang có mã giảm giá và mã mới khác mã đang dùng:
+  if (currentOrder.value.selectedVoucher && currentOrder.value.selectedVoucher.id !== voucher.id) {
+    const curV = currentOrder.value.selectedVoucher
+    const curDisc = calculateVoucherDiscount(curV, subTotal.value)
+    const newDisc = calculateVoucherDiscount(voucher, subTotal.value)
+    const curCode = curV.ma || curV.maPhieuGiamGia || 'Mã hiện tại'
+    const newCode = voucher.ma || voucher.maPhieuGiamGia || 'Mã mới'
+
+    let title = 'Xác nhận đổi mã giảm giá'
+    let msg = `Đơn hàng đang áp dụng mã "${curCode}" (giảm ${formatVnd(curDisc)}). `
+    if (newDisc > curDisc) {
+      title = 'Phát hiện mã giảm giá tốt hơn!'
+      msg += `Mã mới "${newCode}" có mức giảm tốt hơn (giảm ${formatVnd(newDisc)}). Bạn có xác nhận muốn đổi sang dùng mã giảm giá mới này không?`
+    } else {
+      msg += `Mã mới "${newCode}" có mức giảm là ${formatVnd(newDisc)}. Bạn có chắc chắn muốn đổi sang mã này không?`
+    }
+
+    const ok = await notifyConfirm(
+      title,
+      msg,
+      'Dùng mã mới',
+      'Giữ mã cũ'
+    )
+    if (!ok) return
+  }
+
   currentOrder.value.selectedVoucher = voucher
   currentOrder.value.userSelectedVoucherManually = true
   currentOrder.value.userRemovedVoucher = false
@@ -3216,7 +3458,11 @@ const handleCheckout = async (options = {}) => {
       notifyWarning('Phí vận chuyển', 'Đang tính phí vận chuyển, vui lòng đợi trong giây lát...')
       return
     }
-    if (!d.legacy || !d.shippingFee || d.shippingFee <= 0) {
+    if (!d.legacy) {
+      notifyWarning('Phí vận chuyển', 'Chưa tính được phí vận chuyển. Vui lòng chọn địa chỉ giao hàng hợp lệ và thử lại.')
+      return
+    }
+    if (!isFreeShipEligible.value && (!d.shippingFee || d.shippingFee <= 0)) {
       notifyWarning('Phí vận chuyển', 'Chưa tính được phí vận chuyển. Vui lòng chọn địa chỉ giao hàng hợp lệ và thử lại.')
       return
     }
@@ -3270,10 +3516,13 @@ const handleCheckout = async (options = {}) => {
       : (currentOrder.value.customer
         ? (currentOrder.value.customer.ten || currentOrder.value.customer.tenKhachHang)
         : 'Khách lẻ')
+    const finalShipFee = currentOrder.value.isDelivery
+      ? (isFreeShipEligible.value ? 0 : Number(delivery?.shippingFee || 0))
+      : 0
     const payload = {
       maHoaDon: currentOrder.value.code,
       loaiDon: currentOrder.value.isDelivery ? 'Tại quầy (Giao hàng)' : 'Tại quầy',
-      phiVanChuyen: currentOrder.value.isDelivery ? Number(delivery.shippingFee || 0) : 0,
+      phiVanChuyen: finalShipFee,
       tenKhachHang: customerName,
       soDienThoaiKhachHang: customerPhone,
       diaChiNhanHang: delivery
@@ -3285,6 +3534,7 @@ const handleCheckout = async (options = {}) => {
       trangThai: targetStatus,
       ghiChu: currentOrder.value.note || (isDeliveryOrder ? 'Đơn giao hàng tạo tại quầy POS' : 'Bán hàng tại quầy POS'),
       idKhachHang: currentOrder.value.customer ? currentOrder.value.customer.id : null,
+      email: currentOrder.value.customer?.email || null,
       idNhanVien: employeeId,
       idPhuongThucThanhToan: paymentMethodId,
       idPhieuGiamGia: currentOrder.value.selectedVoucher ? currentOrder.value.selectedVoucher.id : null,
@@ -3796,6 +4046,7 @@ const handleKeyDown = (e) => {
     isProductModalOpen.value = false
     isQrModalOpen.value = false
     isAddCustomerModalOpen.value = false
+    isQuickAddAddressModalOpen.value = false
     isBankQrModalOpen.value = false
     isVoucherModalOpen.value = false
     isReceiptModalOpen.value = false
@@ -4095,7 +4346,13 @@ onUnmounted(() => {
         <div class="pos-workspace-panel">
           <div class="pos-orders-tabs-bar">
             <div class="pos-tabs-scroll-area">
-              <button class="btn-create-order-tab" @click="createNewOrder" title="Tạo hóa đơn chờ mới">
+              <button
+                class="btn-create-order-tab"
+                :disabled="pendingOrders.length >= MAX_PENDING_ORDERS"
+                :class="{ 'is-limit': pendingOrders.length >= MAX_PENDING_ORDERS }"
+                @click="createNewOrder"
+                :title="pendingOrders.length >= MAX_PENDING_ORDERS ? `Đã đạt giới hạn tối đa ${MAX_PENDING_ORDERS} hóa đơn chờ` : 'Tạo hóa đơn chờ mới'"
+              >
                 <span>+ Thêm hóa đơn</span>
               </button>
 
@@ -4111,8 +4368,12 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div class="pos-orders-counter-pill" title="Số lượng hóa đơn chờ">
-              <span class="counter-num">{{ pendingOrders.length }}</span>
+            <div
+              class="pos-orders-counter-pill"
+              :class="{ 'is-full': pendingOrders.length >= MAX_PENDING_ORDERS }"
+              :title="`Số lượng hóa đơn chờ: ${pendingOrders.length}/${MAX_PENDING_ORDERS}`"
+            >
+              <span class="counter-num">{{ pendingOrders.length }}/{{ MAX_PENDING_ORDERS }}</span>
               <span class="counter-lbl">hóa đơn</span>
             </div>
           </div>
@@ -4280,6 +4541,13 @@ onUnmounted(() => {
             </div>
 
             <div class="pos-delivery-head-actions">
+              <button type="button" class="btn-del-action-add" @click="openQuickAddAddressModal" title="Thêm nhanh địa chỉ mới cho phần giao hàng">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>+ Thêm nhanh địa chỉ</span>
+              </button>
               <button v-if="currentOrder.customer" type="button" class="btn-del-action-fill" @click="fillDeliveryFromCustomer" title="Lấy họ tên, SĐT và địa chỉ từ khách hàng đã chọn">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
@@ -4324,7 +4592,41 @@ onUnmounted(() => {
                   <span v-if="addr.macDinh" class="pill-default-tag">Mặc định</span>
                   <span class="pill-addr-text">{{ [addr.diaChiCuThe, addr.phuong, addr.thanhPho].filter(Boolean).join(', ') }}</span>
                 </button>
+                <button
+                  type="button"
+                  class="saved-addr-add-btn"
+                  @click="openQuickAddAddressModal"
+                  title="Thêm địa chỉ mới vào sổ địa chỉ của khách"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  <span>+ Thêm địa chỉ</span>
+                </button>
               </div>
+            </div>
+            <div v-else-if="currentOrder.customer" class="pos-del-saved-addresses-bar empty-addr-bar">
+              <div class="saved-addr-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <span>Khách hàng chưa có địa chỉ lưu sẵn.</span>
+              </div>
+              <button
+                type="button"
+                class="saved-addr-add-btn"
+                @click="openQuickAddAddressModal"
+                title="Thêm địa chỉ mới vào sổ địa chỉ của khách"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>+ Thêm địa chỉ mới cho khách</span>
+              </button>
             </div>
 
             <div class="pos-delivery-form-grid">
@@ -4481,7 +4783,17 @@ onUnmounted(() => {
                 </div>
                 <div v-else class="del-fee-value-box">
                   <span class="del-fee-lbl">Phí vận chuyển:</span>
-                  <strong class="del-fee-amount">{{ formatVnd(currentOrder.deliveryInfo.shippingFee || 0) }}</strong>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span v-if="isFreeShipEligible" class="badge-free-ship-tag" style="background: #ecfdf5; color: #059669; font-weight: 700; font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 1px solid #a7f3d0;">
+                      🎉 Miễn phí ship (Đơn &gt; 10tr)
+                    </span>
+                    <strong class="del-fee-amount" :style="{ textDecoration: isFreeShipEligible ? 'line-through' : 'none', color: isFreeShipEligible ? '#94a3b8' : 'inherit' }">
+                      {{ formatVnd(currentOrder.deliveryInfo.rawShippingFee || currentOrder.deliveryInfo.shippingFee || 0) }}
+                    </strong>
+                    <strong v-if="isFreeShipEligible" style="color: #059669; font-size: 15px; font-weight: 800;">
+                      0 ₫
+                    </strong>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4631,10 +4943,17 @@ onUnmounted(() => {
               <span class="bill-label">Giảm giá voucher:</span>
               <span class="bill-val">- {{ formatVnd(discountAmount) }}</span>
             </div>
-            <div v-if="currentOrder && currentOrder.isDelivery && currentOrder.deliveryInfo.shippingFee > 0"
-              class="bill-row">
+            <div v-if="currentOrder && currentOrder.isDelivery" class="bill-row">
               <span class="bill-label">Phí vận chuyển:</span>
-              <span class="bill-val">+ {{ formatVnd(currentOrder.deliveryInfo.shippingFee) }}</span>
+              <span v-if="isFreeShipEligible" class="bill-val" style="color: #059669; font-weight: 700;">
+                0 ₫ (Miễn phí ship)
+              </span>
+              <span v-else-if="currentOrder.deliveryInfo.shippingFee > 0" class="bill-val">
+                + {{ formatVnd(currentOrder.deliveryInfo.shippingFee) }}
+              </span>
+              <span v-else class="bill-val text-muted">
+                0 ₫
+              </span>
             </div>
           </div>
 
@@ -5357,6 +5676,179 @@ onUnmounted(() => {
                 <polyline points="7 3 7 8 15 8"></polyline>
               </svg>
               <span>{{ isSavingCustomer ? 'Đang lưu...' : 'Lưu khách hàng' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- MODAL: THÊM NHANH ĐỊA CHỈ CHO PHẦN GIAO HÀNG -->
+    <transition name="fade">
+      <div v-if="isQuickAddAddressModalOpen" class="pos-modal-overlay" @click.self="isQuickAddAddressModalOpen = false">
+        <div class="pos-modal-dialog modal-customer-dialog modal-quick-address-dialog">
+          <div class="pos-modal-head cust-modal-header quick-addr-modal-head">
+            <div class="modal-head-title">
+              <div class="modal-title-icon customer-icon-badge addr-icon-badge">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                  <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+              </div>
+              <div class="modal-title-text-group">
+                <h3 class="cust-modal-title">Thêm nhanh địa chỉ giao hàng</h3>
+                <span class="cust-modal-subtitle">
+                  {{ currentOrder?.customer ? `Thêm địa chỉ cho khách: ${currentOrder.customer.ten || currentOrder.customer.tenKhachHang}` : 'Thêm thông tin nhận hàng và tính phí vận chuyển tự động' }}
+                </span>
+              </div>
+            </div>
+            <button class="pos-modal-close" @click="isQuickAddAddressModalOpen = false" title="Đóng (Esc)">×</button>
+          </div>
+
+          <div class="pos-modal-body modal-customer-body">
+            <div class="customer-form-grid">
+              <!-- Họ và tên người nhận -->
+              <div class="cust-form-group">
+                <label class="cust-label">Họ và tên người nhận <span class="required-star">*</span></label>
+                <div class="cust-input-wrap">
+                  <span class="cust-input-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                  </span>
+                  <input
+                    type="text"
+                    class="cust-input"
+                    placeholder="VD: Nguyễn Văn Anh"
+                    v-model="quickAddressForm.recipientName"
+                  />
+                </div>
+              </div>
+
+              <!-- SĐT người nhận -->
+              <div class="cust-form-group">
+                <label class="cust-label">Số điện thoại nhận hàng <span class="required-star">*</span></label>
+                <div class="cust-input-wrap">
+                  <span class="cust-input-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                    </svg>
+                  </span>
+                  <input
+                    type="tel"
+                    maxlength="11"
+                    class="cust-input"
+                    placeholder="VD: 0987654321"
+                    v-model="quickAddressForm.recipientPhone"
+                  />
+                </div>
+              </div>
+
+              <!-- Tỉnh / Thành phố -->
+              <div class="cust-form-group">
+                <label class="cust-label">Tỉnh / Thành phố <span class="required-star">*</span></label>
+                <div class="cust-input-wrap">
+                  <select
+                    class="cust-input cust-select"
+                    v-model="quickAddressForm.province"
+                    @change="onQuickAddressProvinceChange"
+                  >
+                    <option :value="null" disabled>-- Chọn Tỉnh / Thành phố --</option>
+                    <option v-for="p in provincesList" :key="p.id" :value="p">{{ p.name }}</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Phường / Xã -->
+              <div class="cust-form-group">
+                <label class="cust-label">Phường / Xã <span class="required-star">*</span></label>
+                <div class="cust-input-wrap">
+                  <select
+                    class="cust-input cust-select"
+                    v-model="quickAddressForm.ward"
+                    :disabled="!quickAddressForm.province || isQuickAddWardsLoading"
+                  >
+                    <option :value="null" disabled>
+                      {{ isQuickAddWardsLoading ? 'Đang tải danh sách Phường / Xã...' : '-- Chọn Phường / Xã --' }}
+                    </option>
+                    <option v-for="w in quickAddAddressWards" :key="w.id" :value="w">{{ w.name }}</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Tên gợi nhớ địa chỉ (nếu có khách hàng) -->
+              <div class="cust-form-group" v-if="currentOrder?.customer">
+                <label class="cust-label">Tên gợi nhớ (Tùy chọn)</label>
+                <div class="cust-input-wrap">
+                  <span class="cust-input-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                  </span>
+                  <input
+                    type="text"
+                    class="cust-input"
+                    placeholder="VD: Nhà riêng, Chỗ làm..."
+                    v-model="quickAddressForm.addressName"
+                  />
+                </div>
+              </div>
+
+              <!-- Địa chỉ cụ thể -->
+              <div class="cust-form-group" :class="{ 'cust-full-span': !currentOrder?.customer }">
+                <label class="cust-label">Địa chỉ cụ thể <span class="required-star">*</span></label>
+                <div class="cust-input-wrap">
+                  <span class="cust-input-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                      <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                  </span>
+                  <input
+                    type="text"
+                    class="cust-input"
+                    placeholder="Số nhà, tên đường, tòa nhà..."
+                    v-model="quickAddressForm.streetAddress"
+                    @keyup.enter="submitQuickAddAddress"
+                  />
+                </div>
+              </div>
+
+              <!-- Tùy chọn lưu vào hồ sơ khách hàng -->
+              <div class="quick-addr-opts-box cust-full-span" v-if="currentOrder?.customer">
+                <label class="quick-addr-opt-item">
+                  <input type="checkbox" class="custom-chk" v-model="quickAddressForm.saveToCustomerProfile" />
+                  <span>Lưu vào sổ địa chỉ của khách hàng <strong>{{ currentOrder.customer.ten || currentOrder.customer.tenKhachHang }}</strong></span>
+                </label>
+                <label class="quick-addr-opt-item" v-if="quickAddressForm.saveToCustomerProfile">
+                  <input type="checkbox" class="custom-chk" v-model="quickAddressForm.isDefault" />
+                  <span>Đặt làm địa chỉ nhận hàng mặc định cho các đơn sau</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="cust-hint-card">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span>Địa chỉ mới sẽ được áp dụng ngay cho đơn hàng và tự động tính lại phí giao hàng GHN.</span>
+            </div>
+          </div>
+
+          <div class="pos-modal-footer cust-modal-footer">
+            <button class="btn-cust-cancel" @click="isQuickAddAddressModalOpen = false" :disabled="isSavingQuickAddress">
+              Hủy
+            </button>
+            <button class="btn-cust-save" :disabled="isSavingQuickAddress" @click="submitQuickAddAddress">
+              <span v-if="isSavingQuickAddress" class="spinner-inline"></span>
+              <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+              <span>{{ isSavingQuickAddress ? 'Đang lưu...' : 'Lưu & Áp dụng ngay' }}</span>
             </button>
           </div>
         </div>

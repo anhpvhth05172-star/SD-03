@@ -270,6 +270,69 @@ public class HoaDonService {
         );
     }
 
+    public void guiEmailHoaDonTuDong(HoaDon h, String emailNhan) {
+        if (h == null) return;
+        try {
+            String email = emailNhan;
+            if (isBlank(email) && h.getKhachHang() != null) {
+                email = h.getKhachHang().getEmail();
+            }
+            if (isBlank(email)) {
+                log.info("Đơn hàng #{} không có email người nhận, bỏ qua gửi email tự động.", h.getMaHoaDon());
+                return;
+            }
+
+            List<ChiTietHoaDon> chiTietList = chiTietHoaDonRepository.findByHoaDonId(h.getId());
+            List<EmailService.ChiTietDongMail> dongList = new ArrayList<>();
+            java.text.NumberFormat nf = java.text.NumberFormat.getCurrencyInstance(new java.util.Locale("vi", "VN"));
+
+            for (ChiTietHoaDon ct : chiTietList) {
+                SanPhamChiTiet s = ct.getSanPhamChiTiet();
+                String tenSp = (s != null && s.getSanPham() != null) ? s.getSanPham().getTenSanPham() : "Sản phẩm";
+                String bienThe = "";
+                if (s != null) {
+                    String size = s.getKichCo() != null ? s.getKichCo().getTenKichCo() : "";
+                    String color = s.getMauSac() != null ? s.getMauSac().getTenMau() : "";
+                    bienThe = "Size " + size + (color.isEmpty() ? "" : " - " + color);
+                }
+                int sl = ct.getSoLuong() != null ? ct.getSoLuong() : 1;
+                String donGia = ct.getDonGia() != null ? nf.format(ct.getDonGia()) : "0 đ";
+                String thanhTien = ct.getThanhTien() != null ? nf.format(ct.getThanhTien()) : "0 đ";
+                dongList.add(new EmailService.ChiTietDongMail(tenSp, bienThe, sl, donGia, thanhTien));
+            }
+
+            String tenKh = !isBlank(h.getTenKhachHang()) ? h.getTenKhachHang()
+                : (h.getKhachHang() != null ? h.getKhachHang().getTenKhachHang() : "Quý khách");
+
+            BigDecimal phiShip = h.getPhiVanChuyen() != null ? h.getPhiVanChuyen() : BigDecimal.ZERO;
+            BigDecimal tienSauGiam = h.getTienSauGiamGia() != null ? h.getTienSauGiamGia() : BigDecimal.ZERO;
+            BigDecimal tienGiam = h.getTienGiam() != null ? h.getTienGiam() : BigDecimal.ZERO;
+            BigDecimal tongHang = h.getTongTien() != null ? h.getTongTien().subtract(phiShip) : BigDecimal.ZERO;
+
+            java.time.format.DateTimeFormatter dtf = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy");
+            String ngayTao = h.getNgayTao() != null ? h.getNgayTao().format(dtf) : "";
+
+            emailService.guiMailHoaDonAsync(
+                email.trim(),
+                tenKh,
+                h.getMaHoaDon(),
+                toTenTrangThai(h.getTrangThai()),
+                toTenLoaiDon(h.getLoaiDon()),
+                !isBlank(h.getDiaChiNhanHang()) ? h.getDiaChiNhanHang() : "Nhận tại quầy",
+                nf.format(tongHang),
+                nf.format(tienGiam),
+                nf.format(phiShip),
+                nf.format(tienSauGiam),
+                ngayTao,
+                dongList
+            );
+            log.info("Đã kích hoạt gửi email tự động cho hóa đơn #{} tới {}", h.getMaHoaDon(), email.trim());
+        } catch (Exception e) {
+            log.warn("Lỗi chuẩn bị gửi email tự động cho hóa đơn #{}: {}", h.getMaHoaDon(), e.getMessage());
+        }
+    }
+
+
     public byte[] xuatExcel(String ma, LocalDate tuNgay, LocalDate denNgay, String loaiDon, String trangThai) {
         BoLoc loc = chuanHoaBoLoc(ma, tuNgay, denNgay, loaiDon, trangThai);
         List<HoaDon> ds = hoaDonRepository.findAllByFilters(
@@ -446,6 +509,9 @@ public class HoaDonService {
         luuCacDong(hoaDon, lines, req);
         if (phieu != null) {
             ghiLichSuSuDung(hoaDon, phieu);
+        }
+        if (!"CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
+            guiEmailHoaDonTuDong(hoaDon, req.getEmail());
         }
         return toFullDTO(hoaDon);
     }
@@ -635,8 +701,7 @@ public class HoaDonService {
             boolean duDiaChi = !isBlank(hoaDon.getDiaChiNhanHang())
                 && hoaDon.getToDistrictId() != null
                 && !isBlank(hoaDon.getToWardCode());
-            boolean duPhi = hoaDon.getPhiVanChuyen() != null
-                && hoaDon.getPhiVanChuyen().compareTo(BigDecimal.ZERO) > 0;
+            boolean duPhi = hoaDon.getPhiVanChuyen() != null; // Cho phép 0 nếu là đơn miễn phí vận chuyển (Free Ship)
             if (!duDiaChi || !duPhi) {
                 throw new IllegalArgumentException(
                     "Đơn online chưa đủ địa chỉ nhận hàng/phí vận chuyển để xác nhận");
@@ -1026,6 +1091,14 @@ boolean isTaiQuay = "TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon())) || "TAI_QUA
         if (!"ONLINE".equals(toMaLoaiDon(req.getLoaiDon()))) {
             return;
         }
+        // Chính sách Free Ship cho đơn hàng có tổng tiền hàng >= 10.000.000đ
+        BigDecimal tienHangTam = req.getChiTiet() != null ? req.getChiTiet().stream()
+            .map(d -> (d.getDonGia() != null ? d.getDonGia() : BigDecimal.ZERO).multiply(BigDecimal.valueOf(d.getSoLuong() != null ? d.getSoLuong() : 1)))
+            .reduce(BigDecimal.ZERO, BigDecimal::add) : BigDecimal.ZERO;
+        if (tienHangTam.compareTo(BigDecimal.valueOf(10000000)) >= 0 || (req.getPhiVanChuyen() != null && req.getPhiVanChuyen().compareTo(BigDecimal.ZERO) == 0)) {
+            req.setPhiVanChuyen(BigDecimal.ZERO);
+            return;
+        }
         if (req.getToProvinceId() == null) {
             throw new IllegalArgumentException("Đơn online phải chọn tỉnh/thành phố để tính phí vận chuyển");
         }
@@ -1237,10 +1310,19 @@ private NhanVien timNhanVien(Long id) {
             dong.add(new DongTinh(spct, d, donGia, thanhTien));
         }
 
-        BigDecimal tong = dong.stream()
+        BigDecimal tongTienHang = dong.stream()
             .map(DongTinh::thanhTien)
-            .reduce(BigDecimal.ZERO, BigDecimal::add)
-            .add(hoaDon.getPhiVanChuyen());
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Chính sách Free Ship cho đơn hàng có tổng tiền hàng >= 10.000.000đ
+        if (tongTienHang.compareTo(BigDecimal.valueOf(10000000)) >= 0) {
+            hoaDon.setPhiVanChuyen(BigDecimal.ZERO);
+            if (req != null) {
+                req.setPhiVanChuyen(BigDecimal.ZERO);
+            }
+        }
+
+        BigDecimal tong = tongTienHang.add(hoaDon.getPhiVanChuyen() != null ? hoaDon.getPhiVanChuyen() : BigDecimal.ZERO);
         hoaDon.setTongTien(tong);
         BigDecimal giam = tinhGiamGia(hoaDon);
         hoaDon.setTienGiam(giam);
@@ -1647,6 +1729,7 @@ private NhanVien timNhanVien(Long id) {
         hoaDon.setNguoiCapNhat("VNPAY");
         HoaDon saved = hoaDonRepository.save(hoaDon);
         ghiLichSuTrangThai(saved, tu, "CHO_XAC_NHAN", "Khách hàng thanh toán qua VNPAY thành công", "VNPAY (Hệ thống)");
+        guiEmailHoaDonTuDong(saved, null);
         return toFullDTO(saved);
     }
 
@@ -1885,6 +1968,7 @@ private NhanVien timNhanVien(Long id) {
         hoaDon.setNguoiCapNhat(nguoiCapNhatHienTai());
         HoaDon saved = hoaDonRepository.save(hoaDon);
         ghiLichSuTrangThai(saved, tu, trangThaiMoi, "Thanh toán thành công tại quầy", tenNguoiThaoTacHienTai());
+        guiEmailHoaDonTuDong(saved, req != null ? req.getEmail() : null);
         return toFullDTO(saved);
     }
 }

@@ -431,7 +431,10 @@ const voucherMsg = reactive({ text: "", ok: false });
 const manualRemoved = ref(false); // khách chủ động gỡ mã -> không tự áp lại
 
 // Tổng trước giảm = tiền hàng + phí vận chuyển (khớp cách tính của back-end)
-const orderTotal = computed(() => cartTotal.value + shippingFee.value);
+const FREE_SHIP_THRESHOLD = 10000000;
+const isFreeShip = computed(() => Number(cartTotal.value || 0) >= FREE_SHIP_THRESHOLD);
+const actualShippingFee = computed(() => (isFreeShip.value ? 0 : Number(shippingFee.value || 0)));
+const orderTotal = computed(() => cartTotal.value + actualShippingFee.value);
 const voucherIsAvailable = (v) => {
   const now = new Date();
   const end = v.ngayKetThuc ? new Date(v.ngayKetThuc) : null;
@@ -678,6 +681,7 @@ function buildHoaDonRequest() {
     idKhachHang: customer.value?.id ?? null,
     tenKhachHang: f.name.trim(),
     soDienThoaiKhachHang: f.phone.trim(),
+    email: customer.value?.email || f.email?.trim() || null,
     diaChiNhanHang: fullDeliveryAddress.value,
     ghiChu: f.note.trim(),
 
@@ -686,7 +690,7 @@ function buildHoaDonRequest() {
 
     ...phuongThucFields(f.pay),
     idPhieuGiamGia: voucher.value?.id ?? null,
-    phiVanChuyen: shippingFee.value,
+    phiVanChuyen: actualShippingFee.value,
     toProvinceId: toProvinceId.value,
     toDistrictId: toDistrictId.value,
     toWardCode: toWardCode.value,
@@ -1086,7 +1090,7 @@ async function copyOrderCode() {
                 >Nhận hàng trong 1-3 ngày làm việc</span
               >
             </span>
-            <span class="small fw-bold">{{ shippingLoading ? 'Đang tính...' : money(shippingFee) }}</span>
+            <span class="small fw-bold" :class="{ 'text-success': isFreeShip }">{{ shippingLoading ? 'Đang tính...' : (isFreeShip ? '0 ₫ (Miễn phí ship)' : money(shippingFee)) }}</span>
           </label>
         </section>
 
@@ -1354,7 +1358,7 @@ async function copyOrderCode() {
             </div>
             <div class="co-row">
               <span>Phí vận chuyển</span>
-              <span class="fw-semibold">{{ money(shippingFee) }}</span>
+              <span class="fw-semibold" :class="{ 'text-success': isFreeShip }">{{ isFreeShip ? '0 ₫ (Miễn phí ship)' : money(shippingFee) }}</span>
             </div>
             <div v-if="discount" class="co-row text-success">
               <span

@@ -250,6 +250,32 @@ public class EmailService {
     /**
      * Gửi lại email thông tin hóa đơn / đơn hàng cho khách hàng.
      */
+    /**
+     * Gửi bất đồng bộ email thông tin hóa đơn / đơn hàng cho khách hàng sau khi thanh toán hoặc tạo đơn.
+     */
+    @Async
+    public void guiMailHoaDonAsync(
+        String toEmail,
+        String tenKhachHang,
+        String maHoaDon,
+        String trangThai,
+        String loaiDon,
+        String diaChiNhanHang,
+        String tongTienHang,
+        String tienGiam,
+        String phiVanChuyen,
+        String tongThanhToan,
+        String ngayTao,
+        List<ChiTietDongMail> chiTietList
+    ) {
+        try {
+            guiMailHoaDon(toEmail, tenKhachHang, maHoaDon, trangThai, loaiDon, diaChiNhanHang,
+                          tongTienHang, tienGiam, phiVanChuyen, tongThanhToan, ngayTao, chiTietList);
+        } catch (Exception e) {
+            log.warn("Gửi email hóa đơn bất đồng bộ thất bại tới {}: {}", toEmail, e.getMessage());
+        }
+    }
+
     public boolean guiMailHoaDon(
         String toEmail,
         String tenKhachHang,
