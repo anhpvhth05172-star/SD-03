@@ -108,7 +108,8 @@ public class HoaDonService {
 
     private static final Map<String, List<String>> TRANSITION_MAP_POS = new HashMap<>();
     static {
-        TRANSITION_MAP_POS.put("CHO_XAC_NHAN", List.of("DA_HOAN_THANH", "DA_HUY"));
+        TRANSITION_MAP_POS.put("CHO_XAC_NHAN", List.of("DA_XAC_NHAN", "DA_HOAN_THANH", "DA_HUY"));
+        TRANSITION_MAP_POS.put("DA_XAC_NHAN", List.of("DA_HOAN_THANH", "DA_HUY"));
         TRANSITION_MAP_POS.put("DA_HOAN_THANH", List.of("DA_HOAN_TIEN"));
         TRANSITION_MAP_POS.put("DA_HUY", List.of());
         TRANSITION_MAP_POS.put("DA_HOAN_TIEN", List.of());
@@ -1953,7 +1954,7 @@ private NhanVien timNhanVien(Long id) {
         boolean coGiaoHang = !isBlank(hoaDon.getDiaChiNhanHang())
             || (hoaDon.getPhiVanChuyen() != null && hoaDon.getPhiVanChuyen().compareTo(BigDecimal.ZERO) > 0);
 
-        String trangThaiMoi = coGiaoHang ? "CHO_XAC_NHAN" : "DA_HOAN_THANH";
+        String trangThaiMoi = "DA_XAC_NHAN";
         String tu = hoaDon.getTrangThai();
         hoaDon.setTrangThai(trangThaiMoi);
         hoaDon.setNgayCapNhat(LocalDateTime.now());

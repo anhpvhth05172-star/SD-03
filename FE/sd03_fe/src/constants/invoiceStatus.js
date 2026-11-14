@@ -15,7 +15,7 @@ export const TRANG_THAI_POS_GIAO_HANG = [
   'Đã hoàn thành',
 ]
 
-export const TRANG_THAI_POS = ['Chờ xác nhận', 'Đã hoàn thành']
+export const TRANG_THAI_POS = ['Chờ xác nhận', 'Đã xác nhận', 'Đã hoàn thành']
 
 export const TRANG_THAI_GIAO_THAT_BAI = [
   'Chờ xác nhận',

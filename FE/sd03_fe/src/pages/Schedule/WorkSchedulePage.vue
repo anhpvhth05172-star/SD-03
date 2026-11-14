@@ -806,9 +806,24 @@ onMounted(() => {
     </div>
     <!-- 1. BREADCRUMBS -->
     <div class="schedule-breadcrumbs">
-      <span class="crumb-parent">Lịch làm việc</span>
-      <span class="crumb-separator">/</span>
-      <span class="crumb-current">Lịch làm việc</span>
+      <div class="crumb-nav">
+        <span class="crumb-parent">Lịch làm việc</span>
+        <span class="crumb-separator">/</span>
+        <span class="crumb-current">Lịch làm việc</span>
+      </div>
+      <button
+        type="button"
+        class="btn-giao-ca-link"
+        @click="router.push('/ca')"
+        title="Xem lịch sử giao ca"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15">
+          <polyline points="6 9 6 2 18 2 18 9"></polyline>
+          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+          <rect x="6" y="14" width="12" height="8"></rect>
+        </svg>
+        Lịch sử giao ca
+      </button>
     </div>
 
     <!-- 3. THANH CÔNG CỤ ĐIỀU HƯỚNG & CHẾ ĐỘ XEM -->
@@ -1639,10 +1654,38 @@ onMounted(() => {
 .schedule-breadcrumbs {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   font-size: 13px;
   color: #64748b;
   padding: 2px 0;
+}
+
+.crumb-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-giao-ca-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-giao-ca-link:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #2563eb;
 }
 
 .crumb-parent {

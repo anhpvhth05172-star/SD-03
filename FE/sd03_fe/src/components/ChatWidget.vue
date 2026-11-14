@@ -24,6 +24,74 @@ let timer = null
 let tuId = 0
 let tuIdAI = 0
 
+const MD_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g
+
+const parseMessageSegments = (content) => {
+  if (!content) return []
+  const segments = []
+  let lastIndex = 0
+  const regex = new RegExp(MD_LINK_REGEX)
+  let match
+
+  while ((match = regex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({
+        isLink: false,
+        text: content.slice(lastIndex, match.index),
+      })
+    }
+    const label = match[1]
+    let url = match[2].trim()
+    if (url.includes('/cua-hang/')) {
+      const idx = url.indexOf('/cua-hang/')
+      url = url.slice(idx)
+    }
+    segments.push({
+      isLink: true,
+      text: label,
+      url,
+    })
+    lastIndex = regex.lastIndex
+  }
+
+  if (lastIndex < content.length) {
+    segments.push({
+      isLink: false,
+      text: content.slice(lastIndex),
+    })
+  }
+  return segments
+}
+
+const getProductCards = (content) => {
+  if (!content) return []
+  const cards = []
+  const seenUrls = new Set()
+  const regex = new RegExp(MD_LINK_REGEX)
+  let match
+
+  while ((match = regex.exec(content)) !== null) {
+    const rawName = match[1].trim()
+    let url = match[2].trim()
+    if (url.includes('/cua-hang/')) {
+      const idx = url.indexOf('/cua-hang/')
+      url = url.slice(idx)
+    }
+    if (url.startsWith('/cua-hang/') && !seenUrls.has(url)) {
+      seenUrls.add(url)
+      cards.push({
+        name: rawName,
+        url,
+      })
+    }
+  }
+  return cards
+}
+
+const handleLinkClick = () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
 const doiCheDo = async (mode) => {
   if (cheDo.value === mode) return
   cheDo.value = mode
@@ -61,17 +129,21 @@ const poll = async () => {
     if (cheDo.value === 'ai') {
       if (!hoiThoaiAI.value) return
       const ds = await layTinAI(hoiThoaiAI.value.id, tuIdAI)
-      if (ds.length) {
-        tinNhan.value = [...tinNhan.value, ...ds]
-        tuIdAI = ds[ds.length - 1].id
-        await nextTick()
-        cuonDuoi()
+      if (ds && ds.length) {
+        const existingIds = new Set(tinNhan.value.map((t) => t.id))
+        const newMessages = ds.filter((t) => !existingIds.has(t.id))
+        if (newMessages.length) {
+          tinNhan.value = [...tinNhan.value, ...newMessages]
+          tuIdAI = ds[ds.length - 1].id
+          await nextTick()
+          cuonDuoi()
+        }
       }
       return
     }
     if (!hoiThoaiNhanVien.value) return
     const ds = await layTinKhach(hoiThoaiNhanVien.value.id, tuId)
-    if (ds.length) {
+    if (ds && ds.length) {
       tinNhan.value = [...tinNhan.value, ...ds]
       tuId = ds[ds.length - 1].id
       danhDaDocKhach(hoiThoaiNhanVien.value.id).catch(() => {})
@@ -95,10 +167,19 @@ const gui = async () => {
   loi.value = ''
   try {
     if (cheDo.value === 'ai') {
-      const kq = await hoiAI(text)
-      tinNhan.value = [...tinNhan.value, kq.tinKhach]
-      tuIdAI = typeof kq.tinKhach.id === 'number' ? kq.tinKhach.id : tuIdAI
       noiDung.value = ''
+      await hoiAI(text)
+      if (hoiThoaiAI.value) {
+        const ds = await layTinAI(hoiThoaiAI.value.id, tuIdAI)
+        if (ds && ds.length) {
+          const existingIds = new Set(tinNhan.value.map((t) => t.id))
+          const newMessages = ds.filter((t) => !existingIds.has(t.id))
+          if (newMessages.length) {
+            tinNhan.value = [...tinNhan.value, ...newMessages]
+            tuIdAI = ds[ds.length - 1].id
+          }
+        }
+      }
       await nextTick()
       cuonDuoi()
     } else {
@@ -179,7 +260,50 @@ onUnmounted(() => {
           staff: t.loaiNguoiGui === 'NHAN_VIEN',
         }">
           <span class="bubble-from">{{ tenNguoiGui(t) }}</span>
-          <p class="bubble-text">{{ t.noiDung }}</p>
+          <p class="bubble-text">
+            <template v-for="(seg, idx) in parseMessageSegments(t.noiDung)" :key="idx">
+              <RouterLink
+                v-if="seg.isLink && seg.url.startsWith('/')"
+                :to="seg.url"
+                class="chat-product-link"
+                @click="handleLinkClick"
+              >
+                {{ seg.text }}
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="link-icon">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+              </RouterLink>
+              <a
+                v-else-if="seg.isLink"
+                :href="seg.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="chat-product-link"
+              >
+                {{ seg.text }}
+              </a>
+              <span v-else>{{ seg.text }}</span>
+            </template>
+          </p>
+
+          <!-- Thẻ sản phẩm gợi ý để bấm vào xem chi tiết sản phẩm ngay -->
+          <div v-if="getProductCards(t.noiDung).length > 0" class="chat-product-cards">
+            <RouterLink
+              v-for="(card, cIdx) in getProductCards(t.noiDung)"
+              :key="cIdx"
+              :to="card.url"
+              class="chat-product-card-item"
+              @click="handleLinkClick"
+            >
+              <div class="product-card-icon">👟</div>
+              <div class="product-card-text">
+                <span class="product-card-title">{{ card.name }}</span>
+                <span class="product-card-sub">Xem chi tiết sản phẩm ➔</span>
+              </div>
+            </RouterLink>
+          </div>
         </div>
       </div>
 
@@ -367,5 +491,90 @@ onUnmounted(() => {
 .chat-input button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.chat-product-link {
+  color: #0284c7;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  word-break: break-word;
+  transition: color 0.15s ease;
+}
+
+.chat-product-link:hover {
+  color: #0369a1;
+}
+
+.link-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.chat-product-cards {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-product-card-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.chat-product-card-item:hover {
+  background: #f0f9ff;
+  border-color: #0284c7;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(2, 132, 199, 0.15);
+}
+
+.product-card-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  background: #e0f2fe;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.product-card-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.product-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.product-card-sub {
+  font-size: 11px;
+  color: #0284c7;
+  font-weight: 600;
+  margin-top: 1px;
 }
 </style>

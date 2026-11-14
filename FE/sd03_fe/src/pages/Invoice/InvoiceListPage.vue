@@ -61,8 +61,10 @@ const todayLocal = () => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-fTuNgay.value = ''
-fDenNgay.value = ''
+const maxDate = computed(() => todayLocal())
+
+fTuNgay.value = todayLocal()
+fDenNgay.value = todayLocal()
 
 const parseDate = (value) => {
   const v = (value || '').trim()
@@ -79,6 +81,8 @@ const buildParams = () => {
   const tu = parseDate(fTuNgay.value)
   const den = parseDate(fDenNgay.value)
   if (tu === undefined || den === undefined) return null
+  const today = todayLocal()
+  if ((tu && tu > today) || (den && den > today)) return null
   if (tu) params.tuNgay = tu
   if (den) params.denNgay = den
   if (fLoaiDon.value) params.loaiDon = fLoaiDon.value
@@ -144,10 +148,21 @@ const setDateRange = (preset) => {
 }
 
 const applyFilter = () => {
-  if (!fTuNgay.value) {
-    fDenNgay.value = ''
-  } else if (!fDenNgay.value || fTuNgay.value > fDenNgay.value) {
-    fDenNgay.value = fTuNgay.value > todayLocal() ? fTuNgay.value : todayLocal()
+  const today = todayLocal()
+  let hasFuture = false
+  if (fTuNgay.value && fTuNgay.value > today) {
+    fTuNgay.value = today
+    hasFuture = true
+  }
+  if (fDenNgay.value && fDenNgay.value > today) {
+    fDenNgay.value = today
+    hasFuture = true
+  }
+  if (hasFuture) {
+    notifyWarning('Ngày không hợp lệ', 'Không thể chọn ngày trong tương lai')
+  }
+  if (fTuNgay.value && fDenNgay.value && fTuNgay.value > fDenNgay.value) {
+    fDenNgay.value = fTuNgay.value
   }
   page.value = 0
   load()
@@ -155,8 +170,8 @@ const applyFilter = () => {
 
 const resetFilter = () => {
   fMa.value = ''
-  fTuNgay.value = ''
-  fDenNgay.value = ''
+  fTuNgay.value = todayLocal()
+  fDenNgay.value = todayLocal()
   fLoaiDon.value = ''
   activeTab.value = 'ALL'
   page.value = 0
@@ -262,11 +277,6 @@ const tongTienText = (v) => formatVnd(v)
 
 const xemChiTiet = (row) => router.push(`/hoa-don/${row.id}`)
 
-const coTheSua = (row) =>
-  row && (row.trangThai === 'Chờ xác nhận' || row.maTrangThai === 'CHO_XAC_NHAN')
-
-const suaHoaDon = (row) => router.push(`/hoa-don/${row.id}/sua`)
-
 onMounted(load)
 </script>
 
@@ -365,7 +375,27 @@ onMounted(load)
 
           <div class="filter-col">
             <label class="filter-lbl">Từ ngày</label>
-            <input v-model="fTuNgay" type="date" class="form-control" @change="applyFilter" />
+            <input
+              v-model="fTuNgay"
+              type="date"
+              class="form-control"
+              :max="maxDate"
+              @change="applyFilter"
+              @keyup.enter="applyFilter"
+            />
+          </div>
+
+          <div class="filter-col">
+            <label class="filter-lbl">Đến ngày</label>
+            <input
+              v-model="fDenNgay"
+              type="date"
+              class="form-control"
+              :min="fTuNgay || undefined"
+              :max="maxDate"
+              @change="applyFilter"
+              @keyup.enter="applyFilter"
+            />
           </div>
 
           <div class="filter-actions">
@@ -491,18 +521,6 @@ onMounted(load)
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                         <circle cx="12" cy="12" r="3"></circle>
-                      </svg>
-                    </button>
-                    <button
-                      v-if="coTheSua(row)"
-                      class="act-btn edit-btn"
-                      type="button"
-                      title="Sửa hóa đơn (Chờ xác nhận)"
-                      @click="suaHoaDon(row)"
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                       </svg>
                     </button>
                   </div>

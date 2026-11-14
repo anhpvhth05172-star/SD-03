@@ -18,7 +18,7 @@ const props = defineProps({
 
 const W = 760
 const H = computed(() => props.height)
-const PAD = { l: 46, r: 14, t: 14, b: 30 }
+const PAD = { l: 62, r: 16, t: 20, b: 30 }
 
 const multi = computed(() => Array.isArray(props.series) && props.series.length > 0)
 const hasBarSeries = computed(() => Array.isArray(props.barSeries) && props.barSeries.length > 0)
@@ -168,10 +168,18 @@ const showLine = computed(() => ['duong', 'ket-hop'].includes(props.mode))
 const fmt = (v) => new Intl.NumberFormat('vi-VN').format(Number(v) || 0)
 const fmtValue = (v) => props.currency ? `${fmt(v)} đ` : fmt(v)
 const fmtTick = (v) => {
-  if (!props.currency) return fmt(v)
-  if (v >= 1000000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(v / 1000000)} tr`
-  if (v >= 1000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(v / 1000)} N`
-  return `${fmt(v)} đ`
+  const n = Number(v) || 0
+  if (n === 0) return props.currency ? '0 đ' : '0'
+  if (props.currency) {
+    if (n >= 1000000000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(n / 1000000000)} tỷ`
+    if (n >= 1000000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(n / 1000000)} tr`
+    if (n >= 1000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(n / 1000)} k`
+    return `${fmt(n)} đ`
+  }
+  if (n >= 1000000000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(n / 1000000000)}B`
+  if (n >= 1000000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(n / 1000000)}M`
+  if (n >= 10000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(n / 1000)}k`
+  return fmt(n)
 }
 
 const isEmpty = computed(() => {
@@ -357,9 +365,10 @@ const isEmpty = computed(() => {
                 <text
                   v-if="showLineLabels"
                   :x="xCenter(i)"
-                  :y="yLine(v) - 9"
+                  :y="Math.max(14, yLine(v) - 8)"
                   text-anchor="middle"
                   class="blc-line-label"
+                  :fill="Number(v) < 0 ? '#dc2626' : (s.color || '#059669')"
                 >
                   {{ fmtLine(v) }}
                 </text>
@@ -441,7 +450,6 @@ const isEmpty = computed(() => {
 
 .blc-line-label {
   font-size: 10px;
-  font-weight: 600;
-  fill: #059669;
+  font-weight: 700;
 }
 </style>

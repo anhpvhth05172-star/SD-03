@@ -177,19 +177,6 @@ onMounted(async () => {
 
 <template>
   <div class="activity-history-page">
-    <div v-if="!isAdmin && !caHienTai" class="shift-alert-banner">
-      <div class="shift-alert-left">
-        <span class="badge-mode">CHẾ ĐỘ XEM</span>
-        <span class="shift-alert-text">
-          Bạn chưa vào ca làm việc nên chỉ có quyền tra cứu thông tin. Các thao tác bán hàng, tạo đơn hàng và chỉnh sửa
-          dữ liệu đang bị khóa.
-        </span>
-      </div>
-      <button type="button" class="btn-enter-shift" @click="diToiGiaoCa">
-        Vào ca làm việc ngay
-      </button>
-    </div>
-
     <div class="schedule-breadcrumbs">
       <span class="crumb-parent">Lịch làm việc</span>
       <span class="crumb-separator">/</span>

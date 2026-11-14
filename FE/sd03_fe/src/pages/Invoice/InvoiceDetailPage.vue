@@ -139,17 +139,6 @@ const tiepTheoMenuList = computed(() => tiepTheoList.value.filter((tt) => tt !==
 
 const laChoXacNhan = computed(() => data.value?.maTrangThai === 'CHO_XAC_NHAN')
 
-const coTheSua = computed(() => {
-  const code = data.value?.maTrangThai || TRANG_THAI_CODE[data.value?.trangThai]
-  return code === 'CHO_XAC_NHAN' || data.value?.trangThai === 'Chờ xác nhận'
-})
-
-const suaDonHang = () => {
-  if (data.value?.id) {
-    router.push(`/hoa-don/${data.value.id}/sua`)
-  }
-}
-
 const coTheHuy = computed(() => {
   const code = data.value?.maTrangThai || TRANG_THAI_CODE[data.value?.trangThai]
   return code === 'CHO_XAC_NHAN' && tiepTheoList.value.includes('Đã hủy')
@@ -621,8 +610,25 @@ const load = async (silent = false) => {
   }
   try {
     const freshInvoice = await getInvoice(id)
-    await enrichInvoiceLinesWithVariantData(freshInvoice?.chiTiet || [])
     data.value = freshInvoice
+    loading.value = false
+
+    // Tải các thông tin làm giàu dữ liệu bất đồng bộ (không chặn hiển thị ban đầu)
+    enrichInvoiceLinesWithVariantData(freshInvoice?.chiTiet || [])
+    if (freshInvoice?.idKhachHang && (!silent || !khInfo.value)) {
+      getCustomer(freshInvoice.idKhachHang)
+        .then((res) => { khInfo.value = res })
+        .catch(() => { khInfo.value = null })
+    }
+    lichSuKetThuc.value = []
+    if (TRANG_THAI_KET_THUC.includes(freshInvoice?.trangThai)) {
+      getInvoiceHistory(freshInvoice.id)
+        .then((res) => { lichSuKetThuc.value = res || [] })
+        .catch(() => { lichSuKetThuc.value = [] })
+    }
+    if (!silent) {
+      genQr()
+    }
   } catch (e) {
     if (!silent) {
       error.value = e.message || 'Không tải được chi tiết hóa đơn'
@@ -632,25 +638,6 @@ const load = async (silent = false) => {
     loading.value = false
     return
   }
-  if (data.value?.idKhachHang && (!silent || !khInfo.value)) {
-    try {
-      khInfo.value = await getCustomer(data.value.idKhachHang)
-    } catch {
-      khInfo.value = null
-    }
-  }
-  lichSuKetThuc.value = []
-  if (TRANG_THAI_KET_THUC.includes(data.value?.trangThai)) {
-    try {
-      lichSuKetThuc.value = await getInvoiceHistory(data.value.id)
-    } catch {
-      lichSuKetThuc.value = []
-    }
-  }
-  if (!silent) {
-    await genQr()
-  }
-  loading.value = false
 }
 
 const inHoaDon = async () => {
@@ -710,19 +697,6 @@ onBeforeUnmount(() => {
         <span class="crumb-current">Chi tiết hóa đơn</span>
       </nav>
       <div class="inv-top-actions">
-        <button
-          v-if="coTheSua"
-          class="btn-top-nav btn-edit-order"
-          type="button"
-          title="Sửa thông tin đơn hàng (Chờ xác nhận)"
-          @click="suaDonHang"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-          </svg>
-          Sửa đơn hàng
-        </button>
         <button class="btn-top-nav" type="button" @click="router.push('/ban-hang')">
           ← Quay lại bán hàng tại quầy
         </button>
@@ -1286,19 +1260,6 @@ onBeforeUnmount(() => {
                 </button>
               </div>
             </div>
-            <button
-              v-if="coTheSua"
-              class="btn btn-outline btn-sua-don"
-              type="button"
-              title="Sửa thông tin đơn hàng"
-              @click="suaDonHang"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-              </svg>
-              Sửa đơn hàng
-            </button>
             <button
               v-if="coTheHuy && !isTerminal"
               class="btn btn-outline btn-huy-don"

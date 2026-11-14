@@ -217,6 +217,37 @@ const sanPhamDaBanTrang = computed(() => {
   return sanPhamDaBanLoc.value.slice(start, start + sizeDon.value)
 })
 
+/* Thuật toán phân trang thông minh với dấu ba chấm (...) chống tràn nút khi nhiều trang */
+const tinhDanhSachTrang = (totalPages, currentPage) => {
+  const tp = Number(totalPages) || 1
+  const cur = (Number(currentPage) || 0) + 1
+  if (tp <= 7) return Array.from({ length: tp }, (_, i) => i + 1)
+  const set = new Set([1, tp])
+  for (let i = Math.max(1, cur - 1); i <= Math.min(tp, cur + 1); i++) {
+    set.add(i)
+  }
+  if (cur <= 3) {
+    set.add(2)
+    set.add(3)
+  }
+  if (cur >= tp - 2) {
+    set.add(tp - 1)
+    set.add(tp - 2)
+  }
+  const sorted = [...set].sort((a, b) => a - b)
+  const out = []
+  let prev = null
+  for (const p of sorted) {
+    if (prev !== null && p - prev > 1) out.push('...')
+    out.push(p)
+    prev = p
+  }
+  return out
+}
+
+const tongTrangKpiHienTai = computed(() => (activeKpi.value === 'SAN_PHAM_DA_BAN' ? tongTrangSpBan.value : tongTrangDon.value))
+const danhSachTrangDon = computed(() => tinhDanhSachTrang(tongTrangKpiHienTai.value, pageDon.value))
+
 const xemChiTietDon = (id) => {
   if (id) router.push(`/hoa-don/${id}`)
 }
@@ -340,6 +371,7 @@ const sanPhamBangLoc = computed(() => {
 })
 
 const tongTrangBangSp = computed(() => Math.max(1, Math.ceil(sanPhamBangLoc.value.length / sizeBangSp.value)))
+const danhSachTrangBangSp = computed(() => tinhDanhSachTrang(tongTrangBangSp.value, pageBangSp.value))
 const sanPhamBangTrang = computed(() => {
   const start = pageBangSp.value * sizeBangSp.value
   return sanPhamBangLoc.value.slice(start, start + sizeBangSp.value)
@@ -447,6 +479,177 @@ const emailDangGui = ref(false)
 const emailErr = ref('')
 const soSanhMode = ref(false)
 
+const cacNamChon = computed(() => {
+  const hienTai = new Date().getFullYear()
+  const ds = []
+  for (let y = 2020; y <= hienTai; y++) ds.push(y)
+  return ds
+})
+
+const chuyenCheDoSoSanh = () => {
+  soSanhMode.value = !soSanhMode.value
+  if (soSanhMode.value) taiSoSanh()
+}
+
+/* ---------------------------------- So sánh & tăng trưởng ---------------------------------- */
+const ssCheDo = ref('thang')
+const ssNam = ref(new Date().getFullYear())
+const ssTu1 = ref('')
+const ssDen1 = ref('')
+const ssTu2 = ref('')
+const ssDen2 = ref('')
+const ssKeyword = ref('')
+const ssData = ref(null)
+const ssDangTai = ref(false)
+const ssErr = ref('')
+
+const SS_CHE_DO = [
+  { key: 'thang', label: 'Theo Tháng (12 tháng)' },
+  { key: 'quy', label: 'Theo Quý (4 quý)' },
+  { key: 'nam', label: 'Theo Năm (Đối chiếu nhiều năm)' },
+  { key: '2ky', label: 'Tùy chọn 2 kỳ' },
+]
+
+const ssDu4Ngay = computed(() =>
+  Boolean(ssTu1.value && ssDen1.value && ssTu2.value && ssDen2.value)
+)
+
+const ssCoTheTai = computed(() => ssCheDo.value !== '2ky' || ssDu4Ngay.value)
+
+const taiSoSanh = async () => {
+  if (!ssCoTheTai.value) return
+  ssDangTai.value = true
+  ssErr.value = ''
+  try {
+    const params = { cheDo: ssCheDo.value }
+    if (ssCheDo.value !== '2ky') params.nam = ssNam.value
+    if (ssCheDo.value === '2ky') {
+      params.tu1 = ssTu1.value
+      params.den1 = ssDen1.value
+      params.tu2 = ssTu2.value
+      params.den2 = ssDen2.value
+    }
+    if (thuongHieuChon.value) params.thuongHieu = thuongHieuChon.value
+    const kw = ssKeyword.value.trim()
+    if (kw) params.keyword = kw
+    ssData.value = await fetchSoSanh(params)
+  } catch (e) {
+    ssData.value = null
+    ssErr.value = e?.response?.data?.message || e?.message || 'Không tải được dữ liệu so sánh'
+    notifyError('Không tải được dữ liệu so sánh', ssErr.value)
+  } finally {
+    ssDangTai.value = false
+  }
+}
+
+const datLaiSoSanh = () => {
+  ssCheDo.value = 'thang'
+  ssNam.value = new Date().getFullYear()
+  ssTu1.value = ''
+  ssDen1.value = ''
+  ssTu2.value = ''
+  ssDen2.value = ''
+  ssKeyword.value = ''
+}
+
+let ssTimer = null
+watch([ssCheDo, ssNam, thuongHieuChon], () => {
+  if (soSanhMode.value) taiSoSanh()
+})
+watch(ssKeyword, () => {
+  if (!soSanhMode.value) return
+  clearTimeout(ssTimer)
+  ssTimer = setTimeout(() => taiSoSanh(), 400)
+})
+watch([ssTu1, ssDen1, ssTu2, ssDen2], () => {
+  if (!soSanhMode.value || ssCheDo.value !== '2ky') return
+  clearTimeout(ssTimer)
+  ssTimer = setTimeout(() => taiSoSanh(), 400)
+})
+
+const ssKy = computed(() => ssData.value?.ky || [])
+const ssTop = computed(() => ssData.value?.topSanPham || [])
+const ssTenKy = computed(() => ssKy.value.map((k) => k.tenKy))
+
+const ssTong = computed(() => {
+  let dt = 0
+  let tm = 0
+  let ck = 0
+  let don = 0
+  for (const k of ssKy.value) {
+    dt += k.doanhThu || 0
+    tm += k.tienMat || 0
+    ck += k.tienChuyenKhoan || 0
+    don += k.soDon || 0
+  }
+  const ttBq =
+    ssKy.value.length > 0
+      ? Math.round(ssKy.value.reduce((s, k) => s + (k.tangTruong || 0), 0) / ssKy.value.length)
+      : 0
+  return {
+    tongDt: dt,
+    tongTm: tm,
+    tongCk: ck,
+    tongDon: don,
+    aovTrungBinh: don > 0 ? Math.round(dt / don) : 0,
+    tangTruongBinhQuan: ttBq,
+  }
+})
+
+const ssBarSeries = computed(() => [
+  { label: 'Tiền mặt', color: '#16a34a', values: ssKy.value.map((k) => k.tienMat || 0) },
+  { label: 'Chuyển khoản', color: '#3b82f6', values: ssKy.value.map((k) => k.tienChuyenKhoan || 0) },
+])
+
+const ssLineSeries = computed(() => [
+  { label: 'Tốc độ tăng trưởng (%)', color: '#d92d20', values: ssKy.value.map((k) => k.tangTruong || 0) },
+])
+
+const ssTopCotKy = computed(() => ssTenKy.value)
+
+const layTangTruongLabel = (tt) => {
+  if (tt === null || tt === undefined || Number.isNaN(Number(tt))) return '—'
+  const n = Number(tt)
+  return (n > 0 ? '+' : '') + n.toFixed(1) + '%'
+}
+
+const xuatSoSanh = async () => {
+  if (!ssKy.value.length) {
+    notifyError('Không có dữ liệu để xuất')
+    return
+  }
+  const rows = ssKy.value.map((k, i) => [
+    i + 1,
+    k.tenKy,
+    k.doanhThu || 0,
+    k.tienMat || 0,
+    k.tienChuyenKhoan || 0,
+    k.soDon || 0,
+    k.aov || 0,
+    k.sanPhamBan || 0,
+    k.chenhLech || 0,
+    k.tangTruong || 0,
+  ])
+  await exportExcel(
+    'so-sanh-tang-truong-doanh-thu.xlsx',
+    [
+      'STT',
+      'Kỳ so sánh',
+      'Tổng doanh thu',
+      'Tiền mặt',
+      'Chuyển khoản',
+      'Số đơn',
+      'AOV',
+      'Đã bán',
+      'Chênh lệch',
+      'Tăng trưởng (%)',
+    ],
+    rows,
+    { sheetName: 'So sánh doanh thu' }
+  )
+  notifySuccess('Đã xuất Excel', 'Tệp Excel (.xlsx) đã được tải xuống')
+}
+
 const moGuiMail = () => {
   emailErr.value = ''
   showEmailModal.value = true
@@ -503,16 +706,45 @@ onMounted(async () => {
     <!-- PAGE HEADER -->
     <div class="page-header">
       <div class="page-header-text">
-        <h1 class="page-title">Thống kê doanh thu</h1>
-        <p class="page-subtitle">Tổng hợp kinh doanh, phân tích sản phẩm và theo dõi tăng trưởng bán hàng</p>
+        <template v-if="soSanhMode">
+          <button type="button" class="btn-back" @click="chuyenCheDoSoSanh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            <span>Quay lại Thống kê</span>
+          </button>
+          <div>
+            <h1 class="page-title">So sánh &amp; Tăng trưởng doanh thu</h1>
+            <p class="page-subtitle">Đối chiếu doanh thu, đo lường tốc độ tăng trưởng và theo dõi biến động sức mua sản phẩm</p>
+          </div>
+        </template>
+        <template v-else>
+          <h1 class="page-title">Thống kê doanh thu</h1>
+          <p class="page-subtitle">Tổng hợp kinh doanh, phân tích sản phẩm và theo dõi tăng trưởng bán hàng</p>
+        </template>
       </div>
       <div class="page-header-actions">
+        <button v-if="!soSanhMode" type="button" class="btn-compare-mode" @click="chuyenCheDoSoSanh">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+            <polyline points="17 6 23 6 23 12"></polyline>
+          </svg>
+          <span>So sánh doanh thu</span>
+        </button>
+        <button v-if="soSanhMode" type="button" class="btn-action-outline" @click="xuatSoSanh">
+          <i class="bi bi-file-earmark-excel me-1"></i>
+          Xuất Excel so sánh
+        </button>
         <button type="button" class="btn-mail-outline" @click="moGuiMail">
           <i class="bi bi-envelope"></i>
           Gửi mail tổng kết
         </button>
       </div>
     </div>
+
+    <!-- NỘI DUNG THỐNG KÊ MẶC ĐỊNH -->
+    <template v-if="!soSanhMode">
 
     <!-- 1. BỘ LỌC THỐNG KÊ (ẢNH 1 - PHẦN TRÊN) -->
     <div class="filter-card">
@@ -610,7 +842,7 @@ onMounted(async () => {
             <i class="bi bi-graph-up-arrow"></i>
           </div>
           <button type="button" class="kpi-toggle-btn">
-            {{ activeKpi === 'DOANH_THU_THUC_TE' ? 'Đang mở ˄' : 'Chi tiết ˅' }}
+            <i class="bi" :class="activeKpi === 'DOANH_THU_THUC_TE' ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
           </button>
         </div>
         <div class="kpi-body">
@@ -630,7 +862,7 @@ onMounted(async () => {
             <i class="bi bi-clock-history"></i>
           </div>
           <button type="button" class="kpi-toggle-btn">
-            {{ activeKpi === 'DOANH_THU_DU_KIEN' ? 'Đang mở ˄' : 'Chi tiết ˅' }}
+            <i class="bi" :class="activeKpi === 'DOANH_THU_DU_KIEN' ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
           </button>
         </div>
         <div class="kpi-body">
@@ -650,19 +882,22 @@ onMounted(async () => {
             <i class="bi bi-wallet2"></i>
           </div>
           <button type="button" class="kpi-toggle-btn">
-            {{ activeKpi === 'TIEN_MAT_CHUYEN_KHOAN' ? 'Đang mở ˄' : 'Chi tiết ˅' }}
+            <i class="bi" :class="activeKpi === 'TIEN_MAT_CHUYEN_KHOAN' ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
           </button>
         </div>
         <div class="kpi-body">
-          <div class="kpi-dual-row">
-            <span class="label">Tiền mặt:</span>
-            <span class="val">{{ formatVnd(tongQuanData.tienMat) }}</span>
+          <div class="kpi-value text-blue">{{ formatVnd(Number(tongQuanData.tienMat || 0) + Number(tongQuanData.tienChuyenKhoan || 0)) }}</div>
+          <div class="kpi-title">Tiền mặt &amp; Chuyển khoản</div>
+          <div class="kpi-split">
+            <div class="kpi-dual-row">
+              <span class="label"><i class="bi bi-cash"></i> Tiền mặt</span>
+              <span class="val">{{ formatVnd(tongQuanData.tienMat) }}</span>
+            </div>
+            <div class="kpi-dual-row">
+              <span class="label"><i class="bi bi-credit-card"></i> Chuyển khoản</span>
+              <span class="val">{{ formatVnd(tongQuanData.tienChuyenKhoan) }}</span>
+            </div>
           </div>
-          <div class="kpi-dual-row">
-            <span class="label">Chuyển khoản:</span>
-            <span class="val">{{ formatVnd(tongQuanData.tienChuyenKhoan) }}</span>
-          </div>
-          <div class="kpi-title mt-1">Tiền mặt &amp; Chuyển khoản</div>
         </div>
       </div>
 
@@ -677,7 +912,7 @@ onMounted(async () => {
             <i class="bi bi-cart3"></i>
           </div>
           <button type="button" class="kpi-toggle-btn">
-            {{ activeKpi === 'TONG_DON_HANG' ? 'Đang mở ˄' : 'Chi tiết ˅' }}
+            <i class="bi" :class="activeKpi === 'TONG_DON_HANG' ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
           </button>
         </div>
         <div class="kpi-body">
@@ -697,7 +932,7 @@ onMounted(async () => {
             <i class="bi bi-box-seam"></i>
           </div>
           <button type="button" class="kpi-toggle-btn">
-            {{ activeKpi === 'SAN_PHAM_DA_BAN' ? 'Đang mở ˄' : 'Chi tiết ˅' }}
+            <i class="bi" :class="activeKpi === 'SAN_PHAM_DA_BAN' ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
           </button>
         </div>
         <div class="kpi-body">
@@ -854,7 +1089,7 @@ onMounted(async () => {
               <th>TRẠNG THÁI</th>
               <th>THANH TOÁN</th>
               <th class="text-end">THÀNH TIỀN</th>
-              <th class="text-center" style="width: 80px;">THAO TÁC</th>
+              <th class="text-center" style="width: 90px; white-space: nowrap;">THAO TÁC</th>
             </tr>
           </thead>
           <tbody>
@@ -940,7 +1175,7 @@ onMounted(async () => {
               <th class="text-center">SỐ LƯỢNG</th>
               <th class="text-end">ĐƠN GIÁ</th>
               <th class="text-end">THÀNH TIỀN</th>
-              <th class="text-center" style="width: 80px;">THAO TÁC</th>
+              <th class="text-center" style="width: 90px; white-space: nowrap;">THAO TÁC</th>
             </tr>
           </thead>
           <tbody>
@@ -1004,24 +1239,28 @@ onMounted(async () => {
             class="page-nav-btn"
             :disabled="pageDon === 0"
             @click="pageDon--"
+            title="Trang trước"
           >
             ‹
           </button>
-          <button
-            v-for="p in (activeKpi === 'SAN_PHAM_DA_BAN' ? tongTrangSpBan : tongTrangDon)"
-            :key="p"
-            type="button"
-            class="page-num-btn"
-            :class="{ 'is-active': pageDon === p - 1 }"
-            @click="pageDon = p - 1"
-          >
-            {{ p }}
-          </button>
+          <template v-for="(p, idx) in danhSachTrangDon" :key="'p-kpi-' + idx">
+            <span v-if="p === '...'" class="page-ellipsis">…</span>
+            <button
+              v-else
+              type="button"
+              class="page-num-btn"
+              :class="{ 'is-active': pageDon === p - 1 }"
+              @click="pageDon = p - 1"
+            >
+              {{ p }}
+            </button>
+          </template>
           <button
             type="button"
             class="page-nav-btn"
-            :disabled="pageDon >= (activeKpi === 'SAN_PHAM_DA_BAN' ? tongTrangSpBan - 1 : tongTrangDon - 1)"
+            :disabled="pageDon >= tongTrangKpiHienTai - 1"
             @click="pageDon++"
+            title="Trang sau"
           >
             ›
           </button>
@@ -1287,24 +1526,28 @@ onMounted(async () => {
             class="page-nav-btn"
             :disabled="pageBangSp === 0"
             @click="pageBangSp--"
+            title="Trang trước"
           >
             ‹
           </button>
-          <button
-            v-for="p in tongTrangBangSp"
-            :key="p"
-            type="button"
-            class="page-num-btn"
-            :class="{ 'is-active': pageBangSp === p - 1 }"
-            @click="pageBangSp = p - 1"
-          >
-            {{ p }}
-          </button>
+          <template v-for="(p, idx) in danhSachTrangBangSp" :key="'p-bsp-' + idx">
+            <span v-if="p === '...'" class="page-ellipsis">…</span>
+            <button
+              v-else
+              type="button"
+              class="page-num-btn"
+              :class="{ 'is-active': pageBangSp === p - 1 }"
+              @click="pageBangSp = p - 1"
+            >
+              {{ p }}
+            </button>
+          </template>
           <button
             type="button"
             class="page-nav-btn"
             :disabled="pageBangSp >= tongTrangBangSp - 1"
             @click="pageBangSp++"
+            title="Trang sau"
           >
             ›
           </button>
@@ -1319,6 +1562,281 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+    </template>
+
+    <!-- CHẾ ĐỘ SO SÁNH DOANH THU & TĂNG TRƯỞNG -->
+    <template v-else>
+      <!-- BỘ LỌC CHẾ ĐỘ ĐỐI CHIẾU -->
+      <div class="filter-card">
+        <div class="filter-header-row mb-3">
+          <div class="filter-title">
+            <i class="bi bi-bar-chart-steps"></i>
+            <span>Chế độ đối chiếu doanh thu</span>
+          </div>
+          <div class="quick-pills-group">
+            <button
+              v-for="c in SS_CHE_DO"
+              :key="c.key"
+              type="button"
+              class="quick-pill-btn"
+              :class="{ 'is-active': ssCheDo === c.key }"
+              @click="ssCheDo = c.key"
+            >
+              {{ c.label }}
+            </button>
+          </div>
+        </div>
+
+        <div class="filter-inputs-grid">
+          <div class="filter-input-col" v-if="ssCheDo !== '2ky'">
+            <label class="filter-label">NĂM SO SÁNH</label>
+            <select v-model="ssNam" class="form-select">
+              <option v-for="y in cacNamChon" :key="y" :value="y">{{ y }}</option>
+            </select>
+          </div>
+
+          <template v-if="ssCheDo === '2ky'">
+            <div class="filter-input-col">
+              <label class="filter-label">KỲ 1: TỪ NGÀY</label>
+              <input type="date" v-model="ssTu1" class="form-control" />
+            </div>
+            <div class="filter-input-col">
+              <label class="filter-label">KỲ 1: ĐẾN NGÀY</label>
+              <input type="date" v-model="ssDen1" class="form-control" />
+            </div>
+            <div class="filter-input-col">
+              <label class="filter-label">KỲ 2: TỪ NGÀY</label>
+              <input type="date" v-model="ssTu2" class="form-control" />
+            </div>
+            <div class="filter-input-col">
+              <label class="filter-label">KỲ 2: ĐẾN NGÀY</label>
+              <input type="date" v-model="ssDen2" class="form-control" />
+            </div>
+          </template>
+
+          <div class="filter-input-col">
+            <label class="filter-label">THƯƠNG HIỆU</label>
+            <select v-model="thuongHieuChon" class="form-select">
+              <option value="">Tất cả thương hiệu</option>
+              <option v-for="th in thuongHieus" :key="th" :value="th">{{ th }}</option>
+            </select>
+          </div>
+
+          <div class="filter-input-col flex-grow">
+            <label class="filter-label">TÌM SẢN PHẨM</label>
+            <div class="search-input-wrap">
+              <i class="bi bi-search search-icon"></i>
+              <input
+                v-model="ssKeyword"
+                type="text"
+                class="form-control ps-4"
+                placeholder="Tìm theo tên / mã sản phẩm..."
+                @keyup.enter="taiSoSanh"
+              />
+            </div>
+          </div>
+
+          <div class="filter-actions-col">
+            <label class="filter-label">&nbsp;</label>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn-filter-apply" @click="taiSoSanh" title="Áp dụng lọc dữ liệu so sánh">
+                <i class="bi bi-funnel-fill"></i>
+                <span>Lọc dữ liệu</span>
+              </button>
+              <button type="button" class="btn-reset" @click="datLaiSoSanh" title="Đặt lại bộ lọc so sánh">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span>Đặt lại</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="ssDangTai" class="ss-loading text-center p-4 bg-white rounded-3 border my-3">
+        <span class="spinner-border spinner-border-sm me-2 text-primary"></span>
+        <span>Đang tải dữ liệu so sánh...</span>
+      </div>
+
+      <div v-else-if="ssErr" class="ss-error alert alert-danger my-3">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <span>{{ ssErr }}</span>
+        <button class="ss-retry-btn ms-3" type="button" @click="taiSoSanh">
+          <i class="bi bi-arrow-clockwise"></i> Thử lại
+        </button>
+      </div>
+
+      <div v-else-if="!ssKy.length" class="ss-empty text-center p-4 bg-white rounded-3 border my-3 text-muted">
+        Không có dữ liệu đối chiếu trong khoảng này
+      </div>
+
+      <template v-if="!ssDangTai && !ssErr && ssKy.length">
+        <!-- 4 THẺ KPI TỔNG HỢP CÁC KỲ -->
+        <div class="kpi-grid mb-3">
+          <div class="kpi-card kpi-green">
+            <div class="kpi-top">
+              <div class="kpi-icon icon-green"><i class="bi bi-graph-up-arrow"></i></div>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value text-green">{{ formatVnd(ssTong.tongDt) }}</div>
+              <div class="kpi-title">Tổng doanh thu các kỳ</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-blue">
+            <div class="kpi-top">
+              <div class="kpi-icon icon-blue"><i class="bi bi-cart3"></i></div>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value text-blue">{{ new Intl.NumberFormat('vi-VN').format(ssTong.tongDon) }}</div>
+              <div class="kpi-title">Tổng đơn hàng</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-amber">
+            <div class="kpi-top">
+              <div class="kpi-icon icon-amber"><i class="bi bi-receipt"></i></div>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value text-amber">{{ formatVnd(ssTong.aovTrungBinh) }}</div>
+              <div class="kpi-title">AOV trung bình (Doanh thu/đơn)</div>
+            </div>
+          </div>
+          <div class="kpi-card" :class="ssTong.tangTruongBinhQuan >= 0 ? 'kpi-green' : 'kpi-rose'">
+            <div class="kpi-top">
+              <div class="kpi-icon" :class="ssTong.tangTruongBinhQuan >= 0 ? 'icon-green' : 'icon-red'"><i class="bi bi-percent"></i></div>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value" :class="ssTong.tangTruongBinhQuan >= 0 ? 'text-green' : 'text-danger'">{{ layTangTruongLabel(ssTong.tangTruongBinhQuan) }}</div>
+              <div class="kpi-title">Tăng trưởng trung bình</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BIỂU ĐỒ DOANH THU & TỐC ĐỘ TĂNG TRƯỞNG -->
+        <div class="content-card mb-3 p-3 bg-white rounded-3 border">
+          <div class="card-header-bar mb-3">
+            <div class="card-title-left d-flex align-items-center">
+              <i class="bi bi-bar-chart-line text-primary me-2"></i>
+              <span class="card-heading fw-bold">Doanh thu &amp; Tốc độ tăng trưởng qua các kỳ</span>
+            </div>
+          </div>
+          <BarLineChart
+            :labels="ssTenKy"
+            :bar-series="ssBarSeries"
+            :line-series="ssLineSeries"
+            :currency="true"
+            line-format="percent"
+            :show-line-labels="true"
+            :height="320"
+          />
+        </div>
+
+        <!-- BẢNG ĐỐI CHIẾU CHI TIẾT CÁC KỲ -->
+        <div class="content-card mb-3 p-3 bg-white rounded-3 border">
+          <div class="card-header-bar mb-3">
+            <div class="card-title-left d-flex align-items-center">
+              <i class="bi bi-table text-primary me-2"></i>
+              <span class="card-heading fw-bold">Đối chiếu doanh thu chi tiết các kỳ</span>
+              <span class="badge bg-light text-dark ms-2 border">Đơn vị: VNĐ</span>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table custom-detail-table align-middle">
+              <thead>
+                <tr>
+                  <th>KỲ SO SÁNH</th>
+                  <th>KHOẢNG THỜI GIAN</th>
+                  <th class="text-end">TỔNG DOANH THU</th>
+                  <th class="text-end">TIỀN MẶT</th>
+                  <th class="text-end">CHUYỂN KHOẢN</th>
+                  <th class="text-end">SỐ ĐƠN</th>
+                  <th class="text-end">AOV</th>
+                  <th class="text-end">ĐÃ BÁN</th>
+                  <th class="text-end">CHÊNH LỆCH</th>
+                  <th class="text-end">TĂNG TRƯỞNG</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="k in ssKy" :key="k.maKy">
+                  <td class="fw-bold">
+                    {{ k.tenKy }}
+                    <span v-if="k.laCaoNhat" class="badge bg-warning text-dark ms-1">Cao nhất</span>
+                  </td>
+                  <td>{{ hienThiNgay(k.tu) }} — {{ hienThiNgay(k.den) }}</td>
+                  <td class="text-end fw-bold text-dark">{{ formatVnd(k.doanhThu) }}</td>
+                  <td class="text-end">{{ formatVnd(k.tienMat) }}</td>
+                  <td class="text-end">{{ formatVnd(k.tienChuyenKhoan) }}</td>
+                  <td class="text-end">{{ new Intl.NumberFormat('vi-VN').format(k.soDon) }}</td>
+                  <td class="text-end">{{ formatVnd(k.aov) }}</td>
+                  <td class="text-end">{{ new Intl.NumberFormat('vi-VN').format(k.sanPhamBan) }}</td>
+                  <td class="text-end" :class="k.chenhLech > 0 ? 'text-success' : k.chenhLech < 0 ? 'text-danger' : ''">
+                    {{ k.chenhLech > 0 ? '+' : '' }}{{ formatVnd(k.chenhLech) }}
+                  </td>
+                  <td class="text-end">
+                    <span class="fw-bold" :class="k.tangTruong > 0 ? 'text-success' : k.tangTruong < 0 ? 'text-danger' : ''">
+                      {{ layTangTruongLabel(k.tangTruong) }}
+                    </span>
+                  </td>
+                </tr>
+                <tr class="table-light fw-bold border-top">
+                  <td colspan="2">TỔNG CỘNG</td>
+                  <td class="text-end text-success">{{ formatVnd(ssTong.tongDt) }}</td>
+                  <td class="text-end">{{ formatVnd(ssTong.tongTm) }}</td>
+                  <td class="text-end">{{ formatVnd(ssTong.tongCk) }}</td>
+                  <td class="text-end">{{ new Intl.NumberFormat('vi-VN').format(ssTong.tongDon) }}</td>
+                  <td class="text-end">{{ formatVnd(ssTong.aovTrungBinh) }}</td>
+                  <td class="text-end">{{ new Intl.NumberFormat('vi-VN').format(ssKy.reduce((s, k) => s + (k.sanPhamBan || 0), 0)) }}</td>
+                  <td></td>
+                  <td class="text-end">
+                    <span class="badge bg-success">Tăng trưởng TB: {{ layTangTruongLabel(ssTong.tangTruongBinhQuan) }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TOP SẢN PHẨM BÁN CHẠY QUA CÁC KỲ -->
+        <div class="content-card p-3 bg-white rounded-3 border">
+          <div class="card-header-bar mb-3">
+            <div class="card-title-left d-flex align-items-center">
+              <i class="bi bi-trophy text-warning me-2"></i>
+              <span class="card-heading fw-bold">Top sản phẩm bán chạy &amp; Đối chiếu sức mua qua các kỳ</span>
+              <span class="badge bg-light text-dark ms-2 border">Top 10 mặt hàng</span>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table custom-detail-table align-middle">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">STT</th>
+                  <th>MÃ SP</th>
+                  <th>TÊN SẢN PHẨM</th>
+                  <th>THƯƠNG HIỆU</th>
+                  <th class="text-end">TỔNG BÁN</th>
+                  <th class="text-end">TỔNG DOANH THU</th>
+                  <th v-for="ten in ssTopCotKy" :key="ten" class="text-end">{{ ten.toUpperCase() }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(t, i) in ssTop" :key="t.maSanPham">
+                  <td>{{ i + 1 }}</td>
+                  <td class="fw-bold">{{ t.maSanPham }}</td>
+                  <td>{{ t.tenSanPham }}</td>
+                  <td><span class="badge bg-light text-dark border">{{ t.tenThuongHieu }}</span></td>
+                  <td class="text-end fw-bold">{{ new Intl.NumberFormat('vi-VN').format(t.tongBan) }}</td>
+                  <td class="text-end fw-bold text-success">{{ formatVnd(t.tongDoanhThu) }}</td>
+                  <td v-for="(v, j) in t.banTheoKy" :key="j" class="text-end">
+                    {{ new Intl.NumberFormat('vi-VN').format(v || 0) }}
+                  </td>
+                </tr>
+                <tr v-if="!ssTop.length">
+                  <td :colspan="6 + ssTopCotKy.length" class="text-center text-muted py-4">Không có sản phẩm nào bán chạy trong khoảng này</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+    </template>
 
     <!-- MODAL GỬI MAIL TỔNG KẾT -->
     <div v-if="showEmailModal" class="modal-backdrop-custom">
@@ -1396,6 +1914,102 @@ onMounted(async () => {
   color: #64748b;
   margin: 4px 0 0 0;
 }
+.page-header-text {
+  display: flex;
+  flex-direction: column;
+}
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.btn-compare-mode {
+  height: 38px;
+  padding: 0 16px;
+  border: 1.5px solid #6366f1;
+  border-radius: 9px;
+  background: #eef2ff;
+  color: #4f46e5;
+  font-size: 13.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.12);
+  font-family: inherit;
+}
+.btn-compare-mode:hover {
+  background: #4f46e5;
+  color: #ffffff;
+  border-color: #4f46e5;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.28);
+}
+.btn-compare-mode:active {
+  transform: translateY(0);
+}
+
+.btn-action-outline {
+  height: 38px;
+  padding: 0 16px;
+  border: 1.5px solid #10b981;
+  border-radius: 9px;
+  background: #ecfdf5;
+  color: #059669;
+  font-size: 13.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.12);
+  font-family: inherit;
+}
+.btn-action-outline:hover {
+  background: #10b981;
+  color: #ffffff;
+  border-color: #10b981;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.28);
+}
+.btn-action-outline:active {
+  transform: translateY(0);
+}
+
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  margin-bottom: 10px;
+  width: fit-content;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+.btn-back:hover {
+  background: #f1f5f9;
+  border-color: #64748b;
+  color: #0f172a;
+  transform: translateX(-3px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+.btn-back:active {
+  transform: translateX(0);
+}
+
 .btn-mail-outline {
   display: inline-flex;
   align-items: center;
@@ -1440,26 +2054,34 @@ onMounted(async () => {
 }
 .quick-pills-group {
   display: flex;
-  gap: 6px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .quick-pill-btn {
-  padding: 4px 12px;
+  padding: 6px 14px;
   border-radius: 20px;
-  border: 1px solid #e2e8f0;
+  border: 1.5px solid #e2e8f0;
   background: #ffffff;
-  font-size: 12px;
-  color: #475569;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #64748b;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  font-family: inherit;
 }
 .quick-pill-btn:hover {
   background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #1e293b;
+  transform: translateY(-1px);
 }
 .quick-pill-btn.is-active {
-  background: #8b5cf6;
+  background: #4f46e5;
   color: #ffffff;
-  border-color: #8b5cf6;
-  font-weight: 600;
+  border-color: #4f46e5;
+  font-weight: 700;
+  box-shadow: 0 3px 10px rgba(79, 70, 229, 0.3);
 }
 
 .filter-inputs-grid {
@@ -1498,17 +2120,79 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 14px;
+  height: 38px;
+  padding: 0 14px;
   background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
   font-size: 13px;
+  font-weight: 600;
   color: #475569;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.18s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  white-space: nowrap;
+  font-family: inherit;
 }
 .btn-reset:hover {
   background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+  transform: translateY(-1px);
+}
+.btn-reset:active {
+  transform: translateY(0);
+}
+
+.btn-filter-apply {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  background: #4f46e5;
+  border: 1.5px solid #4f46e5;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.2);
+  white-space: nowrap;
+  font-family: inherit;
+}
+.btn-filter-apply:hover {
+  background: #4338ca;
+  border-color: #4338ca;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.32);
+}
+.btn-filter-apply:active {
+  transform: translateY(0);
+}
+
+.ss-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #ffffff;
+  border: 1.5px solid #ef4444;
+  border-radius: 8px;
+  color: #dc2626;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.12);
+  font-family: inherit;
+}
+.ss-retry-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.25);
 }
 .filter-status-banner {
   margin-top: 14px;
@@ -1533,20 +2217,23 @@ onMounted(async () => {
   margin-bottom: 20px;
 }
 .kpi-card {
+  position: relative;
   background: #ffffff;
-  border-radius: 12px;
-  padding: 18px;
-  border: 1.5px solid #f1f5f9;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  border-radius: 14px;
+  padding: 18px 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  min-height: 148px;
 }
 .kpi-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
 }
 .kpi-top {
   display: flex;
@@ -1555,121 +2242,168 @@ onMounted(async () => {
   margin-bottom: 12px;
 }
 .kpi-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 16px;
+  transition: transform 0.2s ease;
 }
-.icon-green { background: #dcfce7; color: #16a34a; }
-.icon-amber { background: #fef3c7; color: #d97706; }
-.icon-blue { background: #e0f2fe; color: #0284c7; }
-.icon-purple { background: #f3e8ff; color: #7c3aed; }
-.icon-orange { background: #ffedd5; color: #ea580c; }
+.kpi-card:hover .kpi-icon {
+  transform: scale(1.05);
+}
+.icon-green { background: #ecfdf5; color: #059669; border: 1px solid #d1fae5; }
+.icon-amber { background: #fffbeb; color: #d97706; border: 1px solid #fef3c7; }
+.icon-blue { background: #f0f9ff; color: #0284c7; border: 1px solid #e0f2fe; }
+.icon-purple { background: #faf5ff; color: #7c3aed; border: 1px solid #f3e8ff; }
+.icon-orange { background: #fff7ed; color: #ea580c; border: 1px solid #ffedd5; }
 
 .kpi-toggle-btn {
-  background: #f8fafc;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 3px 10px;
-  font-size: 11px;
-  font-weight: 500;
+  background: #f8fafc;
   color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
   cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
 }
-.kpi-card.is-active .kpi-toggle-btn {
-  background: currentColor;
-  color: #ffffff;
-}
-
-/* Active styles matching Screenshot 1 */
-.kpi-purple.is-active {
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
-}
-.kpi-purple.is-active .kpi-toggle-btn {
-  background: #7c3aed;
-  color: #ffffff;
-  border-color: #7c3aed;
+.kpi-card:hover .kpi-toggle-btn {
+  border-color: #cbd5e1;
+  color: #334155;
+  background: #ffffff;
 }
 
+/* Active styles per card type with sleek top border accent */
+.kpi-card.is-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 14px 14px 0 0;
+}
 .kpi-green.is-active {
-  border-color: #16a34a;
-  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+  border-color: #10b981;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.12);
 }
+.kpi-green.is-active::before { background: #10b981; }
 .kpi-green.is-active .kpi-toggle-btn {
-  background: #16a34a;
+  background: #10b981;
   color: #ffffff;
-  border-color: #16a34a;
+  border-color: #10b981;
 }
 
 .kpi-amber.is-active {
-  border-color: #d97706;
-  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.2);
+  border-color: #f59e0b;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.12);
 }
+.kpi-amber.is-active::before { background: #f59e0b; }
 .kpi-amber.is-active .kpi-toggle-btn {
-  background: #d97706;
+  background: #f59e0b;
   color: #ffffff;
-  border-color: #d97706;
+  border-color: #f59e0b;
 }
 
 .kpi-blue.is-active {
-  border-color: #0284c7;
-  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
+  border-color: #0ea5e9;
+  box-shadow: 0 4px 16px rgba(14, 165, 233, 0.12);
 }
+.kpi-blue.is-active::before { background: #0ea5e9; }
 .kpi-blue.is-active .kpi-toggle-btn {
-  background: #0284c7;
+  background: #0ea5e9;
   color: #ffffff;
-  border-color: #0284c7;
+  border-color: #0ea5e9;
+}
+
+.kpi-purple.is-active {
+  border-color: #8b5cf6;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.12);
+}
+.kpi-purple.is-active::before { background: #8b5cf6; }
+.kpi-purple.is-active .kpi-toggle-btn {
+  background: #8b5cf6;
+  color: #ffffff;
+  border-color: #8b5cf6;
 }
 
 .kpi-orange.is-active {
-  border-color: #ea580c;
-  box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.2);
+  border-color: #f97316;
+  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.12);
 }
+.kpi-orange.is-active::before { background: #f97316; }
 .kpi-orange.is-active .kpi-toggle-btn {
-  background: #ea580c;
+  background: #f97316;
   color: #ffffff;
-  border-color: #ea580c;
+  border-color: #f97316;
 }
 
 .kpi-value {
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 700;
-  line-height: 1.2;
+  letter-spacing: -0.3px;
+  line-height: 1.25;
+  color: #0f172a;
 }
-.text-green { color: #16a34a; }
+.text-green { color: #059669; }
 .text-amber { color: #d97706; }
+.text-blue { color: #0284c7; }
 .text-purple { color: #7c3aed; }
 .text-orange { color: #ea580c; }
+
 .kpi-title {
   font-size: 13px;
+  font-weight: 500;
   color: #64748b;
   margin-top: 4px;
+}
+
+.kpi-split {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 .kpi-dual-row {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  align-items: center;
+  font-size: 11.5px;
   line-height: 1.4;
 }
-.kpi-dual-row .label { color: #64748b; }
-.kpi-dual-row .val { font-weight: 600; color: #1e293b; }
+.kpi-dual-row .label {
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.kpi-dual-row .val {
+  font-weight: 600;
+  color: #1e293b;
+}
 
 /* 3. Khung chi tiết động */
 .kpi-detail-card {
   background: #ffffff;
-  border-radius: 12px;
-  padding: 20px;
+  border-radius: 14px;
+  padding: 20px 22px;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
   margin-bottom: 24px;
-  animation: fadeIn 0.25s ease-out;
+  animation: fadeIn 0.22s ease-out;
 }
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-6px); }
+  from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -1680,25 +2414,29 @@ onMounted(async () => {
   border-bottom: 1px solid #f1f5f9;
   padding-bottom: 14px;
   margin-bottom: 14px;
+  gap: 12px;
 }
 .detail-title-group {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 .detail-heading {
   font-size: 16px;
   font-weight: 700;
-  color: #1e293b;
+  color: #0f172a;
   margin: 0;
+  letter-spacing: -0.2px;
 }
 .detail-count-badge {
   background: #f1f5f9;
   color: #475569;
   font-size: 12px;
   font-weight: 500;
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
 }
 
 .detail-tabs-group {
@@ -1710,23 +2448,30 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
-  border-radius: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
   border: 1px solid #e2e8f0;
   background: #ffffff;
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 500;
   color: #475569;
   cursor: pointer;
   transition: all 0.15s ease;
 }
+.sub-tab-btn:hover {
+  background: #f8fafc;
+  color: #1e293b;
+  border-color: #cbd5e1;
+}
 .sub-tab-btn.is-active {
-  background: #1e293b;
+  background: #0f172a;
   color: #ffffff;
-  border-color: #1e293b;
+  border-color: #0f172a;
   font-weight: 600;
 }
 .tab-badge {
-  background: #0f172a;
+  background: #334155;
   color: #ffffff;
   padding: 1px 6px;
   border-radius: 10px;
@@ -1735,20 +2480,30 @@ onMounted(async () => {
 .sub-tab-btn.is-active .tab-badge {
   background: #ffffff;
   color: #0f172a;
+  font-weight: 700;
 }
 .btn-collapse {
-  padding: 5px 12px;
+  height: 34px;
+  padding: 0 12px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
   color: #64748b;
   cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .btn-collapse:hover {
-  background: #f1f5f9;
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fecaca;
 }
 
+/* Detail Filter Bar - Đồng bộ chiều cao 36px */
 .detail-filter-bar {
   display: flex;
   gap: 10px;
@@ -1758,90 +2513,158 @@ onMounted(async () => {
 .detail-filter-bar .search-wrap {
   position: relative;
   min-width: 260px;
+  flex: 1 1 260px;
 }
-.select-filter {
+.detail-filter-bar .search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 14px;
+  pointer-events: none;
+  z-index: 2;
+}
+.detail-filter-bar .search-wrap .form-control {
+  height: 36px;
+  padding-left: 36px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  background: #ffffff;
+  box-shadow: none;
+}
+.detail-filter-bar .search-wrap .form-control:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+.detail-filter-bar .select-filter,
+.detail-filter-bar .select-sort {
+  height: 36px;
   width: auto;
   min-width: 160px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  background-color: #ffffff;
+  padding: 0 32px 0 12px;
+  box-shadow: none;
 }
-.select-sort {
-  width: auto;
-  min-width: 140px;
+.detail-filter-bar .select-filter:focus,
+.detail-filter-bar .select-sort:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 .btn-reset-detail {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid #e2e8f0;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #cbd5e1;
   background: #ffffff;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
+  font-weight: 500;
   color: #475569;
   cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.btn-reset-detail:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
 }
 
-/* Custom Table */
+/* Custom Table - Header màu trung tính, không wrap, border gọn */
+.custom-detail-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  margin-bottom: 0;
+}
 .custom-detail-table th {
-  background: #f1ebe5;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 10px 12px;
-  border-bottom: none;
+  background: #f8fafc !important;
+  color: #475569 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.4px;
   text-transform: uppercase;
+  padding: 11px 12px !important;
+  border-top: 1px solid #e2e8f0 !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  white-space: nowrap;
 }
 .custom-detail-table td {
   font-size: 13px;
   padding: 12px;
   border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
 }
+.custom-detail-table tbody tr:hover td {
+  background-color: #f8fafc;
+}
+
 .order-code-link {
-  font-weight: 700;
+  font-weight: 600;
   color: #2563eb;
   cursor: pointer;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.order-code-link:hover {
+  color: #1d4ed8;
   text-decoration: underline;
 }
 .staff-badge {
-  color: #0284c7;
+  color: #334155;
   font-weight: 500;
 }
 
+/* Badges phân loại */
 .badge-loai-don {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 3px 8px;
-  border-radius: 12px;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
 }
-.badge-online { background: #e0f2fe; color: #0284c7; }
-.badge-pos { background: #fef3c7; color: #b45309; }
+.badge-online { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+.badge-pos { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
 
 .badge-order-status {
-  padding: 3px 8px;
-  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
 }
-.status-pending { background: #fef3c7; color: #d97706; }
-.status-confirmed { background: #e0f2fe; color: #0284c7; }
-.status-completed { background: #dcfce7; color: #16a34a; }
-.status-cancelled { background: #fee2e2; color: #dc2626; }
+.status-pending { background: #fffbeb; color: #b45309; border: 1px solid #fef3c7; }
+.status-confirmed { background: #eff6ff; color: #1d4ed8; border: 1px solid #dbeafe; }
+.status-completed { background: #ecfdf5; color: #047857; border: 1px solid #d1fae5; }
+.status-cancelled { background: #fef2f2; color: #b91c1c; border: 1px solid #fee2e2; }
 
 .badge-payment-status {
-  padding: 3px 8px;
-  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
 }
-.pay-paid { background: #dcfce7; color: #16a34a; }
-.pay-unpaid { background: #ffedd5; color: #c2410c; }
+.pay-paid { background: #ecfdf5; color: #047857; border: 1px solid #d1fae5; }
+.pay-unpaid { background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; }
 
 .btn-view-action {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   border: 1px solid #e2e8f0;
   background: #ffffff;
   color: #475569;
@@ -1850,6 +2673,7 @@ onMounted(async () => {
   justify-content: center;
   cursor: pointer;
   transition: all 0.15s ease;
+  font-size: 14px;
 }
 .btn-view-action:hover {
   background: #eff6ff;
@@ -1865,29 +2689,49 @@ onMounted(async () => {
   margin-top: 16px;
   font-size: 13px;
   color: #64748b;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 .pagination-pages {
   display: flex;
   gap: 4px;
 }
 .page-nav-btn, .page-num-btn {
-  min-width: 30px;
-  height: 30px;
+  min-width: 32px;
+  height: 32px;
   border-radius: 6px;
   border: 1px solid #e2e8f0;
   background: #ffffff;
-  font-size: 12px;
+  font-size: 12.5px;
   color: #475569;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.15s ease;
+}
+.page-nav-btn:hover:not(:disabled),
+.page-num-btn:hover:not(.is-active) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
 }
 .page-num-btn.is-active {
-  background: #926c45;
+  background: #0f172a;
   color: #ffffff;
-  border-color: #926c45;
+  border-color: #0f172a;
   font-weight: 600;
+}
+.page-ellipsis {
+  min-width: 26px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
 }
 
 /* 4. Chart Section */

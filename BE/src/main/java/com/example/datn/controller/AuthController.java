@@ -1,16 +1,20 @@
 package com.example.datn.controller;
 
 import com.example.datn.dto.Auth.AuthResponse;
+import com.example.datn.dto.Auth.CapNhatThongTinKhachRequest;
 import com.example.datn.dto.Auth.DangKyRequest;
 import com.example.datn.dto.Auth.DangNhapRequest;
 import com.example.datn.dto.Auth.DangXuatRequest;
 import com.example.datn.dto.Auth.RefreshRequest;
 import com.example.datn.dto.Auth.ThongTinResponse;
+import com.example.datn.dto.KhachHang.KhachHangDTO;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.exception.DangNhapThatBaiException;
 import com.example.datn.repository.KhachHangRepository;
 import com.example.datn.repository.NhanVienRepository;
 import com.example.datn.service.AuthService;
+import com.example.datn.service.KhachHangService;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +24,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,6 +37,7 @@ public class AuthController {
     private final AuthService authService;
     private final KhachHangRepository khachHangRepository;
     private final NhanVienRepository nhanVienRepository;
+    private final KhachHangService khachHangService;
 
     @PostMapping("/dang-ky")
     public ResponseEntity<Map<String, Object>> dangKy(@RequestBody DangKyRequest req) {
@@ -121,7 +127,7 @@ public class AuthController {
         }
         KhachHang khachHang = khachHangRepository.findById(idNguoiDung)
             .orElseThrow(() -> new DangNhapThatBaiException("Không tìm thấy tài khoản"));
-        return new ThongTinResponse(
+        ThongTinResponse res = new ThongTinResponse(
             khachHang.getId(),
             khachHang.getTenTaiKhoan(),
             khachHang.getTenKhachHang(),
@@ -129,5 +135,54 @@ public class AuthController {
             khachHang.getSoDienThoai(),
             khachHang.getVaiTro()
         );
+        if (khachHangService != null) {
+            KhachHangDTO dto = khachHangService.get(idNguoiDung);
+            if (dto != null) {
+                res.setMaKhachHang(dto.getMaKhachHang());
+                res.setNgaySinh(dto.getNgaySinh());
+                res.setGioiTinh(dto.getGioiTinh());
+                res.setSoCccd(dto.getSoCccd());
+                res.setHangThanhVien(dto.getHangThanhVien());
+                res.setMaHangThanhVien(dto.getMaHangThanhVien());
+                res.setSoDon(dto.getSoDon());
+                res.setTongChiTieu(dto.getTongChiTieu());
+                res.setDiaChiMacDinh(dto.getDiaChiMacDinh());
+                res.setDanhSachDiaChi(dto.getDanhSachDiaChi());
+                res.setNgayTao(dto.getNgayTao());
+            }
+        }
+        return res;
+    }
+
+    @PutMapping("/thong-tin")
+    public ThongTinResponse capNhatThongTin(@RequestBody CapNhatThongTinKhachRequest req) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof Long idNguoiDung)) {
+            throw new DangNhapThatBaiException("Chưa đăng nhập");
+        }
+        boolean laNhanVien = auth.getAuthorities().stream()
+            .anyMatch(a -> "ROLE_NHAN_VIEN".equals(a.getAuthority()));
+        if (!laNhanVien) {
+            KhachHang khachHang = khachHangRepository.findById(idNguoiDung)
+                .orElseThrow(() -> new DangNhapThatBaiException("Không tìm thấy tài khoản"));
+            if (req != null) {
+                if (req.getTenKhachHang() != null && !req.getTenKhachHang().trim().isEmpty()) {
+                    khachHang.setTenKhachHang(req.getTenKhachHang().trim());
+                }
+                if (req.getSoDienThoai() != null && !req.getSoDienThoai().trim().isEmpty()) {
+                    khachHang.setSoDienThoai(req.getSoDienThoai().trim());
+                }
+                if (req.getNgaySinh() != null) {
+                    khachHang.setNgaySinh(req.getNgaySinh());
+                }
+                if (req.getGioiTinh() != null) {
+                    khachHang.setGioiTinh(req.getGioiTinh());
+                }
+                khachHang.setNgayCapNhat(LocalDateTime.now());
+                khachHang.setNguoiCapNhat(khachHang.getTenTaiKhoan());
+                khachHangRepository.save(khachHang);
+            }
+        }
+        return thongTin();
     }
 }

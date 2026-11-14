@@ -12,6 +12,7 @@ import {
 } from "../store";
 import { getUser, isKhachHangDangNhap } from "@/utils/auth";
 import { listVouchers, suDungCuaToi } from "@/api/voucher";
+import { notifyConfirm } from "@/utils/notify";
 
 const user = ref(isKhachHangDangNhap() ? getUser() : null);
 const myVoucherUsage = ref({});
@@ -155,11 +156,133 @@ const bestVoucherOption = computed(() =>
   eligibleVouchers.value.length > 0 ? eligibleVouchers.value[0] : null,
 );
 
-// Watcher tự động áp dụng voucher tốt nhất
+// State chọn phiếu giảm giá thủ công
+const isVoucherModalOpen = ref(false);
+const manualVoucherCode = ref("");
+const manualVoucherError = ref("");
+const userSelectedManually = ref(false);
+const manualRemoved = ref(false);
+
+const openVoucherModal = () => {
+  manualVoucherCode.value = "";
+  manualVoucherError.value = "";
+  isVoucherModalOpen.value = true;
+};
+
+const closeVoucherModal = () => {
+  isVoucherModalOpen.value = false;
+  manualVoucherError.value = "";
+};
+
+const chooseVoucher = (v) => {
+  if (!v) return;
+  const raw = allVouchers.value.find((d) => VF.id(d) === v.id);
+  if (!raw || !checkVoucher(raw, cartTotal.value)) {
+    manualVoucherError.value = "Mã này chưa đủ điều kiện áp dụng cho giỏ hàng hiện tại.";
+    return;
+  }
+  selectedVoucher.value = v;
+  userSelectedManually.value = true;
+  manualRemoved.value = false;
+  sessionStorage.setItem("ps_selected_voucher_code", v.code);
+  closeVoucherModal();
+};
+
+const handleRemoveVoucher = () => {
+  selectedVoucher.value = null;
+  userSelectedManually.value = false;
+  manualRemoved.value = true;
+  sessionStorage.removeItem("ps_selected_voucher_code");
+};
+
+const applyManualCode = () => {
+  manualVoucherError.value = "";
+  const code = String(manualVoucherCode.value || "").trim().toUpperCase();
+  if (!code) {
+    manualVoucherError.value = "Vui lòng nhập mã giảm giá.";
+    return;
+  }
+  const found = allVouchers.value.find((d) => String(VF.code(d)).toUpperCase() === code);
+  if (!found) {
+    manualVoucherError.value = "Mã giảm giá không tồn tại hoặc đã hết hạn.";
+    return;
+  }
+  if (!checkVoucher(found, cartTotal.value)) {
+    const minReq = VF.min(found);
+    if (cartTotal.value < minReq) {
+      manualVoucherError.value = `Đơn hàng cần tối thiểu ${money(minReq)} để dùng mã này (còn thiếu ${money(minReq - cartTotal.value)}).`;
+    } else {
+      manualVoucherError.value = "Mã giảm giá này hiện không khả dụng cho tài khoản hoặc giỏ hàng của bạn.";
+    }
+    return;
+  }
+  const v = toVoucher(found);
+  chooseVoucher(v);
+};
+
+// Danh sách tất cả voucher kèm trạng thái để hiển thị trong modal chọn voucher
+const voucherModalList = computed(() => {
+  const total = cartTotal.value;
+  const rawCid = user.value?.idKhachHang ?? user.value?.id;
+  const cid = rawCid != null ? Number(rawCid) : null;
+
+  return allVouchers.value
+    .filter((d) => {
+      if (isPersonal(VF.scope(d))) {
+        if (!cid) return false;
+        const assigned = VF.customerIds(d).includes(cid) || VF.usedCustomerIds(d).includes(cid);
+        if (!assigned) return false;
+      }
+      return true;
+    })
+    .map((d) => {
+      const v = toVoucher(d);
+      const eligible = checkVoucher(d, total, false);
+      const disc = eligible ? calcDiscount(v, total) : 0;
+      const needMore = Math.max(0, (v.min || 0) - total);
+      const isBest = bestVoucherOption.value?.v?.id === v.id;
+      const end = VF.end(d);
+      return {
+        v,
+        raw: d,
+        eligible,
+        discount: disc,
+        needMore,
+        isBest,
+        expire: end ? new Date(end).toLocaleDateString("vi-VN") : "",
+      };
+    })
+    .sort((a, b) => {
+      if (a.eligible && !b.eligible) return -1;
+      if (!a.eligible && b.eligible) return 1;
+      return b.discount - a.discount || (a.v.min || 0) - (b.v.min || 0);
+    });
+});
+
+// Watcher tự động áp dụng voucher tốt nhất (vẫn giữ nguyên nhưng tôn trọng lựa chọn thủ công của khách)
 watch(
   [bestVoucherOption, cartTotal],
   ([best]) => {
+    // Nếu khách đã chủ động gỡ mã -> không tự áp lại
+    if (manualRemoved.value) return;
+
+    // Nếu khách đã tự chọn một voucher hợp lệ
+    if (userSelectedManually.value && selectedVoucher.value) {
+      const raw = allVouchers.value.find((d) => VF.id(d) === selectedVoucher.value.id);
+      if (raw && checkVoucher(raw, cartTotal.value)) {
+        sessionStorage.setItem("ps_selected_voucher_code", selectedVoucher.value.code);
+        return;
+      }
+      userSelectedManually.value = false;
+    }
+
+    // Mặc định: tự động chọn voucher tốt nhất
     selectedVoucher.value = best ? best.v : null;
+    if (selectedVoucher.value) {
+      sessionStorage.setItem("ps_selected_voucher_code", selectedVoucher.value.code);
+    } else {
+      sessionStorage.removeItem("ps_selected_voucher_code");
+    }
   },
   { immediate: true },
 );
@@ -238,6 +361,15 @@ const handleQtyChange = async (item, delta) => {
 };
 
 const handleRemove = async (item, idx) => {
+  const tenSp = item.tenSanPham || item.ten || item.name || "sản phẩm này";
+  const ok = await notifyConfirm(
+    "Xác nhận xóa sản phẩm",
+    `Bạn có chắc chắn muốn xóa "${tenSp}" khỏi giỏ hàng?`,
+    "Xóa",
+    "Hủy bỏ",
+    "warning"
+  );
+  if (!ok) return;
   actionLoadingId.value = rowId(item);
   actionError.value = "";
   try {
@@ -251,7 +383,14 @@ const handleRemove = async (item, idx) => {
 };
 
 const handleClear = async () => {
-  if (!confirm("Bạn có chắc chắn muốn xóa toàn bộ giỏ hàng?")) return;
+  const ok = await notifyConfirm(
+    "Xác nhận xóa giỏ hàng",
+    "Bạn có chắc chắn muốn xóa toàn bộ giỏ hàng?",
+    "Xóa toàn bộ",
+    "Hủy bỏ",
+    "warning"
+  );
+  if (!ok) return;
   actionError.value = "";
   try {
     await clearCart();
@@ -459,9 +598,9 @@ const handleClear = async () => {
                 <i class="bi bi-ticket-perforated-fill"></i>
               </div>
               <div class="flex-grow-1 min-w-0">
-                <div class="voucher-code">
-                  {{ selectedVoucher.code }}
-                  <span class="voucher-badge">Ưu đãi tốt nhất</span>
+                <div class="voucher-code d-flex align-items-center justify-content-between flex-wrap gap-1">
+                  <span>{{ selectedVoucher.code }}</span>
+                  <span class="voucher-badge" v-if="bestVoucherOption && selectedVoucher.id === bestVoucherOption.v.id">Ưu đãi tốt nhất</span>
                 </div>
                 <div v-if="selectedVoucher.name" class="voucher-name">
                   {{ selectedVoucher.name }}
@@ -479,8 +618,31 @@ const handleClear = async () => {
                     · đơn từ {{ money(selectedVoucher.min) }}
                   </template>
                 </div>
+                <div class="d-flex align-items-center gap-2 mt-2 pt-2 border-top">
+                  <button type="button" class="btn btn-sm btn-link text-danger p-0 text-decoration-none fw-semibold" @click="openVoucherModal">
+                    <i class="bi bi-arrow-repeat me-1"></i>Đổi phiếu giảm giá
+                  </button>
+                  <span class="text-muted small">·</span>
+                  <button type="button" class="btn btn-sm btn-link text-muted p-0 text-decoration-none small" @click="handleRemoveVoucher">
+                    Gỡ mã
+                  </button>
+                </div>
               </div>
               <div class="voucher-save">-{{ money(discountAmount) }}</div>
+            </div>
+
+            <!-- Khi chưa chọn voucher -->
+            <div v-else class="voucher-box select-prompt" @click="openVoucherModal">
+              <div class="voucher-ico">
+                <i class="bi bi-ticket-perforated"></i>
+              </div>
+              <div class="flex-grow-1 min-w-0">
+                <div class="fw-bold text-dark small">Phiếu giảm giá PolyShoes</div>
+                <div class="text-danger small">Bấm để chọn hoặc nhập mã ưu đãi</div>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-semibold" style="font-size: 12px;">
+                Chọn mã
+              </button>
             </div>
 
             <!-- Gợi ý mua thêm -->
@@ -560,6 +722,132 @@ const handleClear = async () => {
         >
           <i class="bi bi-shop me-1"></i> Mua sắm ngay
         </RouterLink>
+      </div>
+    </div>
+
+    <!-- MODAL CHỌN PHIẾU GIẢM GIÁ -->
+    <div v-if="isVoucherModalOpen" class="voucher-modal-backdrop" @click.self="closeVoucherModal">
+      <div class="voucher-modal-card">
+        <div class="voucher-modal-head">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-ticket-perforated-fill text-danger fs-5"></i>
+            <h5 class="fw-bold mb-0">Chọn phiếu giảm giá PolyShoes</h5>
+          </div>
+          <button type="button" class="btn-close" @click="closeVoucherModal" aria-label="Đóng"></button>
+        </div>
+
+        <div class="voucher-modal-body">
+          <!-- Nhập mã giảm giá thủ công -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold small text-muted">Nhập mã voucher của bạn</label>
+            <div class="d-flex gap-2">
+              <input
+                v-model="manualVoucherCode"
+                type="text"
+                class="form-control text-uppercase"
+                placeholder="Ví dụ: POLYSHOES10"
+                @keyup.enter="applyManualCode"
+              />
+              <button
+                type="button"
+                class="btn btn-danger px-3 fw-semibold text-nowrap"
+                @click="applyManualCode"
+              >
+                Áp dụng
+              </button>
+            </div>
+            <div v-if="manualVoucherError" class="small text-danger mt-1">
+              <i class="bi bi-exclamation-circle me-1"></i>{{ manualVoucherError }}
+            </div>
+          </div>
+
+          <!-- Danh sách voucher khả dụng -->
+          <div class="voucher-list-section">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <span class="fw-bold text-dark small">Tất cả phiếu giảm giá</span>
+              <span class="badge bg-success-subtle text-success">
+                {{ voucherModalList.filter(o => o.eligible).length }}/{{ voucherModalList.length }} dùng được
+              </span>
+            </div>
+
+            <div v-if="!voucherModalList.length" class="text-center py-4 text-muted small">
+              Hiện chưa có mã giảm giá nào.
+            </div>
+
+            <div v-else class="d-flex flex-column gap-2 mb-3">
+              <div
+                v-for="o in voucherModalList"
+                :key="o.v.id"
+                class="v-modal-item"
+                :class="{
+                  'is-active': selectedVoucher && selectedVoucher.id === o.v.id,
+                  'is-disabled': !o.eligible
+                }"
+              >
+                <div class="v-modal-left">
+                  <div class="v-modal-disc">
+                    {{ o.v.type === 'percent' ? `${o.v.value}%` : money(o.v.value) }}
+                  </div>
+                  <div class="v-modal-sub">GIẢM</div>
+                </div>
+
+                <div class="v-modal-mid">
+                  <div class="d-flex align-items-center gap-1 flex-wrap">
+                    <span class="fw-bold text-dark">{{ o.v.code }}</span>
+                    <span v-if="o.isBest && o.eligible" class="badge bg-success" style="font-size: 10px;">Tốt nhất</span>
+                    <span v-if="o.eligible" class="badge bg-success-subtle text-success" style="font-size: 10px;">Dùng được</span>
+                    <span v-else class="badge bg-secondary-subtle text-secondary" style="font-size: 10px;">Chưa đủ điều kiện</span>
+                  </div>
+                  <div class="small text-muted text-truncate" style="max-width: 250px;">
+                    {{ o.v.name || 'Phiếu ưu đãi khách hàng PolyShoes' }}
+                  </div>
+                  <div class="v-modal-rule">
+                    Đơn tối thiểu: {{ money(o.v.min || 0) }}
+                    <template v-if="o.v.max > 0">· Giảm tối đa: {{ money(o.v.max) }}</template>
+                  </div>
+                  <div v-if="o.expire" class="v-modal-rule text-muted">
+                    HSD: {{ o.expire }}
+                  </div>
+
+                  <!-- Thông báo điều kiện -->
+                  <div v-if="!o.eligible" class="small text-danger mt-1">
+                    <i class="bi bi-info-circle me-1"></i>Mua thêm {{ money(o.needMore) }} để dùng mã này
+                  </div>
+                  <div v-else class="small text-success mt-1 fw-semibold">
+                    <i class="bi bi-check2-circle me-1"></i>Tiết kiệm {{ money(o.discount) }}
+                  </div>
+                </div>
+
+                <div class="v-modal-right">
+                  <button
+                    type="button"
+                    class="btn btn-sm"
+                    :class="selectedVoucher && selectedVoucher.id === o.v.id ? 'btn-success' : (o.eligible ? 'btn-outline-danger' : 'btn-light border disabled')"
+                    :disabled="!o.eligible"
+                    @click="chooseVoucher(o.v)"
+                  >
+                    {{ selectedVoucher && selectedVoucher.id === o.v.id ? '✓ Đang dùng' : (o.eligible ? 'Áp dụng' : 'Không khả dụng') }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="voucher-modal-foot">
+          <button
+            v-if="selectedVoucher"
+            type="button"
+            class="btn btn-sm btn-link text-muted text-decoration-none"
+            @click="handleRemoveVoucher(); closeVoucherModal();"
+          >
+            Bỏ chọn mã
+          </button>
+          <div v-else></div>
+          <button type="button" class="btn btn-danger px-4 rounded-pill" @click="closeVoucherModal">
+            Đóng
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1097,5 +1385,115 @@ const handleClear = async () => {
   .summary-card {
     position: static;
   }
+}
+
+/* ===== Chọn phiếu giảm giá (Voucher Box & Modal) ===== */
+.voucher-box.select-prompt {
+  background: #fdf2f2;
+  border: 1.5px dashed #fca5a5;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.voucher-box.select-prompt:hover {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+.voucher-box.select-prompt .voucher-ico {
+  background: #dc2626;
+}
+
+.voucher-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(3px);
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.voucher-modal-card {
+  background: #ffffff;
+  width: 100%;
+  max-width: 540px;
+  max-height: 85vh;
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: vModalZoom 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes vModalZoom {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+.voucher-modal-head {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #f1f5f9;
+}
+.voucher-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+.voucher-modal-foot {
+  padding: 14px 20px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fafafa;
+}
+
+.v-modal-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  transition: all 0.2s ease;
+}
+.v-modal-item.is-active {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+.v-modal-item.is-disabled {
+  opacity: 0.65;
+  background: #f8fafc;
+}
+.v-modal-left {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 68px;
+  text-align: center;
+}
+.v-modal-disc {
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1.2;
+}
+.v-modal-sub {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+}
+.v-modal-mid {
+  flex: 1;
+  min-width: 0;
+}
+.v-modal-rule {
+  font-size: 11px;
+  color: #64748b;
+}
+.v-modal-right {
+  flex-shrink: 0;
 }
 </style>

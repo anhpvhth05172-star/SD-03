@@ -69,7 +69,7 @@ const menu = [
     iconType: 'schedule',
     children: [
       { label: 'Lịch làm việc', path: '/lich-lam-viec' },
-      { label: 'Lịch sử hoạt động', path: '/lich-su-hoat-dong' },
+      { label: 'Lịch sử giao ca', path: '/ca' },
     ],
   },
   {
@@ -86,11 +86,6 @@ const menu = [
     label: 'Chat khách hàng',
     path: '/chat',
     iconType: 'chat',
-  },
-  {
-    label: 'Giao ca',
-    path: '/ca',
-    iconType: 'cashRegister',
   },
 ]
 

@@ -113,7 +113,8 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
           (:loaiDon = 'TAI_QUAY_GIAO_HANG' AND (h.loai_don = 'TAI_QUAY_GIAO_HANG' OR (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND h.dia_chi_nhan_hang IS NOT NULL AND TRIM(h.dia_chi_nhan_hang) <> ''))) OR
           (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))) OR
           (:loaiDon = 'TAI_QUAY_TAT_CA' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy', 'TAI_QUAY_GIAO_HANG'))))
-              AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
+              AND ((:trangThai IS NULL AND h.trang_thai NOT IN ('DA_HUY', N'Đã hủy')) OR
+                   (:trangThai IS NOT NULL AND (h.trang_thai = :trangThai OR (:trangThai = 'DA_HUY' AND h.trang_thai IN ('DA_HUY', N'Đã hủy')))))
               AND h.da_xoa = :daXoa
             ORDER BY CASE WHEN h.trang_thai IN ('DA_HOAN_THANH', 'DA_HOAN_TIEN') THEN 1 ELSE 0 END ASC,
                      h.ngay_tao DESC, h.id DESC
@@ -140,7 +141,8 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
           (:loaiDon = 'TAI_QUAY_GIAO_HANG' AND (h.loai_don = 'TAI_QUAY_GIAO_HANG' OR (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND h.dia_chi_nhan_hang IS NOT NULL AND TRIM(h.dia_chi_nhan_hang) <> ''))) OR
           (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))) OR
           (:loaiDon = 'TAI_QUAY_TAT_CA' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy', 'TAI_QUAY_GIAO_HANG'))))
-              AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
+              AND ((:trangThai IS NULL AND h.trang_thai NOT IN ('DA_HUY', N'Đã hủy')) OR
+                   (:trangThai IS NOT NULL AND (h.trang_thai = :trangThai OR (:trangThai = 'DA_HUY' AND h.trang_thai IN ('DA_HUY', N'Đã hủy')))))
               AND h.da_xoa = :daXoa
             ORDER BY CASE WHEN h.trang_thai IN ('DA_HOAN_THANH', 'DA_HOAN_TIEN') THEN 1 ELSE 0 END ASC,
                      h.ngay_tao DESC, h.id DESC
@@ -155,7 +157,8 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
           (:loaiDon = 'TAI_QUAY_GIAO_HANG' AND (h.loai_don = 'TAI_QUAY_GIAO_HANG' OR (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND h.dia_chi_nhan_hang IS NOT NULL AND TRIM(h.dia_chi_nhan_hang) <> ''))) OR
           (:loaiDon = 'TAI_QUAY' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy') AND (h.dia_chi_nhan_hang IS NULL OR TRIM(h.dia_chi_nhan_hang) = ''))) OR
           (:loaiDon = 'TAI_QUAY_TAT_CA' AND (h.loai_don IN ('TAI_QUAY', N'Tại quầy', 'TAI_QUAY_GIAO_HANG'))))
-              AND (:trangThai IS NULL OR h.trang_thai = :trangThai)
+              AND ((:trangThai IS NULL AND h.trang_thai NOT IN ('DA_HUY', N'Đã hủy')) OR
+                   (:trangThai IS NOT NULL AND (h.trang_thai = :trangThai OR (:trangThai = 'DA_HUY' AND h.trang_thai IN ('DA_HUY', N'Đã hủy')))))
               AND h.da_xoa = :daXoa
             """,
         nativeQuery = true
