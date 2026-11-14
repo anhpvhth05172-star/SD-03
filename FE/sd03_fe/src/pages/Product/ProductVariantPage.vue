@@ -48,8 +48,22 @@ const pageSizeOptions = [5, 10, 20, 50]
 const selectedIds = ref([])
 const posPendingOrders = ref([])
 
+const getTodayDateString = () => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 const loadPosPendingOrders = () => {
   try {
+    const savedDate = localStorage.getItem('polyshoes_pos_pending_date_v1')
+    const today = getTodayDateString()
+    if (savedDate && savedDate !== today) {
+      posPendingOrders.value = []
+      return
+    }
     const raw = localStorage.getItem('polyshoes_pos_pending_orders_v1')
     posPendingOrders.value = raw ? JSON.parse(raw) : []
   } catch {

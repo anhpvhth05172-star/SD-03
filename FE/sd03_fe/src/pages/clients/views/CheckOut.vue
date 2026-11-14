@@ -479,6 +479,7 @@ async function applyVoucher() {
   }
   manualRemoved.value = false;
   voucher.value = r.voucher;
+  sessionStorage.setItem("ps_selected_voucher_code", r.voucher.code);
   voucherMsg.text = "Áp dụng mã thành công!";
   voucherMsg.ok = true;
 }
@@ -490,6 +491,7 @@ function removeVoucher() {
 // Khách bấm gỡ mã
 function onRemoveClick() {
   manualRemoved.value = true;
+  sessionStorage.removeItem("ps_selected_voucher_code");
   removeVoucher();
 }
 // Giỏ thay đổi làm không còn đủ điều kiện -> gỡ voucher
@@ -594,6 +596,21 @@ watch([bestVoucher, orderTotal, customer, myVoucherUsage], ([best]) => {
     }
   }
   if (manualRemoved.value) return;
+
+  // Nếu khách hàng đã chọn mã từ giỏ hàng hoặc phiên trước (sessionStorage)
+  const savedCode = sessionStorage.getItem("ps_selected_voucher_code");
+  if (savedCode && !manualRemoved.value) {
+    const found = allVouchers.value.find((v) => String(VF.code(v)).toUpperCase() === savedCode.toUpperCase());
+    if (found && !checkVoucher(found, false) && calcDiscount(toVoucher(found), orderTotal.value) > 0) {
+      const v = toVoucher(found);
+      voucher.value = v;
+      selectedVoucherId.value = String(v.id);
+      voucherMsg.text = `Đang áp dụng mã: ${v.code}.`;
+      voucherMsg.ok = true;
+      return;
+    }
+  }
+
   const current = voucher.value;
   const next = best && best.eligible ? best.v : null;
   if (current?.id === next?.id) return;
@@ -640,6 +657,8 @@ function toggleVoucher(o) {
   manualRemoved.value = false;
   voucher.value = o.v;
   voucherCode.value = "";
+  selectedVoucherId.value = String(o.v.id);
+  sessionStorage.setItem("ps_selected_voucher_code", o.v.code);
   voucherMsg.text = "Áp dụng mã thành công!";
   voucherMsg.ok = true;
 }
@@ -1428,11 +1447,18 @@ const confirmQrPayment = async () => {
                   Mã: <strong>{{ voucher.code }}</strong>
                   <span
                     class="badge bg-success ms-1"
-                    >Tự động áp dụng</span
+                    >Đang áp dụng</span
                   >
                 </div>
                 <div class="text-success fw-semibold">
                   Đã giảm -{{ money(discount) }}
+                </div>
+                <div class="d-flex align-items-center gap-2 mt-1">
+                  <span class="text-muted small">Muốn đổi mã? Bấm "Áp dụng" vào mã khác ở danh sách bên dưới</span>
+                  <span class="text-muted small">·</span>
+                  <button type="button" class="btn btn-sm btn-link text-muted p-0 text-decoration-none small" @click="onRemoveClick">
+                    Gỡ mã
+                  </button>
                 </div>
               </div>
             </div>

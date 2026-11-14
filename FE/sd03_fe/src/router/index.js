@@ -71,15 +71,11 @@ const routes = [
   { path: '/dang-ky', component: RegisterPage, meta: { title: 'Đăng ký' } },
   { path: '/quen-mat-khau', component: QuenMatKhauPage, meta: { title: 'Quên mật khẩu' } },
   {
-    path: '/tai-khoan',
-    component: CustomerAccountPage,
-    meta: { title: 'Tài khoản của tôi', canKhach: true },
-  },
-  {
     path: '/',
     component: ClientLayout,
     children: [
       { path: '', redirect: '/trang-chu' },
+      { path: 'tai-khoan', component: CustomerAccountPage, meta: { title: 'Tài khoản của tôi', canKhach: true } },
       { path: 'trang-chu', component: Home, meta: { title: 'Trang chủ Poly Shoes' } },
       { path: 'cua-hang', component: ProductShop, meta: { title: 'Sản phẩm' } },
       { path: 'cua-hang/:id', component: ProductDetail, meta: { title: 'Chi tiết sản phẩm' } },
@@ -141,9 +137,7 @@ const routes = [
       },
       {
         path: '/lich-su-hoat-dong',
-        name: 'ActivityHistory',
-        component: () => import('@/pages/Schedule/ActivityHistoryPage.vue'),
-        meta: { ...metaBo, title: 'Lịch sử hoạt động' },
+        redirect: '/ca',
       },
       {
         path: '/ban-hang',

@@ -66,7 +66,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/nhan-vien/**", "/admin/**",
                     "/api/ca-lam/**", "/api/ca-lam-viec-dinh-nghia/**").hasRole("ADMIN")
                 .requestMatchers("/api/thong-ke/**").hasRole("ADMIN")
-                .requestMatchers("/api/ca/lich-su", "/api/ca/*/doi-soat").hasRole("ADMIN")
+                .requestMatchers("/api/ca/lich-su", "/api/ca/*/doi-soat").hasAnyRole("NHAN_VIEN", "ADMIN")
                 .requestMatchers("/api/hoa-don/**",
                     "/api/khach-hang/**", "/api/khach-hang/{idKhachHang}/dia-chi/**",
                     "/api/chat/nhan-vien/**", "/api/voucher-email/**").hasAnyRole("NHAN_VIEN", "ADMIN")

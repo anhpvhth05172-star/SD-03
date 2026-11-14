@@ -27,6 +27,11 @@ const isAdmin = computed(() => laAdmin())
 const currentUser = computed(() => getUser())
 const currentStaffId = computed(() => currentUser.value?.idNhanVien)
 const caTruoc = computed(() => list.value.find((row) => row.trangThai === 'DA_KET_CA'))
+watch(caTruoc, (val) => {
+  if (val && (moCaForm.tienDauCa === '' || moCaForm.tienDauCa === null || moCaForm.tienDauCa === undefined)) {
+    moCaForm.tienDauCa = Number(val.tienThucTe ?? val.tienDauCa ?? 0)
+  }
+}, { immediate: true })
 const caHienTai = ref(null)
 const dsCaChiaSan = ref([])
 const moCaForm = reactive({ tienDauCa: '', ghiChu: '', idCaLich: null })

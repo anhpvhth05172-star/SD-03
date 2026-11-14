@@ -126,6 +126,9 @@ public class ThongKeService {
         if ("DA_HOAN_THANH".equals(tt) || "DA_GIAO_HANG".equals(tt)) {
             return true;
         }
+        if ("TAI_QUAY".equalsIgnoreCase(loaiDon) && "DA_XAC_NHAN".equals(tt)) {
+            return true;
+        }
         if ("ONLINE".equalsIgnoreCase(loaiDon)) {
             boolean laTienMatCod = laTienMat(maHinhThuc);
             if (!laTienMatCod && !"CHO_THANH_TOAN".equals(tt)) {
