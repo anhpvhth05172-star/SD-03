@@ -198,6 +198,23 @@ const normalizeAttributeList = (data) => {
 
 const fetchOptions = async () => {
   try {
+    const cached = sessionStorage.getItem('product_list_filter_options')
+    if (cached) {
+      const data = JSON.parse(cached)
+      if (data && typeof data === 'object') {
+        brands.value = normalizeAttributeList(data.thuongHieu)
+        categories.value = normalizeAttributeList(data.loaiGiay)
+        materials.value = normalizeAttributeList(data.chatLieu)
+        styles.value = normalizeAttributeList(data.kieuDang)
+        origins.value = normalizeAttributeList(data.xuatXu)
+        if (brands.value.length > 0 || categories.value.length > 0) {
+          return
+        }
+      }
+    }
+  } catch {}
+
+  try {
     const bulkRes = await apiFetch(`${API_BASE}/attributes/all-filter-options`)
     if (bulkRes.ok) {
       const data = await bulkRes.json()
@@ -207,6 +224,9 @@ const fetchOptions = async () => {
         materials.value = normalizeAttributeList(data.chatLieu)
         styles.value = normalizeAttributeList(data.kieuDang)
         origins.value = normalizeAttributeList(data.xuatXu)
+        try {
+          sessionStorage.setItem('product_list_filter_options', JSON.stringify(data))
+        } catch {}
         if (brands.value.length > 0 || categories.value.length > 0) {
           return
         }
@@ -764,10 +784,6 @@ onUnmounted(() => {
               <td class="text-center attr-plain-text">{{ item.tenLoaiGiay || '---' }}</td>
               <td class="text-center qty-plain-text">
                 <div>{{ formatNumber(getAvailableProductStock(item)) }}</div>
-                <div v-if="getPosReservedForProduct(item) > 0"
-                  style="font-size: 11px; color: #d97706; font-weight: 600; margin-top: 2px;">
-                  Giữ tại quầy: {{ getPosReservedForProduct(item) }} (Kho: {{ formatNumber(item.soLuong || 0) }})
-                </div>
               </td>
               <td class="text-center price-plain-text">
                 <div v-if="hasProductDiscount(item)" class="product-price-discount-box">
@@ -853,7 +869,7 @@ onUnmounted(() => {
         </table>
       </div>
 
-      <div v-if="totalPages > 1" class="table-card-foot">
+      <div v-if="totalElements > 0" class="table-card-foot">
         <PaginationBar :page="currentPage" :total-pages="totalPages" :total-elements="totalElements"
           :page-size="pageSize" :sizes="pageSizeOptions" :from="products.length ? currentPage * pageSize + 1 : 0"
           :to="currentPage * pageSize + products.length" label="sản phẩm" @change="changePage"

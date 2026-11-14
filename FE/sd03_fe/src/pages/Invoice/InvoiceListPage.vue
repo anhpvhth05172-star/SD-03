@@ -25,6 +25,7 @@ const tabs = [
   { key: 'DA_GIAO_HANG', label: 'Đã giao hàng' },
   { key: 'DA_HOAN_THANH', label: 'Đã hoàn thành' },
   { key: 'DA_HUY', label: 'Đã hủy' },
+  { key: 'CHO_HOAN_TIEN', label: 'Chờ hoàn tiền' },
   { key: 'DA_HOAN_TIEN', label: 'Đã hoàn tiền' },
   { key: 'GIAO_HANG_THAT_BAI', label: 'Giao hàng thất bại' },
 ]
@@ -239,7 +240,7 @@ const statusPill = (value) => {
   if (['Đã xác nhận'].includes(value)) return 'inv-pill-sky'
   if (['Chờ giao hàng'].includes(value)) return 'inv-pill-blue'
   if (['Đang giao hàng'].includes(value)) return 'inv-pill-teal'
-  if (['Đã hủy', 'Đã hoàn tiền', 'Giao hàng thất bại'].includes(value)) return 'inv-pill-red'
+  if (['Đã hủy', 'Đã hoàn tiền', 'Chờ hoàn tiền', 'Giao hàng thất bại'].includes(value)) return 'inv-pill-red'
   if (['Chờ xác nhận'].includes(value)) return 'inv-pill-amber'
   return 'inv-pill-gray'
 }

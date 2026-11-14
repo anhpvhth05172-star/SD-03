@@ -89,12 +89,13 @@ public class HoaDonService {
         {"GIAO_HANG_THAT_BAI", "Giao hàng thất bại"},
         {"DA_HOAN_THANH", "Đã hoàn thành"},
         {"DA_HUY", "Đã hủy"},
+        {"CHO_HOAN_TIEN", "Chờ hoàn tiền"},
         {"DA_HOAN_TIEN", "Đã hoàn tiền"},
     };
 
     private static final Map<String, List<String>> TRANSITION_MAP = new HashMap<>();
     static {
-        TRANSITION_MAP.put("CHO_THANH_TOAN", List.of("CHO_XAC_NHAN", "DA_XAC_NHAN", "DA_HUY"));
+        TRANSITION_MAP.put("CHO_THANH_TOAN", List.of("CHO_XAC_NHAN", "DA_XAC_NHAN", "DA_HUY", "CHO_HOAN_TIEN"));
         TRANSITION_MAP.put("CHO_XAC_NHAN", List.of("DA_XAC_NHAN", "DA_HUY"));
         TRANSITION_MAP.put("DA_XAC_NHAN", List.of("CHO_GIAO_HANG", "DA_HUY"));
         TRANSITION_MAP.put("CHO_GIAO_HANG", List.of("DANG_GIAO_HANG", "DA_HUY"));
@@ -102,6 +103,7 @@ public class HoaDonService {
         TRANSITION_MAP.put("DA_GIAO_HANG", List.of("DA_HOAN_THANH"));
         TRANSITION_MAP.put("DA_HOAN_THANH", List.of("DA_HOAN_TIEN"));
         TRANSITION_MAP.put("GIAO_HANG_THAT_BAI", List.of("DANG_GIAO_HANG"));
+        TRANSITION_MAP.put("CHO_HOAN_TIEN", List.of("DA_HOAN_TIEN", "DA_HUY"));
         TRANSITION_MAP.put("DA_HUY", List.of());
         TRANSITION_MAP.put("DA_HOAN_TIEN", List.of());
     }
@@ -277,6 +279,15 @@ public class HoaDonService {
             String email = emailNhan;
             if (isBlank(email) && h.getKhachHang() != null) {
                 email = h.getKhachHang().getEmail();
+            }
+            if (isBlank(email) && h.getGhiChu() != null && h.getGhiChu().contains("[EMAIL:")) {
+                try {
+                    int start = h.getGhiChu().indexOf("[EMAIL:") + 7;
+                    int end = h.getGhiChu().indexOf("]", start);
+                    if (end > start) {
+                        email = h.getGhiChu().substring(start, end).trim();
+                    }
+                } catch (Exception ignored) {}
             }
             if (isBlank(email)) {
                 log.info("Đơn hàng #{} không có email người nhận, bỏ qua gửi email tự động.", h.getMaHoaDon());
@@ -750,7 +761,9 @@ public class HoaDonService {
                 throw new IllegalArgumentException(
                     "Đơn online chưa đủ địa chỉ nhận hàng/phí vận chuyển để xác nhận");
             }
-            truKho(hoaDon);
+            if (!daTruKho(hoaDon)) {
+                truKho(hoaDon);
+            }
         } else if ("DA_XAC_NHAN".equals(maMoi)
             && "TAI_QUAY_GIAO_HANG".equalsIgnoreCase(hoaDon.getLoaiDon())
             && isBlank(hoaDon.getDiaChiNhanHang())) {
@@ -1206,7 +1219,14 @@ boolean isTaiQuay = "TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon())) || "TAI_QUA
         hoaDon.setToDistrictId(req.getToDistrictId());
         hoaDon.setToWardCode(blankToNull(req.getToWardCode()));
         hoaDon.setTrangThai(toMaTrangThai(req.getTrangThai()));
-        hoaDon.setGhiChu(blankToNull(req.getGhiChu()));
+        String ghiChuText = blankToNull(req.getGhiChu());
+        if (!isBlank(req.getEmail())) {
+            String emailTag = "[EMAIL:" + req.getEmail().trim() + "]";
+            if (ghiChuText == null || !ghiChuText.contains("[EMAIL:")) {
+                ghiChuText = ghiChuText == null ? emailTag : ghiChuText + " " + emailTag;
+            }
+        }
+        hoaDon.setGhiChu(ghiChuText);
         hoaDon.setNguoiCapNhat(nguoiCapNhatHienTai());
         hoaDon.setNgayCapNhat(LocalDateTime.now());
 
@@ -1516,20 +1536,24 @@ private NhanVien timNhanVien(Long id) {
             e.setTrangThai(d.req().getTrangThai() == null || d.req().getTrangThai());
             entities.add(e);
 
-            // Đơn ONLINE chưa trừ kho lúc tạo (chỉ trừ khi nhân viên xác nhận DA_XAC_NHAN). Đơn TAI_QUAY trừ ngay trừ khi CHO_THANH_TOAN.
-            boolean laOnline = "ONLINE".equalsIgnoreCase(hoaDon.getLoaiDon());
-            if (!laOnline && !"CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
+            // Đơn ONLINE (COD và VNPAY CHO_THANH_TOAN): KHÔNG giữ chỗ và KHÔNG trừ kho lúc tạo đơn.
+            // Chỉ đơn TẠI QUẦY (bán trực tiếp) mới trừ kho ngay lập tức.
+            // Đơn VNPAY chỉ trừ kho khi thanh toán thành công (nếu hết hàng sẽ chuyển sang CHO_HOAN_TIEN).
+            boolean canTruKhoNgay = !"ONLINE".equalsIgnoreCase(hoaDon.getLoaiDon());
+            if (canTruKhoNgay) {
                 SanPhamChiTiet spct = d.spct();
                 spct.setSoLuong(spct.getSoLuong() - d.req().getSoLuong());
                 sanPhamChiTietRepository.save(spct);
             }
 
-            // Xóa sản phẩm tương ứng khỏi giỏ hàng nếu khách hàng đã đăng nhập
+            // Xóa sản phẩm tương ứng khỏi giỏ hàng nếu khách hàng đã đăng nhập (với đơn VNPAY sẽ xóa khi thanh toán thành công)
             if (idKhachHang != null && gioHangChiTietRepository != null && d.spct() != null && d.spct().getId() != null) {
-                try {
-                    gioHangChiTietRepository.xoaTheoKhachHangVaSpct(idKhachHang, d.spct().getId());
-                } catch (Exception ex) {
-                    log.warn("Không thể xóa sản phẩm #{} khỏi giỏ hàng của KH #{}: {}", d.spct().getId(), idKhachHang, ex.getMessage());
+                if (!"CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
+                    try {
+                        gioHangChiTietRepository.xoaTheoKhachHangVaSpct(idKhachHang, d.spct().getId());
+                    } catch (Exception ex) {
+                        log.warn("Không thể xóa sản phẩm #{} khỏi giỏ hàng của KH #{}: {}", d.spct().getId(), idKhachHang, ex.getMessage());
+                    }
                 }
             }
         }
@@ -1728,23 +1752,41 @@ private NhanVien timNhanVien(Long id) {
     }
 
     /**
-     * Hủy đơn CHO_THANH_TOAN (VNPay thất bại) - hard delete để giỏ hàng giữ nguyên.
-     * Đơn CHO_THANH_TOAN chưa trừ kho nên không cần hoàn kho.
+     * Hủy đơn CHO_THANH_TOAN (VNPay thất bại hoặc hết hạn) - xóa đơn tạm (chưa trừ kho nên không hoàn kho).
      */
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void huyDonChoThanhToan(Long id) {
         HoaDon hoaDon = hoaDonRepository.findByIdForUpdate(id).orElse(null);
         if (hoaDon == null) return;
         if (!"CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
             throw new IllegalArgumentException("Chỉ hủy được đơn ở trạng thái Chờ thanh toán");
         }
-        chiTietHoaDonRepository.deleteByHoaDonId(id);
+        List<ChiTietHoaDon> chiTiets = chiTietHoaDonRepository.findByHoaDonId(id);
+        if (!chiTiets.isEmpty()) {
+            chiTietHoaDonRepository.deleteAll(chiTiets);
+            chiTietHoaDonRepository.flush();
+        }
+        if (hoaDon.getPhieuGiamGia() != null && hoaDon.getKhachHang() != null) {
+            PhieuGiamGia phieu = hoaDon.getPhieuGiamGia();
+            if ("CA_NHAN".equalsIgnoreCase(phieu.getPhamVi())) {
+                khachHangPhieuGiamGiaRepository.findByPhieuGiamGia_IdAndKhachHang_Id(phieu.getId(), hoaDon.getKhachHang().getId())
+                    .ifPresent(khPg -> {
+                        khPg.setNgaySuDung(null);
+                        khPg.setTrangThai(true);
+                        khachHangPhieuGiamGiaRepository.save(khPg);
+                    });
+            }
+        }
+        lichSuSuDungRepository.deleteByHoaDonId(id);
+        lichSuSuDungRepository.flush();
         lichSuHoaDonRepository.deleteByHoaDonId(id);
-        hoaDonRepository.deleteById(id);
+        lichSuHoaDonRepository.flush();
+        hoaDonRepository.delete(hoaDon);
+        hoaDonRepository.flush();
     }
 
     /**
-     * VNPay thành công: CHO_THANH_TOAN -> CHO_XAC_NHAN (chờ nhân viên xác nhận và đóng gói).
+     * VNPay thành công: CHO_THANH_TOAN -> CHO_XAC_NHAN (nếu đủ kho) hoặc CHO_HOAN_TIEN (nếu hết hàng).
      * Idempotent: return URL + IPN gọi 2 lần thì lần sau thoát sớm.
      */
     @Transactional
@@ -1755,8 +1797,26 @@ private NhanVien timNhanVien(Long id) {
             return toFullDTO(hoaDon);
         }
         String tu = hoaDon.getTrangThai();
+        List<ChiTietHoaDon> lines = chiTietHoaDonRepository.findByHoaDonId(hoaDon.getId());
+        Map<Long, SanPhamChiTiet> spctMap = khoaSanPham(lines);
+
+        boolean duTonKho = true;
+        StringBuilder lyDoThieuKho = new StringBuilder();
+        for (ChiTietHoaDon l : lines) {
+            if (l.getSanPhamChiTiet() == null) continue;
+            SanPhamChiTiet s = spctMap.get(l.getSanPhamChiTiet().getId());
+            int ton = (s != null && s.getSoLuong() != null) ? s.getSoLuong() : 0;
+            int can = l.getSoLuong() != null ? l.getSoLuong() : 0;
+            if (can > ton) {
+                duTonKho = false;
+                if (lyDoThieuKho.length() > 0) lyDoThieuKho.append(", ");
+                lyDoThieuKho.append(s != null ? s.getMaChiTietSanPham() : "SP #" + l.getId())
+                            .append(" (yêu cầu ").append(can).append(", kho còn ").append(ton).append(")");
+            }
+        }
+
+        // Xóa sản phẩm khỏi giỏ hàng nếu khách hàng đã đăng nhập
         if (hoaDon.getKhachHang() != null && hoaDon.getKhachHang().getId() != null && gioHangChiTietRepository != null) {
-            List<ChiTietHoaDon> lines = chiTietHoaDonRepository.findByHoaDonId(hoaDon.getId());
             for (ChiTietHoaDon line : lines) {
                 if (line.getSanPhamChiTiet() != null && line.getSanPhamChiTiet().getId() != null) {
                     try {
@@ -1768,13 +1828,41 @@ private NhanVien timNhanVien(Long id) {
                 }
             }
         }
-        hoaDon.setTrangThai("CHO_XAC_NHAN");
-        hoaDon.setNgayCapNhat(LocalDateTime.now());
-        hoaDon.setNguoiCapNhat("VNPAY");
-        HoaDon saved = hoaDonRepository.save(hoaDon);
-        ghiLichSuTrangThai(saved, tu, "CHO_XAC_NHAN", "Khách hàng thanh toán qua VNPAY thành công", "VNPAY (Hệ thống)");
-        guiEmailHoaDonTuDong(saved, null);
-        return toFullDTO(saved);
+
+        if (duTonKho) {
+            // Còn đủ hàng trong kho: trừ kho thực tế
+            for (ChiTietHoaDon l : lines) {
+                if (l.getSanPhamChiTiet() == null) continue;
+                SanPhamChiTiet s = spctMap.get(l.getSanPhamChiTiet().getId());
+                if (s != null) {
+                    int ton = s.getSoLuong() != null ? s.getSoLuong() : 0;
+                    int can = l.getSoLuong() != null ? l.getSoLuong() : 0;
+                    s.setSoLuong(Math.max(0, ton - can));
+                }
+            }
+            sanPhamChiTietRepository.saveAll(spctMap.values());
+
+            hoaDon.setTrangThai("CHO_XAC_NHAN");
+            hoaDon.setNgayCapNhat(LocalDateTime.now());
+            hoaDon.setNguoiCapNhat("VNPAY");
+            HoaDon saved = hoaDonRepository.save(hoaDon);
+            ghiLichSuTrangThai(saved, tu, "CHO_XAC_NHAN", "Khách hàng thanh toán qua VNPAY thành công. Đã trừ tồn kho.", "VNPAY (Hệ thống)");
+            guiEmailHoaDonTuDong(saved, null);
+            return toFullDTO(saved);
+        } else {
+            // Sự cố tồn kho: Quầy hoặc khách khác đã mua hết trong lúc khách thanh toán VNPAY
+            hoaDon.setTrangThai("CHO_HOAN_TIEN");
+            hoaDon.setNgayCapNhat(LocalDateTime.now());
+            hoaDon.setNguoiCapNhat("VNPAY (SỰ CỐ KHO)");
+            String warningMsg = "[SỰ CỐ TỒN KHO: " + lyDoThieuKho + ". Đã thanh toán VNPAY nhưng hết hàng trong kho. Chờ hoàn tiền!]";
+            String oldNote = hoaDon.getGhiChu() != null ? hoaDon.getGhiChu().trim() : "";
+            hoaDon.setGhiChu(oldNote.isEmpty() ? warningMsg : oldNote + " | " + warningMsg);
+            HoaDon saved = hoaDonRepository.save(hoaDon);
+            ghiLichSuTrangThai(saved, tu, "CHO_HOAN_TIEN", 
+                "Sự cố tồn kho: Khách thanh toán VNPAY thành công nhưng kho không đủ: " + lyDoThieuKho + ". Đơn chuyển sang Chờ hoàn tiền.", 
+                "VNPAY (Hệ thống)");
+            return toFullDTO(saved);
+        }
     }
 
     private Map<Long, SanPhamChiTiet> khoaSanPham(List<ChiTietHoaDon> lines) {
@@ -1819,10 +1907,33 @@ private NhanVien timNhanVien(Long id) {
 
     public boolean daTruKho(HoaDon hoaDon) {
         if (hoaDon == null) return false;
+        if ("CHO_THANH_TOAN".equals(hoaDon.getTrangThai()) || "CHO_HOAN_TIEN".equals(hoaDon.getTrangThai())) {
+            return false;
+        }
         if ("ONLINE".equalsIgnoreCase(hoaDon.getLoaiDon())) {
+            if (isDonVnPay(hoaDon)) {
+                return !"CHO_THANH_TOAN".equals(hoaDon.getTrangThai()) && !"CHO_HOAN_TIEN".equals(hoaDon.getTrangThai());
+            }
             return TRANG_THAI_DA_TRU_KHO_ONLINE.contains(hoaDon.getTrangThai());
         }
-        return !"CHO_THANH_TOAN".equals(hoaDon.getTrangThai());
+        return true;
+    }
+
+    public boolean isDonVnPay(HoaDon hoaDon) {
+        if (hoaDon == null) return false;
+        if ("CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) return true;
+        if (hoaDon.getPhuongThucThanhToan() != null) {
+            Long id = hoaDon.getPhuongThucThanhToan().getId();
+            if (id != null && id == 4L) return true;
+            String ten = hoaDon.getPhuongThucThanhToan().getTenPhuongThuc();
+            String ma = hoaDon.getPhuongThucThanhToan().getMaPhuongThuc();
+            if (ten != null && ten.toUpperCase().contains("VNPAY")) return true;
+            if (ma != null && ma.toUpperCase().contains("VNPAY")) return true;
+        }
+        if (hoaDon.getGhiChu() != null && hoaDon.getGhiChu().toUpperCase().contains("VNPAY")) {
+            return true;
+        }
+        return false;
     }
 
     @Transactional(readOnly = true)

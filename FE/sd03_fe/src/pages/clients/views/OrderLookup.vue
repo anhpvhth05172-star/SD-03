@@ -78,6 +78,7 @@ const STATUS = {
   DA_GIAO_HANG: { label: "Đã giao hàng", tone: "ok", step: 4 },
   DA_HOAN_THANH: { label: "Đã hoàn thành", tone: "ok", step: 4 },
   DA_HUY: { label: "Đã hủy", tone: "danger", step: -1 },
+  CHO_HOAN_TIEN: { label: "Chờ hoàn tiền (Sự cố kho)", tone: "danger", step: -1 },
   DA_HOAN_TIEN: { label: "Đã hoàn tiền", tone: "danger", step: -1 },
 };
 const statusInfo = (code) =>

@@ -7873,3 +7873,249 @@ input:checked + .toggle-slider:before {
   font-size: 14px;
   flex-shrink: 0;
 }
+
+/* ==========================================================
+   KHÔI PHỤC VÀ HOÀN THIỆN MODAL CHỌN SẢN PHẨM BÁN HÀNG TẠI QUẦY
+   ========================================================== */
+.pos-prod-thumb-box {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pos-prod-thumb-img {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  transition: transform 0.2s ease;
+}
+
+.pos-prod-table tbody tr:hover .pos-prod-thumb-img {
+  transform: scale(1.06);
+}
+
+.pos-thumb-models-badge {
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #ef4444;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+  line-height: 1.2;
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.4);
+  pointer-events: none;
+}
+
+.pos-prod-code-text {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  letter-spacing: -0.01em;
+}
+
+.prod-brand-sub {
+  font-size: 11.5px;
+  color: #94a3b8;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.pos-color-chips-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  max-width: 140px;
+  margin: 0 auto;
+}
+
+.pos-chips-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.pos-color-chip {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #334155;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.pos-color-chip.chip-more {
+  background: #f1f5f9;
+  color: #64748b;
+  font-weight: 600;
+  border-color: #cbd5e1;
+}
+
+.pos-size-text-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: #334155;
+  line-height: 1.35;
+}
+
+.pos-sizes-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.pos-size-text-val {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.pos-size-ellipsis {
+  color: #94a3b8;
+  font-size: 12px;
+  margin-left: 2px;
+}
+
+.pos-stock-qty-text {
+  color: #16a34a;
+  font-weight: 700;
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+
+.pos-price-range-cell {
+  font-weight: 700;
+  font-size: 13px;
+  color: #0f172a;
+  text-align: center;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.pos-price-val {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.btn-pos-pick-variant {
+  background-color: #dc2626;
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.2);
+}
+
+.btn-pos-pick-variant:hover {
+  background-color: #b91c1c;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(220, 38, 38, 0.3);
+}
+
+.pos-variant-count-pill {
+  background-color: #ffffff;
+  color: #dc2626;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.pos-modal-pager-simple {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pager-btn-simple {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+  transition: all 0.15s ease;
+}
+
+.pager-btn-simple:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.pager-btn-simple:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pager-info-simple {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.btn-pos-close-modal {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 7px 24px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-pos-close-modal:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+

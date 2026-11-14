@@ -20,7 +20,6 @@ const API_BASE = '/api/v1'
 
 const router = useRouter()
 
-// --- QUẢN LÝ CA LÀM VIỆC (MỞ CA / ĐÓNG CA TRÊN POS) ---
 const activeShift = ref(null)
 const isLoadingShift = ref(false)
 const isCheDoXem = computed(() => !laAdmin() && !activeShift.value?.id)
@@ -853,7 +852,7 @@ const handleCartItemQtyInput = (item, event) => {
   if (!item || !event?.target) return
   const rawVal = event.target.value.trim()
   if (rawVal === '') return
-  
+
   const parsed = parseInt(rawVal, 10)
   if (isNaN(parsed) || parsed < 1) return
 
@@ -970,12 +969,9 @@ const handleBarcodeSearchSubmit = async () => {
 
   if (!found) {
     try {
-      const res = await fetch(`${API_BASE}/san-pham-chi-tiet?search=${encodeURIComponent(code)}&size=5`)
-      if (res.ok) {
-        const data = await res.json()
-        if (data && data.content && data.content.length > 0) {
-          found = ensureProductInCatalog(data.content[0]) || data.content[0]
-        }
+      const res = await http.get('/v1/san-pham-chi-tiet', { params: { search: code, size: 5 } })
+      if (res && res.data && res.data.content && res.data.content.length > 0) {
+        found = ensureProductInCatalog(res.data.content[0]) || res.data.content[0]
       }
     } catch {
       // Tiếp tục tra cứu mã bằng các nguồn dữ liệu cục bộ.
@@ -1584,68 +1580,17 @@ const resetModalFilters = () => {
   modalCurrentPage.value = 0
 }
 
-// Nhóm biến thể theo Sản phẩm cha (mỗi sản phẩm chỉ hiển thị 1 dòng đại diện)
-const activePickerProduct = ref(null)
-const isVariantPickerModalOpen = ref(false)
-const selectedPickerVariant = ref(null)
-const pickerColorFilter = ref('ALL')
-
-const openVariantPickerForProduct = (prodGroup) => {
-  if (!prodGroup) return
-  activePickerProduct.value = prodGroup
-  selectedPickerVariant.value = null
-  pickerColorFilter.value = 'ALL'
-  isVariantPickerModalOpen.value = true
-}
-
-const closeVariantPickerModal = () => {
-  isVariantPickerModalOpen.value = false
-  activePickerProduct.value = null
-  selectedPickerVariant.value = null
-}
-
-const availablePickerColors = computed(() => {
-  if (!activePickerProduct.value) return []
-  const set = new Set()
-  activePickerProduct.value.variants.forEach(v => {
-    const c = v.color || v.tenMau
-    if (c) set.add(c)
-  })
-  return Array.from(set)
-})
-
-const filteredPickerVariants = computed(() => {
-  if (!activePickerProduct.value) return []
-  let list = activePickerProduct.value.variants
-  if (pickerColorFilter.value !== 'ALL') {
-    list = list.filter(v => (v.color || v.tenMau) === pickerColorFilter.value)
-  }
-  return list
-})
-
-const addVariantFromPicker = (variant) => {
-  if (!kiemTraQuyenBanHang('thêm sản phẩm vào giỏ')) return
-  if (!variant) return
-  const stock = getRemainingStock(variant.id)
-  if (stock <= 0) {
-    notifyWarning('Hết hàng', 'Biến thể này hiện đã hết tồn kho khả dụng!')
-    return
-  }
-  addToCart(variant, 1, false)
-  closeVariantPickerModal()
-}
-
-const filteredModalProducts = computed(() => {
+const filteredModalVariants = computed(() => {
+  // Lắng nghe pendingOrders để kích hoạt lại computed ngay khi thêm/sửa/xóa sản phẩm trong giỏ
   const _cartTrigger = pendingOrders.value.map(o => (o.cart || []).map(i => `${i.idCtsp}:${i.quantity}`).join(',')).join(';')
 
-  // Lấy toàn bộ biến thể còn tồn kho khả dụng > 0
-  let variantList = (allProducts.value || []).filter(p => {
+  // Tự động ẩn những sản phẩm có số lượng tồn kho khả dụng = 0 (khi đã thêm hết vào giỏ hàng)
+  let list = (allProducts.value || []).filter(p => {
     return getRemainingStock(p.id) > 0
   })
-
   const term = modalFilters.search.trim().toLowerCase()
   if (term) {
-    variantList = variantList.filter(p =>
+    list = list.filter(p =>
       (p.tenSp && p.tenSp.toLowerCase().includes(term)) ||
       (p.tenSanPham && p.tenSanPham.toLowerCase().includes(term)) ||
       (p.maCtsp && p.maCtsp.toLowerCase().includes(term)) ||
@@ -1657,23 +1602,47 @@ const filteredModalProducts = computed(() => {
   }
 
   if (modalFilters.idThuongHieu) {
-    variantList = variantList.filter(p => String(p.idThuongHieu) === String(modalFilters.idThuongHieu) || (p.tenThuongHieu && p.tenThuongHieu === modalFilters.idThuongHieu))
+    const brandName = brandsList.value.find(b => String(b.id) === String(modalFilters.idThuongHieu))?.ten || modalFilters.idThuongHieu
+    list = list.filter(p =>
+      String(p.idThuongHieu) === String(modalFilters.idThuongHieu) ||
+      (p.tenThuongHieu && p.tenThuongHieu.toLowerCase() === String(brandName).toLowerCase()) ||
+      (p.tenThuongHieu && p.tenThuongHieu.toLowerCase() === String(modalFilters.idThuongHieu).toLowerCase())
+    )
   }
 
   if (modalFilters.idLoaiGiay) {
-    variantList = variantList.filter(p => String(p.idLoaiGiay) === String(modalFilters.idLoaiGiay) || (p.tenLoaiGiay && p.tenLoaiGiay === modalFilters.idLoaiGiay))
+    const catName = categoriesList.value.find(c => String(c.id) === String(modalFilters.idLoaiGiay))?.ten || modalFilters.idLoaiGiay
+    list = list.filter(p =>
+      String(p.idLoaiGiay) === String(modalFilters.idLoaiGiay) ||
+      (p.tenLoaiGiay && p.tenLoaiGiay.toLowerCase() === String(catName).toLowerCase()) ||
+      (p.tenLoaiGiay && p.tenLoaiGiay.toLowerCase() === String(modalFilters.idLoaiGiay).toLowerCase())
+    )
   }
 
   if (modalFilters.idMauSac) {
-    variantList = variantList.filter(p => String(p.idMauSac) === String(modalFilters.idMauSac) || (p.color && p.color === modalFilters.idMauSac) || (p.tenMau && p.tenMau === modalFilters.idMauSac))
+    const colorObj = colorsList.value.find(m => String(m.id) === String(modalFilters.idMauSac) || m.ten === modalFilters.idMauSac)
+    const colorName = colorObj?.ten || modalFilters.idMauSac
+    list = list.filter(p =>
+      String(p.idMauSac) === String(modalFilters.idMauSac) ||
+      (p.color && p.color.toLowerCase() === String(colorName).toLowerCase()) ||
+      (p.tenMau && p.tenMau.toLowerCase() === String(colorName).toLowerCase()) ||
+      (p.color && p.color.toLowerCase() === String(modalFilters.idMauSac).toLowerCase())
+    )
   }
 
   if (modalFilters.idKichCo) {
-    variantList = variantList.filter(p => String(p.idKichCo) === String(modalFilters.idKichCo) || (p.size && p.size === modalFilters.idKichCo) || (p.tenKichCo && p.tenKichCo === modalFilters.idKichCo))
+    const sizeObj = sizesList.value.find(s => String(s.id) === String(modalFilters.idKichCo) || s.ten === modalFilters.idKichCo)
+    const sizeName = sizeObj?.ten || modalFilters.idKichCo
+    list = list.filter(p =>
+      String(p.idKichCo) === String(modalFilters.idKichCo) ||
+      (p.size && String(p.size).trim().toLowerCase() === String(sizeName).trim().toLowerCase()) ||
+      (p.tenKichCo && String(p.tenKichCo).trim().toLowerCase() === String(sizeName).trim().toLowerCase()) ||
+      (p.size && String(p.size).trim().toLowerCase() === String(modalFilters.idKichCo).trim().toLowerCase())
+    )
   }
 
   if (modalFilters.priceRange) {
-    variantList = variantList.filter(p => {
+    list = list.filter(p => {
       const pr = getEffectivePrice(p)
       if (modalFilters.priceRange === '<1m') return pr < 1000000
       if (modalFilters.priceRange === '1m-3m') return pr >= 1000000 && pr <= 3000000
@@ -1683,56 +1652,15 @@ const filteredModalProducts = computed(() => {
     })
   }
 
-  // Nhóm các biến thể theo sản phẩm cha: mỗi sản phẩm chỉ xuất hiện 1 dòng duy nhất
-  const groupsMap = new Map()
-  variantList.forEach(v => {
-    const spKey = v.idSanPham ? `id_${v.idSanPham}` : (v.maSp ? `masp_${v.maSp}` : (v.tenSp || v.tenSanPham || `item_${v.id}`))
-    if (!groupsMap.has(spKey)) {
-      groupsMap.set(spKey, {
-        key: spKey,
-        idSanPham: v.idSanPham || null,
-        maSp: v.maSp || v.maSanPham || (v.maCtsp ? v.maCtsp.split('-')[0] : 'SP---'),
-        tenSp: v.tenSp || v.tenSanPham || 'Sản phẩm',
-        img: getShoeImage(v),
-        tenThuongHieu: v.tenThuongHieu || '',
-        tenLoaiGiay: v.tenLoaiGiay || '',
-        variants: [],
-        totalStock: 0,
-        minPrice: Infinity,
-        maxPrice: -Infinity,
-        colors: new Set(),
-        sizes: new Set()
-      })
-    }
-    const grp = groupsMap.get(spKey)
-    grp.variants.push(v)
-    const stock = getRemainingStock(v.id)
-    grp.totalStock += stock
-    const effPrice = getEffectivePrice(v)
-    if (effPrice < grp.minPrice) grp.minPrice = effPrice
-    if (effPrice > grp.maxPrice) grp.maxPrice = effPrice
-    if (v.color || v.tenMau) grp.colors.add(v.color || v.tenMau)
-    if (v.size || v.tenKichCo) grp.sizes.add(v.size || v.tenKichCo)
-  })
-
-  const productList = []
-  groupsMap.forEach(grp => {
-    if (grp.minPrice === Infinity) grp.minPrice = 0
-    if (grp.maxPrice === -Infinity) grp.maxPrice = grp.minPrice
-    grp.colorsList = Array.from(grp.colors)
-    grp.sizesList = Array.from(grp.sizes).sort((a, b) => Number(a) - Number(b))
-    productList.push(grp)
-  })
-
-  return productList
+  return list
 })
 
-const modalTotalElements = computed(() => filteredModalProducts.value.length)
+const modalTotalElements = computed(() => filteredModalVariants.value.length)
 const modalTotalPages = computed(() => Math.max(1, Math.ceil(modalTotalElements.value / modalPageSize.value)))
 
-const paginatedModalProducts = computed(() => {
+const paginatedModalVariants = computed(() => {
   const start = modalCurrentPage.value * modalPageSize.value
-  return filteredModalProducts.value.slice(start, start + modalPageSize.value)
+  return filteredModalVariants.value.slice(start, start + modalPageSize.value)
 })
 
 const changeModalPage = (p) => {
@@ -1745,19 +1673,218 @@ watch([modalFilters, modalPageSize], () => {
   modalCurrentPage.value = 0
 }, { deep: true })
 
+const modalSelectedIds = ref([])
+
+const loadFilterAttributes = async (force = false) => {
+  const hasData = brandsList.value.length > 0 && colorsList.value.length > 0 && sizesList.value.length > 0 && categoriesList.value.length > 0
+  if (!force && hasData) return
+
+  // 1. Kiểm tra cache sessionStorage (chỉ hợp lệ nếu chứa đầy đủ dữ liệu > 0 phần tử)
+  if (!force) {
+    try {
+      const raw = sessionStorage.getItem('pos_attributes_cache')
+      if (raw) {
+        const cached = JSON.parse(raw)
+        if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000 &&
+            Array.isArray(cached.brands) && cached.brands.length > 0 &&
+            Array.isArray(cached.categories) && cached.categories.length > 0 &&
+            Array.isArray(cached.colors) && cached.colors.length > 0 &&
+            Array.isArray(cached.sizes) && cached.sizes.length > 0) {
+          brandsList.value = cached.brands
+          categoriesList.value = cached.categories
+          colorsList.value = cached.colors
+          sizesList.value = cached.sizes
+          return
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Tải trực tiếp từ các endpoint API backend
+  try {
+    const [allFilterRes, colorRes, sizeRes] = await Promise.allSettled([
+      http.get('/v1/attributes/all-filter-options'),
+      http.get('/v1/attributes/mau_sac'),
+      http.get('/v1/attributes/kich_co')
+    ])
+
+    if (allFilterRes.status === 'fulfilled' && allFilterRes.value?.data) {
+      const d = allFilterRes.value.data
+      if (Array.isArray(d.thuongHieu) && d.thuongHieu.length > 0) {
+        brandsList.value = d.thuongHieu
+      }
+      if (Array.isArray(d.loaiGiay) && d.loaiGiay.length > 0) {
+        categoriesList.value = d.loaiGiay
+      }
+    }
+
+    if (colorRes.status === 'fulfilled' && Array.isArray(colorRes.value?.data) && colorRes.value.data.length > 0) {
+      colorsList.value = colorRes.value.data
+    }
+
+    if (sizeRes.status === 'fulfilled' && Array.isArray(sizeRes.value?.data) && sizeRes.value.data.length > 0) {
+      sizesList.value = sizeRes.value.data
+    }
+  } catch (err) {
+    console.warn('Lỗi tải thuộc tính lọc POS:', err)
+  }
+
+  // 3. Fallback: Nếu API trả về rỗng hoặc chưa lấy được, tự động trích xuất các thuộc tính duy nhất từ allProducts
+  if (Array.isArray(allProducts.value) && allProducts.value.length > 0) {
+    if (brandsList.value.length === 0) {
+      const distinct = [...new Set(allProducts.value.map(p => p.tenThuongHieu).filter(Boolean))]
+      if (distinct.length > 0) {
+        brandsList.value = distinct.map((ten, i) => ({ id: `th-${i + 1}`, ten }))
+      }
+    }
+    if (categoriesList.value.length === 0) {
+      const distinct = [...new Set(allProducts.value.map(p => p.tenLoaiGiay).filter(Boolean))]
+      if (distinct.length > 0) {
+        categoriesList.value = distinct.map((ten, i) => ({ id: `lg-${i + 1}`, ten }))
+      }
+    }
+    if (colorsList.value.length === 0) {
+      const distinct = [...new Set(allProducts.value.map(p => p.color || p.tenMau).filter(Boolean))]
+      if (distinct.length > 0) {
+        colorsList.value = distinct.map((ten, i) => ({ id: `ms-${i + 1}`, ten }))
+      }
+    }
+    if (sizesList.value.length === 0) {
+      const distinct = [...new Set(allProducts.value.map(p => p.size || p.tenKichCo).filter(Boolean))]
+      if (distinct.length > 0) {
+        sizesList.value = distinct.map((ten, i) => ({ id: `kc-${i + 1}`, ten }))
+      }
+    }
+  }
+
+  // 4. Chỉ lưu cache khi các danh sách thuộc tính có dữ liệu thực tế
+  if (brandsList.value.length > 0 && colorsList.value.length > 0 && sizesList.value.length > 0) {
+    try {
+      sessionStorage.setItem('pos_attributes_cache', JSON.stringify({
+        brands: brandsList.value,
+        categories: categoriesList.value,
+        colors: colorsList.value,
+        sizes: sizesList.value,
+        timestamp: Date.now()
+      }))
+    } catch {}
+  }
+}
+
 const openProductPicker = async () => {
   if (!currentOrder.value) {
     createNewOrder()
   }
+  if (brandsList.value.length === 0 || colorsList.value.length === 0 || sizesList.value.length === 0 || categoriesList.value.length === 0) {
+    await loadFilterAttributes()
+  }
   resetModalFilters()
+  modalSelectedIds.value = []
   isProductModalOpen.value = true
   await handleDiscountChanged()
 }
 
+const isModalRowSelected = (id) => modalSelectedIds.value.includes(id)
+
+const isAllPageSelected = computed(() => {
+  const selectable = paginatedModalVariants.value.filter(p => (p.stock ?? p.soLuong ?? 0) > 0)
+  if (selectable.length === 0) return false
+  return selectable.every(p => modalSelectedIds.value.includes(p.id))
+})
+
+const toggleModalRow = (product, event) => {
+  if (event) event.stopPropagation()
+  const stock = product.stock !== undefined ? product.stock : (product.soLuong || 0)
+  if (stock <= 0) {
+    const reservedOther = getReservedInOtherOrders(product.id)
+    const extra = reservedOther > 0 ? ` (đang giữ ${reservedOther} sản phẩm ở các đơn chờ khác)` : ''
+    notifyWarning('Hết hàng', `Sản phẩm này hiện đã hết tồn kho khả dụng${extra}!`)
+    return
+  }
+  toggleModalSelect(product.id)
+}
+
+const toggleModalSelect = (id) => {
+  const i = modalSelectedIds.value.indexOf(id)
+  if (i >= 0) modalSelectedIds.value.splice(i, 1)
+  else modalSelectedIds.value.push(id)
+}
+
+const toggleSelectAllPage = () => {
+  const selectable = paginatedModalVariants.value.filter(p => (p.stock ?? p.soLuong ?? 0) > 0)
+  if (isAllPageSelected.value) {
+    const pageIds = selectable.map(p => p.id)
+    modalSelectedIds.value = modalSelectedIds.value.filter(id => !pageIds.includes(id))
+  } else {
+    const toAdd = selectable.filter(p => !modalSelectedIds.value.includes(p.id)).map(p => p.id)
+    modalSelectedIds.value = [...modalSelectedIds.value, ...toAdd]
+  }
+}
+
+const handleSelectProductFromModal = (product) => {
+  const stock = product.stock !== undefined ? product.stock : (product.soLuong || 0)
+  if (stock <= 0) {
+    const reservedOther = getReservedInOtherOrders(product.id)
+    const extra = reservedOther > 0 ? ` (đang giữ ${reservedOther} sản phẩm ở các đơn chờ khác)` : ''
+    notifyWarning('Hết hàng', `Sản phẩm này hiện đã hết tồn kho khả dụng${extra}!`)
+    return
+  }
+  toggleModalSelect(product.id)
+}
+
+const quickAddSingleProductFromModal = (product) => {
+  if (!kiemTraQuyenBanHang('thêm sản phẩm vào giỏ')) return
+  const stock = product.stock !== undefined ? product.stock : (product.soLuong || 0)
+  if (stock <= 0) {
+    const reservedOther = getReservedInOtherOrders(product.id)
+    const extra = reservedOther > 0 ? ` (đang giữ ${reservedOther} sản phẩm ở các đơn chờ khác)` : ''
+    notifyWarning('Hết hàng', `Sản phẩm này hiện đã hết tồn kho khả dụng${extra}!`)
+    return
+  }
+  addToCart(product, 1, false)
+}
+
+const confirmModalSelection = () => {
+  if (!kiemTraQuyenBanHang('thêm sản phẩm vào giỏ')) return
+  const products = modalSelectedIds.value
+    .map(id => allProducts.value.find(p => p.id === id))
+    .filter(Boolean)
+
+  if (products.length === 0) {
+    notifyWarning('Chưa chọn sản phẩm', 'Vui lòng chọn ít nhất 1 sản phẩm để thêm vào giỏ hàng.')
+    return
+  }
+
+  let added = 0
+  let outOfStock = 0
+
+  products.forEach(p => {
+    const stock = p.stock !== undefined ? p.stock : (p.soLuong || 0)
+    if (stock <= 0) {
+      outOfStock++
+      return
+    }
+    addToCart(p, 1, true)
+    added++
+  })
+
+  if (added > 0) {
+    notifySuccess('Thành công', `Đã thêm ${added} sản phẩm vào giỏ hàng!`)
+    closeProductPicker()
+  } else if (outOfStock > 0) {
+    notifyWarning('Hết hàng', 'Tất cả sản phẩm đã chọn đều đã hết hàng tồn kho.')
+  }
+}
+
 const closeProductPicker = () => {
   isProductModalOpen.value = false
+  modalSelectedIds.value = []
   syncCartPricesWithCatalog()
 }
+
+
+
+
 
 const getShoeImage = (p) => {
   if (p.img) return p.img
@@ -1955,12 +2082,9 @@ const handleScannedResult = async (decodedText) => {
             // Không phải JSON; dùng nguyên chuỗi làm mã tìm kiếm.
           }
         }
-        const res = await fetch(`${API_BASE}/san-pham-chi-tiet?search=${encodeURIComponent(searchKey)}&size=5`)
-        if (res.ok) {
-          const data = await res.json()
-          if (data && data.content && data.content.length > 0) {
-            found = ensureProductInCatalog(data.content[0]) || data.content[0]
-          }
+        const res = await http.get('/v1/san-pham-chi-tiet', { params: { search: searchKey, size: 5 } })
+        if (res && res.data && res.data.content && res.data.content.length > 0) {
+          found = ensureProductInCatalog(res.data.content[0]) || res.data.content[0]
         }
       } catch (err) {
         console.warn('Tra cứu backend theo mã quét thất bại:', err)
@@ -2318,36 +2442,43 @@ const provincesList = ref([])
 const wardsList = ref([])
 
 const loadProvinces = async () => {
-  // 1. Ưu tiên gọi API Địa giới hành chính mới nhất 2026 (v2 - 2 cấp Tỉnh/Thành phố -> Phường/Xã)
+  // 1. Kiểm tra cache sessionStorage để hiển thị tức thì (0ms)
   try {
-    const res = await fetch('https://provinces.open-api.vn/api/v2/p/')
-    if (res.ok) {
-      const data = await res.json()
-      if (Array.isArray(data) && data.length > 0) {
-        provincesList.value = data.map(p => ({ id: p.code, name: p.name }))
+    const cached = sessionStorage.getItem('pos_provinces_cache')
+    if (cached) {
+      const parsed = JSON.parse(cached)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        provincesList.value = parsed
         return
       }
     }
-  } catch (err) {
-    console.warn('Open API v2 (2026) failed, checking backend /shipping/provinces...', err)
-  }
+  } catch {}
 
-  // 2. Fallback sang Backend /shipping/provinces (chỉ nhận nếu đã cập nhật danh sách tỉnh mới <= 35 tỉnh)
-  try {
-    const list = await getProvinces()
-    if (Array.isArray(list) && list.length > 0 && list.length <= 35) {
-      provincesList.value = list
-      return
-    }
-  } catch (e) {
-    console.warn('Backend /shipping/provinces failed, using local 2026 province list...', e)
-  }
-
-  // 3. Fallback danh sách tỉnh/thành phố mới 2026 lưu cục bộ
+  // 2. Fallback ngay lập tức danh sách 63 tỉnh thành cục bộ để giao diện không bị trống
   provincesList.value = DS_63_TINH_THANH.map((p, idx) => ({
     id: p.subCodes?.[0] || (idx + 1),
     name: p.ten
   }))
+
+  // 3. Tải nền bất đồng bộ từ open-api có timeout 1.2s ngắn để không nghẽn mạng
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 1200)
+    const res = await fetch('https://provinces.open-api.vn/api/v2/p/', { signal: controller.signal })
+    clearTimeout(timer)
+    if (res.ok) {
+      const data = await res.json()
+      if (Array.isArray(data) && data.length > 0) {
+        const mapped = data.map(p => ({ id: p.code, name: p.name }))
+        provincesList.value = mapped
+        try {
+          sessionStorage.setItem('pos_provinces_cache', JSON.stringify(mapped))
+        } catch {}
+      }
+    }
+  } catch {
+    // Đã có fallback cục bộ, không gây gián đoạn
+  }
 }
 
 const onProvinceChange = async () => {
@@ -2745,7 +2876,6 @@ const nextVoucherSuggestion = computed(() => {
 
 let isConfirmingVoucherUpgrade = false
 
-// Tự động áp dụng phiếu giảm giá tốt nhất đủ điều kiện (hoàn toàn tự động)
 watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrder.value?.customer?.id], ([newSubTotal, newBest], [, , oldCustId]) => {
   if (!currentOrder.value) return
   if (newSubTotal <= 0) {
@@ -2753,14 +2883,12 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
     return
   }
 
-  // Nếu thay đổi khách hàng, cho phép tự động tính lại voucher tốt nhất cho khách mới
   const currentCustId = currentOrder.value?.customer?.id
   if (currentCustId !== oldCustId) {
     currentOrder.value.userSelectedVoucherManually = false
     currentOrder.value.userRemovedVoucher = false
   }
 
-  // 1. Nếu voucher đang chọn không còn hợp lệ: tự động chuyển về voucher tốt nhất hiện tại
   if (currentOrder.value.selectedVoucher && !isVoucherEligible(currentOrder.value.selectedVoucher)) {
     const droppedV = currentOrder.value.selectedVoucher
     const vCode = droppedV.ma || droppedV.maPhieuGiamGia || 'Voucher'
@@ -2780,12 +2908,6 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
     return
   }
 
-  // 2. Nếu người dùng đã chủ động chọn voucher này và nó vẫn hợp lệ: giữ nguyên
-  if (currentOrder.value.userSelectedVoucherManually && currentOrder.value.selectedVoucher) {
-    return
-  }
-
-  // 3. Tự động áp dụng mã tốt nhất và cảnh báo xác nhận khi có mã mới tốt hơn
   if (!currentOrder.value.selectedVoucher) {
     if (newBest?.voucher) {
       currentOrder.value.selectedVoucher = newBest.voucher
@@ -2796,8 +2918,8 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
     const curDisc = calculateVoucherDiscount(curV, newSubTotal)
     const newDisc = calculateVoucherDiscount(newBest.voucher, newSubTotal)
 
-    // Nếu mã mới có mức giảm tốt hơn mã đang áp dụng: hiện thông báo warning hỏi xác nhận
-    if (newDisc > curDisc && !isConfirmingVoucherUpgrade) {
+    // Nếu mã mới có mức giảm tốt hơn mã đang áp dụng và chưa từng từ chối mã này trên đơn hiện tại
+    if (newDisc > curDisc && !isConfirmingVoucherUpgrade && currentOrder.value.declinedUpgradeVoucherId !== newBest.voucher.id) {
       isConfirmingVoucherUpgrade = true
       const curCode = curV.ma || curV.maPhieuGiamGia || 'Mã hiện tại'
       const newCode = newBest.voucher.ma || newBest.voucher.maPhieuGiamGia || 'Mã mới'
@@ -2812,10 +2934,11 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
         if (ok && currentOrder.value) {
           currentOrder.value.selectedVoucher = newBest.voucher
           currentOrder.value.userSelectedVoucherManually = false
+          currentOrder.value.declinedUpgradeVoucherId = null
           notifySuccess('Đổi mã thành công', `Đã chuyển sang dùng mã "${newCode}" (giảm ${formatVnd(newDisc)})!`)
         } else if (currentOrder.value) {
-          // Người dùng chọn giữ mã cũ
           currentOrder.value.userSelectedVoucherManually = true
+          currentOrder.value.declinedUpgradeVoucherId = newBest.voucher.id
         }
       }).catch(() => {
         isConfirmingVoucherUpgrade = false
@@ -2824,7 +2947,6 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
   }
 }, { immediate: true })
 
-// Mặc định ô tiền khách đưa bằng tổng tiền cần thanh toán
 watch(finalTotal, (newTotal) => {
   if (currentOrder.value && !currentOrder.value.customCashGiven) {
     currentOrder.value.cashGiven = newTotal
@@ -2901,7 +3023,6 @@ const syncEmployeeListAndCheckRole = (empList, isInitial = false) => {
     const isSelectedPosEmp = selectedStaffId.value && Number(selectedStaffId.value) === empId
 
     if (!isInitial && prev) {
-      // Kiểm tra khóa/mở khóa tài khoản nhân viên
       if (prev.trangThai !== newActive) {
         if (!newActive) {
           if (isLoggedEmp) {
@@ -2927,7 +3048,6 @@ const syncEmployeeListAndCheckRole = (empList, isInitial = false) => {
         }
       }
 
-      // Kiểm tra chuyển quyền nhân viên (Admin <-> Nhân viên)
       if (prev.maVaiTro && prev.maVaiTro !== newRole) {
         const oldRoleLabel = prev.maVaiTro === 'ADMIN' ? 'Admin' : 'Nhân viên'
         if (isLoggedEmp || !loggedId) {
@@ -2942,14 +3062,12 @@ const syncEmployeeListAndCheckRole = (empList, isInitial = false) => {
             }
             window.dispatchEvent(new Event('polyshoes-user-updated'))
           } catch {
-            // Đồng bộ quyền cục bộ là tùy chọn; dữ liệu quyền từ API vẫn được áp dụng.
           }
         }
         changes.push(`Chuyển quyền nhân viên: Tài khoản "${empName}" vừa thay đổi vai trò từ [${oldRoleLabel}] sang [${newRoleLabel}]`)
       }
     }
 
-    // Nếu lúc đầu đăng nhập quyền trong localStorage bị lệch với DB thì đồng bộ lại
     if (isLoggedEmp && staffUserRef.value?.vaiTro && String(staffUserRef.value.vaiTro).toUpperCase() !== newRole) {
       const oldRoleLabel = String(staffUserRef.value.vaiTro).toUpperCase() === 'ADMIN' ? 'Admin' : 'Nhân viên'
       datVaiTro(newRole)
@@ -2963,7 +3081,6 @@ const syncEmployeeListAndCheckRole = (empList, isInitial = false) => {
         }
         window.dispatchEvent(new Event('polyshoes-user-updated'))
       } catch {
-        // Đồng bộ quyền cục bộ là tùy chọn; dữ liệu quyền từ API vẫn được áp dụng.
       }
       if (!isInitial && !changes.some(c => c.includes(empName))) {
         changes.push(`Chuyển quyền nhân viên: Tài khoản "${empName}" vừa thay đổi vai trò từ [${oldRoleLabel}] sang [${newRoleLabel}]`)
@@ -3003,11 +3120,6 @@ const withRequestTimeout = (promise, ms = 4000) => {
   ])
 }
 
-// --- KIỂM TRA & ĐỒNG BỘ 4 CASE KHÓ BÁN HÀNG TẠI QUẦY ---
-// 1. Đổi giá sản phẩm (giá bán gốc thay đổi hoặc ngừng kinh doanh)
-// 2. Sửa voucher (hết hạn, hết hạn do edit, khóa voucher, hết lượt, thay đổi giá trị giảm / đơn tối thiểu)
-// 3. Chuyển quyền nhân viên (đổi vai trò Admin <-> Nhân viên hoặc khóa tài khoản nhân viên)
-// 4. Đợt giảm giá thay đổi (bắt đầu / kết thúc / tắt đợt giảm giá / thay đổi % giảm)
 const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, silentToast: false }) => {
   if (isSyncingHardCases) return { abortedByStaffLock: false, changes: [] }
   if (!options.isBeforeCheckout) {
@@ -3029,11 +3141,10 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
   try {
     const [formRes, prodRes, empRes] = await Promise.allSettled([
       withRequestTimeout(http.get('/hoa-don/form-data'), 4000),
-      withRequestTimeout(fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&_t=${Date.now()}`, { cache: 'no-store' }).then(r => r.json()), 4000),
+      withRequestTimeout(http.get('/v1/san-pham-chi-tiet?page=0&size=500').then(r => r.data), 4000),
       withRequestTimeout(http.get('/nhan-vien', { params: { page: 0, size: 100 } }), 4000)
     ])
 
-    // --- CASE 3: CHUYỂN QUYỀN NHÂN VIÊN & TRẠNG THÁI TÀI KHOẢN ---
     if (empRes.status === 'fulfilled' && empRes.value?.data?.content) {
       const staffCheck = syncEmployeeListAndCheckRole(empRes.value.data.content, false)
       if (staffCheck.abortedByStaffLock) {
@@ -3045,14 +3156,12 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
       }
     }
 
-    // Lưu tạm tổng tiền hàng cũ của từng đơn trước khi cập nhật giá mới để đối chiếu voucher chính xác
     const oldSubTotalsMap = new Map()
     for (const order of pendingOrders.value) {
       const oldSub = (order.cart || []).reduce((sum, i) => sum + (Number(i.price || 0) * Number(i.quantity || 0)), 0)
       oldSubTotalsMap.set(order.id, oldSub)
     }
 
-    // --- CASE 1 (ĐỔI GIÁ) & CASE 4 (ĐỢT GIẢM GIÁ THAY ĐỔI) ---
     if (prodRes.status === 'fulfilled' && prodRes.value && Array.isArray(prodRes.value.content)) {
       const rawProducts = prodRes.value.content
       const prodMap = new Map(rawProducts.map(p => [Number(p.id), p]))
@@ -3065,7 +3174,6 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
           const item = order.cart[i]
           const freshProd = prodMap.get(Number(item.idCtsp))
 
-          // Kiểm tra sản phẩm bị ngừng bán hoặc xóa
           if (!freshProd || freshProd.trangThai === false) {
             changes.push(`Sản phẩm "${item.name}" (Size ${item.size} - ${item.color})${orderLabel} vừa ngừng kinh doanh và đã được gỡ khỏi giỏ hàng`)
             order.cart.splice(i, 1)
@@ -3079,7 +3187,6 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
           const oldDisc = normalizeDiscountStr(item.discount)
           const newDisc = normalizeDiscountStr(freshProd.discount)
 
-          // Case 1: Đổi giá bán gốc
           if (oldOriginalPrice !== newOriginalPrice) {
             item.originalPrice = newOriginalPrice
             item.price = newEffectivePrice
@@ -3088,7 +3195,6 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
               `Đổi giá: Sản phẩm "${item.name}" (Size ${item.size} - ${item.color})${orderLabel} thay đổi giá gốc từ ${formatVnd(oldOriginalPrice)} → ${formatVnd(newOriginalPrice)} (Đơn giá mới: ${formatVnd(newEffectivePrice)})`
             )
           }
-          // Case 4: Đợt giảm giá thay đổi (giá gốc giữ nguyên nhưng % khuyến mãi hoặc giá sau giảm thay đổi)
           else if (oldEffectivePrice !== newEffectivePrice || oldDisc !== newDisc) {
             item.originalPrice = newOriginalPrice
             item.price = newEffectivePrice
@@ -3112,12 +3218,10 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
         }
       }
 
-      // Cập nhật danh sách sản phẩm đang kinh doanh và đồng bộ lại tồn kho khả dụng
       const activeProducts = rawProducts.filter(p => p.trangThai !== false)
       setServerProductsList(activeProducts)
     }
 
-    // --- CASE 2: SỬA VOUCHER (HẾT HẠN / HẾT HẠN DO ĐỔI EDIT / KHÓA / HẾT LƯỢT / ĐỔI GIÁ TRỊ GIẢM) ---
     if (formRes.status === 'fulfilled' && formRes.value?.data) {
       const d = formRes.value.data
       allCustomers.value = d.khachHangs || []
@@ -3219,13 +3323,6 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
   return { abortedByStaffLock, changes }
 }
 
-const openVoucherModal = () => {
-  if (!currentOrder.value) createNewOrder()
-  voucherSearchQuery.value = ''
-  isVoucherModalOpen.value = true
-  validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: true })
-}
-
 const applyVoucher = async (voucher) => {
   if (!kiemTraQuyenBanHang('áp dụng voucher')) return
   if (!currentOrder.value) return
@@ -3264,7 +3361,6 @@ const applyVoucher = async (voucher) => {
   currentOrder.value.userSelectedVoucherManually = true
   currentOrder.value.userRemovedVoucher = false
   voucherInputCode.value = ''
-  isVoucherModalOpen.value = false
   notifySuccess('Đã áp dụng voucher', `Đã áp dụng mã "${voucher.ma || voucher.maPhieuGiamGia}" (${voucher.ten})!`)
 }
 
@@ -3320,13 +3416,6 @@ const handleModalSearchApply = () => {
   }
 }
 
-watch([bestVoucherSuggestion, () => currentOrder.value?.selectedVoucher?.id], ([best]) => {
-  if (!currentOrder.value) return
-  const voucher = best?.voucher || null
-  if (currentOrder.value.selectedVoucher?.id !== voucher?.id) {
-    currentOrder.value.selectedVoucher = voucher
-  }
-})
 
 watch(tienMatDuKienSauChi, (tienMoi, tienCu) => {
   if (isKetCaModalOpen.value && Number(ketCaForm.tienThucTe) === Number(tienCu)) {
@@ -3354,7 +3443,6 @@ const handleCheckout = async (options = {}) => {
     return
   }
 
-  // Bắt buộc kiểm tra & đồng bộ 4 Case khó (Đổi giá, Sửa voucher, Chuyển quyền NV, Đợt giảm giá) ngay trước khi thanh toán
   const syncRes = await validateAndSyncHardCases({ isBeforeCheckout: true, silentToast: true })
   if (syncRes.abortedByStaffLock) return
 
@@ -3438,7 +3526,6 @@ const handleCheckout = async (options = {}) => {
   isProcessingCheckout.value = true
 
   try {
-    // Kiểm tra tồn kho thực tế trước khi gửi thanh toán
     for (const item of currentOrder.value.cart) {
       const prod = allProducts.value.find(p => Number(p.id) === Number(item.idCtsp))
       if (prod) {
@@ -3502,7 +3589,6 @@ const handleCheckout = async (options = {}) => {
       }))
     }
 
-    // Kiểm tra tính hợp lệ của voucher trước khi checkout
     if (currentOrder.value.selectedVoucher && !isVoucherEligible(currentOrder.value.selectedVoucher)) {
       const fallbackBest = getBestVoucherForOrder(currentOrder.value)
       currentOrder.value.selectedVoucher = fallbackBest?.voucher || null
@@ -3598,7 +3684,6 @@ const handleCheckout = async (options = {}) => {
     completedInvoiceData.value = completedRecord
     saveRecentInvoiceToStorage(completedRecord)
 
-    // Trừ ngay tồn kho gốc (_serverStock) cho các sản phẩm vừa bán
     soldCartSnapshot.forEach(soldItem => {
       const prod = allProducts.value.find(p => Number(p.id) === Number(soldItem.idCtsp))
       if (prod) {
@@ -3617,14 +3702,12 @@ const handleCheckout = async (options = {}) => {
       activeOrderIndex.value = Math.max(0, pendingOrders.value.length - 1)
     }
 
-    // Đồng bộ lại tồn kho khả dụng và số lượt dùng voucher mới nhất cho các hóa đơn chờ còn lại
     reconcilePendingOrdersWithServerStock()
     recalculateAvailableStocks()
     savePendingOrdersToStorage()
 
     validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: true })
 
-    // Tự động in hóa đơn ngay sau khi thanh toán xác nhận tại quầy
     notifySuccess(
       isDeliveryOrder ? 'Tạo đơn giao hàng thành công!' : 'Thanh toán thành công!',
       `Đã hoàn tất hóa đơn "${completedRecord.code}".`
@@ -3634,7 +3717,6 @@ const handleCheckout = async (options = {}) => {
     await nextTick()
     printReceipt()
 
-    // Tự động chuyển sang trang hóa đơn chi tiết của hóa đơn đó
     if (completedRecord?.id) {
       setTimeout(() => {
         router.push(`/hoa-don/${completedRecord.id}`)
@@ -3663,12 +3745,8 @@ const printReceipt = () => {
     return
   }
 
-  // Lấy nội dung hóa đơn
   const receiptHtml = printEl.outerHTML
-
-  // Tự động đóng modal xem trước hóa đơn ngay khi thực hiện in, thu ngân không cần bấm Đóng thủ công
   isReceiptModalOpen.value = false
-
   const iframe = document.createElement('iframe')
   iframe.style.position = 'fixed'
   iframe.style.right = '0'
@@ -3963,10 +4041,6 @@ const printReceipt = () => {
 
 const handleKeyDown = (e) => {
   if (e.key === 'Escape') {
-    if (isVariantPickerModalOpen.value) {
-      isVariantPickerModalOpen.value = false
-      return
-    }
     isProductModalOpen.value = false
     isQrModalOpen.value = false
     isAddCustomerModalOpen.value = false
@@ -3986,26 +4060,39 @@ const loadInitialData = async () => {
     const hadStaffSnapshot = loadStaffSnapshotFromStorage()
     const restoredOrders = restorePendingOrdersFromStorage()
 
-    const [formRes, prodRes, brandRes, catRes, colorRes, sizeRes, empRes] = await Promise.allSettled([
-      http.get('/hoa-don/form-data'),
-      fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&_t=${Date.now()}`, { cache: 'no-store' }).then(r => r.json()),
-      fetch(`${API_BASE}/attributes/thuong_hieu`).then(r => r.json()),
-      fetch(`${API_BASE}/attributes/loai_giay`).then(r => r.json()),
-      fetch(`${API_BASE}/attributes/mau_sac`).then(r => r.json()),
-      fetch(`${API_BASE}/attributes/kich_co`).then(r => r.json()),
-      http.get('/nhan-vien', { params: { page: 0, size: 100 } })
-    ])
+    // 0. SWR: Hiển thị ngay sản phẩm từ cache sessionStorage (0ms tải trang)
+    try {
+      const cachedProds = sessionStorage.getItem('pos_products_cache')
+      if (cachedProds) {
+        const parsed = JSON.parse(cachedProds)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setServerProductsList(parsed)
+        }
+      }
+    } catch {}
 
-    if (formRes.status === 'fulfilled' && formRes.value.data) {
+    // 1. Tải song song với axios client (có auth header và baseURL tự động)
+    const reqs = [
+      http.get('/hoa-don/form-data'),
+      http.get('/v1/san-pham-chi-tiet?page=0&size=500')
+    ]
+
+    // Tải thuộc tính lọc song song
+    const attrPromise = loadFilterAttributes()
+
+    const results = await Promise.allSettled(reqs)
+    const formRes = results[0]
+    const prodRes = results[1]
+
+    if (formRes.status === 'fulfilled' && formRes.value?.data) {
       const d = formRes.value.data
       allCustomers.value = d.khachHangs || []
       allVouchers.value = (d.phieuGiamGias || []).filter(v => v.trangThai !== false)
       allEmployees.value = d.nhanViens || []
       allPaymentMethods.value = d.phuongThucThanhToans || d.phuongThucs || []
-    }
-
-    if (empRes.status === 'fulfilled' && empRes.value?.data?.content && !hadStaffSnapshot) {
-      syncEmployeeListAndCheckRole(empRes.value.data.content, true)
+      if (d.nhanViens && !hadStaffSnapshot) {
+        syncEmployeeListAndCheckRole(d.nhanViens, true)
+      }
     }
 
     if (allPaymentMethods.value.length === 0) {
@@ -4015,17 +4102,14 @@ const loadInitialData = async () => {
       ]
     }
 
-    if (brandRes.status === 'fulfilled' && Array.isArray(brandRes.value)) brandsList.value = brandRes.value
-    if (catRes.status === 'fulfilled' && Array.isArray(catRes.value)) categoriesList.value = catRes.value
-    if (colorRes.status === 'fulfilled' && Array.isArray(colorRes.value)) colorsList.value = colorRes.value
-    if (sizeRes.status === 'fulfilled' && Array.isArray(sizeRes.value)) sizesList.value = sizeRes.value
+    await attrPromise
 
     let loadedProducts = []
-    if (prodRes.status === 'fulfilled' && prodRes.value && prodRes.value.content) {
-      loadedProducts = prodRes.value.content.filter(p => p.trangThai !== false)
+    if (prodRes.status === 'fulfilled' && prodRes.value?.data?.content) {
+      loadedProducts = prodRes.value.data.content.filter(p => p.trangThai !== false)
     }
 
-    if (loadedProducts.length === 0) {
+    if (loadedProducts.length === 0 && allProducts.value.length === 0) {
       loadedProducts = [
         {
           id: 101,
@@ -4090,7 +4174,12 @@ const loadInitialData = async () => {
       ]
     }
 
-    setServerProductsList(loadedProducts)
+    if (loadedProducts.length > 0) {
+      setServerProductsList(loadedProducts)
+      try {
+        sessionStorage.setItem('pos_products_cache', JSON.stringify(loadedProducts))
+      } catch {}
+    }
 
     if (!restoredOrders || pendingOrders.value.length === 0) {
       createNewOrder(true)
@@ -4118,11 +4207,17 @@ const handleWindowClick = (e) => {
   }
 }
 
+let lastFocusFetchTime = 0
+
 const handleDiscountChanged = async () => {
   try {
-    const res = await fetch(`${API_BASE}/san-pham-chi-tiet?page=0&size=500&_t=${Date.now()}`, { cache: 'no-store' }).then(r => r.json())
-    if (res && Array.isArray(res.content)) {
-      setServerProductsList(res.content.filter(p => p.trangThai !== false))
+    const res = await http.get('/v1/san-pham-chi-tiet?page=0&size=500')
+    if (res && res.data && Array.isArray(res.data.content)) {
+      const activeProds = res.data.content.filter(p => p.trangThai !== false)
+      setServerProductsList(activeProds)
+      try {
+        sessionStorage.setItem('pos_products_cache', JSON.stringify(activeProds))
+      } catch {}
     }
   } catch (e) {
     console.warn('Lỗi tải lại sản phẩm khi đợt giảm giá thay đổi:', e)
@@ -4132,7 +4227,11 @@ const handleDiscountChanged = async () => {
 
 const handleWindowFocusOrVisible = () => {
   if (document.visibilityState === 'visible') {
-    handleDiscountChanged()
+    const now = Date.now()
+    if (now - lastFocusFetchTime > 30000) {
+      lastFocusFetchTime = now
+      handleDiscountChanged()
+    }
   }
 }
 
@@ -4151,8 +4250,8 @@ const handleCrossTabStorageSync = (e) => {
 }
 
 onMounted(async () => {
-  await fetchActiveShift()
   loadRecentInvoicesFromStorage()
+  fetchActiveShift()
   loadInitialData()
   loadProvinces()
   window.addEventListener('keydown', handleKeyDown)
@@ -4206,12 +4305,14 @@ onUnmounted(() => {
         <!-- Nút Mở / Đóng ca làm việc trên quầy POS (Chỉ hiển thị cho Nhân viên, Admin không cần mở/đóng ca) -->
         <template v-if="!laAdmin()">
           <div v-if="activeShift" class="pos-shift-group">
-            <span class="pos-shift-badge" :title="`Ca làm việc ${activeShift.tenCaLich || activeShift.maCa} đang hoạt động`">
+            <span class="pos-shift-badge"
+              :title="`Ca làm việc ${activeShift.tenCaLich || activeShift.maCa} đang hoạt động`">
               <span class="pulse-dot"></span>
               Ca: <strong>{{ activeShift.tenCaLich || activeShift.maCa }}</strong>
               <small v-if="activeShift.tenCaLich" class="pos-shift-code-tag">({{ activeShift.maCa }})</small>
             </span>
-            <button type="button" class="btn-pos-close-shift" @click="openKetCaModal" title="Đóng và kết ca làm việc này">
+            <button type="button" class="btn-pos-close-shift" @click="openKetCaModal"
+              title="Đóng và kết ca làm việc này">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
@@ -4220,7 +4321,8 @@ onUnmounted(() => {
             </button>
           </div>
 
-          <button v-else type="button" class="btn-pos-open-shift" @click="openMoCaModal" title="Mở ca làm việc mới để bắt đầu bán hàng">
+          <button v-else type="button" class="btn-pos-open-shift" @click="openMoCaModal"
+            title="Mở ca làm việc mới để bắt đầu bán hàng">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"></circle>
               <line x1="12" y1="8" x2="12" y2="16"></line>
@@ -4248,7 +4350,9 @@ onUnmounted(() => {
     <div v-if="isCheDoXem && !isLoadingShift" class="pos-no-shift-alert-banner is-view-mode">
       <div class="alert-banner-left">
         <span class="badge-view-mode-tag">CHẾ ĐỘ XEM</span>
-        <span class="view-mode-text">Bạn chưa vào ca làm việc nên chỉ có quyền tra cứu thông tin. Các thao tác bán hàng, tạo đơn hàng và chỉnh sửa dữ liệu đang bị khóa.</span>
+        <span class="view-mode-text">Bạn chưa vào ca làm việc nên chỉ có quyền tra cứu thông tin. Các thao tác bán hàng,
+          tạo
+          đơn hàng và chỉnh sửa dữ liệu đang bị khóa.</span>
       </div>
       <button type="button" class="btn-banner-open-shift btn-view-mode-red" @click="openMoCaModal">
         <span>Vào ca làm việc ngay</span>
@@ -4260,13 +4364,9 @@ onUnmounted(() => {
         <div class="pos-workspace-panel">
           <div class="pos-orders-tabs-bar">
             <div class="pos-tabs-scroll-area">
-              <button
-                class="btn-create-order-tab"
-                :disabled="pendingOrders.length >= MAX_PENDING_ORDERS"
-                :class="{ 'is-limit': pendingOrders.length >= MAX_PENDING_ORDERS }"
-                @click="createNewOrder"
-                :title="pendingOrders.length >= MAX_PENDING_ORDERS ? `Đã đạt giới hạn tối đa ${MAX_PENDING_ORDERS} hóa đơn chờ` : 'Tạo hóa đơn chờ mới'"
-              >
+              <button class="btn-create-order-tab" :disabled="pendingOrders.length >= MAX_PENDING_ORDERS"
+                :class="{ 'is-limit': pendingOrders.length >= MAX_PENDING_ORDERS }" @click="createNewOrder"
+                :title="pendingOrders.length >= MAX_PENDING_ORDERS ? `Đã đạt giới hạn tối đa ${MAX_PENDING_ORDERS} hóa đơn chờ` : 'Tạo hóa đơn chờ mới'">
                 <span>+ Thêm hóa đơn</span>
               </button>
 
@@ -4282,11 +4382,8 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div
-              class="pos-orders-counter-pill"
-              :class="{ 'is-full': pendingOrders.length >= MAX_PENDING_ORDERS }"
-              :title="`Số lượng hóa đơn chờ: ${pendingOrders.length}/${MAX_PENDING_ORDERS}`"
-            >
+            <div class="pos-orders-counter-pill" :class="{ 'is-full': pendingOrders.length >= MAX_PENDING_ORDERS }"
+              :title="`Số lượng hóa đơn chờ: ${pendingOrders.length}/${MAX_PENDING_ORDERS}`">
               <span class="counter-num">{{ pendingOrders.length }}/{{ MAX_PENDING_ORDERS }}</span>
               <span class="counter-lbl">hóa đơn</span>
             </div>
@@ -4365,10 +4462,10 @@ onUnmounted(() => {
                       </td>
                       <td class="text-center">
                         <div class="qty-stepper-modern">
-                          <button class="step-btn" @click="updateCartItemQty(item, item.quantity - 1)" title="Giảm số lượng (về 0 để xóa)">−</button>
-                          <input type="number" class="step-input" :value="item.quantity"
-                            min="1" :max="getMaxAllowedForCartItem(item)"
-                            @input="handleCartItemQtyInput(item, $event)"
+                          <button class="step-btn" @click="updateCartItemQty(item, item.quantity - 1)"
+                            title="Giảm số lượng (về 0 để xóa)">−</button>
+                          <input type="number" class="step-input" :value="item.quantity" min="1"
+                            :max="getMaxAllowedForCartItem(item)" @input="handleCartItemQtyInput(item, $event)"
                             @change="updateCartItemQty(item, $event.target.value, $event)"
                             @blur="updateCartItemQty(item, $event.target.value, $event)"
                             @keydown.enter="$event.target.blur()" />
@@ -4384,11 +4481,13 @@ onUnmounted(() => {
                       </td>
                       <td class="text-center">
                         <div class="price-stack" style="white-space: nowrap !important;">
-                          <span class="price-active" style="white-space: nowrap !important;">{{ formatVnd(item.price) }}</span>
+                          <span class="price-active" style="white-space: nowrap !important;">{{ formatVnd(item.price)
+ }}</span>
                           <span v-if="item.originalPrice && item.originalPrice > item.price"
                             class="price-strikethrough">
                             {{ formatVnd(item.originalPrice) }}
-                            <strong v-if="normalizeDiscountStr(item.discount)" style="color: #dc2626; font-size: 11px; margin-left: 4px; text-decoration: none; display: inline-block;">
+                            <strong v-if="normalizeDiscountStr(item.discount)"
+                              style="color: #dc2626; font-size: 11px; margin-left: 4px; text-decoration: none; display: inline-block;">
                               ({{ normalizeDiscountStr(item.discount) }})
                             </strong>
                           </span>
@@ -4399,9 +4498,11 @@ onUnmounted(() => {
                       </td>
                       <td class="text-center">
                         <button class="btn-del-item" @click="removeCartItem(item)" title="Xóa khỏi giỏ hàng">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                            </path>
                             <line x1="10" y1="11" x2="10" y2="17"></line>
                             <line x1="14" y1="11" x2="14" y2="17"></line>
                           </svg>
@@ -4441,7 +4542,8 @@ onUnmounted(() => {
           <div class="pos-delivery-card-head">
             <div class="pos-delivery-title-group">
               <div class="pos-delivery-icon-badge">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
                   <rect x="1" y="3" width="15" height="13" rx="2"></rect>
                   <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
                   <circle cx="5.5" cy="18.5" r="2.5"></circle>
@@ -4450,26 +4552,31 @@ onUnmounted(() => {
               </div>
               <div class="pos-delivery-head-text">
                 <h4 class="pos-delivery-title">Thông tin giao hàng</h4>
-                <p class="pos-delivery-subtitle">Điền địa chỉ người nhận theo địa giới hành chính mới để tính phí vận chuyển GHN</p>
+                <p class="pos-delivery-subtitle">Điền địa chỉ người nhận theo địa giới hành chính mới để tính phí vận
+                  chuyển
+                  GHN</p>
               </div>
             </div>
 
             <div class="pos-delivery-head-actions">
-              <button type="button" class="btn-del-action-add" @click="openQuickAddAddressModal" title="Thêm nhanh địa chỉ mới cho phần giao hàng">
+              <button type="button" class="btn-del-action-add" @click="openQuickAddAddressModal"
+                title="Thêm nhanh địa chỉ mới cho phần giao hàng">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
                   <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
-                <span>+ Thêm nhanh địa chỉ</span>
+                <span>Thêm nhanh địa chỉ</span>
               </button>
-              <button v-if="currentOrder.customer" type="button" class="btn-del-action-fill" @click="fillDeliveryFromCustomer" title="Lấy họ tên, SĐT và địa chỉ từ khách hàng đã chọn">
+              <button v-if="currentOrder.customer" type="button" class="btn-del-action-fill"
+                @click="fillDeliveryFromCustomer" title="Lấy họ tên, SĐT và địa chỉ từ khách hàng đã chọn">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                   <circle cx="12" cy="7" r="4"></circle>
                 </svg>
                 <span>Điền từ khách hàng</span>
               </button>
-              <button type="button" class="btn-del-action-reset" @click="clearDeliveryForm" title="Làm mới các ô thông tin nhận hàng">
+              <button type="button" class="btn-del-action-reset" @click="clearDeliveryForm"
+                title="Làm mới các ô thông tin nhận hàng">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
                   <path d="M3 3v5h5"></path>
@@ -4481,42 +4588,34 @@ onUnmounted(() => {
 
           <div class="pos-delivery-card-body">
             <!-- Sổ địa chỉ đã lưu của khách hàng (chọn nhanh 1 chạm) -->
-            <div v-if="currentOrder.customer && currentCustomerSavedAddresses.length > 0" class="pos-del-saved-addresses-bar">
+            <div v-if="currentOrder.customer && currentCustomerSavedAddresses.length > 0"
+              class="pos-del-saved-addresses-bar">
               <div class="saved-addr-label">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
                 </svg>
-                <span>Địa chỉ đã lưu của <strong>{{ currentOrder.customer.ten || currentOrder.customer.tenKhachHang }}</strong>:</span>
+                <span>Địa chỉ đã lưu của <strong>{{ currentOrder.customer.ten || currentOrder.customer.tenKhachHang
+ }}</strong>:</span>
               </div>
               <div class="saved-addr-pills">
-                <button
-                  v-for="addr in currentCustomerSavedAddresses"
-                  :key="addr.id"
-                  type="button"
-                  class="saved-addr-pill"
-                  :class="{
+                <button v-for="addr in currentCustomerSavedAddresses" :key="addr.id" type="button"
+                  class="saved-addr-pill" :class="{
                     active:
                       normalizePlaceName(currentOrder.deliveryInfo.province?.name) === normalizePlaceName(addr.thanhPho) &&
                       normalizePlaceName(currentOrder.deliveryInfo.ward?.name) === normalizePlaceName(addr.phuong) &&
                       String(currentOrder.deliveryInfo.recipientAddress || '').trim().toLowerCase() === String(addr.diaChiCuThe || '').trim().toLowerCase()
-                  }"
-                  @click="applySavedAddressToDeliveryForm(addr, currentOrder.customer, true)"
-                  :title="[addr.diaChiCuThe, addr.phuong, addr.thanhPho].filter(Boolean).join(', ')"
-                >
+                  }" @click="applySavedAddressToDeliveryForm(addr, currentOrder.customer, true)"
+                  :title="[addr.diaChiCuThe, addr.phuong, addr.thanhPho].filter(Boolean).join(', ')">
                   <span v-if="addr.macDinh" class="pill-default-tag">Mặc định</span>
                   <span class="pill-addr-text">{{ [addr.diaChiCuThe, addr.phuong, addr.thanhPho].filter(Boolean).join(', ') }}</span>
                 </button>
-                <button
-                  type="button"
-                  class="saved-addr-add-btn"
-                  @click="openQuickAddAddressModal"
-                  title="Thêm địa chỉ mới vào sổ địa chỉ của khách"
-                >
+                <button type="button" class="saved-addr-add-btn" @click="openQuickAddAddressModal"
+                  title="Thêm địa chỉ mới vào sổ địa chỉ của khách">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                   </svg>
-                  <span>+ Thêm địa chỉ</span>
+                  <span>Thêm địa chỉ</span>
                 </button>
               </div>
             </div>
@@ -4529,17 +4628,13 @@ onUnmounted(() => {
                 </svg>
                 <span>Khách hàng chưa có địa chỉ lưu sẵn.</span>
               </div>
-              <button
-                type="button"
-                class="saved-addr-add-btn"
-                @click="openQuickAddAddressModal"
-                title="Thêm địa chỉ mới vào sổ địa chỉ của khách"
-              >
+              <button type="button" class="saved-addr-add-btn" @click="openQuickAddAddressModal"
+                title="Thêm địa chỉ mới vào sổ địa chỉ của khách">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
                   <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
-                <span>+ Thêm địa chỉ mới cho khách</span>
+                <span>Thêm địa chỉ mới cho khách</span>
               </button>
             </div>
 
@@ -4569,10 +4664,13 @@ onUnmounted(() => {
                 <div class="pos-del-input-wrap">
                   <span class="pos-del-field-icon">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                      <path
+                        d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z">
+                      </path>
                     </svg>
                   </span>
-                  <input type="tel" class="pos-del-control with-icon" placeholder="Nhập SĐT liên hệ giao hàng (VD: 0987...)"
+                  <input type="tel" class="pos-del-control with-icon"
+                    placeholder="Nhập SĐT liên hệ giao hàng (VD: 0987...)"
                     v-model="currentOrder.deliveryInfo.recipientPhone" maxlength="11" />
                 </div>
               </div>
@@ -4603,7 +4701,8 @@ onUnmounted(() => {
               </div>
 
               <!-- Địa chỉ chi tiết -->
-              <div class="pos-del-field" :class="{ 'col-span-2': !(currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length) }">
+              <div class="pos-del-field"
+                :class="{ 'col-span-2': !(currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length) }">
                 <label class="pos-del-label">
                   Địa chỉ cụ thể (Số nhà, ngõ, tên đường, tòa nhà...) <span class="req-star">*</span>
                 </label>
@@ -4614,16 +4713,20 @@ onUnmounted(() => {
                       <circle cx="12" cy="10" r="3"></circle>
                     </svg>
                   </span>
-                  <input type="text" class="pos-del-control with-icon" placeholder="VD: Số 120 đường Cầu Giấy, Tòa nhà Discovery..."
+                  <input type="text" class="pos-del-control with-icon"
+                    placeholder="VD: Số 120 đường Cầu Giấy, Tòa nhà Discovery..."
                     v-model="currentOrder.deliveryInfo.recipientAddress" />
                 </div>
               </div>
 
               <!-- Gói dịch vụ vận chuyển (nếu có) -->
-              <div class="pos-del-field" v-if="currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length">
+              <div class="pos-del-field"
+                v-if="currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length">
                 <label class="pos-del-label">Gói dịch vụ vận chuyển GHN</label>
-                <select class="pos-del-control" v-model="currentOrder.deliveryInfo.serviceTypeId" @change="onServiceChange">
-                  <option v-for="s in currentOrder.deliveryInfo.services" :key="s.serviceTypeId" :value="s.serviceTypeId">
+                <select class="pos-del-control" v-model="currentOrder.deliveryInfo.serviceTypeId"
+                  @change="onServiceChange">
+                  <option v-for="s in currentOrder.deliveryInfo.services" :key="s.serviceTypeId"
+                    :value="s.serviceTypeId">
                     {{ s.shortName || ('Dịch vụ GHN #' + s.serviceTypeId) }}
                   </option>
                 </select>
@@ -4631,7 +4734,8 @@ onUnmounted(() => {
             </div>
 
             <!-- Tùy chọn & Nút lưu địa chỉ vào hồ sơ khách hàng cho các lần mua sau -->
-            <div v-if="currentOrder.customer" class="pos-del-save-profile-bar" :class="{ 'is-saved': isCurrentDeliveryAddressSaved }">
+            <div v-if="currentOrder.customer" class="pos-del-save-profile-bar"
+              :class="{ 'is-saved': isCurrentDeliveryAddressSaved }">
               <div class="save-profile-left">
                 <span v-if="!hasCustomerSavedAddress" class="save-profile-badge badge-warning">
                   Khách chưa có địa chỉ lưu sẵn
@@ -4644,28 +4748,23 @@ onUnmounted(() => {
                 </span>
 
                 <label v-if="!isCurrentDeliveryAddressSaved" class="save-profile-chk-label">
-                  <input
-                    type="checkbox"
-                    class="custom-chk pos-chk"
-                    v-model="currentOrder.deliveryInfo.saveToCustomerProfile"
-                  />
-                  <span>Tự động lưu làm địa chỉ mặc định của <strong>{{ currentOrder.customer.ten || currentOrder.customer.tenKhachHang }}</strong> khi Thanh toán</span>
+                  <input type="checkbox" class="custom-chk pos-chk"
+                    v-model="currentOrder.deliveryInfo.saveToCustomerProfile" />
+                  <span>Tự động lưu làm địa chỉ mặc định của <strong>{{ currentOrder.customer.ten ||
+ currentOrder.customer.tenKhachHang }}</strong> khi Thanh toán</span>
                 </label>
                 <span v-else class="save-profile-saved-note">
                   Lần mua tiếp theo hệ thống sẽ tự động điền Tỉnh/Phường/Số nhà này cho khách.
                 </span>
               </div>
 
-              <button
-                v-if="!isCurrentDeliveryAddressSaved"
-                type="button"
-                class="btn-save-addr-profile"
+              <button v-if="!isCurrentDeliveryAddressSaved" type="button" class="btn-save-addr-profile"
                 :disabled="!isCurrentDeliveryAddressComplete || isSavingCustomerAddress"
                 @click="saveDeliveryAddressToCustomerProfile(false)"
-                title="Lưu ngay Tỉnh/Phường/Số nhà này vào hồ sơ khách hàng"
-              >
+                title="Lưu ngay Tỉnh/Phường/Số nhà này vào hồ sơ khách hàng">
                 <span v-if="isSavingCustomerAddress" class="fee-spinner"></span>
-                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2.2">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                   <polyline points="17 21 17 13 7 13 7 21"></polyline>
                   <polyline points="7 3 7 8 15 8"></polyline>
@@ -4678,8 +4777,11 @@ onUnmounted(() => {
             <div class="pos-delivery-footer-bar">
               <div class="pos-del-carrier-info">
                 <span class="carrier-badge">GHN Express</span>
-                <span class="carrier-address-preview" v-if="currentOrder.deliveryInfo.province && currentOrder.deliveryInfo.ward">
-                  Giao tới: <strong>{{ [currentOrder.deliveryInfo.recipientAddress, currentOrder.deliveryInfo.ward?.name, currentOrder.deliveryInfo.province?.name].filter(Boolean).join(', ') }}</strong>
+                <span class="carrier-address-preview"
+                  v-if="currentOrder.deliveryInfo.province && currentOrder.deliveryInfo.ward">
+                  Giao tới: <strong>{{ [currentOrder.deliveryInfo.recipientAddress,
+ currentOrder.deliveryInfo.ward?.name,
+ currentOrder.deliveryInfo.province?.name].filter(Boolean).join(', ') }}</strong>
                 </span>
                 <span class="carrier-address-hint" v-else>
                   Vui lòng chọn Tỉnh/Thành phố và Phường/Xã để tự động tính cước phí vận chuyển
@@ -4698,11 +4800,15 @@ onUnmounted(() => {
                 <div v-else class="del-fee-value-box">
                   <span class="del-fee-lbl">Phí vận chuyển:</span>
                   <div style="display: flex; align-items: center; gap: 8px;">
-                    <span v-if="isFreeShipEligible" class="badge-free-ship-tag" style="background: #ecfdf5; color: #059669; font-weight: 700; font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 1px solid #a7f3d0;">
+                    <span v-if="isFreeShipEligible" class="badge-free-ship-tag"
+                      style="background: #ecfdf5; color: #059669; font-weight: 700; font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 1px solid #a7f3d0;">
                       🎉 Miễn phí ship (Đơn &gt; 10tr)
                     </span>
-                    <strong class="del-fee-amount" :style="{ textDecoration: isFreeShipEligible ? 'line-through' : 'none', color: isFreeShipEligible ? '#94a3b8' : 'inherit' }">
-                      {{ formatVnd(currentOrder.deliveryInfo.rawShippingFee || currentOrder.deliveryInfo.shippingFee || 0) }}
+                    <strong class="del-fee-amount"
+                      :style="{ textDecoration: isFreeShipEligible ? 'line-through' : 'none', color: isFreeShipEligible ? '#94a3b8' : 'inherit' }">
+                      {{ formatVnd(currentOrder.deliveryInfo.rawShippingFee || currentOrder.deliveryInfo.shippingFee ||
+ 0)
+ }}
                     </strong>
                     <strong v-if="isFreeShipEligible" style="color: #059669; font-size: 15px; font-weight: 800;">
                       0 ₫
@@ -4785,9 +4891,11 @@ onUnmounted(() => {
           <div v-if="currentOrder && currentOrder.isDelivery" class="delivery-active-summary-badge">
             <div class="delivery-summary-row">
               <span class="delivery-summary-dot"></span>
-              <span class="delivery-summary-txt" v-if="currentOrder.deliveryInfo.recipientName || currentOrder.deliveryInfo.recipientPhone">
+              <span class="delivery-summary-txt"
+                v-if="currentOrder.deliveryInfo.recipientName || currentOrder.deliveryInfo.recipientPhone">
                 Người nhận: <strong>{{ currentOrder.deliveryInfo.recipientName || 'Chưa nhập tên' }}</strong>
-                <template v-if="currentOrder.deliveryInfo.recipientPhone"> ({{ currentOrder.deliveryInfo.recipientPhone }})</template>
+                <template v-if="currentOrder.deliveryInfo.recipientPhone"> ({{ currentOrder.deliveryInfo.recipientPhone
+ }})</template>
               </span>
               <span class="delivery-summary-txt" v-else>
                 Vui lòng điền <strong>Form thông tin giao hàng</strong> ngay bên dưới giỏ hàng
@@ -4805,7 +4913,7 @@ onUnmounted(() => {
               <div class="selected-voucher-content">
                 <div class="selected-voucher-top">
                   <span class="selected-voucher-code">{{ currentOrder.selectedVoucher.ma ||
-                    currentOrder.selectedVoucher.maPhieuGiamGia }}</span>
+ currentOrder.selectedVoucher.maPhieuGiamGia }}</span>
                   <span class="badge bg-success text-white" style="font-size: 10px; padding: 2px 6px;">
                     Tốt nhất
                   </span>
@@ -4814,7 +4922,7 @@ onUnmounted(() => {
                 <div class="selected-voucher-desc">
                   {{ currentOrder.selectedVoucher.ten }}
                   <span v-if="currentOrder.selectedVoucher.hoaDonToiThieu"> • Đơn từ {{
-                    formatVnd(currentOrder.selectedVoucher.hoaDonToiThieu) }}</span>
+ formatVnd(currentOrder.selectedVoucher.hoaDonToiThieu) }}</span>
                 </div>
               </div>
             </div>
@@ -4830,11 +4938,14 @@ onUnmounted(() => {
               </div>
               <div class="upsell-body-col">
                 <div class="upsell-title">
-                  Mua thêm <span class="upsell-highlight-amt">{{ formatVnd(nextVoucherSuggestion.neededMore) }}</span> để dùng mã
+                  Mua thêm <span class="upsell-highlight-amt">{{ formatVnd(nextVoucherSuggestion.neededMore) }}</span>
+                  để
+                  dùng mã
                   <span class="upsell-code-badge">{{ nextVoucherSuggestion.voucher.ma }}</span>
                 </div>
                 <div class="upsell-desc">
-                  Ưu đãi giảm thêm lên tới <strong class="upsell-benefit">{{ formatVnd(nextVoucherSuggestion.potentialDiscount) }}</strong>
+                  Ưu đãi giảm thêm lên tới <strong class="upsell-benefit">{{
+ formatVnd(nextVoucherSuggestion.potentialDiscount) }}</strong>
                 </div>
               </div>
             </div>
@@ -4900,16 +5011,10 @@ onUnmounted(() => {
                 </span>
               </div>
               <div class="cash-input-wrap">
-                <input
-                  type="number"
-                  class="cash-amount-inp"
+                <input type="number" class="cash-amount-inp"
                   :value="currentOrder.cashGiven === 0 && !currentOrder.customCashGiven ? '' : currentOrder.cashGiven"
-                  @input="handleCashGivenInput($event)"
-                  placeholder=""
-                  min="0"
-                  step="1000"
-                  @focus="$event.target.select()"
-                />
+                  @input="handleCashGivenInput($event)" placeholder="" min="0" step="1000"
+                  @focus="$event.target.select()" />
                 <span class="cash-currency-badge">₫</span>
               </div>
             </div>
@@ -4924,16 +5029,10 @@ onUnmounted(() => {
                 </span>
               </div>
               <div class="cash-input-wrap">
-                <input
-                  type="number"
-                  class="cash-amount-inp"
+                <input type="number" class="cash-amount-inp"
                   :value="currentOrder.transferGiven === 0 ? '' : currentOrder.transferGiven"
                   @input="currentOrder.transferGiven = $event.target.value === '' ? 0 : Math.max(0, Number($event.target.value))"
-                  placeholder="Nhập số tiền chuyển khoản..."
-                  min="0"
-                  step="1000"
-                  @focus="$event.target.select()"
-                />
+                  placeholder="Nhập số tiền chuyển khoản..." min="0" step="1000" @focus="$event.target.select()" />
                 <span class="cash-currency-badge">₫</span>
               </div>
             </div>
@@ -4943,7 +5042,7 @@ onUnmounted(() => {
             v-if="currentOrder && currentOrder.paymentMethod !== 'CHUYEN_KHOAN'">
             <span class="change-label">{{ changeDue >= 0 ? 'Tiền thừa trả khách:' : 'Khách còn thiếu:' }}</span>
             <span class="change-value">{{ changeDue >= 0 ? formatVnd(changeDue) : formatVnd(Math.abs(changeDue))
-            }}</span>
+ }}</span>
           </div>
 
           <div class="bank-qr-trigger-box"
@@ -5001,8 +5100,8 @@ onUnmounted(() => {
             <div class="modal-prod-filter-bar">
               <div class="modal-filter-top-row">
                 <div class="modal-search-field">
-                  <input v-model="modalFilters.search" type="text" placeholder="Tìm theo tên sản phẩm, mã sản phẩm, mã CTSP..."
-                    class="modal-search-inp" />
+                  <input v-model="modalFilters.search" type="text"
+                    placeholder="Tìm theo tên sản phẩm, mã sản phẩm, mã CTSP..." class="modal-search-inp" />
                   <button v-if="modalFilters.search" class="modal-clear-search-btn"
                     @click="modalFilters.search = ''">×</button>
                 </div>
@@ -5015,7 +5114,7 @@ onUnmounted(() => {
                   <select v-model="modalFilters.idThuongHieu" class="filter-select"
                     :class="{ active: !!modalFilters.idThuongHieu }">
                     <option value="">Tất cả thương hiệu</option>
-                    <option v-for="b in brandsList" :key="b.id" :value="b.id || b.ten">{{ b.ten || b.tenThuongHieu }}
+                    <option v-for="b in brandsList" :key="b.id || b.ten" :value="b.ten || b.id">{{ b.ten || b.tenThuongHieu }}
                     </option>
                   </select>
                 </div>
@@ -5024,7 +5123,7 @@ onUnmounted(() => {
                   <select v-model="modalFilters.idLoaiGiay" class="filter-select"
                     :class="{ active: !!modalFilters.idLoaiGiay }">
                     <option value="">Tất cả thể loại</option>
-                    <option v-for="c in categoriesList" :key="c.id" :value="c.id || c.ten">{{ c.ten || c.tenLoaiGiay }}
+                    <option v-for="c in categoriesList" :key="c.id || c.ten" :value="c.ten || c.id">{{ c.ten || c.tenLoaiGiay }}
                     </option>
                   </select>
                 </div>
@@ -5033,8 +5132,7 @@ onUnmounted(() => {
                   <select v-model="modalFilters.idMauSac" class="filter-select"
                     :class="{ active: !!modalFilters.idMauSac }">
                     <option value="">Tất cả màu sắc</option>
-                    <option v-for="m in colorsList" :key="m.id" :value="m.id || m.ten || m.tenMau">{{ m.ten || m.tenMau
-                    }}
+                    <option v-for="m in colorsList" :key="m.id || m.ten" :value="m.ten || m.id">{{ m.ten || m.tenMau }}
                     </option>
                   </select>
                 </div>
@@ -5043,9 +5141,7 @@ onUnmounted(() => {
                   <select v-model="modalFilters.idKichCo" class="filter-select"
                     :class="{ active: !!modalFilters.idKichCo }">
                     <option value="">Tất cả kích cỡ</option>
-                    <option v-for="s in sizesList" :key="s.id" :value="s.id || s.ten || s.tenKichCo">{{ s.ten ||
-                      s.tenKichCo
-                    }}</option>
+                    <option v-for="s in sizesList" :key="s.id || s.ten" :value="s.ten || s.id">{{ s.ten || s.tenKichCo }}</option>
                   </select>
                 </div>
 
@@ -5062,88 +5158,95 @@ onUnmounted(() => {
               </div>
             </div>
 
+            <div class="pos-prod-select-summary">
+              <span class="select-summary-text">
+                Đã chọn <strong>{{ modalSelectedIds.length }}</strong> sản phẩm
+                <template v-if="filteredModalVariants.length === 0">(không có kết quả khớp bộ lọc)</template>
+              </span>
+              <button v-if="modalSelectedIds.length > 0" class="btn-clear-selection" @click="modalSelectedIds = []">Bỏ chọn tất cả</button>
+            </div>
+
             <div class="pos-prod-table-wrap">
               <table class="pos-prod-table">
                 <thead>
                   <tr>
-                    <th style="width: 42px;" class="text-center">STT</th>
-                    <th style="width: 56px;" class="text-center">ẢNH</th>
-                    <th style="width: 100px;" class="text-center">MÃ SP</th>
-                    <th>TÊN SẢN PHẨM</th>
-                    <th style="width: 120px;" class="text-center">MÀU SẮC</th>
-                    <th style="width: 105px;" class="text-center">KÍCH CỠ</th>
-                    <th style="width: 90px;" class="text-center">TỔNG TỒN</th>
-                    <th style="width: 140px;" class="text-center">KHOẢNG GIÁ</th>
-                    <th style="width: 125px;" class="text-center">THAO TÁC</th>
+                    <th width="42" class="text-center">
+                      <input type="checkbox" class="custom-chk pos-chk" :checked="isAllPageSelected"
+                        @change="toggleSelectAllPage" title="Chọn tất cả trên trang này" />
+                    </th>
+                    <th width="45" class="text-center">STT</th>
+                    <th width="64" class="text-center">ẢNH</th>
+                    <th width="140" class="text-center">MÃ CTSP</th>
+                    <th>SẢN PHẨM</th>
+                    <th width="110" class="text-center">MÀU SẮC</th>
+                    <th width="75" class="text-center">SIZE</th>
+                    <th width="90" class="text-center">TỒN KHO</th>
+                    <th width="130" class="text-center">ĐƠN GIÁ</th>
+                    <th width="90" class="text-center">CHỌN</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(prod, idx) in paginatedModalProducts" :key="prod.key"
-                    @click="openVariantPickerForProduct(prod)"
-                    style="cursor: pointer;"
-                    title="Bấm để xem và chọn biến thể">
+                  <tr v-for="(item, idx) in paginatedModalVariants" :key="item.id"
+                    :class="{ 'row-selected': isModalRowSelected(item.id) }" @click="handleSelectProductFromModal(item)"
+                    title="Click để thêm nhanh hoặc tick chọn">
+                    <td class="text-center" @click.stop>
+                      <input type="checkbox" class="custom-chk pos-chk" :checked="isModalRowSelected(item.id)"
+                        :disabled="(item.stock ?? item.soLuong ?? 0) <= 0" @change="toggleModalRow(item, $event)" />
+                    </td>
                     <td class="text-center prod-stt">{{ modalCurrentPage * modalPageSize + idx + 1 }}</td>
                     <td class="text-center">
                       <div class="modal-thumb-box">
-                        <img :src="prod.img" class="modal-thumb-img" alt="shoe" />
-                        <span class="prod-img-discount-badge" v-if="prod.variants.length > 1">
-                          {{ prod.variants.length }} mẫu
+                        <img :src="getShoeImage(item)" class="modal-thumb-img" alt="shoe" />
+                        <span v-if="getDiscountPercentBadge(item)" class="prod-img-discount-badge">
+                          {{ getDiscountPercentBadge(item) }}
                         </span>
                       </div>
                     </td>
                     <td class="text-center">
-                      <span class="code-pill-modal">{{ prod.maSp }}</span>
+                      <span class="code-pill-modal">{{ item.maCtsp || item.maChiTietSanPham || item.maSp }}</span>
                     </td>
                     <td class="modal-prod-name">
-                      <div class="prod-text-title fw-bold">{{ prod.tenSp }}</div>
-                      <div class="small text-muted" v-if="prod.tenThuongHieu">{{ prod.tenThuongHieu }}</div>
+                      <span class="prod-text-title">{{ item.tenSp || item.tenSanPham }}</span>
                     </td>
                     <td class="text-center">
-                      <div class="d-flex flex-wrap gap-1 justify-content-center align-items-center">
-                        <span v-for="c in prod.colorsList.slice(0, 3)" :key="c" class="badge bg-light text-dark border" style="font-size: 11px;">
-                          {{ c }}
-                        </span>
-                        <span v-if="prod.colorsList.length > 3" class="badge bg-secondary-subtle text-secondary" style="font-size: 10px;">
-                          +{{ prod.colorsList.length - 3 }}
-                        </span>
+                      <div class="modal-color-cell">
+                        <span class="modal-color-dot" :style="{ backgroundColor: (item.colorHex || '#64748b') }"></span>
+                        <span class="modal-color-name">{{ item.color || item.tenMau || '---' }}</span>
                       </div>
                     </td>
                     <td class="text-center">
-                      <div class="d-flex flex-wrap gap-1 justify-content-center align-items-center">
-                        <span v-for="s in prod.sizesList.slice(0, 4)" :key="s" class="badge-size-tag" style="font-size: 11px; padding: 2px 5px;">
-                          {{ s }}
-                        </span>
-                        <span v-if="prod.sizesList.length > 4" class="text-muted small">
-                          ...
-                        </span>
-                      </div>
+                      <span class="badge-size-tag">{{ item.size || item.tenKichCo || '---' }}</span>
                     </td>
                     <td class="text-center">
-                      <span class="stock-badge in-stock">
-                        {{ prod.totalStock }} đôi
+                      <span class="stock-badge" :class="{
+                        'in-stock': (item.stock !== undefined ? item.stock : (item.soLuong || 0)) > 10,
+                        'low-stock': (item.stock !== undefined ? item.stock : (item.soLuong || 0)) > 0 && (item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 10,
+                        'zero-stock': (item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0
+                      }">
+                        {{ item.stock !== undefined ? item.stock : (item.soLuong || 0) }}
                       </span>
                     </td>
                     <td class="text-center">
                       <div class="prod-modal-price-box">
-                        <span class="price-now" v-if="prod.minPrice === prod.maxPrice">
-                          {{ formatVnd(prod.minPrice) }}
-                        </span>
-                        <span class="price-now" v-else style="font-size: 12.5px;">
-                          {{ formatVnd(prod.minPrice) }} - {{ formatVnd(prod.maxPrice) }}
-                        </span>
+                        <span class="price-now">{{ formatVnd(getEffectivePrice(item)) }}</span>
+                        <span v-if="item.discount && item.discount !== '-'" class="price-was">{{ formatVnd(item.price || item.giaBan) }}</span>
                       </div>
                     </td>
                     <td class="text-center" @click.stop>
-                      <button class="btn btn-sm btn-danger fw-bold rounded-pill px-3 py-1"
-                        @click="openVariantPickerForProduct(prod)"
-                        style="font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
-                        <span>Chọn biến thể</span>
-                        <span class="badge bg-white text-danger rounded-circle px-1" style="font-size: 10px;">{{ prod.variants.length }}</span>
+                      <button class="btn-select-add-cart"
+                        :disabled="(item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0"
+                        @click="quickAddSingleProductFromModal(item)">
+                        <svg v-if="(item.stock !== undefined ? item.stock : (item.soLuong || 0)) > 0" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2.5">
+                          <line x1="12" y1="5" x2="12" y2="19"></line>
+                          <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        {{ (item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0 ? 'Hết hàng' : 'Thêm' }}
                       </button>
                     </td>
                   </tr>
-                  <tr v-if="paginatedModalProducts.length === 0">
-                    <td colspan="9" class="empty-state-modal">
+                  <tr v-if="paginatedModalVariants.length === 0">
+                    <td colspan="10" class="empty-state-modal">
                       <div class="empty-modal-inner">
                         <span class="empty-icon-shoe">👟</span>
                         <p class="empty-text">Không tìm thấy sản phẩm nào phù hợp với bộ lọc hiện tại.</p>
@@ -5156,7 +5259,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Phân trang -->
+          <!-- Phân trang chuẩn giống Quản lý sản phẩm -->
           <div v-if="modalTotalPages > 1" class="table-card-foot" style="border-top: 1px solid #e2e8f0; background: #ffffff;">
             <PaginationBar
               :page="modalCurrentPage"
@@ -5164,15 +5267,15 @@ onUnmounted(() => {
               :total-elements="modalTotalElements"
               :page-size="modalPageSize"
               :sizes="pageSizeOptions"
-              :from="paginatedModalProducts.length ? modalCurrentPage * modalPageSize + 1 : 0"
-              :to="modalCurrentPage * modalPageSize + paginatedModalProducts.length"
+              :from="paginatedModalVariants.length ? modalCurrentPage * modalPageSize + 1 : 0"
+              :to="modalCurrentPage * modalPageSize + paginatedModalVariants.length"
               label="sản phẩm"
               @change="changeModalPage"
               @size-change="(sz) => { modalPageSize = sz; modalCurrentPage = 0 }"
             />
           </div>
 
-          <div class="pos-prod-footer">
+          <div class="pos-prod-footer pos-prod-footer-with-action">
             <div class="pos-modal-page-size">
               <span class="page-size-label">Hiển thị:</span>
               <select v-model.number="modalPageSize" class="page-size-select" @change="modalCurrentPage = 0">
@@ -5182,128 +5285,24 @@ onUnmounted(() => {
             </div>
 
             <div class="pos-prod-action-group">
-              <button class="btn-pos-secondary px-4 py-2" @click="closeProductPicker">Đóng</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- SUB-MODAL: CHỌN BIẾN THỂ CỦA SẢN PHẨM -->
-    <transition name="fade">
-      <div v-if="isVariantPickerModalOpen" class="pos-modal-overlay" style="z-index: 1065;" @click.self="closeVariantPickerModal">
-        <div class="pos-modal-dialog modal-swap-variant" style="max-width: 860px;">
-          <div class="pos-modal-head">
-            <div class="modal-head-title">
-              <div class="modal-title-icon" style="background: #fee2e2; color: #dc2626;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <span class="pos-prod-selected-count">Đã chọn: <strong>{{ modalSelectedIds.length }}</strong></span>
+              <button class="btn-pos-secondary" @click="closeProductPicker">Hủy</button>
+              <button class="btn-pos-primary" :disabled="modalSelectedIds.length === 0" @click="confirmModalSelection">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                   <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
                   <line x1="3" y1="6" x2="21" y2="6"></line>
                   <path d="M16 10a4 4 0 0 1-8 0"></path>
                 </svg>
-              </div>
-              <div class="modal-title-text-group">
-                <h3>Chọn biến thể sản phẩm</h3>
-                <span class="modal-badge-count" v-if="activePickerProduct">{{ activePickerProduct.variants.length }} biến thể có sẵn</span>
-              </div>
+                Thêm vào giỏ hàng ({{ modalSelectedIds.length }})
+              </button>
             </div>
-            <button class="pos-modal-close" @click="closeVariantPickerModal" title="Đóng (Esc)">×</button>
-          </div>
-
-          <div class="pos-modal-body">
-            <div class="current-swap-banner" v-if="activePickerProduct">
-              <div class="csb-left">
-                <img v-if="activePickerProduct.img" :src="activePickerProduct.img" alt="Ảnh SP" class="csb-img" />
-                <div v-else class="csb-no-img">👟</div>
-                <div class="csb-details">
-                  <span class="csb-title" style="font-size: 16px;">{{ activePickerProduct.tenSp }}</span>
-                  <div class="csb-pills">
-                    <span class="csb-pill pill-code">Mã SP: {{ activePickerProduct.maSp }}</span>
-                    <span class="csb-pill pill-current">Tổng tồn kho: <strong>{{ activePickerProduct.totalStock }} đôi</strong></span>
-                    <span class="csb-pill pill-qty" v-if="activePickerProduct.tenThuongHieu">{{ activePickerProduct.tenThuongHieu }}</span>
-                  </div>
-                </div>
-              </div>
-              <div class="csb-price-box">
-                <span class="csb-price-lbl">Khoảng giá:</span>
-                <span class="csb-price-val" v-if="activePickerProduct.minPrice === activePickerProduct.maxPrice">
-                  {{ formatVnd(activePickerProduct.minPrice) }}
-                </span>
-                <span class="csb-price-val" v-else style="font-size: 14px;">
-                  {{ formatVnd(activePickerProduct.minPrice) }} - {{ formatVnd(activePickerProduct.maxPrice) }}
-                </span>
-              </div>
-            </div>
-
-            <div class="swap-color-filter-bar" v-if="availablePickerColors.length > 1">
-              <span class="filter-bar-title">Lọc theo màu sắc:</span>
-              <div class="filter-chips-list">
-                <button type="button" class="swap-chip-btn" :class="{ active: pickerColorFilter === 'ALL' }"
-                  @click="pickerColorFilter = 'ALL'">
-                  Tất cả màu ({{ activePickerProduct?.variants.length || 0 }})
-                </button>
-                <button v-for="color in availablePickerColors" :key="color" type="button" class="swap-chip-btn"
-                  :class="{ active: pickerColorFilter === color }" @click="pickerColorFilter = color">
-                  {{ color }}
-                </button>
-              </div>
-            </div>
-
-            <div class="swap-variants-matrix" v-if="filteredPickerVariants.length > 0">
-              <div v-for="variant in filteredPickerVariants" :key="variant.id" class="variant-swap-card" :class="{
-                'is-card-selected': selectedPickerVariant?.id === variant.id,
-                'is-stock-depleted': getRemainingStock(variant.id) <= 0
-              }"
-                @click="getRemainingStock(variant.id) > 0 && (selectedPickerVariant = variant)">
-                <div class="vsc-top-bar">
-                  <span v-if="getRemainingStock(variant.id) <= 0" class="badge-vsc out-stock">Hết hàng</span>
-                  <span v-else class="badge-vsc in-stock">Còn {{ getRemainingStock(variant.id) }} đôi</span>
-
-                  <span class="vsc-color-pill">
-                    <span class="vsc-dot" :style="{ backgroundColor: variant.colorHex || '#64748b' }"></span>
-                    {{ variant.color || variant.tenMau }}
-                  </span>
-                </div>
-
-                <div class="vsc-body">
-                  <div class="vsc-size-display">
-                    <span class="size-large">{{ variant.size || variant.tenKichCo }}</span>
-                    <span class="size-sub">Size / Mã: {{ variant.maCtsp || variant.maChiTietSanPham || variant.maSp }}</span>
-                  </div>
-
-                  <div class="vsc-price-col">
-                    <div class="vsc-price-val">{{ formatVnd(getEffectivePrice(variant)) }}</div>
-                    <div class="vsc-price-diff" v-if="variant.discount && variant.discount !== '-'">
-                      <span class="diff-tag down">{{ variant.discount }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="vsc-foot">
-                  <button type="button" v-if="getRemainingStock(variant.id) <= 0" class="btn-vsc-btn disabled-stock" disabled>
-                    Hết hàng
-                  </button>
-                  <button type="button" v-else class="btn btn-sm btn-danger w-100 py-2 fw-bold rounded-3"
-                    @click.stop="addVariantFromPicker(variant)">
-                    + Thêm vào giỏ
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div v-else class="swap-empty-box">
-              <p>Không có biến thể nào còn hàng phù hợp với màu này.</p>
-            </div>
-          </div>
-
-          <div class="pos-modal-footer cust-modal-footer">
-            <button type="button" class="btn-cust-cancel" @click="closeVariantPickerModal">
-              Đóng
-            </button>
           </div>
         </div>
       </div>
     </transition>
+
+
+
 
 
     <transition name="fade">
@@ -5340,7 +5339,8 @@ onUnmounted(() => {
                 <!-- Toast nổi góc trên camera khi thêm thành công sản phẩm -->
                 <transition name="fade">
                   <div v-if="scanNotificationToast" class="pos-scan-notification-pill">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2.5">
                       <polyline points="20 6 9 17 4 12"></polyline>
                     </svg>
                     <span>{{ scanNotificationToast }}</span>
@@ -5355,7 +5355,8 @@ onUnmounted(() => {
                   <line x1="12" y1="16" x2="12" y2="12"></line>
                   <line x1="12" y1="8" x2="12.01" y2="8"></line>
                 </svg>
-                <span>Hướng camera vào lần lượt các <b>mã QR / Barcode</b> để quét liên tục nhiều sản phẩm. Bấm <b>Hoàn tất</b> khi quét xong.</span>
+                <span>Hướng camera vào lần lượt các <b>mã QR / Barcode</b> để quét liên tục nhiều sản phẩm. Bấm <b>Hoàn
+                    tất</b> khi quét xong.</span>
               </p>
 
               <!-- Danh sách các sản phẩm đã quét trong phiên -->
@@ -5369,13 +5370,15 @@ onUnmounted(() => {
                     </svg>
                     Đã quét được: <strong>{{ totalScannedSessionItems }} sản phẩm</strong>
                   </span>
-                  <button type="button" class="btn-clear-scanned-session" @click="scannedSessionList = []">Làm mới danh sách</button>
+                  <button type="button" class="btn-clear-scanned-session" @click="scannedSessionList = []">Làm mới danh
+                    sách</button>
                 </div>
                 <div class="scanned-session-items-list">
                   <div v-for="item in scannedSessionList" :key="item.id" class="scanned-session-item">
                     <div class="scanned-item-info">
                       <span class="scanned-item-name">{{ item.tenSp }}</span>
-                      <span class="scanned-item-meta">Size {{ item.size }} • {{ item.color }} • {{ formatVnd(item.price) }}</span>
+                      <span class="scanned-item-meta">Size {{ item.size }} • {{ item.color }} • {{ formatVnd(item.price)
+ }}</span>
                     </div>
                     <span class="scanned-item-qty">x{{ item.count }}</span>
                   </div>
@@ -5405,7 +5408,8 @@ onUnmounted(() => {
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <polyline points="20 6 9 17 4 12"></polyline>
                   </svg>
-                  <span>Hoàn tất quét{{ totalScannedSessionItems > 0 ? ` (${totalScannedSessionItems} sản phẩm)` : '' }}</span>
+                  <span>Hoàn tất quét{{ totalScannedSessionItems > 0 ? ` (${totalScannedSessionItems} sản phẩm)` : ''
+                  }}</span>
                 </button>
               </div>
             </div>
@@ -5572,7 +5576,8 @@ onUnmounted(() => {
               <div class="modal-title-text-group">
                 <h3 class="cust-modal-title">Thêm nhanh địa chỉ giao hàng</h3>
                 <span class="cust-modal-subtitle">
-                  {{ currentOrder?.customer ? `Thêm địa chỉ cho khách: ${currentOrder.customer.ten || currentOrder.customer.tenKhachHang}` : 'Thêm thông tin nhận hàng và tính phí vận chuyển tự động' }}
+                  {{ currentOrder?.customer ? `Thêm địa chỉ cho khách: ${currentOrder.customer.ten ||
+                    currentOrder.customer.tenKhachHang}` : 'Thêm thông tin nhận hàng và tính phí vận chuyển tự động' }}
                 </span>
               </div>
             </div>
@@ -5591,12 +5596,8 @@ onUnmounted(() => {
                       <circle cx="12" cy="7" r="4"></circle>
                     </svg>
                   </span>
-                  <input
-                    type="text"
-                    class="cust-input"
-                    placeholder="VD: Nguyễn Văn Anh"
-                    v-model="quickAddressForm.recipientName"
-                  />
+                  <input type="text" class="cust-input" placeholder="VD: Nguyễn Văn Anh"
+                    v-model="quickAddressForm.recipientName" />
                 </div>
               </div>
 
@@ -5606,16 +5607,13 @@ onUnmounted(() => {
                 <div class="cust-input-wrap">
                   <span class="cust-input-icon">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                      <path
+                        d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z">
+                      </path>
                     </svg>
                   </span>
-                  <input
-                    type="tel"
-                    maxlength="11"
-                    class="cust-input"
-                    placeholder="VD: 0987654321"
-                    v-model="quickAddressForm.recipientPhone"
-                  />
+                  <input type="tel" maxlength="11" class="cust-input" placeholder="VD: 0987654321"
+                    v-model="quickAddressForm.recipientPhone" />
                 </div>
               </div>
 
@@ -5623,11 +5621,8 @@ onUnmounted(() => {
               <div class="cust-form-group">
                 <label class="cust-label">Tỉnh / Thành phố <span class="required-star">*</span></label>
                 <div class="cust-input-wrap">
-                  <select
-                    class="cust-input cust-select"
-                    v-model="quickAddressForm.province"
-                    @change="onQuickAddressProvinceChange"
-                  >
+                  <select class="cust-input cust-select" v-model="quickAddressForm.province"
+                    @change="onQuickAddressProvinceChange">
                     <option :value="null" disabled>-- Chọn Tỉnh / Thành phố --</option>
                     <option v-for="p in provincesList" :key="p.id" :value="p">{{ p.name }}</option>
                   </select>
@@ -5638,11 +5633,8 @@ onUnmounted(() => {
               <div class="cust-form-group">
                 <label class="cust-label">Phường / Xã <span class="required-star">*</span></label>
                 <div class="cust-input-wrap">
-                  <select
-                    class="cust-input cust-select"
-                    v-model="quickAddressForm.ward"
-                    :disabled="!quickAddressForm.province || isQuickAddWardsLoading"
-                  >
+                  <select class="cust-input cust-select" v-model="quickAddressForm.ward"
+                    :disabled="!quickAddressForm.province || isQuickAddWardsLoading">
                     <option :value="null" disabled>
                       {{ isQuickAddWardsLoading ? 'Đang tải danh sách Phường / Xã...' : '-- Chọn Phường / Xã --' }}
                     </option>
@@ -5660,12 +5652,8 @@ onUnmounted(() => {
                       <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
                     </svg>
                   </span>
-                  <input
-                    type="text"
-                    class="cust-input"
-                    placeholder="VD: Nhà riêng, Chỗ làm..."
-                    v-model="quickAddressForm.addressName"
-                  />
+                  <input type="text" class="cust-input" placeholder="VD: Nhà riêng, Chỗ làm..."
+                    v-model="quickAddressForm.addressName" />
                 </div>
               </div>
 
@@ -5679,13 +5667,8 @@ onUnmounted(() => {
                       <polyline points="9 22 9 12 15 12 15 22"></polyline>
                     </svg>
                   </span>
-                  <input
-                    type="text"
-                    class="cust-input"
-                    placeholder="Số nhà, tên đường, tòa nhà..."
-                    v-model="quickAddressForm.streetAddress"
-                    @keyup.enter="submitQuickAddAddress"
-                  />
+                  <input type="text" class="cust-input" placeholder="Số nhà, tên đường, tòa nhà..."
+                    v-model="quickAddressForm.streetAddress" @keyup.enter="submitQuickAddAddress" />
                 </div>
               </div>
 
@@ -5693,7 +5676,8 @@ onUnmounted(() => {
               <div class="quick-addr-opts-box cust-full-span" v-if="currentOrder?.customer">
                 <label class="quick-addr-opt-item">
                   <input type="checkbox" class="custom-chk" v-model="quickAddressForm.saveToCustomerProfile" />
-                  <span>Lưu vào sổ địa chỉ của khách hàng <strong>{{ currentOrder.customer.ten || currentOrder.customer.tenKhachHang }}</strong></span>
+                  <span>Lưu vào sổ địa chỉ của khách hàng <strong>{{ currentOrder.customer.ten ||
+ currentOrder.customer.tenKhachHang }}</strong></span>
                 </label>
                 <label class="quick-addr-opt-item" v-if="quickAddressForm.saveToCustomerProfile">
                   <input type="checkbox" class="custom-chk" v-model="quickAddressForm.isDefault" />
@@ -5713,7 +5697,8 @@ onUnmounted(() => {
           </div>
 
           <div class="pos-modal-footer cust-modal-footer">
-            <button class="btn-cust-cancel" @click="isQuickAddAddressModalOpen = false" :disabled="isSavingQuickAddress">
+            <button class="btn-cust-cancel" @click="isQuickAddAddressModalOpen = false"
+              :disabled="isSavingQuickAddress">
               Hủy
             </button>
             <button class="btn-cust-save" :disabled="isSavingQuickAddress" @click="submitQuickAddAddress">
@@ -5762,19 +5747,10 @@ onUnmounted(() => {
               <!-- Cột trái: Mã QR thanh toán -->
               <div class="bank-clean-qr-col">
                 <div class="bank-clean-qr-box">
-                  <img
-                    v-if="!isQrImgFailed && vietQrNetworkUrl"
-                    :src="vietQrNetworkUrl"
-                    @error="onQrImgError"
-                    class="bank-clean-qr-img"
-                    alt="Mã QR VietQR"
-                  />
-                  <img
-                    v-else-if="bankQrDataUrl"
-                    :src="bankQrDataUrl"
-                    class="bank-clean-qr-img"
-                    alt="Mã QR Chuyển khoản"
-                  />
+                  <img v-if="!isQrImgFailed && vietQrNetworkUrl" :src="vietQrNetworkUrl" @error="onQrImgError"
+                    class="bank-clean-qr-img" alt="Mã QR VietQR" />
+                  <img v-else-if="bankQrDataUrl" :src="bankQrDataUrl" class="bank-clean-qr-img"
+                    alt="Mã QR Chuyển khoản" />
                 </div>
                 <div class="bank-clean-qr-sub">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -5792,12 +5768,10 @@ onUnmounted(() => {
                   <span class="bank-clean-amount-label">Số tiền cần thanh toán</span>
                   <div class="bank-clean-amount-row">
                     <span class="bank-clean-amount-value">{{ formatVnd(bankTransferAmount) }}</span>
-                    <button
-                      class="btn-clean-copy-amount"
-                      @click="copyToClipboard(bankTransferAmount, 'số tiền')"
-                      title="Sao chép số tiền"
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <button class="btn-clean-copy-amount" @click="copyToClipboard(bankTransferAmount, 'số tiền')"
+                      title="Sao chép số tiền">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                       </svg>
@@ -5810,7 +5784,8 @@ onUnmounted(() => {
                 <div class="bank-clean-details-card">
                   <div class="bank-clean-row">
                     <span class="clean-row-lbl">Hóa đơn:</span>
-                    <span class="clean-row-val">{{ currentOrder?.title }} (<strong>{{ currentOrder?.code }}</strong>)</span>
+                    <span class="clean-row-val">{{ currentOrder?.title }} (<strong>{{ currentOrder?.code
+ }}</strong>)</span>
                   </div>
 
                   <div class="bank-clean-row">
@@ -5830,11 +5805,9 @@ onUnmounted(() => {
                     <span class="clean-row-lbl">Số tài khoản:</span>
                     <div class="clean-row-val-copy">
                       <span class="stk-number">{{ defaultStoreBank.accountNo }}</span>
-                      <button
-                        class="btn-clean-copy-mini"
+                      <button class="btn-clean-copy-mini"
                         @click="copyToClipboard(defaultStoreBank.accountNo, 'số tài khoản')"
-                        title="Sao chép số tài khoản"
-                      >
+                        title="Sao chép số tài khoản">
                         Sao chép
                       </button>
                     </div>
@@ -5844,11 +5817,8 @@ onUnmounted(() => {
                     <span class="clean-row-lbl">Nội dung CK:</span>
                     <div class="clean-row-val-copy">
                       <span class="memo-badge">{{ currentOrder?.code }}</span>
-                      <button
-                        class="btn-clean-copy-mini"
-                        @click="copyToClipboard(currentOrder?.code, 'nội dung chuyển khoản')"
-                        title="Sao chép nội dung"
-                      >
+                      <button class="btn-clean-copy-mini"
+                        @click="copyToClipboard(currentOrder?.code, 'nội dung chuyển khoản')" title="Sao chép nội dung">
                         Sao chép
                       </button>
                     </div>
@@ -5869,25 +5839,17 @@ onUnmounted(() => {
           </div>
 
           <div class="pos-modal-foot bank-clean-foot">
-            <button
-              type="button"
-              class="btn-toggle-auto-pay"
-              :class="{ active: isAutoCheckoutEnabled }"
-              @click="toggleAutoCheckout"
-              title="Bật/Tắt tự động thanh toán sau 5 giây"
-            >
+            <button type="button" class="btn-toggle-auto-pay" :class="{ active: isAutoCheckoutEnabled }"
+              @click="toggleAutoCheckout" title="Bật/Tắt tự động thanh toán sau 5 giây">
               <span class="auto-dot" :class="{ pulsing: isAutoCheckoutEnabled }"></span>
-              <span>{{ isAutoCheckoutEnabled ? `Tự động (${autoCheckoutCountdown}s)` : 'Tự động thanh toán (5s)' }}</span>
+              <span>{{ isAutoCheckoutEnabled ? `Tự động (${autoCheckoutCountdown}s)` : 'Tự động thanh toán (5s)'
+              }}</span>
             </button>
 
             <button class="btn-clean-cancel" @click="isBankQrModalOpen = false">
               Đóng
             </button>
-            <button
-              class="btn-clean-confirm"
-              :disabled="isProcessingCheckout"
-              @click="confirmBankPaymentReceived"
-            >
+            <button class="btn-clean-confirm" :disabled="isProcessingCheckout" @click="confirmBankPaymentReceived">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
@@ -5922,7 +5884,7 @@ onUnmounted(() => {
 
               <!-- Tiêu đề & Thông tin đơn -->
               <div class="receipt-bill-heading">
-                <div class="receipt-bill-title">{{ completedInvoiceData.isDelivery ? 'PHIẾU GIAO HÀNG (POS)' : 'HÓA ĐƠN BÁN LẺ (POS)' }}</div>
+                <div class="receipt-bill-title">{{ completedInvoiceData.isDelivery ? 'PHIẾU GIAO HÀNG (POS)' : 'HÓA ĐƠN BÁN LẺ(POS)' }}</div>
                 <div class="receipt-barcode-code">*{{ completedInvoiceData.code }}*</div>
               </div>
 
@@ -5933,7 +5895,8 @@ onUnmounted(() => {
                 </div>
                 <div class="meta-row">
                   <span class="meta-k">Trạng thái:</span>
-                  <span class="meta-v"><strong style="color: #2563eb;">{{ completedInvoiceData.trangThai || (completedInvoiceData.isDelivery ? 'Chờ xác nhận' : 'Đã hoàn thành') }}</strong></span>
+                  <span class="meta-v"><strong style="color: #2563eb;">{{ completedInvoiceData.trangThai ||
+ (completedInvoiceData.isDelivery ? 'Chờ xác nhận' : 'Đã hoàn thành') }}</strong></span>
                 </div>
                 <div class="meta-row">
                   <span class="meta-k">Thời gian:</span>
@@ -6026,13 +5989,9 @@ onUnmounted(() => {
             <button class="btn-receipt-close" @click="isReceiptModalOpen = false">
               Đóng
             </button>
-            <button
-              v-if="completedInvoiceData?.id"
-              class="btn-receipt-view-invoice"
-              type="button"
+            <button v-if="completedInvoiceData?.id" class="btn-receipt-view-invoice" type="button"
               @click="router.push(`/hoa-don/${completedInvoiceData.id}`)"
-              title="Xem chi tiết đơn này trong Quản lý hóa đơn"
-            >
+              title="Xem chi tiết đơn này trong Quản lý hóa đơn">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                 <circle cx="12" cy="12" r="3"></circle>
@@ -6077,20 +6036,13 @@ onUnmounted(() => {
           <div class="pos-modal-body recent-invoices-modal-body">
             <div class="recent-invoices-toolbar">
               <div class="recent-search-wrap">
-                <input
-                  type="text"
-                  class="recent-search-input"
-                  v-model="recentInvoiceSearch"
-                  placeholder="Tìm theo mã hóa đơn, tên khách hàng hoặc số điện thoại..."
-                />
-                <button v-if="recentInvoiceSearch" class="btn-clear-recent-search" @click="recentInvoiceSearch = ''">×</button>
+                <input type="text" class="recent-search-input" v-model="recentInvoiceSearch"
+                  placeholder="Tìm theo mã hóa đơn, tên khách hàng hoặc số điện thoại..." />
+                <button v-if="recentInvoiceSearch" class="btn-clear-recent-search"
+                  @click="recentInvoiceSearch = ''">×</button>
               </div>
-              <button
-                v-if="recentPosInvoices.length > 0"
-                type="button"
-                class="btn-clear-recent-history"
-                @click="clearRecentInvoicesHistory"
-              >
+              <button v-if="recentPosInvoices.length > 0" type="button" class="btn-clear-recent-history"
+                @click="clearRecentInvoicesHistory">
                 Xóa lịch sử ca
               </button>
             </div>
@@ -6123,7 +6075,7 @@ onUnmounted(() => {
                     </td>
                     <td class="text-center">
                       <span class="recent-qty-pill">
-                        {{ Array.isArray(inv.cart) ? inv.cart.reduce((s, i) => s + Number(i.quantity || 0), 0) : 0 }}
+                        {{Array.isArray(inv.cart) ? inv.cart.reduce((s, i) => s + Number(i.quantity || 0), 0) : 0}}
                       </span>
                     </td>
                     <td class="text-center">
@@ -6134,20 +6086,12 @@ onUnmounted(() => {
                     </td>
                     <td class="text-center">
                       <div class="recent-actions-group">
-                        <button
-                          type="button"
-                          class="btn-recent-view"
-                          @click="viewRecentInvoiceReceipt(inv)"
-                          title="Xem chi tiết hóa đơn"
-                        >
+                        <button type="button" class="btn-recent-view" @click="viewRecentInvoiceReceipt(inv)"
+                          title="Xem chi tiết hóa đơn">
                           Xem bill
                         </button>
-                        <button
-                          type="button"
-                          class="btn-recent-reprint"
-                          @click="reprintRecentInvoice(inv)"
-                          title="In lại hóa đơn nhiệt 80mm ngay"
-                        >
+                        <button type="button" class="btn-recent-reprint" @click="reprintRecentInvoice(inv)"
+                          title="In lại hóa đơn nhiệt 80mm ngay">
                           In lại
                         </button>
                       </div>
@@ -6159,7 +6103,9 @@ onUnmounted(() => {
 
             <div v-else class="recent-empty-state">
               <p class="recent-empty-title">Chưa có hóa đơn nào vừa thanh toán trong ca</p>
-              <p class="recent-empty-sub">Các hóa đơn sau khi hoàn tất thanh toán tại quầy sẽ tự động lưu tại đây để bạn tra cứu hoặc in lại nhanh.</p>
+              <p class="recent-empty-sub">Các hóa đơn sau khi hoàn tất thanh toán tại quầy sẽ tự động lưu tại đây để bạn
+                tra
+                cứu hoặc in lại nhanh.</p>
             </div>
           </div>
 
@@ -6180,7 +6126,9 @@ onUnmounted(() => {
             <div class="modal-head-title">
               <div class="modal-title-icon is-shift-open">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
+                  <path
+                    d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83">
+                  </path>
                 </svg>
               </div>
               <div class="modal-title-text-group">
@@ -6203,7 +6151,8 @@ onUnmounted(() => {
               </div>
               <div class="shift-info-item">
                 <span class="shift-info-label">Khung giờ ca:</span>
-                <span class="shift-info-val font-weight-bold">{{ selectedCa ? (selectedCa.batDau?.substring(0, 5) + ' — ' + selectedCa.ketThuc?.substring(0, 5)) : '--:--' }}</span>
+                <span class="shift-info-val font-weight-bold">{{ selectedCa ? (selectedCa.batDau?.substring(0, 5) + ' — ' +
+ selectedCa.ketThuc?.substring(0, 5)) : '--:--' }}</span>
               </div>
               <div class="shift-info-item">
                 <span class="shift-info-label">Điểm bán hàng:</span>
@@ -6223,17 +6172,11 @@ onUnmounted(() => {
               </div>
 
               <div v-else-if="dsCaChiaSan && dsCaChiaSan.length > 0" class="pos-shift-cards-grid">
-                <div
-                  v-for="c in dsCaChiaSan"
-                  :key="c.id"
-                  class="pos-shift-pick-card"
-                  :class="{
-                    'is-selected': moCaForm.idCaLich === c.id,
-                    'is-valid-window': kiemTraTrongGioNhanCa(c),
-                    'is-invalid-window': !kiemTraTrongGioNhanCa(c)
-                  }"
-                  @click="moCaForm.idCaLich = c.id"
-                >
+                <div v-for="c in dsCaChiaSan" :key="c.id" class="pos-shift-pick-card" :class="{
+                  'is-selected': moCaForm.idCaLich === c.id,
+                  'is-valid-window': kiemTraTrongGioNhanCa(c),
+                  'is-invalid-window': !kiemTraTrongGioNhanCa(c)
+                }" @click="moCaForm.idCaLich = c.id">
                   <div class="pick-card-top">
                     <span class="pick-card-name">{{ c.ten }}</span>
                     <span v-if="kiemTraTrongGioNhanCa(c)" class="badge-time-status is-active">Đang nhận ca</span>
@@ -6253,7 +6196,9 @@ onUnmounted(() => {
               <!-- Cảnh báo nếu ca được chọn không trong thời gian nhận ca -->
               <div v-if="selectedCa && !kiemTraTrongGioNhanCa(selectedCa) && !laAdmin()" class="shift-time-alert-box">
                 <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
-                <span>Hiện không trong thời gian nhận <strong>{{ selectedCa.ten }}</strong>. Chỉ được mở ca trước giờ bắt đầu tối đa 30 phút và trước khi ca kết thúc. Bạn đang ở <strong>Chế độ chỉ xem</strong>.</span>
+                <span>Hiện không trong thời gian nhận <strong>{{ selectedCa.ten }}</strong>. Chỉ được mở ca trước giờ
+                  bắt
+                  đầu tối đa 30 phút và trước khi ca kết thúc. Bạn đang ở <strong>Chế độ chỉ xem</strong>.</span>
               </div>
             </div>
 
@@ -6264,16 +6209,8 @@ onUnmounted(() => {
                 <strong class="pos-shift-preview-val">{{ formatVnd(moCaForm.tienDauCa || 0) }}</strong>
               </label>
               <div class="pos-shift-input-wrap">
-                <input
-                  v-model.number="moCaForm.tienDauCa"
-                  type="number"
-                  min="0"
-                  step="10000"
-                  class="pos-shift-input"
-                  placeholder="Nhập số tiền mặt có sẵn trong két..."
-                  @keydown.enter="handleMoCaSubmit"
-                  autofocus
-                />
+                <input v-model.number="moCaForm.tienDauCa" type="number" min="0" step="10000" class="pos-shift-input"
+                  placeholder="Nhập số tiền mặt có sẵn trong két..." @keydown.enter="handleMoCaSubmit" autofocus />
                 <span class="pos-shift-currency-unit">VNĐ</span>
               </div>
 
@@ -6281,12 +6218,8 @@ onUnmounted(() => {
 
             <div class="pos-shift-field-group">
               <label class="pos-shift-label">Ghi chú mở ca (Tùy chọn):</label>
-              <textarea
-                v-model="moCaForm.ghiChu"
-                class="pos-shift-textarea"
-                rows="2"
-                placeholder="Ví dụ: Nhận bàn giao két tiền từ ca trước, tiền mệnh giá lẻ 10k, 20k, 50k đầy đủ..."
-              ></textarea>
+              <textarea v-model="moCaForm.ghiChu" class="pos-shift-textarea" rows="2"
+                placeholder="Ví dụ: Nhận bàn giao két tiền từ ca trước, tiền mệnh giá lẻ 10k, 20k, 50k đầy đủ..."></textarea>
             </div>
           </div>
 
@@ -6294,16 +6227,13 @@ onUnmounted(() => {
             <button type="button" class="btn-shift-cancel" @click="isMoCaModalOpen = false" :disabled="moCaSubmitting">
               Hủy bỏ
             </button>
-            <button
-              type="button"
-              class="btn-shift-confirm-open"
-              @click="handleMoCaSubmit"
-              :disabled="moCaSubmitting || (!laAdmin() && (!selectedCa || !kiemTraTrongGioNhanCa(selectedCa)))"
-            >
+            <button type="button" class="btn-shift-confirm-open" @click="handleMoCaSubmit"
+              :disabled="moCaSubmitting || (!laAdmin() && (!selectedCa || !kiemTraTrongGioNhanCa(selectedCa)))">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
-              <span>{{ moCaSubmitting ? 'Đang mở ca...' : ('Xác nhận mở ' + (selectedCa?.ten || 'ca làm việc')) }}</span>
+              <span>{{ moCaSubmitting ? 'Đang mở ca...' : ('Xác nhận mở ' + (selectedCa?.ten || 'ca làm việc'))
+ }}</span>
             </button>
           </div>
         </div>
@@ -6324,7 +6254,8 @@ onUnmounted(() => {
               </div>
               <div class="modal-title-text-group">
                 <h3>Kết thúc ca làm việc & Đối soát</h3>
-                <span class="modal-badge-count">Ca: {{ activeShift?.maCa }} • Mở lúc: {{ formatDateTime(activeShift?.thoiGianMo) }}</span>
+                <span class="modal-badge-count">Ca: {{ activeShift?.maCa }} • Mở lúc: {{
+ formatDateTime(activeShift?.thoiGianMo) }}</span>
               </div>
             </div>
             <button class="pos-modal-close" @click="isKetCaModalOpen = false" title="Đóng (Esc)">×</button>
@@ -6338,13 +6269,16 @@ onUnmounted(() => {
           </div>
 
           <div class="pos-modal-body" v-else-if="ketCaSummary">
-                        <!-- CẢNH BÁO NẾU CÒN ĐƠN CHƯA HOÀN TẤT -->
-            <div class="pos-pending-orders-alert" v-if="ketCaSummary.hoaDonDangXuLy && ketCaSummary.hoaDonDangXuLy.length > 0">
+            <!-- CẢNH BÁO NẾU CÒN ĐƠN CHƯA HOÀN TẤT -->
+            <div class="pos-pending-orders-alert"
+              v-if="ketCaSummary.hoaDonDangXuLy && ketCaSummary.hoaDonDangXuLy.length > 0">
               <div class="pending-alert-icon">⚠️</div>
               <div class="pending-alert-content">
                 <strong>Ca làm việc còn {{ ketCaSummary.hoaDonDangXuLy.length }} đơn hàng chưa hoàn tất:</strong>
                 <span class="pending-order-codes">{{ ketCaSummary.hoaDonDangXuLy.join(', ') }}</span>
-                <p>Vui lòng xử lý thanh toán hoặc hủy đơn chờ trên quầy trước khi đóng ca để đối soát két tiền chính xác!</p>
+                <p>Vui lòng xử lý thanh toán hoặc hủy đơn chờ trên quầy trước khi đóng ca để đối soát két tiền chính
+                  xác!
+                </p>
               </div>
             </div>
 
@@ -6384,7 +6318,8 @@ onUnmounted(() => {
               <div class="pos-shift-field-group">
                 <label class="pos-shift-label" for="shift-cash-expense">Tiền chi trong ca</label>
                 <div class="pos-shift-input-wrap">
-                  <input id="shift-cash-expense" v-model.number="ketCaForm.tienChi" type="number" min="0" step="1000" class="pos-shift-input" />
+                  <input id="shift-cash-expense" v-model.number="ketCaForm.tienChi" type="number" min="0" step="1000"
+                    class="pos-shift-input" />
                   <span class="pos-shift-currency-unit">VNĐ</span>
                 </div>
               </div>
@@ -6400,14 +6335,8 @@ onUnmounted(() => {
               </div>
 
               <div class="pos-shift-input-wrap">
-                <input
-                  v-model.number="ketCaForm.tienThucTe"
-                  type="number"
-                  min="0"
-                  step="1000"
-                  class="pos-shift-input is-lg"
-                  placeholder="Nhập tổng số tiền mặt kiểm đếm được..."
-                />
+                <input v-model.number="ketCaForm.tienThucTe" type="number" min="0" step="1000"
+                  class="pos-shift-input is-lg" placeholder="Nhập tổng số tiền mặt kiểm đếm được..." />
                 <span class="pos-shift-currency-unit">VNĐ</span>
               </div>
 
@@ -6418,17 +6347,31 @@ onUnmounted(() => {
                 'is-short': chenhLechKetCa < 0
               }">
                 <div class="diff-banner-icon">
-                  <svg v-if="chenhLechKetCa === 0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <svg v-else-if="chenhLechKetCa > 0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                  <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  <svg v-if="chenhLechKetCa === 0" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  <svg v-else-if="chenhLechKetCa > 0" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2.5">
+                    <polyline points="18 15 12 9 6 15"></polyline>
+                  </svg>
+                  <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2.5">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
                 </div>
                 <div class="diff-banner-text">
                   <span class="diff-label" v-if="chenhLechKetCa === 0">Két tiền khớp hoàn hảo:</span>
                   <span class="diff-label" v-else-if="chenhLechKetCa > 0">Phát hiện thừa tiền két:</span>
                   <span class="diff-label" v-else>Phát hiện thiếu hụt tiền két:</span>
                   <strong class="diff-amount">{{ formatVnd(Math.abs(chenhLechKetCa)) }}</strong>
-                  <span class="diff-note" v-if="chenhLechKetCa === 0">Số tiền mặt thực tế kiểm đếm khớp 100% với số liệu phần mềm.</span>
-                  <span class="diff-note text-warning" v-else>Bắt buộc phải nhập lý do giải trình bên dưới để hoàn tất đóng ca.</span>
+                  <span class="diff-note" v-if="chenhLechKetCa === 0">Số tiền mặt thực tế kiểm đếm khớp 100% với số liệu
+                    phần mềm.</span>
+                  <span class="diff-note text-warning" v-else>Bắt buộc phải nhập lý do giải trình bên dưới để hoàn tất
+                    đóng
+                    ca.</span>
                 </div>
               </div>
 
@@ -6438,28 +6381,21 @@ onUnmounted(() => {
                   <span class="text-danger">Lý do giải trình chênh lệch tiền mặt</span>
                   <span class="pos-shift-required">*</span>
                 </label>
-                <input
-                  v-model="ketCaForm.lyDoLech"
-                  type="text"
-                  class="pos-shift-input is-warning-border"
+                <input v-model="ketCaForm.lyDoLech" type="text" class="pos-shift-input is-warning-border"
                   placeholder="Nhập chi tiết lý do thừa / thiếu tiền (VD: Khách không lấy 10k tiền lẻ, nhầm lẫn tiền thối...)"
-                  required
-                />
+                  required />
               </div>
 
               <div class="pos-shift-field-group mt-3">
                 <label class="pos-shift-label">Ghi chú bàn giao ca (Tùy chọn):</label>
-                <textarea
-                  v-model="ketCaForm.ghiChu"
-                  class="pos-shift-textarea"
-                  rows="2"
-                  placeholder="Ghi chú thêm thông tin bàn giao cho thu ngân ca sau..."
-                ></textarea>
+                <textarea v-model="ketCaForm.ghiChu" class="pos-shift-textarea" rows="2"
+                  placeholder="Ghi chú thêm thông tin bàn giao cho thu ngân ca sau..."></textarea>
               </div>
             </div>
 
             <!-- KHỐI 3: DANH SÁCH ĐƠN HÀNG TRONG CA -->
-            <div class="shift-bills-accordion mt-3" v-if="ketCaSummary.hoaDonGanDay && ketCaSummary.hoaDonGanDay.length > 0">
+            <div class="shift-bills-accordion mt-3"
+              v-if="ketCaSummary.hoaDonGanDay && ketCaSummary.hoaDonGanDay.length > 0">
               <div class="bills-accordion-title">
                 <span>Hóa đơn vừa tạo trong ca ({{ ketCaSummary.hoaDonGanDay.length }})</span>
               </div>
@@ -6487,10 +6423,12 @@ onUnmounted(() => {
           </div>
 
           <div class="pos-modal-footer">
-            <button type="button" class="btn-shift-cancel" @click="isKetCaModalOpen = false" :disabled="ketCaSubmitting">
+            <button type="button" class="btn-shift-cancel" @click="isKetCaModalOpen = false"
+              :disabled="ketCaSubmitting">
               Hủy / Quay lại
             </button>
-            <button type="button" class="btn-shift-confirm-close" @click="handleKetCaSubmit" :disabled="ketCaSubmitting || (chenhLechKetCa !== 0 && !ketCaForm.lyDoLech?.trim()) || (ketCaSummary.hoaDonDangXuLy && ketCaSummary.hoaDonDangXuLy.length > 0)"
+            <button type="button" class="btn-shift-confirm-close" @click="handleKetCaSubmit"
+              :disabled="ketCaSubmitting || (chenhLechKetCa !== 0 && !ketCaForm.lyDoLech?.trim()) || (ketCaSummary.hoaDonDangXuLy && ketCaSummary.hoaDonDangXuLy.length > 0)"
               :title="(ketCaSummary.hoaDonDangXuLy && ketCaSummary.hoaDonDangXuLy.length > 0) ? 'Còn hóa đơn chưa hoàn tất. Vui lòng thanh toán hoặc hủy trước khi đóng ca!' : 'Xác nhận đóng ca'">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>

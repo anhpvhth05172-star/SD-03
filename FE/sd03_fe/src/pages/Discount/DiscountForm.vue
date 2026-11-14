@@ -68,7 +68,10 @@ const fmtMoney = (v) =>
 const onMoneyInput = (key, e) => {
   const digits = e.target.value.replace(/\D/g, "");
   form[key] = digits ? Number(digits) : null;
-  e.target.value = fmtMoney(form[key]); // hiển thị lại có dấu chấm
+  const formatted = fmtMoney(form[key]);
+  if (e.target.value !== formatted) {
+    e.target.value = formatted;
+  }
   touch(key);
   // Sửa đơn hàng tối thiểu -> kiểm tra lại giá trị giảm nếu đã nhập
   if (key === "minOrder" && form.discountValue !== null) {

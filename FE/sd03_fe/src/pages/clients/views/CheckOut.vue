@@ -4,7 +4,7 @@ import * as store from "../store";
 import { createInvoice } from "@/api/invoice";
 import { listVouchers, suDungCuaToi } from "@/api/voucher";
 import { getProvinces, getWards, getServices, tinhPhi } from "@/api/shipping";
-import { notifyConfirm } from "@/utils/notify";
+import { notifyConfirm, notifySuccess, notifyWarning, notifyError } from "@/utils/notify";
 import { getUser, isKhachHangDangNhap } from "@/utils/auth";
 
 const { cart, cartTotal, money } = store;
@@ -87,6 +87,7 @@ const isLoggedIn = computed(() => !!customer.value);
 const userInfo = (u) => ({
   name: u.tenKhachHang || "",
   phone: u.soDienThoai || "",
+  email: u.email || "",
 });
 
 const fullAddress = (a) =>
@@ -268,7 +269,7 @@ async function fetchVoucher(code) {
 }
 /* ======================================================= */
 
-const f = reactive({ name: "", phone: "", address: "", note: "", pay: "cod" });
+const f = reactive({ name: "", phone: "", email: "", address: "", note: "", pay: "cod" });
 const errors = reactive({});
 const done = ref(false);
 const orderId = ref("");
@@ -284,6 +285,7 @@ function chooseAddress(id) {
   if (id === "new") {
     f.name = base.name;
     f.phone = base.phone;
+    f.email = base.email;
     f.address = "";
     provinceId.value = "";
     wardId.value = "";
@@ -294,6 +296,7 @@ function chooseAddress(id) {
   if (!a) return;
   f.name = a.name || base.name;
   f.phone = a.phone || base.phone;
+  f.email = base.email;
   f.address = a.street;
   savedAddressToRestore.value = a;
   restoreSavedAddressRegion();
@@ -723,11 +726,18 @@ async function submit() {
   errors.phone = /^0\d{9}$/.test(f.phone)
     ? ""
     : "Số điện thoại gồm 10 số, bắt đầu bằng 0.";
+  if (!f.email || !f.email.trim()) {
+    errors.email = "Vui lòng nhập địa chỉ email nhận thông báo đơn hàng.";
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) {
+    errors.email = "Địa chỉ email không đúng định dạng (VD: nguyenvan@gmail.com).";
+  } else {
+    errors.email = "";
+  }
   errors.address = f.address.trim() && provinceId.value && wardId.value
     ? ""
     : "Vui lòng nhập địa chỉ cụ thể và chọn tỉnh/thành phố, phường/xã.";
-  if (errors.name || errors.phone || errors.address) {
-    submitError.value = errors.name || errors.phone || errors.address;
+  if (errors.name || errors.phone || errors.email || errors.address) {
+    submitError.value = errors.name || errors.phone || errors.email || errors.address;
     return;
   }
   if (shippingLoading.value) {
@@ -742,7 +752,7 @@ async function submit() {
 
   submitting.value = true;
 
-  // ====== VNPAY: Tạo đơn CHO_THANH_TOAN + redirect, CHƯA xóa giỏ ======
+  // ====== VNPAY: Tạo đơn CHO_THANH_TOAN + mở QR quét thanh toán ======
   if (f.pay === "vnpay") {
     const payload = buildHoaDonRequest();
     // Ghi đè trangThai, BE sẽ set CHO_THANH_TOAN
@@ -769,9 +779,9 @@ async function submit() {
       }
 
       const payData = await res.json();
-      if (payData && payData.paymentUrl) {
-        // Redirect sang VNPay — KHÔNG xóa giỏ (giỏ chỉ xóa sau khi VNPayReturn xác nhận thành công)
-        window.location.href = payData.paymentUrl;
+      if (payData && (payData.qrUrl || payData.paymentUrl)) {
+        submitting.value = false;
+        openQrModal(payData);
         return;
       } else {
         throw new Error("Không nhận được liên kết thanh toán từ VNPAY.");
@@ -843,6 +853,165 @@ async function copyOrderCode() {
     /* bỏ qua */
   }
 }
+
+// ====== Quét mã QR thanh toán (VietQR / VNPAY) ======
+const isQrModalOpen = ref(false);
+const qrModalData = ref({
+  orderId: null,
+  maHoaDon: '',
+  amount: 0,
+  qrUrl: '',
+  paymentUrl: '',
+  accountNo: '0987654321',
+  accountName: 'POLYSHOES STORE',
+  bankName: 'MB Bank (Ngân hàng Quân Đội)'
+});
+const qrConfirming = ref(false);
+const autoCountdown = ref(10);
+let autoCountdownTimer = null;
+const isAutoConfirmEnabled = ref(true);
+const copyToast = ref('');
+
+function showCopyToast(msg) {
+  copyToast.value = msg;
+  setTimeout(() => (copyToast.value = ''), 2000);
+}
+
+function copyText(val, label) {
+  if (!val) return;
+  navigator.clipboard.writeText(String(val)).then(() => {
+    showCopyToast(`Đã sao chép ${label}!`);
+  }).catch(() => {});
+}
+
+const playSuccessChime = () => {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const playNote = (freq, start, dur) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, start);
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.3, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + dur);
+    };
+    const now = ctx.currentTime;
+    playNote(523.25, now, 0.15); // C5
+    playNote(659.25, now + 0.12, 0.15); // E5
+    playNote(783.99, now + 0.24, 0.3); // G5
+  } catch {}
+};
+
+const startAutoCountdown = () => {
+  stopAutoCountdown();
+  if (!isAutoConfirmEnabled.value) return;
+  autoCountdown.value = 10;
+  autoCountdownTimer = setInterval(() => {
+    if (autoCountdown.value > 1) {
+      autoCountdown.value--;
+    } else {
+      stopAutoCountdown();
+      confirmQrPayment();
+    }
+  }, 1000);
+};
+
+const stopAutoCountdown = () => {
+  if (autoCountdownTimer) {
+    clearInterval(autoCountdownTimer);
+    autoCountdownTimer = null;
+  }
+};
+
+const toggleAutoConfirm = () => {
+  isAutoConfirmEnabled.value = !isAutoConfirmEnabled.value;
+  if (isAutoConfirmEnabled.value) {
+    startAutoCountdown();
+  } else {
+    stopAutoCountdown();
+  }
+};
+
+const openQrModal = (payData) => {
+  qrModalData.value = {
+    orderId: payData.orderId,
+    maHoaDon: payData.maHoaDon,
+    amount: payData.amount,
+    qrUrl: payData.qrUrl,
+    paymentUrl: payData.paymentUrl,
+    accountNo: '0987654321',
+    accountName: 'POLYSHOES STORE',
+    bankName: 'MB Bank (Ngân hàng Quân Đội)'
+  };
+  isQrModalOpen.value = true;
+  startAutoCountdown();
+};
+
+const closeQrModal = () => {
+  stopAutoCountdown();
+  isQrModalOpen.value = false;
+};
+
+const confirmQrPayment = async () => {
+  if (qrConfirming.value || !qrModalData.value.orderId) return;
+  stopAutoCountdown();
+  qrConfirming.value = true;
+
+  try {
+    const res = await fetch(`/api/vnpay/xac-nhan-qr/${qrModalData.value.orderId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() }
+    });
+    const result = await res.json();
+
+    playSuccessChime();
+    isQrModalOpen.value = false;
+
+    orderId.value = qrModalData.value.orderId;
+    orderCode.value = qrModalData.value.maHoaDon;
+
+    // Lưu vào danh sách đơn gần đây để tra cứu
+    try {
+      const orders = JSON.parse(localStorage.getItem('ps_orders') || '[]');
+      orders.unshift({
+        id: orderCode.value,
+        orderId: orderId.value,
+        info: {
+          name: f.name,
+          phone: f.phone,
+          address: fullDeliveryAddress.value,
+          note: f.note,
+          pay: f.pay,
+        },
+        items: JSON.parse(JSON.stringify(cart.items)),
+        total: qrModalData.value.amount || finalTotal.value,
+        date: new Date().toLocaleString('vi-VN'),
+      });
+      localStorage.setItem('ps_orders', JSON.stringify(orders.slice(0, 20)));
+    } catch {}
+
+    done.value = true;
+    await clearCart();
+
+    if (result?.outOfStock) {
+      notifyWarning('Sự cố tồn kho', result.message || 'Sản phẩm đã hết hàng trong kho. Đơn chuyển sang Chờ hoàn tiền!');
+    } else {
+      notifySuccess('Thanh toán thành công', 'Đơn hàng của bạn đã được thanh toán và chuyển sang Chờ xác nhận!');
+    }
+  } catch (err) {
+    console.error('Lỗi xác nhận thanh toán QR:', err);
+    notifyError('Lỗi xác nhận', err.message || 'Không thể xác nhận thanh toán!');
+  } finally {
+    qrConfirming.value = false;
+  }
+};
 </script>
 
 <template>
@@ -1025,6 +1194,19 @@ async function copyOrderCode() {
                 placeholder="Nhập số điện thoại"
               />
               <div class="invalid-feedback">{{ errors.phone }}</div>
+            </div>
+            <div class="col-12">
+              <label class="co-label"
+                >Email nhận thông báo đơn hàng <span class="text-danger">*</span></label
+              >
+              <input
+                v-model="f.email"
+                type="email"
+                class="form-control co-input"
+                :class="{ 'is-invalid': errors.email }"
+                placeholder="Nhập địa chỉ email để nhận hóa đơn (ví dụ: nguyenvan@gmail.com)"
+              />
+              <div class="invalid-feedback">{{ errors.email }}</div>
             </div>
             <div class="col-md-6">
               <label class="co-label">Tỉnh / Thành phố <span class="text-danger">*</span></label>
@@ -1406,6 +1588,125 @@ async function copyOrderCode() {
         </div>
       </div>
     </div>
+
+    <!-- ================= MODAL QUÉT MÃ QR THANH TOÁN (VIETQR / VNPAY) ================= -->
+    <transition name="fade">
+      <div v-if="isQrModalOpen" class="qr-modal-backdrop" @click.self="closeQrModal">
+        <div class="qr-modal-card">
+          <!-- Header -->
+          <div class="qr-modal-header">
+            <div class="qr-header-left">
+              <div class="qr-header-badge">
+                <span class="viet-txt">Viet</span><span class="qr-txt">QR</span>
+                <span class="napas-badge">Napas 24/7</span>
+              </div>
+              <h5 class="qr-header-title">Quét mã QR để thanh toán đơn hàng</h5>
+            </div>
+            <button type="button" class="btn-close-qr" @click="closeQrModal" title="Đóng">✕</button>
+          </div>
+
+          <!-- Body -->
+          <div class="qr-modal-body">
+            <div class="qr-body-grid">
+              <!-- Cột trái: Ảnh mã QR -->
+              <div class="qr-img-column">
+                <div class="qr-box">
+                  <img :src="qrModalData.qrUrl" class="qr-image" alt="Mã QR thanh toán" />
+                </div>
+                <div class="qr-instruction">
+                  <i class="bi bi-qr-code-scan me-1 text-primary"></i>
+                  <span>Quét bằng app ngân hàng hoặc ví điện tử bất kỳ</span>
+                </div>
+                <!-- Đếm ngược tự động -->
+                <div class="qr-auto-box" :class="{ disabled: !isAutoConfirmEnabled }">
+                  <div class="form-check form-switch d-inline-flex align-items-center gap-2 mb-1">
+                    <input class="form-check-input" type="checkbox" id="chkAutoConfirm"
+                      :checked="isAutoConfirmEnabled" @change="toggleAutoConfirm" />
+                    <label class="form-check-label small fw-semibold cursor-pointer" for="chkAutoConfirm">
+                      Tự động hoàn thành (mô phỏng quét xong)
+                    </label>
+                  </div>
+                  <div v-if="isAutoConfirmEnabled" class="qr-timer-text">
+                    Tự động hoàn thành sau: <strong class="text-danger fs-6">{{ autoCountdown }}s</strong>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Cột phải: Thông tin chuyển khoản -->
+              <div class="qr-info-column">
+                <div class="qr-amount-card">
+                  <span class="qr-amount-lbl">Số tiền cần thanh toán</span>
+                  <div class="qr-amount-val">{{ money(qrModalData.amount) }}</div>
+                </div>
+
+                <div class="qr-details-table">
+                  <div class="qr-detail-row">
+                    <span class="detail-label">Ngân hàng:</span>
+                    <span class="detail-value fw-bold text-dark">{{ qrModalData.bankName }}</span>
+                  </div>
+                  <div class="qr-detail-row">
+                    <span class="detail-label">Chủ tài khoản:</span>
+                    <span class="detail-value fw-bold text-dark">{{ qrModalData.accountName }}</span>
+                  </div>
+                  <div class="qr-detail-row">
+                    <span class="detail-label">Số tài khoản:</span>
+                    <div class="detail-value-copy">
+                      <span class="fw-bold font-monospace text-primary fs-6">{{ qrModalData.accountNo }}</span>
+                      <button type="button" class="btn-copy-mini" @click="copyText(qrModalData.accountNo, 'Số tài khoản')">
+                        Sao chép
+                      </button>
+                    </div>
+                  </div>
+                  <div class="qr-detail-row">
+                    <span class="detail-label">Nội dung CK:</span>
+                    <div class="detail-value-copy">
+                      <span class="badge bg-danger-subtle text-danger fw-bold font-monospace fs-6 px-2 py-1">
+                        {{ qrModalData.maHoaDon }}
+                      </span>
+                      <button type="button" class="btn-copy-mini" @click="copyText(qrModalData.maHoaDon, 'Nội dung chuyển khoản')">
+                        Sao chép
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="qr-notice-card">
+                  <i class="bi bi-info-circle-fill text-warning me-1"></i>
+                  <span>Hệ thống sẽ tự động cập nhật đơn hàng ngay khi bạn quét mã thanh toán.</span>
+                </div>
+
+                <!-- Toast sao chép -->
+                <transition name="fade">
+                  <div v-if="copyToast" class="qr-copy-toast">
+                    <i class="bi bi-check-circle-fill text-success me-1"></i>
+                    <span>{{ copyToast }}</span>
+                  </div>
+                </transition>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="qr-modal-footer">
+            <a v-if="qrModalData.paymentUrl" :href="qrModalData.paymentUrl" target="_blank" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1">
+              <i class="bi bi-box-arrow-up-right"></i>
+              <span>Mở cổng VNPAY (Thẻ/Ví)</span>
+            </a>
+            <div class="d-flex align-items-center gap-2 ms-auto">
+              <button type="button" class="btn btn-light" @click="closeQrModal">
+                Đóng
+              </button>
+              <button type="button" class="btn btn-success d-inline-flex align-items-center gap-2 fw-semibold px-4"
+                :disabled="qrConfirming" @click="confirmQrPayment">
+                <span v-if="qrConfirming" class="spinner-border spinner-border-sm"></span>
+                <i v-else class="bi bi-check-circle-fill"></i>
+                <span>{{ qrConfirming ? 'Đang hoàn tất...' : 'Tôi đã quét mã xong' }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -1879,5 +2180,250 @@ async function copyOrderCode() {
   .co-card {
     padding: 1.1rem;
   }
+}
+/* ===== QR Payment Modal (VietQR / VNPAY) ===== */
+.qr-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.qr-modal-card {
+  background: #ffffff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 680px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: qrPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes qrPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.qr-modal-header {
+  padding: 1.1rem 1.4rem;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+}
+.qr-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.qr-header-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.viet-txt {
+  font-weight: 900;
+  color: #005baa;
+  font-size: 1.15rem;
+}
+.qr-txt {
+  font-weight: 900;
+  color: #e11b22;
+  font-size: 1.15rem;
+}
+.napas-badge {
+  background: #0284c7;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.qr-header-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.btn-close-qr {
+  border: none;
+  background: #e2e8f0;
+  color: #475569;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.btn-close-qr:hover {
+  background: #cbd5e1;
+  color: #0f172a;
+}
+.qr-modal-body {
+  padding: 1.4rem;
+}
+.qr-body-grid {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (max-width: 640px) {
+  .qr-body-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.qr-img-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.qr-box {
+  width: 220px;
+  height: 220px;
+  padding: 8px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1.5px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.6rem;
+}
+.qr-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.qr-instruction {
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.3;
+  margin-bottom: 0.8rem;
+}
+.qr-auto-box {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+  transition: all 0.2s;
+}
+.qr-auto-box.disabled {
+  opacity: 0.6;
+}
+.qr-timer-text {
+  font-size: 0.8rem;
+  color: #475569;
+}
+.qr-info-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.qr-amount-card {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+}
+.qr-amount-lbl {
+  font-size: 0.8rem;
+  color: #166534;
+  font-weight: 500;
+  display: block;
+}
+.qr-amount-val {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #15803d;
+  letter-spacing: -0.5px;
+}
+.qr-details-table {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.qr-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+.detail-label {
+  color: #64748b;
+  font-weight: 500;
+}
+.detail-value-copy {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.btn-copy-mini {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #334155;
+  padding: 1px 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-copy-mini:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+.qr-notice-card {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.8rem;
+  color: #92400e;
+  line-height: 1.35;
+}
+.qr-copy-toast {
+  background: #1e293b;
+  color: #fff;
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+}
+.qr-modal-footer {
+  padding: 0.9rem 1.4rem;
+  border-top: 1px solid #f1f5f9;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+}
+.cursor-pointer {
+  cursor: pointer;
 }
 </style>

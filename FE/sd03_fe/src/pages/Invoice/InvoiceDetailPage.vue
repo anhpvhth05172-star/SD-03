@@ -52,6 +52,7 @@ const TRANG_THAI_CODE = {
   'Đã giao hàng': 'DA_GIAO_HANG',
   'Đã hoàn thành': 'DA_HOAN_THANH',
   'Đã hủy': 'DA_HUY',
+  'Chờ hoàn tiền': 'CHO_HOAN_TIEN',
   'Đã hoàn tiền': 'DA_HOAN_TIEN',
   'Giao hàng thất bại': 'GIAO_HANG_THAT_BAI',
 }

@@ -1,5 +1,6 @@
 package com.example.datn.dto;
 
+import java.math.BigDecimal;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -15,5 +16,9 @@ public class VNPayPaymentResponse {
     private String status;
     private String message;
     private String paymentUrl;
+    private Long orderId;
+    private String maHoaDon;
+    private BigDecimal amount;
+    private String qrUrl;
 }
 

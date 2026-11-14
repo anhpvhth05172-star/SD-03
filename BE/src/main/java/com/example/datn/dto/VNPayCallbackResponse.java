@@ -22,5 +22,6 @@ public class VNPayCallbackResponse {
     private String transactionNo;
     private String responseCode;
     private String payDate;
+    private boolean outOfStock;
 }
 

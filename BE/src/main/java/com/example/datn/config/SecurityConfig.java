@@ -56,7 +56,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/**", "/api/phieu-giam-gia").permitAll()
                 .requestMatchers("/api/shipping/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/hoa-don").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/vnpay/create-payment").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/vnpay/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/vnpay/payment-callback", "/api/vnpay/vnpay-ipn").permitAll()
                 .requestMatchers("/api/auth/thong-tin").authenticated()
                 .requestMatchers("/api/phieu-giam-gia/cua-toi", "/api/gio-hang/**").hasRole("KHACH_HANG")

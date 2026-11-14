@@ -35,8 +35,8 @@ onMounted(async () => {
     const data = await res.json();
     result.value = data;
 
-    if (data.success) {
-      // ✅ Thanh toán thành công → xóa giỏ hàng (đơn đã được xác nhận phía BE)
+    if (data.success || data.outOfStock) {
+      // ✅ Thanh toán thành công (kể cả sự cố hết hàng chờ hoàn tiền) → xóa giỏ hàng
       try {
         await clearCart()
       } catch {
@@ -158,6 +158,66 @@ async function retryPayment() {
                 </RouterLink>
                 <RouterLink to="/cua-hang" class="btn btn-primary px-4 py-2">
                   <i class="bi bi-bag me-1"></i> Tiếp tục mua hàng
+                </RouterLink>
+              </div>
+            </div>
+          </div>
+
+          <!-- ⚠️ Thanh toán thành công nhưng hết hàng (Chờ hoàn tiền) -->
+          <div v-else-if="result?.outOfStock" class="card shadow-sm border-0 rounded-4 overflow-hidden">
+            <div class="card-header bg-warning text-dark text-center py-4 border-0">
+              <div class="status-icon bg-white text-warning rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center shadow-sm">
+                <i class="bi bi-exclamation-triangle-fill fs-1 text-warning"></i>
+              </div>
+              <h4 class="fw-bold mb-1">Thanh toán thành công — Sự cố tồn kho</h4>
+              <p class="mb-0 opacity-75 small">Đơn hàng đã được chuyển sang trạng thái <strong>Chờ hoàn tiền</strong></p>
+            </div>
+
+            <div class="card-body p-4 p-md-5">
+              <div class="alert alert-warning mb-4">
+                <div class="d-flex align-items-start gap-2">
+                  <i class="bi bi-info-circle-fill fs-5 flex-shrink-0 mt-1"></i>
+                  <div>
+                    <strong>Thông báo: </strong>{{ result?.message }}
+                  </div>
+                </div>
+              </div>
+
+              <h6 class="fw-bold text-uppercase text-muted small mb-3">Chi tiết giao dịch</h6>
+              <div class="bg-light rounded-3 p-3 mb-4">
+                <div class="d-flex justify-content-between py-2 border-bottom">
+                  <span class="text-muted small">Mã đơn hàng</span>
+                  <strong class="text-dark">#{{ result.maHoaDon || result.orderId }}</strong>
+                </div>
+                <div class="d-flex justify-content-between py-2 border-bottom">
+                  <span class="text-muted small">Số tiền đã trừ</span>
+                  <strong class="text-danger fs-6">{{ money(result.amount) }}</strong>
+                </div>
+                <div v-if="result.transactionNo" class="d-flex justify-content-between py-2 border-bottom">
+                  <span class="text-muted small">Mã giao dịch VNPAY</span>
+                  <span class="font-monospace small fw-semibold">{{ result.transactionNo }}</span>
+                </div>
+                <div v-if="result.bankCode" class="d-flex justify-content-between py-2">
+                  <span class="text-muted small">Ngân hàng</span>
+                  <span class="badge bg-warning-subtle text-dark fw-semibold">{{ result.bankCode }}</span>
+                </div>
+              </div>
+
+              <div class="alert alert-info small mb-4">
+                <i class="bi bi-headset me-1"></i>
+                Bộ phận Chăm sóc Khách hàng sẽ liên hệ với bạn trong thời gian sớm nhất để hoàn 100% số tiền vào tài khoản. Hotline hỗ trợ: <strong>1900 6868</strong>.
+              </div>
+
+              <div class="d-grid d-sm-flex gap-2 justify-content-center">
+                <RouterLink
+                  v-if="result.orderId"
+                  :to="`/don-hang/${result.orderId}`"
+                  class="btn btn-outline-warning px-4 py-2 text-dark"
+                >
+                  <i class="bi bi-receipt me-1"></i> Xem chi tiết đơn hàng
+                </RouterLink>
+                <RouterLink to="/cua-hang" class="btn btn-primary px-4 py-2">
+                  <i class="bi bi-bag me-1"></i> Tiếp tục mua sắm
                 </RouterLink>
               </div>
             </div>

@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,7 +26,7 @@ public class VNPayController {
     private final VNPayService vnPayService;
 
     /**
-     * Tạo đơn hàng (CHO_THANH_TOAN) + URL thanh toán VNPay.
+     * Tạo đơn hàng (CHO_THANH_TOAN) + URL thanh toán VNPay + Mã QR VietQR.
      * Body: HoaDonRequest đầy đủ (tương tự POST /api/hoa-don nhưng cho VNPay).
      */
     @PostMapping("/create-payment")
@@ -34,6 +35,17 @@ public class VNPayController {
         HttpServletRequest httpRequest
     ) {
         VNPayPaymentResponse response = vnPayService.createPaymentAndUrl(httpRequest, request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Xác nhận thanh toán khi quét mã QR thành công (tự động hoặc bấm xác nhận).
+     * Chuyển đơn từ CHO_THANH_TOAN sang CHO_XAC_NHAN, trừ kho, xóa giỏ và gửi mail.
+     */
+    @PostMapping("/xac-nhan-qr/{id}")
+    public ResponseEntity<VNPayCallbackResponse> xacNhanThanhToanQR(@PathVariable("id") Long id) {
+        log.info("Khách hàng xác nhận quét mã QR cho đơn hàng #{}", id);
+        VNPayCallbackResponse response = vnPayService.xacNhanThanhToanQR(id);
         return ResponseEntity.ok(response);
     }
 

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { API_BASE } from '@/api/http'
+import http, { API_BASE } from '@/api/http'
 import { formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
 import { notifySuccess, notifyError } from '@/utils/notify'
@@ -487,13 +487,23 @@ const guiBaoCao = async () => {
 onMounted(async () => {
   napDuLieu()
   try {
-    const res = await fetch(`${API_BASE}/attributes/all-filter-options`)
-    if (res.ok) {
-      const data = await res.json()
-      thuongHieus.value = (data.thuongHieu || []).map((t) => t.ten || t).filter(Boolean)
+    const cachedBrands = sessionStorage.getItem('stats_brands_cache')
+    if (cachedBrands) {
+      thuongHieus.value = JSON.parse(cachedBrands)
+    } else {
+      const res = await http.get('/v1/attributes/all-filter-options')
+      if (res && res.data) {
+        const list = (res.data.thuongHieu || []).map((t) => t.ten || t).filter(Boolean)
+        thuongHieus.value = list
+        try {
+          sessionStorage.setItem('stats_brands_cache', JSON.stringify(list))
+        } catch {}
+      }
     }
   } catch {
-    thuongHieus.value = ['Local Brand', 'FF Shirt', 'Nike', 'Adidas']
+    if (!thuongHieus.value.length) {
+      thuongHieus.value = ['Local Brand', 'FF Shirt', 'Nike', 'Adidas']
+    }
   }
 })
 </script>

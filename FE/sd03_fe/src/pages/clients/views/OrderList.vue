@@ -94,6 +94,8 @@ const STATUS = {
   },
   DA_GIAO: { label: "Giao thành công", cls: "bg-success-subtle text-success" },
   DA_HUY: { label: "Đã hủy", cls: "bg-danger-subtle text-danger" },
+  CHO_HOAN_TIEN: { label: "Chờ hoàn tiền (Sự cố kho)", cls: "bg-danger-subtle text-danger" },
+  DA_HOAN_TIEN: { label: "Đã hoàn tiền", cls: "bg-secondary-subtle text-secondary" },
 };
 const statusInfo = (code) =>
   STATUS[code] || {

@@ -161,6 +161,19 @@ watch(() => filters.idSanPham, (newVal) => {
 
 const fetchFilterOptions = async () => {
   try {
+    const cached = sessionStorage.getItem('variant_page_filter_options')
+    if (cached) {
+      const data = JSON.parse(cached)
+      if (data) {
+        if (Array.isArray(data.colors)) colorsList.value = data.colors
+        if (Array.isArray(data.sizes)) sizesList.value = data.sizes
+        if (Array.isArray(data.products)) productsList.value = data.products
+        if (colorsList.value.length > 0) return
+      }
+    }
+  } catch { }
+
+  try {
     const [resColor, resSize, resProd] = await Promise.all([
       apiFetch(`${API_BASE}/attributes/mau_sac`),
       apiFetch(`${API_BASE}/attributes/kich_co`),
@@ -172,6 +185,13 @@ const fetchFilterOptions = async () => {
       const pData = await resProd.json()
       productsList.value = Array.isArray(pData) ? pData : (pData.content || [])
     }
+    try {
+      sessionStorage.setItem('variant_page_filter_options', JSON.stringify({
+        colors: colorsList.value,
+        sizes: sizesList.value,
+        products: productsList.value
+      }))
+    } catch { }
   } catch (e) {
     console.error('Lỗi khi tải danh mục màu sắc / kích cỡ / sản phẩm:', e)
   }
@@ -1513,10 +1533,6 @@ onUnmounted(() => {
                   <span class="stock-badge">
                     {{ formatNumber(getAvailableVariantStock(item)) }}
                   </span>
-                  <div v-if="getPosReservedForVariant(item) > 0"
-                    style="font-size: 11px; color: #d97706; font-weight: 600; margin-top: 2px;">
-                    Giữ tại quầy: {{ getPosReservedForVariant(item) }} (Kho: {{ formatNumber(item.stock ?? 0) }})
-                  </div>
                 </td>
                 <td class="text-center price-val">
                   <div v-if="hasDiscount(item)" class="price-discount-box">
@@ -1579,7 +1595,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Pagination -->
-      <div v-if="totalPages > 1" class="table-card-foot">
+      <div v-if="totalElements > 0" class="table-card-foot">
         <PaginationBar :page="currentPage" :total-pages="totalPages" :total-elements="totalElements"
           :page-size="pageSize" :sizes="pageSizeOptions" :from="variants.length ? currentPage * pageSize + 1 : 0"
           :to="currentPage * pageSize + variants.length" label="biến thể" @change="changePage"

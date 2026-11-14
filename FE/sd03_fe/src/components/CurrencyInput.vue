@@ -40,13 +40,12 @@ const emit = defineEmits(['update:modelValue', 'change', 'blur', 'focus'])
 
 const inputRef = ref(null)
 const isFocused = ref(false)
-let isSelectAllOnMouseUp = false
+let isComposing = false
 
 const formatNumberString = (val) => {
   if (val === null || val === undefined || val === '') return ''
   const num = typeof val === 'number' ? val : parseInt(String(val).replace(/[^\d]/g, ''), 10)
   if (isNaN(num)) return ''
-  // Nếu giá trị là 0 và có placeholder tùy chỉnh (không phải '0'), trả về chuỗi rỗng để hiện placeholder rõ ràng
   if (num === 0 && props.placeholder && props.placeholder !== '0') {
     return ''
   }
@@ -55,56 +54,33 @@ const formatNumberString = (val) => {
 
 const displayValue = ref(formatNumberString(props.modelValue))
 
-// Đồng bộ khi modelValue thay đổi từ bên ngoài
+// Đồng bộ khi modelValue thay đổi từ bên ngoài (cha truyền vào)
 watch(
   () => props.modelValue,
   (newVal) => {
     const currentNum = parseInt(String(displayValue.value).replace(/[^\d]/g, ''), 10) || 0
     const newNum = parseInt(String(newVal).replace(/[^\d]/g, ''), 10) || 0
-    // Khi đang focus gõ và giá trị số học không đổi thì KHÔNG chạm vào DOM để tránh giật con trỏ hoặc nhảy số
     if (isFocused.value && currentNum === newNum) {
       return
     }
     const formatted = formatNumberString(newVal)
     displayValue.value = formatted
-    if (inputRef.value) {
+    if (inputRef.value && inputRef.value.value !== formatted) {
       inputRef.value.value = formatted
     }
   }
 )
 
-const handleMouseDown = () => {
-  if (!isFocused.value) {
-    isSelectAllOnMouseUp = true
-  }
-}
-
-const handleMouseUp = (e) => {
-  if (isSelectAllOnMouseUp) {
-    isSelectAllOnMouseUp = false
-    e.preventDefault()
-    if (inputRef.value) {
-      inputRef.value.select()
-    }
-  }
-}
-
-const handleClick = () => {
-  // Khi click vào input, nếu con trỏ ở vị trí 0 (khoảng trống hoặc đầu số), tự động bôi đen để thay thế ngay
-  if (inputRef.value) {
-    if (inputRef.value.selectionStart === 0 && inputRef.value.selectionEnd === 0 && displayValue.value) {
-      inputRef.value.select()
-    }
-  }
-}
-
 const handleFocus = (e) => {
   isFocused.value = true
-  setTimeout(() => {
-    if (inputRef.value) {
-      inputRef.value.select()
-    }
-  }, 25)
+  // Khi focus vào input, tự động chọn toàn bộ để người dùng có thể gõ đè số mới ngay nếu muốn
+  if (inputRef.value && displayValue.value) {
+    nextTick(() => {
+      if (inputRef.value) {
+        inputRef.value.select()
+      }
+    })
+  }
   emit('focus', e)
 }
 
@@ -113,7 +89,9 @@ const updateValue = (rawInput, targetCursorDigits) => {
 
   if (!digits) {
     displayValue.value = ''
-    if (inputRef.value) inputRef.value.value = ''
+    if (inputRef.value && inputRef.value.value !== '') {
+      inputRef.value.value = ''
+    }
     emit('update:modelValue', '')
     emit('change', '')
     return
@@ -132,28 +110,29 @@ const updateValue = (rawInput, targetCursorDigits) => {
 
   const formatted = new Intl.NumberFormat('vi-VN').format(num)
   displayValue.value = formatted
-  if (inputRef.value) inputRef.value.value = formatted
+
+  // QUAN TRỌNG: Chỉ gán lại input value khi chuỗi formatted thực sự khác giá trị hiện tại trong DOM!
+  // Tuyệt đối không gán đè chuỗi giống nhau vì sẽ gây xung đột với Windows IME (Unikey/EVKey) làm lặp số!
+  if (inputRef.value && inputRef.value.value !== formatted) {
+    inputRef.value.value = formatted
+
+    // Tính lại vị trí con trỏ theo số lượng chữ số thực tế trước con trỏ
+    let newCursorPos = formatted.length
+    let count = 0
+    for (let i = 0; i < formatted.length; i++) {
+      if (/\d/.test(formatted[i])) {
+        count++
+      }
+      if (count >= targetCursorDigits) {
+        newCursorPos = i + 1
+        break
+      }
+    }
+    inputRef.value.setSelectionRange(newCursorPos, newCursorPos)
+  }
 
   emit('update:modelValue', num)
   emit('change', num)
-
-  // Tính lại con trỏ chính xác theo số lượng chữ số trước con trỏ
-  let newCursorPos = formatted.length
-  let count = 0
-  for (let i = 0; i < formatted.length; i++) {
-    if (/\d/.test(formatted[i])) {
-      count++
-    }
-    if (count >= targetCursorDigits) {
-      newCursorPos = i + 1
-      break
-    }
-  }
-
-  nextTick(() => {
-    if (!inputRef.value || !isFocused.value) return
-    inputRef.value.setSelectionRange(newCursorPos, newCursorPos)
-  })
 }
 
 const handleClear = () => {
@@ -164,6 +143,15 @@ const handleClear = () => {
   }
   emit('update:modelValue', '')
   emit('change', '')
+}
+
+const handleCompositionStart = () => {
+  isComposing = true
+}
+
+const handleCompositionEnd = (e) => {
+  isComposing = false
+  handleInput(e)
 }
 
 const handleKeyDown = (e) => {
@@ -204,15 +192,14 @@ const handleKeyDown = (e) => {
     }
   }
 
-  // Chặn phím không phải là chữ số và không phải phím xóa
-  if (!/^\d$/.test(e.key)) {
-    if (e.key === '.' || e.key === ',') {
-      e.preventDefault()
-    }
+  // Chặn nhập các ký tự không phải số (cho phép backspace, delete và các phím số)
+  if (e.key === '.' || e.key === ',') {
+    e.preventDefault()
   }
 }
 
 const handleInput = (e) => {
+  if (isComposing) return
   const inputEl = e.target
   const rawInput = inputEl.value || ''
   const cursorPos = inputEl.selectionStart || 0
@@ -222,16 +209,19 @@ const handleInput = (e) => {
 
 const handleBlur = (e) => {
   isFocused.value = false
-  isSelectAllOnMouseUp = false
   const raw = String(displayValue.value).replace(/[^\d]/g, '')
   if (!raw) {
     if (props.min > 0) {
       displayValue.value = formatNumberString(props.min)
-      if (inputRef.value) inputRef.value.value = displayValue.value
+      if (inputRef.value && inputRef.value.value !== displayValue.value) {
+        inputRef.value.value = displayValue.value
+      }
       emit('update:modelValue', props.min)
     } else {
       displayValue.value = ''
-      if (inputRef.value) inputRef.value.value = ''
+      if (inputRef.value && inputRef.value.value !== '') {
+        inputRef.value.value = ''
+      }
       emit('update:modelValue', '')
     }
   } else {
@@ -246,7 +236,9 @@ const handleBlur = (e) => {
 
     const formatted = formatNumberString(num)
     displayValue.value = formatted
-    if (inputRef.value) inputRef.value.value = formatted
+    if (inputRef.value && inputRef.value.value !== formatted) {
+      inputRef.value.value = formatted
+    }
     emit('update:modelValue', num)
   }
   emit('blur', e)
@@ -269,12 +261,13 @@ const handleBlur = (e) => {
       :value="displayValue"
       :placeholder="placeholder"
       :disabled="disabled"
-      @mousedown="handleMouseDown"
-      @mouseup="handleMouseUp"
-      @click="handleClick"
+      autocomplete="off"
+      spellcheck="false"
       @focus="handleFocus"
       @keydown="handleKeyDown"
       @input="handleInput"
+      @compositionstart="handleCompositionStart"
+      @compositionend="handleCompositionEnd"
       @blur="handleBlur"
     />
     <button 
@@ -308,67 +301,66 @@ const handleBlur = (e) => {
   background-color: #ffffff;
   color: #0f172a;
   outline: none;
-  font-family: inherit;
   transition: all 0.2s ease;
+  font-family: inherit;
 }
 
 .currency-input:hover:not(:disabled) {
   border-color: #94a3b8;
 }
 
-/* Đổi viền focus sang màu Xanh chuẩn focus của form, không dùng màu đỏ tránh hiểu nhầm là lỗi */
 .currency-input:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
-/* Chỉ khi thực sự có lỗi validation (hasError = true) mới hiển thị viền đỏ */
-.currency-input-wrap.has-error .currency-input,
-.currency-input-wrap.has-error .currency-input:focus {
-  border-color: #dc2626 !important;
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15) !important;
+.currency-input-wrap.has-error .currency-input {
+  border-color: #ef4444;
   background-color: #fef2f2;
+}
+
+.currency-input-wrap.has-error .currency-input:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
 }
 
 .currency-input-wrap.is-disabled .currency-input {
   background-color: #f1f5f9;
+  color: #94a3b8;
   cursor: not-allowed;
-  opacity: 0.7;
-}
-
-.btn-clear-currency {
-  position: absolute;
-  right: 26px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #e2e8f0;
-  color: #64748b;
-  border: none;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  padding: 0;
-  z-index: 2;
-}
-
-.btn-clear-currency:hover {
-  background: #cbd5e1;
-  color: #0f172a;
+  border-color: #e2e8f0;
 }
 
 .currency-suffix {
   position: absolute;
-  right: 10px;
+  right: 12px;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: #64748b;
   pointer-events: none;
-  z-index: 1;
+  user-select: none;
+}
+
+.btn-clear-currency {
+  position: absolute;
+  right: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #cbd5e1;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-clear-currency:hover {
+  background: #94a3b8;
+  color: #ffffff;
 }
 </style>
