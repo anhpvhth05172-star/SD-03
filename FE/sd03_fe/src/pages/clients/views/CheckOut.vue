@@ -9,8 +9,8 @@ import { getUser, isKhachHangDangNhap } from "@/utils/auth";
 
 const { cart, cartTotal, money } = store;
 
-// Phí vận chuyển đơn online (back-end yêu cầu > 1.000đ). Đổi theo chính sách của shop.
-const SHIP_FEE = 30000;
+// Phí vận chuyển đơn online cơ bản (chuẩn nội thành 22.000đ).
+const SHIP_FEE = 22000;
 const shippingFee = ref(SHIP_FEE);
 const provinces = ref([]);
 const wards = ref([]);
@@ -327,6 +327,32 @@ function cleanPlaceName(v) {
   return normalizePlace(v).replace(/^(thanh pho|tp\.?|tinh|quan|huyen|thi xa|phuong|xa|thi tran)\s+/i, "").trim();
 }
 
+function getEstimatedShippingFee(provinceName, wardName) {
+  const p = normalizePlace(provinceName);
+  const w = normalizePlace(wardName);
+  if (p.includes('ha noi')) {
+    const isInner = ['ba dinh', 'hoan kiem', 'dong da', 'hai ba trung', 'cau giay', 'thanh xuan', 'tay ho', 'bac tu liem', 'nam tu liem', 'long bien', 'bo de', 'hoang mai', 'ha dong'].some((q) => w.includes(q));
+    const isOuterFar = ['ba vi', 'son tay', 'ung hoa', 'my duc', 'chuong my', 'thuong tin', 'phu xuyen', 'quoc oai', 'thach that', 'phuc tho'].some((q) => w.includes(q));
+    if (isInner) return 22000;
+    if (isOuterFar) return 28000;
+    return 25000;
+  }
+  if (['bac ninh', 'hung yen', 'ha nam', 'vinh phuc'].some((k) => p.includes(k))) return 28000;
+  if (['hai phong', 'hai duong', 'quang ninh', 'nam dinh', 'ninh binh', 'thai binh', 'phu tho', 'thai nguyen'].some((k) => p.includes(k))) return 32000;
+  if (['hoa binh', 'bac kan', 'lang son', 'tuyen quang', 'yen bai', 'lao cai', 'cao bang', 'ha giang'].some((k) => p.includes(k))) return 35000;
+  if (['son la', 'dien bien', 'lai chau'].some((k) => p.includes(k))) return 38000;
+  if (['thanh hoa', 'nghe an', 'ha tinh'].some((k) => p.includes(k))) return 35000;
+  if (p.includes('da nang')) return 36000;
+  if (['quang binh', 'quang tri', 'hue', 'thua thien', 'quang nam', 'quang ngai', 'binh dinh', 'phu yen', 'khanh hoa', 'ninh thuan', 'binh thuan'].some((k) => p.includes(k))) return 38000;
+  if (['kon tum', 'gia lai', 'dak lak', 'dak nong', 'lam dong'].some((k) => p.includes(k))) return 42000;
+  if (['ho chi minh', 'sai gon', 'tphcm'].some((k) => p.includes(k))) return 38000;
+  if (['binh duong', 'dong nai', 'ba ria', 'vung tau', 'tay ninh', 'binh phuoc'].some((k) => p.includes(k))) return 40000;
+  if (['long an', 'tien giang', 'ben tre', 'vinh long', 'tra vinh', 'can tho'].some((k) => p.includes(k))) return 45000;
+  if (['dong thap', 'an giang', 'hau giang', 'soc trang', 'bac lieu'].some((k) => p.includes(k))) return 48000;
+  if (['kien giang', 'ca mau', 'phu quoc'].some((k) => p.includes(k))) return 52000;
+  return 35000;
+}
+
 function restoreSavedAddressRegion() {
   const address = savedAddressToRestore.value;
   if (!address || !provinces.value.length) return;
@@ -388,7 +414,7 @@ watch([provinceId, wardId, serviceTypeId], async ([province, ward]) => {
       })),
     });
     if (requestId !== shippingRequestId) return;
-    shippingFee.value = Number(result.shippingFee || SHIP_FEE);
+    shippingFee.value = Number(result.shippingFee || getEstimatedShippingFee(selectedProvince.value?.name, selectedWard.value?.name));
     toProvinceId.value = Number(result.toProvinceId || selectedProvince.value.id) || 201;
     toDistrictId.value = Number(result.toDistrictId || 0) || 1;
     toWardCode.value = String(result.toWardCode || selectedWard.value.id || "001");
@@ -403,9 +429,9 @@ watch([provinceId, wardId, serviceTypeId], async ([province, ward]) => {
     }
   } catch (error) {
     if (requestId !== shippingRequestId) return;
-    console.warn("[Checkout] Không tính được phí GHN tự động, dùng phí mặc định:", error.message);
+    console.warn("[Checkout] Không tính được phí GHN tự động, dùng phí dự phòng:", error.message);
     shippingError.value = "";
-    shippingFee.value = SHIP_FEE;
+    shippingFee.value = getEstimatedShippingFee(selectedProvince.value?.name, selectedWard.value?.name);
     toProvinceId.value = Number(selectedProvince.value.id) || 201;
     toDistrictId.value = 1;
     toWardCode.value = "001";

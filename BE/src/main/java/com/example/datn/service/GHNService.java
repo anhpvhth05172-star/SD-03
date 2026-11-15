@@ -134,11 +134,149 @@ public class GHNService {
     }
 
     public ShippingFeeResponse tinhPhiResponse(ShippingFeeRequest req) {
-        if (!cauHinh.daCauHinh()) {
-            return new ShippingFeeResponse(30000, "VND", "Phí vận chuyển tiêu chuẩn");
+        if (cauHinh.daCauHinh()) {
+            try {
+                int phi = tinhPhi(req);
+                return new ShippingFeeResponse(phi, "VND", "Phí vận chuyển được tính bởi GHN");
+            } catch (Exception ex) {
+                // GHN API timeout, lỗi token hoặc địa chỉ không khớp -> tự động chuyển sang biểu phí khu vực
+            }
         }
-        int phi = tinhPhi(req);
-        return new ShippingFeeResponse(phi, "VND", "Phí vận chuyển được tính bởi GHN");
+        int phiKhuVuc = tinhPhiChuanTheoKhuVuc(req);
+        return new ShippingFeeResponse(phiKhuVuc, "VND", "Phí giao hàng GHN Express (Tính theo cự ly khu vực)");
+    }
+
+    public int tinhPhiChuanTheoKhuVuc(ShippingFeeRequest req) {
+        String prov = req != null ? chuanHoaDiaChi(req.getToProvinceName()) : "";
+        String ward = req != null ? chuanHoaDiaChi(req.getToWardName()) : "";
+
+        // 1. Xác định cước cơ bản theo khoảng cách từ kho (Bắc Từ Liêm, Hà Nội) đến tỉnh/thành đích
+        int cuocCoBan = 35000;
+
+        if (prov.contains("ha noi")) {
+            // Hà Nội: Kiểm tra quận/huyện nội hay ngoại thành
+            boolean laNoiThanh = ward.contains("ba dinh") || ward.contains("hoan kiem")
+                || ward.contains("dong da") || ward.contains("hai ba trung")
+                || ward.contains("cau giay") || ward.contains("thanh xuan")
+                || ward.contains("tay ho") || ward.contains("bac tu liem")
+                || ward.contains("nam tu liem") || ward.contains("long bien")
+                || ward.contains("bo de") || ward.contains("gia thuy") || ward.contains("ngoc lam")
+                || ward.contains("hoang mai") || ward.contains("ha dong");
+
+            boolean laNgoaiThanhXa = ward.contains("ba vi") || ward.contains("son tay")
+                || ward.contains("ung hoa") || ward.contains("my duc")
+                || ward.contains("chuong my") || ward.contains("thuong tin")
+                || ward.contains("phu xuyen") || ward.contains("quoc oai")
+                || ward.contains("thach that") || ward.contains("phuc tho");
+
+            if (laNoiThanh) {
+                cuocCoBan = 22000; // Nội thành Hà Nội chuẩn GHN
+            } else if (laNgoaiThanhXa) {
+                cuocCoBan = 28000; // Ngoại thành xa Hà Nội
+            } else {
+                cuocCoBan = 25000; // Ngoại thành 1 (Gia Lâm, Đông Anh, Sóc Sơn, Mê Linh, Hoài Đức...)
+            }
+        } else if (prov.contains("bac ninh") || prov.contains("hung yen")
+            || prov.contains("ha nam") || prov.contains("vinh phuc")) {
+            cuocCoBan = 28000; // Các tỉnh giáp ranh Hà Nội
+        } else if (prov.contains("hai phong") || prov.contains("hai duong")
+            || prov.contains("quang ninh") || prov.contains("nam dinh")
+            || prov.contains("ninh binh") || prov.contains("thai binh")
+            || prov.contains("phu tho") || prov.contains("thai nguyen")) {
+            cuocCoBan = 32000; // Đồng bằng sông Hồng & Duyên hải Bắc Bộ
+        } else if (prov.contains("hoa binh") || prov.contains("bac kan") || prov.contains("bac can")
+            || prov.contains("lang son") || prov.contains("tuyen quang")
+            || prov.contains("yen bai") || prov.contains("lao cai")
+            || prov.contains("cao bang") || prov.contains("ha giang")) {
+            cuocCoBan = 35000; // Miền núi phía Bắc
+        } else if (prov.contains("son la") || prov.contains("dien bien") || prov.contains("lai chau")) {
+            cuocCoBan = 38000; // Vùng cao Tây Bắc
+        } else if (prov.contains("thanh hoa") || prov.contains("nghe an") || prov.contains("ha tinh")) {
+            cuocCoBan = 35000; // Bắc Trung Bộ
+        } else if (prov.contains("da nang")) {
+            cuocCoBan = 36000; // TP. Đà Nẵng
+        } else if (prov.contains("quang binh") || prov.contains("quang tri")
+            || prov.contains("hue") || prov.contains("thua thien")
+            || prov.contains("quang nam") || prov.contains("quang ngai")
+            || prov.contains("binh dinh") || prov.contains("phu yen")
+            || prov.contains("khanh hoa") || prov.contains("nha trang")
+            || prov.contains("ninh thuan") || prov.contains("binh thuan")) {
+            cuocCoBan = 38000; // Duyên hải Nam Trung Bộ
+        } else if (prov.contains("kon tum") || prov.contains("gia lai")
+            || prov.contains("dak lak") || prov.contains("dac lac")
+            || prov.contains("dak nong") || prov.contains("dac nong")
+            || prov.contains("lam dong") || prov.contains("da lat")) {
+            cuocCoBan = 42000; // Tây Nguyên
+        } else if (prov.contains("ho chi minh") || prov.contains("sai gon") || prov.contains("tphcm")) {
+            boolean laNgoaiThanhHcm = ward.contains("hoc mon") || ward.contains("cu chi")
+                || ward.contains("binh chanh") || ward.contains("nha be") || ward.contains("can gio");
+            cuocCoBan = laNgoaiThanhHcm ? 42000 : 38000; // TP. Hồ Chí Minh
+        } else if (prov.contains("binh duong") || prov.contains("dong nai")
+            || prov.contains("ba ria") || prov.contains("vung tau")) {
+            cuocCoBan = 40000; // Đông Nam Bộ phát triển
+        } else if (prov.contains("tay ninh") || prov.contains("binh phuoc")) {
+            cuocCoBan = 42000; // Đông Nam Bộ biên giới
+        } else if (prov.contains("long an") || prov.contains("tien giang")
+            || prov.contains("ben tre") || prov.contains("vinh long")
+            || prov.contains("tra vinh") || prov.contains("can tho")) {
+            cuocCoBan = 45000; // Đồng bằng sông Cửu Long (Tiền Giang - Hậu Giang)
+        } else if (prov.contains("dong thap") || prov.contains("an giang")
+            || prov.contains("hau giang") || prov.contains("soc trang") || prov.contains("bac lieu")) {
+            cuocCoBan = 48000; // Miền Tây sông nước
+        } else if (prov.contains("kien giang") || prov.contains("phu quoc") || prov.contains("ca mau")) {
+            cuocCoBan = 52000; // Cực Nam & Đảo xa
+        }
+
+        // 2. Tính trọng lượng đơn hàng (nếu có items)
+        long tongTrongLuong = 500; // mặc định 1 đôi giày 500g
+        if (req != null && req.getItems() != null && !req.getItems().isEmpty()) {
+            tongTrongLuong = 0;
+            for (ShippingFeeRequest.DongHang d : req.getItems()) {
+                if (d != null && d.soLuong() != null && d.soLuong() > 0) {
+                    long tlItem = 500;
+                    if (d.idSanPhamChiTiet() != null) {
+                        try {
+                            SanPhamChiTiet sp = sanPhamChiTietRepository.findById(d.idSanPhamChiTiet()).orElse(null);
+                            if (sp != null && sp.getTrongLuong() != null && sp.getTrongLuong().longValue() > 0) {
+                                tlItem = sp.getTrongLuong().longValue();
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                    tongTrongLuong += tlItem * d.soLuong();
+                }
+            }
+            if (tongTrongLuong <= 0) tongTrongLuong = 500;
+        }
+
+        // Cứ mỗi 500g trên 1kg (1000g), cộng thêm 5.000đ theo cước bậc lũy tiến GHN
+        if (tongTrongLuong > 1000) {
+            long vuot = tongTrongLuong - 1000;
+            long soBac = (vuot + 499) / 500;
+            cuocCoBan += (int) (soBac * 5000);
+        }
+
+        // 3. Xử lý loại dịch vụ vận chuyển
+        if (req != null && req.getServiceTypeId() != null) {
+            if (req.getServiceTypeId() == 1) {
+                // Hỏa tốc / Express
+                cuocCoBan = (int) Math.round(cuocCoBan * 1.35);
+            } else if (req.getServiceTypeId() == 5) {
+                // Tiết kiệm
+                cuocCoBan = (int) Math.round(cuocCoBan * 0.9);
+            }
+        }
+
+        // Làm tròn tới hàng nghìn
+        return (cuocCoBan / 1000) * 1000;
+    }
+
+    private String chuanHoaDiaChi(String input) {
+        if (input == null) return "";
+        String s = java.text.Normalizer.normalize(input, java.text.Normalizer.Form.NFD)
+            .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
+            .replace('đ', 'd').replace('Đ', 'D')
+            .trim().toLowerCase();
+        return s.replaceAll("^(thanh pho|tp\\.?|tinh|quan|huyen|thi xa|tx\\.?|phuong|xa|thi tran)\\s+", "").trim();
     }
 
     public List<ShippingAddressDTO> getTinhThanhMoi() {

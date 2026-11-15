@@ -2553,6 +2553,32 @@ const onProvinceChange = async () => {
   }
 }
 
+const getEstimatedShippingFee = (provinceName, wardName) => {
+  const p = normalizePlaceName(provinceName)
+  const w = normalizePlaceName(wardName)
+  if (p.includes('ha noi')) {
+    const isInner = ['ba dinh', 'hoan kiem', 'dong da', 'hai ba trung', 'cau giay', 'thanh xuan', 'tay ho', 'bac tu liem', 'nam tu liem', 'long bien', 'bo de', 'hoang mai', 'ha dong'].some(q => w.includes(q))
+    const isOuterFar = ['ba vi', 'son tay', 'ung hoa', 'my duc', 'chuong my', 'thuong tin', 'phu xuyen', 'quoc oai', 'thach that', 'phuc tho'].some(q => w.includes(q))
+    if (isInner) return 22000
+    if (isOuterFar) return 28000
+    return 25000
+  }
+  if (['bac ninh', 'hung yen', 'ha nam', 'vinh phuc'].some(k => p.includes(k))) return 28000
+  if (['hai phong', 'hai duong', 'quang ninh', 'nam dinh', 'ninh binh', 'thai binh', 'phu tho', 'thai nguyen'].some(k => p.includes(k))) return 32000
+  if (['hoa binh', 'bac kan', 'lang son', 'tuyen quang', 'yen bai', 'lao cai', 'cao bang', 'ha giang'].some(k => p.includes(k))) return 35000
+  if (['son la', 'dien bien', 'lai chau'].some(k => p.includes(k))) return 38000
+  if (['thanh hoa', 'nghe an', 'ha tinh'].some(k => p.includes(k))) return 35000
+  if (p.includes('da nang')) return 36000
+  if (['quang binh', 'quang tri', 'hue', 'thua thien', 'quang nam', 'quang ngai', 'binh dinh', 'phu yen', 'khanh hoa', 'ninh thuan', 'binh thuan'].some(k => p.includes(k))) return 38000
+  if (['kon tum', 'gia lai', 'dak lak', 'dak nong', 'lam dong'].some(k => p.includes(k))) return 42000
+  if (['ho chi minh', 'sai gon', 'tphcm'].some(k => p.includes(k))) return 38000
+  if (['binh duong', 'dong nai', 'ba ria', 'vung tau', 'tay ninh', 'binh phuoc'].some(k => p.includes(k))) return 40000
+  if (['long an', 'tien giang', 'ben tre', 'vinh long', 'tra vinh', 'can tho'].some(k => p.includes(k))) return 45000
+  if (['dong thap', 'an giang', 'hau giang', 'soc trang', 'bac lieu'].some(k => p.includes(k))) return 48000
+  if (['kien giang', 'ca mau', 'phu quoc'].some(k => p.includes(k))) return 52000
+  return 35000
+}
+
 const tinhPhiVanChuyen = async () => {
   const d = currentOrder.value?.deliveryInfo
   if (!d || !d.province || !d.ward) return
@@ -2568,9 +2594,13 @@ const tinhPhiVanChuyen = async () => {
     const res = await tinhPhi({
       toProvinceName: d.province.name,
       toWardName: d.ward.name,
-      serviceTypeId: d.serviceTypeId || undefined
+      serviceTypeId: d.serviceTypeId || undefined,
+      items: (currentOrder.value.cart || []).map(item => ({
+        idSanPhamChiTiet: item.id || item.spctId || item.idSanPhamChiTiet,
+        soLuong: item.soLuong || item.quantity || 1
+      }))
     })
-    const rawFee = res.shippingFee || 30000
+    const rawFee = res.shippingFee || getEstimatedShippingFee(d.province.name, d.ward.name)
     d.rawShippingFee = rawFee
     d.shippingFee = isFreeShipEligible.value ? 0 : rawFee
     d.legacy = {
@@ -2587,7 +2617,7 @@ const tinhPhiVanChuyen = async () => {
       }
     }
   } catch (e) {
-    const fallbackFee = 30000
+    const fallbackFee = getEstimatedShippingFee(d.province.name, d.ward.name)
     d.rawShippingFee = fallbackFee
     d.shippingFee = isFreeShipEligible.value ? 0 : fallbackFee
     d.legacy = {

@@ -57,11 +57,19 @@ public class ShippingController {
         Integer tinhIdLegacy = null;
         if (canThieuMa) {
             if (ghnService.daCauHinhGhn()) {
-                KetQuaAnhXach kq = ghnDiaChiMapper.anhXach(
-                    request.getToProvinceName(), request.getToWardName());
-                request.setToDistrictId(kq.quanId());
-                request.setToWardCode(kq.maPhuong());
-                tinhIdLegacy = kq.tinhId();
+                try {
+                    KetQuaAnhXach kq = ghnDiaChiMapper.anhXach(
+                        request.getToProvinceName(), request.getToWardName());
+                    if (kq != null) {
+                        request.setToDistrictId(kq.quanId());
+                        request.setToWardCode(kq.maPhuong());
+                        tinhIdLegacy = kq.tinhId();
+                    }
+                } catch (Exception ignored) {
+                    request.setToDistrictId(1);
+                    request.setToWardCode("001");
+                    tinhIdLegacy = 1;
+                }
             } else {
                 request.setToDistrictId(1);
                 request.setToWardCode("001");
