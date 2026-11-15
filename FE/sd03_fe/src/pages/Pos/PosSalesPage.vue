@@ -4658,10 +4658,7 @@ onUnmounted(() => {
                   <span v-if="activeCustomerSavedAddress.macDinh" class="pill-default-tag">Mặc định</span>
                   <span v-else class="pill-active-tag">Đang chọn</span>
                   <span class="single-box-text">
-                    {{ [activeCustomerSavedAddress.diaChiCuThe, activeCustomerSavedAddress.phuong,
-                    activeCustomerSavedAddress.thanhPho ||
-                    activeCustomerSavedAddress.tinhThanhPho].filter(Boolean).join(',
-                    ') }}
+                    {{ [activeCustomerSavedAddress.diaChiCuThe, activeCustomerSavedAddress.phuong, activeCustomerSavedAddress.thanhPho || activeCustomerSavedAddress.tinhThanhPho].filter(Boolean).join(', ') }}
                   </span>
                 </div>
                 <div class="single-box-right">
@@ -4762,9 +4759,7 @@ onUnmounted(() => {
                 <select class="pos-del-control" v-model="currentOrder.deliveryInfo.ward" @change="onWardChange"
                   :disabled="!currentOrder.deliveryInfo.province || currentOrder.deliveryInfo.wardsLoading">
                   <option :value="null" disabled>
-                    {{ currentOrder.deliveryInfo.wardsLoading ? 'Đang tải danh sách Phường / Xã...' : '-- Chọn Phường /
-                    Xã
-                    --' }}
+                    {{ currentOrder.deliveryInfo.wardsLoading ? 'Đang tải danh sách Phường / Xã...' : '-- Chọn Phường / Xã --' }}
                   </option>
                   <option v-for="w in wardsList" :key="w.id" :value="w">{{ w.name }}</option>
                 </select>
@@ -5660,9 +5655,7 @@ onUnmounted(() => {
                 <div class="select-addr-info-col">
                   <div class="select-addr-top">
                     <span class="select-addr-name">
-                      {{ addr.tenChiChi || currentOrder?.customer?.ten || currentOrder?.customer?.tenKhachHang || 'Địa
-                      chỉ
-                      nhận hàng' }}
+                      {{ addr.tenChiChi || currentOrder?.customer?.ten || currentOrder?.customer?.tenKhachHang || 'Địa chỉ nhận hàng' }}
                     </span>
                     <span v-if="addr.macDinh" class="pill-default-tag">Mặc định</span>
                     <span v-if="activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id"
@@ -6021,9 +6014,7 @@ onUnmounted(() => {
 
               <!-- Tiêu đề & Thông tin đơn -->
               <div class="receipt-bill-heading">
-                <div class="receipt-bill-title">{{ completedInvoiceData.isDelivery ? 'PHIẾU GIAO HÀNG (POS)' : 'HÓA ĐƠN
-                BÁN
-                LẺ(POS)' }}</div>
+                <div class="receipt-bill-title">{{ completedInvoiceData.isDelivery ? 'PHIẾU GIAO HÀNG (POS)' : 'HÓA ĐƠN BÁN LẺ(POS)' }}</div>
                 <div class="receipt-barcode-code">*{{ completedInvoiceData.code }}*</div>
               </div>
 
@@ -6290,9 +6281,7 @@ onUnmounted(() => {
               </div>
               <div class="shift-info-item">
                 <span class="shift-info-label">Khung giờ ca:</span>
-                <span class="shift-info-val font-weight-bold">{{ selectedCa ? (selectedCa.batDau?.substring(0, 5) + ' —
-                  ' +
-                selectedCa.ketThuc?.substring(0, 5)) : '--:--' }}</span>
+                <span class="shift-info-val font-weight-bold">{{ selectedCa ? (selectedCa.batDau?.substring(0, 5) + ' — ' + selectedCa.ketThuc?.substring(0, 5)) : '--:--' }}</span>
               </div>
               <div class="shift-info-item">
                 <span class="shift-info-label">Điểm bán hàng:</span>
