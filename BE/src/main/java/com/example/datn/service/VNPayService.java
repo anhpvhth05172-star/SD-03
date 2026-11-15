@@ -110,32 +110,27 @@ public class VNPayService {
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         hoaDonRepository.save(hoaDon);
 
-        boolean hetHangKho = "CHO_HOAN_TIEN".equals(dto.getTrangThai());
-        if (!hetHangKho) {
-            try {
-                KhachHang kh = hoaDon.getKhachHang();
-                if (kh != null && kh.getEmail() != null && !kh.getEmail().isBlank()) {
-                    String tenKH = kh.getTenKhachHang() != null ? kh.getTenKhachHang() : "Quý khách";
-                    String soTienStr = String.format("%,.0f", hoaDon.getTienSauGiamGia());
-                    String diaChi = hoaDon.getDiaChiNhanHang() != null ? hoaDon.getDiaChiNhanHang() : "Không có";
-                    emailService.guiMailDatHangThanhCong(
-                        kh.getEmail(), tenKH, hoaDon.getMaHoaDon(), soTienStr, "Chuyển khoản QR", diaChi
-                    );
-                }
-            } catch (Exception ex) {
-                log.warn("Lỗi gửi email xác nhận đơn QR {}: {}", hoaDon.getMaHoaDon(), ex.getMessage());
+        try {
+            KhachHang kh = hoaDon.getKhachHang();
+            if (kh != null && kh.getEmail() != null && !kh.getEmail().isBlank()) {
+                String tenKH = kh.getTenKhachHang() != null ? kh.getTenKhachHang() : "Quý khách";
+                String soTienStr = String.format("%,.0f", hoaDon.getTienSauGiamGia());
+                String diaChi = hoaDon.getDiaChiNhanHang() != null ? hoaDon.getDiaChiNhanHang() : "Không có";
+                emailService.guiMailDatHangThanhCong(
+                    kh.getEmail(), tenKH, hoaDon.getMaHoaDon(), soTienStr, "Chuyển khoản QR", diaChi
+                );
             }
+        } catch (Exception ex) {
+            log.warn("Lỗi gửi email xác nhận đơn QR {}: {}", hoaDon.getMaHoaDon(), ex.getMessage());
         }
 
         return VNPayCallbackResponse.builder()
-            .success(!hetHangKho)
-            .outOfStock(hetHangKho)
+            .success(true)
+            .outOfStock(false)
             .orderId(hoaDon.getId())
             .maHoaDon(hoaDon.getMaHoaDon())
             .amount(hoaDon.getTienSauGiamGia())
-            .message(hetHangKho
-                ? "Thanh toán thành công nhưng sản phẩm đã hết hàng trong kho. Đơn #" + hoaDon.getMaHoaDon() + " đã chuyển sang CHỜ HOÀN TIỀN."
-                : "Xác nhận thanh toán thành công!")
+            .message("Xác nhận thanh toán thành công! Đơn hàng #" + hoaDon.getMaHoaDon() + " đang ở trạng thái Chờ xác nhận.")
             .build();
     }
 
@@ -205,7 +200,6 @@ public class VNPayService {
         }
 
         if (isSuccess) {
-            boolean hetHangKho = false;
             if ("CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
                 HoaDonDTO dto = hoaDonService.xacNhanThanhToanVNPay(hoaDon.getId());
                 // Ghi ghi chú giao dịch vào đơn
@@ -219,42 +213,22 @@ public class VNPayService {
                 hoaDon.setNgayCapNhat(LocalDateTime.now());
                 hoaDonRepository.save(hoaDon);
 
-                if ("CHO_HOAN_TIEN".equals(dto.getTrangThai())) {
-                    hetHangKho = true;
-                    log.warn("VNPay thành công nhưng SỰ CỐ TỒN KHO → đơn {} chuyển sang CHO_HOAN_TIEN (GD: {})", maHoaDon, vnpTransactionNo);
-                } else {
-                    log.info("VNPay thành công → đơn {} chuyển sang CHO_XAC_NHAN (GD: {})", maHoaDon, vnpTransactionNo);
-                    try {
-                        KhachHang kh = hoaDon.getKhachHang();
-                        if (kh != null && kh.getEmail() != null && !kh.getEmail().isBlank()) {
-                            String tenKH = kh.getTenKhachHang() != null ? kh.getTenKhachHang() : "Quý khách";
-                            String soTienStr = String.format("%,.0f", amount);
-                            String diaChi = hoaDon.getDiaChiNhanHang() != null ? hoaDon.getDiaChiNhanHang() : "Không có";
-                            emailService.guiMailDatHangThanhCong(
-                                kh.getEmail(), tenKH, maHoaDon, soTienStr, "VNPay QR", diaChi
-                            );
-                        }
-                    } catch (Exception ex) {
-                        log.warn("Lỗi gửi email xác nhận đơn VNPay {}: {}", maHoaDon, ex.getMessage());
+                log.info("VNPay thành công → đơn {} chuyển sang CHO_XAC_NHAN (GD: {})", maHoaDon, vnpTransactionNo);
+                try {
+                    KhachHang kh = hoaDon.getKhachHang();
+                    if (kh != null && kh.getEmail() != null && !kh.getEmail().isBlank()) {
+                        String tenKH = kh.getTenKhachHang() != null ? kh.getTenKhachHang() : "Quý khách";
+                        String soTienStr = String.format("%,.0f", amount);
+                        String diaChi = hoaDon.getDiaChiNhanHang() != null ? hoaDon.getDiaChiNhanHang() : "Không có";
+                        emailService.guiMailDatHangThanhCong(
+                            kh.getEmail(), tenKH, maHoaDon, soTienStr, "VNPay QR", diaChi
+                        );
                     }
+                } catch (Exception ex) {
+                    log.warn("Lỗi gửi email xác nhận đơn VNPay {}: {}", maHoaDon, ex.getMessage());
                 }
             } else {
                 log.info("VNPay callback đã xử lý trước đó cho đơn {}", maHoaDon);
-            }
-
-            if (hetHangKho || "CHO_HOAN_TIEN".equals(hoaDon.getTrangThai())) {
-                return VNPayCallbackResponse.builder()
-                    .success(false)
-                    .outOfStock(true)
-                    .message("Thanh toán VNPAY thành công nhưng sản phẩm đã hết hàng trong kho do khách khác đã mua trước. Đơn hàng #" + maHoaDon + " đã được chuyển sang trạng thái CHỜ HOÀN TIỀN. Bộ phận CSKH sẽ chủ động liên hệ để hỗ trợ hoàn tiền cho bạn!")
-                    .orderId(hoaDon.getId())
-                    .maHoaDon(maHoaDon)
-                    .amount(amount)
-                    .bankCode(vnpBankCode)
-                    .transactionNo(vnpTransactionNo)
-                    .responseCode(vnpResponseCode)
-                    .payDate(vnpPayDate)
-                    .build();
             }
         } else {
             if ("CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {

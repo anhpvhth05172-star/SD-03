@@ -394,8 +394,10 @@ watch(provinceId, async (id) => {
 watch([provinceId, wardId, serviceTypeId], async ([province, ward]) => {
   const requestId = ++shippingRequestId;
   if (!province || !ward || !selectedProvince.value || !selectedWard.value) {
-    shippingFee.value = SHIP_FEE;
-    toProvinceId.value = null;
+    shippingFee.value = selectedProvince.value
+      ? getEstimatedShippingFee(selectedProvince.value.name, '')
+      : SHIP_FEE;
+    toProvinceId.value = selectedProvince.value ? (Number(selectedProvince.value.id) || 201) : null;
     toDistrictId.value = null;
     toWardCode.value = "";
     shippingLoading.value = false;
@@ -409,7 +411,7 @@ watch([provinceId, wardId, serviceTypeId], async ([province, ward]) => {
       toWardName: selectedWard.value.name,
       serviceTypeId: serviceTypeId.value || undefined,
       items: cart.items.map((i) => ({
-        idSanPhamChiTiet: i.idSanPhamChiTiet ?? i.spctId ?? i.id,
+        idSanPhamChiTiet: i.idSanPhamChiTiet ?? i.variantId ?? i.spctId ?? i.id,
         soLuong: i.qty || 1,
       })),
     });

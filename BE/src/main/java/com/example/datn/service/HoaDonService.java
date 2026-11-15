@@ -96,13 +96,13 @@ public class HoaDonService {
     private static final Map<String, List<String>> TRANSITION_MAP = new HashMap<>();
     static {
         TRANSITION_MAP.put("CHO_THANH_TOAN", List.of("CHO_XAC_NHAN", "DA_XAC_NHAN", "DA_HUY", "CHO_HOAN_TIEN"));
-        TRANSITION_MAP.put("CHO_XAC_NHAN", List.of("DA_XAC_NHAN", "DA_HUY"));
-        TRANSITION_MAP.put("DA_XAC_NHAN", List.of("CHO_GIAO_HANG", "DA_HUY"));
-        TRANSITION_MAP.put("CHO_GIAO_HANG", List.of("DANG_GIAO_HANG", "DA_HUY"));
-        TRANSITION_MAP.put("DANG_GIAO_HANG", List.of("DA_GIAO_HANG", "GIAO_HANG_THAT_BAI"));
-        TRANSITION_MAP.put("DA_GIAO_HANG", List.of("DA_HOAN_THANH"));
-        TRANSITION_MAP.put("DA_HOAN_THANH", List.of("DA_HOAN_TIEN"));
-        TRANSITION_MAP.put("GIAO_HANG_THAT_BAI", List.of("DANG_GIAO_HANG"));
+        TRANSITION_MAP.put("CHO_XAC_NHAN", List.of("DA_XAC_NHAN", "DA_HUY", "CHO_HOAN_TIEN", "DA_HOAN_TIEN"));
+        TRANSITION_MAP.put("DA_XAC_NHAN", List.of("CHO_GIAO_HANG", "DA_HUY", "CHO_HOAN_TIEN"));
+        TRANSITION_MAP.put("CHO_GIAO_HANG", List.of("DANG_GIAO_HANG", "DA_HUY", "CHO_HOAN_TIEN"));
+        TRANSITION_MAP.put("DANG_GIAO_HANG", List.of("DA_GIAO_HANG", "GIAO_HANG_THAT_BAI", "CHO_HOAN_TIEN"));
+        TRANSITION_MAP.put("DA_GIAO_HANG", List.of("DA_HOAN_THANH", "CHO_HOAN_TIEN"));
+        TRANSITION_MAP.put("DA_HOAN_THANH", List.of("DA_HOAN_TIEN", "CHO_HOAN_TIEN"));
+        TRANSITION_MAP.put("GIAO_HANG_THAT_BAI", List.of("DANG_GIAO_HANG", "CHO_HOAN_TIEN", "DA_HUY"));
         TRANSITION_MAP.put("CHO_HOAN_TIEN", List.of("DA_HOAN_TIEN", "DA_HUY"));
         TRANSITION_MAP.put("DA_HUY", List.of());
         TRANSITION_MAP.put("DA_HOAN_TIEN", List.of());
@@ -110,9 +110,10 @@ public class HoaDonService {
 
     private static final Map<String, List<String>> TRANSITION_MAP_POS = new HashMap<>();
     static {
-        TRANSITION_MAP_POS.put("CHO_XAC_NHAN", List.of("DA_XAC_NHAN", "DA_HOAN_THANH", "DA_HUY"));
-        TRANSITION_MAP_POS.put("DA_XAC_NHAN", List.of("DA_HOAN_THANH", "DA_HUY"));
-        TRANSITION_MAP_POS.put("DA_HOAN_THANH", List.of("DA_HOAN_TIEN"));
+        TRANSITION_MAP_POS.put("CHO_XAC_NHAN", List.of("DA_XAC_NHAN", "DA_HOAN_THANH", "DA_HUY", "CHO_HOAN_TIEN", "DA_HOAN_TIEN"));
+        TRANSITION_MAP_POS.put("DA_XAC_NHAN", List.of("DA_HOAN_THANH", "DA_HUY", "CHO_HOAN_TIEN"));
+        TRANSITION_MAP_POS.put("DA_HOAN_THANH", List.of("DA_HOAN_TIEN", "CHO_HOAN_TIEN"));
+        TRANSITION_MAP_POS.put("CHO_HOAN_TIEN", List.of("DA_HOAN_TIEN", "DA_HUY"));
         TRANSITION_MAP_POS.put("DA_HUY", List.of());
         TRANSITION_MAP_POS.put("DA_HOAN_TIEN", List.of());
     }
@@ -774,7 +775,7 @@ public class HoaDonService {
         boolean laLanThatBaiThuBa = "GIAO_HANG_THAT_BAI".equals(maMoi)
             && lichSuHoaDonRepository.countByHoaDonIdAndTrangThai(id, "GIAO_HANG_THAT_BAI")
                 >= SO_LAN_GIAO_THAT_BAI_TU_DONG_HUY - 1;
-        if (("DA_HUY".equals(maMoi) || "DA_HOAN_TIEN".equals(maMoi)) && daTruKho(hoaDon)) {
+        if (("DA_HUY".equals(maMoi) || "DA_HOAN_TIEN".equals(maMoi) || "CHO_HOAN_TIEN".equals(maMoi)) && daTruKho(hoaDon)) {
             hoanTonKho(id);
         }
         hoaDon.setTrangThai(maMoi);
@@ -1174,34 +1175,34 @@ boolean isTaiQuay = "TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon())) || "TAI_QUA
         if (req.getChiTiet() == null || req.getChiTiet().isEmpty()) {
             throw new IllegalArgumentException("Chưa có sản phẩm để tính phí vận chuyển");
         }
-        if (req.getToDistrictId() <= 1 || "001".equals(req.getToWardCode().trim())) {
-            BigDecimal fallbackPhi = req.getPhiVanChuyen();
-            if (fallbackPhi == null || fallbackPhi.compareTo(BigDecimal.valueOf(1000)) <= 0) {
-                fallbackPhi = BigDecimal.valueOf(30000);
-            }
-            req.setPhiVanChuyen(fallbackPhi);
+        // 1. Nếu client đã tính phí vận chuyển chuẩn (> 1000đ), tôn trọng phí client gửi lên
+        if (req.getPhiVanChuyen() != null && req.getPhiVanChuyen().compareTo(BigDecimal.valueOf(1000)) > 0) {
             return;
         }
-        ShippingFeeRequest phiReq = new ShippingFeeRequest(
-            req.getToDistrictId(),
-            req.getToWardCode().trim(),
-            req.getChiTiet().stream()
+
+        // 2. Tạo request chuẩn để gọi GHN hoặc tính phí theo biểu phí khoảng cách 63 tỉnh/thành
+        ShippingFeeRequest phiReq = new ShippingFeeRequest();
+        phiReq.setToDistrictId(req.getToDistrictId());
+        phiReq.setToWardCode(req.getToWardCode() != null ? req.getToWardCode().trim() : "");
+        phiReq.setToProvinceName(req.getDiaChiNhanHang());
+        phiReq.setToWardName(req.getDiaChiNhanHang());
+        if (req.getChiTiet() != null) {
+            phiReq.setItems(req.getChiTiet().stream()
                 .map(d -> new ShippingFeeRequest.DongHang(d.getIdSanPhamChiTiet(), d.getSoLuong()))
-                .toList()
-        );
-        try {
-            int phi = ghnService.tinhPhi(phiReq);
-            if (phi <= 1000) {
-                throw new IllegalArgumentException("Phí vận chuyển từ GHN không hợp lệ");
-            }
-            req.setPhiVanChuyen(BigDecimal.valueOf(phi));
-        } catch (Exception ex) {
-            BigDecimal fallbackPhi = req.getPhiVanChuyen();
-            if (fallbackPhi == null || fallbackPhi.compareTo(BigDecimal.valueOf(1000)) <= 0) {
-                fallbackPhi = BigDecimal.valueOf(30000);
-            }
-            req.setPhiVanChuyen(fallbackPhi);
+                .toList());
         }
+
+        try {
+            int phi = ghnService.tinhPhiResponse(phiReq).getShippingFee();
+            if (phi > 1000) {
+                req.setPhiVanChuyen(BigDecimal.valueOf(phi));
+                return;
+            }
+        } catch (Exception ignored) {}
+
+        // 3. Fallback chuẩn theo biểu phí cự ly khu vực (22k - 52k) thay vì mặc định 30k
+        int phiChuan = ghnService.tinhPhiChuanTheoKhuVuc(phiReq);
+        req.setPhiVanChuyen(BigDecimal.valueOf(phiChuan));
     }
 
     private void fillHeader(HoaDon hoaDon, HoaDonRequest req) {
@@ -1858,15 +1859,20 @@ private NhanVien timNhanVien(Long id) {
             return toFullDTO(saved);
         } else {
             // Sự cố tồn kho: Quầy hoặc khách khác đã mua hết trong lúc khách thanh toán VNPAY
-            hoaDon.setTrangThai("CHO_HOAN_TIEN");
+            // YÊU CẦU: Trạng thái đơn hàng LUÔN LÀ "CHO_XAC_NHAN" (Chờ xác nhận).
+            // Không được tự động chuyển sang CHO_HOAN_TIEN.
+            // Để đơn treo chờ xác nhận để nhân viên liên hệ khách:
+            // - Khách đợi được hàng: tiếp tục giữ Chờ xác nhận
+            // - Khách không đợi được: nhân viên sẽ chủ động thao tác chuyển sang Chờ hoàn tiền / Hoàn tiền.
+            hoaDon.setTrangThai("CHO_XAC_NHAN");
             hoaDon.setNgayCapNhat(LocalDateTime.now());
             hoaDon.setNguoiCapNhat("VNPAY (SỰ CỐ KHO)");
-            String warningMsg = "[SỰ CỐ TỒN KHO: " + lyDoThieuKho + ". Đã thanh toán VNPAY nhưng hết hàng trong kho. Chờ hoàn tiền!]";
+            String warningMsg = "[CẢNH BÁO TỒN KHO: " + lyDoThieuKho + ". Đã thanh toán VNPAY (kho tạm thiếu). Chờ nhân viên liên hệ khách: đợi hàng hoặc hoàn tiền!]";
             String oldNote = hoaDon.getGhiChu() != null ? hoaDon.getGhiChu().trim() : "";
             hoaDon.setGhiChu(oldNote.isEmpty() ? warningMsg : oldNote + " | " + warningMsg);
             HoaDon saved = hoaDonRepository.save(hoaDon);
-            ghiLichSuTrangThai(saved, tu, "CHO_HOAN_TIEN", 
-                "Sự cố tồn kho: Khách thanh toán VNPAY thành công nhưng kho không đủ: " + lyDoThieuKho + ". Đơn chuyển sang Chờ hoàn tiền.", 
+            ghiLichSuTrangThai(saved, tu, "CHO_XAC_NHAN", 
+                "Cảnh báo tồn kho: Khách thanh toán VNPAY thành công nhưng kho tạm thời thiếu: " + lyDoThieuKho + ". Treo Chờ xác nhận để nhân viên liên hệ khách hàng (đợi hàng hoặc hoàn tiền).", 
                 "VNPAY (Hệ thống)");
             guiEmailHoaDonTuDong(saved, null);
             return toFullDTO(saved);
