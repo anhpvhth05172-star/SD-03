@@ -200,7 +200,7 @@ const loadProducts = async () => {
       icon: "error",
       title: "Không tải được danh sách sản phẩm",
       text: e.response?.data?.message || "Không kết nối được máy chủ",
-      confirmButtonColor: "#cc0000",
+      confirmButtonColor: "#dc2626",
     });
   } finally {
     loadingProducts.value = false;
@@ -361,7 +361,7 @@ const submit = async () => {
       icon: "error",
       title: "Tạo thất bại",
       text: e.response?.data?.message || "Không kết nối được máy chủ",
-      confirmButtonColor: "#cc0000",
+      confirmButtonColor: "#dc2626",
     });
   } finally {
     saving.value = false;
@@ -787,11 +787,11 @@ const submit = async () => {
 <style scoped>
 /* Dùng tiền tố dg- để không bị trùng class với Bootstrap (card, col-*, badge...) */
 .dg-screen {
-  --red: #cc0000;
-  --red-soft: #fdecec;
-  --line: #e5e7eb;
-  --ink: #111827;
-  --muted: #6b7280;
+  --red: #dc2626;
+  --red-soft: #fef2f2;
+  --line: #e2e8f0;
+  --ink: #0f172a;
+  --muted: #64748b;
   padding: 0.5rem 0.75rem 2rem;
   color: var(--ink);
 }

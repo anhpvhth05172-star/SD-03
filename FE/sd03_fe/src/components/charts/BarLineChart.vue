@@ -4,7 +4,7 @@ import { computed } from 'vue'
 const props = defineProps({
   labels: { type: Array, default: () => [] },
   values: { type: Array, default: () => [] },
-  color: { type: String, default: '#d92d20' },
+  color: { type: String, default: '#dc2626' },
   mode: { type: String, default: 'cot' },
   currency: { type: Boolean, default: false },
   series: { type: Array, default: null },

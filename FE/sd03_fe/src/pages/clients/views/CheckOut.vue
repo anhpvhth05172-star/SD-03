@@ -1760,9 +1760,9 @@ const confirmQrPayment = async () => {
 }
 
 .co-step.current .co-step-dot {
-  background: var(--bs-primary, #d62828);
+  background: var(--bs-primary, #dc2626);
   color: #fff;
-  box-shadow: 0 0 0 4px rgba(214, 40, 40, 0.15);
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.15);
 }
 
 .co-step.current {
@@ -1818,7 +1818,7 @@ const confirmQrPayment = async () => {
   display: grid;
   place-items: center;
   font-size: 1rem;
-  color: var(--bs-primary, #d62828);
+  color: var(--bs-primary, #dc2626);
   background: rgba(var(--bs-primary-rgb, 214, 40, 40), 0.1);
 }
 

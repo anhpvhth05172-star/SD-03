@@ -1628,7 +1628,7 @@ onMounted(async () => {
 .profile-avatar-initials {
   width: 100%;
   height: 100%;
-  background: #cc0000;
+  background: #dc2626;
   color: #ffffff;
   font-size: 26px;
   font-weight: 700;
@@ -1655,7 +1655,7 @@ onMounted(async () => {
 .badge-code {
   font-size: 11.5px;
   font-weight: 700;
-  color: #cc0000;
+  color: #dc2626;
   background: #fef2f2;
   padding: 2px 8px;
   border-radius: 6px;

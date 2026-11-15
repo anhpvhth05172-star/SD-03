@@ -140,27 +140,27 @@ const xulyDangXuat = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #4a4a52;
+  color: #64748b;
   font-size: 13px;
 }
 
 .breadcrumb svg {
   width: 15px;
   height: 15px;
-  color: #2b2b32;
+  color: #475569;
 }
 
 .crumb {
   font-weight: 600;
-  color: #2b2b32;
+  color: #475569;
 }
 
 .crumb-sep {
-  color: #b0b0b8;
+  color: #94a3b8;
 }
 
 .crumb-current {
-  color: #23232a;
+  color: #0f172a;
   font-weight: 600;
 }
 

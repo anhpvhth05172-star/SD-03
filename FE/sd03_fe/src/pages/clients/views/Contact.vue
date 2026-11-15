@@ -304,7 +304,7 @@ const submitContact = () => {
 <style scoped>
 /* Màu chủ đạo bám theo theme của dự án (đỏ - trắng) */
 .ct-page {
-  --ct-red: var(--bs-primary, #d62828);
+  --ct-red: var(--bs-primary, #dc2626);
   --ct-red-soft: rgba(var(--bs-primary-rgb, 214, 40, 40), 0.08);
 }
 

@@ -687,7 +687,7 @@ onMounted(async () => {
 .create-title {
   font-size: 17px;
   font-weight: 700;
-  color: #1d1d23;
+  color: #0f172a;
 }
 
 .create-grid {
@@ -719,12 +719,12 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  background: #f7f7f9;
-  border: 1px solid #ececef;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 9px 12px;
   font-size: 12.5px;
-  color: #4a4a52;
+  color: #334155;
 }
 
 .form-error {

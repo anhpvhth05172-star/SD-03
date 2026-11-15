@@ -333,7 +333,7 @@ const getColorHex = (item) => {
   const name = (item.color || '').toLowerCase()
   if (name.includes('đen')) return '#000000'
   if (name.includes('trắng')) return '#ffffff'
-  if (name.includes('đỏ')) return '#d92d20'
+  if (name.includes('đỏ')) return '#dc2626'
   if (name.includes('xanh rêu')) return '#15803d'
   if (name.includes('xanh')) return '#2563eb'
   if (name.includes('vàng')) return '#eab308'

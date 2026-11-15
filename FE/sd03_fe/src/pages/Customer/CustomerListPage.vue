@@ -874,12 +874,12 @@ onMounted(() => {
 /* Nút Edit (đỏ) */
 .btn-icon.is-edit {
   background: #fef2f2;
-  color: #cc0000;
+  color: #dc2626;
   border: 1px solid #fecaca;
 }
 
 .btn-icon.is-edit:hover {
-  background: #cc0000;
+  background: #dc2626;
   color: #ffffff;
 }
 
@@ -1245,14 +1245,14 @@ onMounted(() => {
   gap: 6px;
   padding: 9px 18px;
   border-radius: 9999px;
-  background: #cc0000;
+  background: #dc2626;
   color: #ffffff;
   border: none;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(204, 0, 0, 0.25);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
 }
 
 .btn-profile-edit:hover {

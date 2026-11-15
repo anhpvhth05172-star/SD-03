@@ -1446,7 +1446,7 @@ onUnmounted(() => {
 
 <style scoped>
 .ol-page {
-  --ol-red: var(--bs-primary, #d62828);
+  --ol-red: var(--bs-primary, #dc2626);
   --ol-red-soft: rgba(var(--bs-primary-rgb, 214, 40, 40), 0.08);
   --ol-card: #ffffff;
   --ol-border: #eef0f3;

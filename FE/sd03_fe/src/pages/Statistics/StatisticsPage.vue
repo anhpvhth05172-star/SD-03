@@ -631,7 +631,7 @@ const ssBarSeries = computed(() => [
 ])
 
 const ssLineSeries = computed(() => [
-  { label: 'Tốc độ tăng trưởng (%)', color: '#d92d20', values: ssKy.value.map((k) => k.tangTruong || 0) },
+  { label: 'Tốc độ tăng trưởng (%)', color: '#dc2626', values: ssKy.value.map((k) => k.tangTruong || 0) },
 ])
 
 const ssTopCotKy = computed(() => ssTenKy.value)

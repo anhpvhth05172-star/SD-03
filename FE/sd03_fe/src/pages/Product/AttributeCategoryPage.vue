@@ -268,7 +268,7 @@ const saveAttributeDirectly = async () => {
     return
   }
   if (activeTab.value === 'mau_sac' && modalForm.mo_ta && !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(modalForm.mo_ta.trim())) {
-    formError.value = 'Mã màu phải đúng định dạng HEX, ví dụ #d92d20.'
+    formError.value = 'Mã màu phải đúng định dạng HEX, ví dụ #dc2626.'
     return
   }
   if (tenTrimmed.length > 150 || (modalForm.mo_ta || '').trim().length > 500) {
@@ -573,7 +573,7 @@ const executeDeleteFast = async (item) => {
               <label class="form-lbl">Mã màu HEX đại diện</label>
               <div class="color-input-row">
                 <input v-model="modalForm.mo_ta" type="color" class="color-picker-box" />
-                <input v-model="modalForm.mo_ta" type="text" class="form-inp" placeholder="#HEX (vd: #D92D20)"
+                <input v-model="modalForm.mo_ta" type="text" class="form-inp" placeholder="#HEX (vd: #DC2626)"
                   @input="modalForm.mo_ta = modalForm.mo_ta ? modalForm.mo_ta.toUpperCase() : ''" />
               </div>
             </div>

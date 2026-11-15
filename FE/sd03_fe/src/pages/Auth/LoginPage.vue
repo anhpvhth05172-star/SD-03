@@ -195,8 +195,8 @@ const duongDanSauDangNhap = (macDinh) => {
   color: #666666;
 }
 .input-wrap:focus-within {
-  border-color: #cc0000;
-  box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.12);
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
 }
 .input-wrap > i { font-size: 17px; }
 .input-wrap input {
@@ -207,7 +207,7 @@ const duongDanSauDangNhap = (macDinh) => {
   border: 0;
   outline: 0;
   background: transparent;
-  color: #24242a;
+  color: #0f172a;
   font: inherit;
   font-size: 15px;
   box-sizing: border-box;
@@ -227,7 +227,7 @@ const duongDanSauDangNhap = (macDinh) => {
   margin: 0 0 6px;
   font-size: 13px;
   font-weight: 600;
-  color: #cc0000;
+  color: #dc2626;
   text-decoration: none;
 }
 .auth-forgot:hover { text-decoration: underline; }
@@ -243,14 +243,14 @@ const duongDanSauDangNhap = (macDinh) => {
   padding: 12px 16px;
   border: none;
   border-radius: 8px;
-  background: #cc0000;
+  background: #dc2626;
   color: #fff;
   font-weight: 700;
   font-size: 16px;
   cursor: pointer;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 3px 8px rgba(220, 38, 38, 0.25);
 }
-.auth-btn:hover:not(:disabled) { background: #a30000; }
+.auth-btn:hover:not(:disabled) { background: #b91c1c; }
 .auth-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -268,6 +268,6 @@ const duongDanSauDangNhap = (macDinh) => {
   color: #64748b;
   margin: 16px 0 0;
 }
-.auth-customer-links a { color: #cc0000; font-weight: 700; }
+.auth-customer-links a { color: #dc2626; font-weight: 700; }
 @media (max-width: 480px) { .auth-card { max-width: 100%; padding: 24px 20px 20px; } }
 </style>
