@@ -4537,10 +4537,6 @@ onUnmounted(() => {
                           <span v-if="item.originalPrice && item.originalPrice > item.price"
                             class="price-strikethrough">
                             {{ formatVnd(item.originalPrice) }}
-                            <strong v-if="normalizeDiscountStr(item.discount)"
-                              style="color: #dc2626; font-size: 11px; margin-left: 4px; text-decoration: none; display: inline-block;">
-                              ({{ normalizeDiscountStr(item.discount) }})
-                            </strong>
                           </span>
                         </div>
                       </td>
