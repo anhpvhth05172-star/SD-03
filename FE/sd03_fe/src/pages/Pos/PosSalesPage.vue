@@ -1094,6 +1094,38 @@ const isCurrentDeliveryAddressSaved = computed(() => {
   })
 })
 
+const activeCustomerSavedAddress = computed(() => {
+  const list = currentCustomerSavedAddresses.value
+  if (!list || list.length === 0) return null
+  const d = currentOrder.value?.deliveryInfo
+  if (d) {
+    const curProv = normalizePlaceName(d.province?.name)
+    const curWard = normalizePlaceName(d.ward?.name)
+    const curStreet = String(d.recipientAddress || '').trim().toLowerCase()
+
+    const matched = list.find(a => {
+      const savedProv = normalizePlaceName(a.thanhPho || a.tinhThanhPho)
+      const savedWard = normalizePlaceName(a.phuong)
+      const savedStreet = String(a.diaChiCuThe || '').trim().toLowerCase()
+      return savedProv === curProv && savedWard === curWard && savedStreet === curStreet
+    })
+    if (matched) return matched
+  }
+  return list.find(a => a.macDinh) || list[0]
+})
+
+const isSelectAddressModalOpen = ref(false)
+const openSelectAddressModal = () => {
+  isSelectAddressModalOpen.value = true
+}
+const closeSelectAddressModal = () => {
+  isSelectAddressModalOpen.value = false
+}
+const selectAddressFromModal = async (addr) => {
+  await applySavedAddressToDeliveryForm(addr, currentOrder.value?.customer, true)
+  closeSelectAddressModal()
+}
+
 const applySavedAddressToDeliveryForm = async (addrObj, cust = null, showToast = false) => {
   if (!currentOrder.value?.deliveryInfo || !addrObj) return
   const d = currentOrder.value.deliveryInfo
@@ -1382,6 +1414,7 @@ const submitQuickAddAddress = async () => {
     }
 
     isQuickAddAddressModalOpen.value = false
+    isSelectAddressModalOpen.value = false
     notifySuccess(
       'Thành công',
       `Đã thêm và áp dụng địa chỉ giao hàng: ${quickAddressForm.streetAddress.trim()}, ${quickAddressForm.ward.name}, ${quickAddressForm.province.name}!`,
@@ -3096,6 +3129,7 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
       isQrModalOpen.value ||
       isAddCustomerModalOpen.value ||
       isQuickAddAddressModalOpen.value ||
+      isSelectAddressModalOpen.value ||
       isReceiptModalOpen.value ||
       isRecentInvoicesModalOpen.value ||
       isProcessingCheckout.value
@@ -4029,6 +4063,7 @@ const handleKeyDown = (e) => {
     isQrModalOpen.value = false
     isAddCustomerModalOpen.value = false
     isQuickAddAddressModalOpen.value = false
+    isSelectAddressModalOpen.value = false
     isBankQrModalOpen.value = false
     isReceiptModalOpen.value = false
     isRecentInvoicesModalOpen.value = false
@@ -4566,36 +4601,49 @@ onUnmounted(() => {
           </div>
 
           <div class="pos-delivery-card-body">
-            <!-- Sổ địa chỉ đã lưu của khách hàng (chọn nhanh 1 chạm) -->
+            <!-- Sổ địa chỉ đã lưu của khách hàng (Mặc định 1 địa chỉ + Popup chọn địa chỉ khác) -->
             <div v-if="currentOrder.customer && currentCustomerSavedAddresses.length > 0"
-              class="pos-del-saved-addresses-bar">
-              <div class="saved-addr-label">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-                </svg>
-                <span>Địa chỉ đã lưu của <strong>{{ currentOrder.customer.ten || currentOrder.customer.tenKhachHang
- }}</strong>:</span>
-              </div>
-              <div class="saved-addr-pills">
-                <button v-for="addr in currentCustomerSavedAddresses" :key="addr.id" type="button"
-                  class="saved-addr-pill" :class="{
-                    active:
-                      normalizePlaceName(currentOrder.deliveryInfo.province?.name) === normalizePlaceName(addr.thanhPho) &&
-                      normalizePlaceName(currentOrder.deliveryInfo.ward?.name) === normalizePlaceName(addr.phuong) &&
-                      String(currentOrder.deliveryInfo.recipientAddress || '').trim().toLowerCase() === String(addr.diaChiCuThe || '').trim().toLowerCase()
-                  }" @click="applySavedAddressToDeliveryForm(addr, currentOrder.customer, true)"
-                  :title="[addr.diaChiCuThe, addr.phuong, addr.thanhPho].filter(Boolean).join(', ')">
-                  <span v-if="addr.macDinh" class="pill-default-tag">Mặc định</span>
-                  <span class="pill-addr-text">{{ [addr.diaChiCuThe, addr.phuong, addr.thanhPho].filter(Boolean).join(', ') }}</span>
-                </button>
-                <button type="button" class="saved-addr-add-btn" @click="openQuickAddAddressModal"
-                  title="Thêm địa chỉ mới vào sổ địa chỉ của khách">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
+              class="pos-del-saved-addresses-bar single-default-mode">
+              <div class="saved-addr-bar-top">
+                <div class="saved-addr-label">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
                   </svg>
-                  <span>Thêm địa chỉ</span>
-                </button>
+                  <span>Địa chỉ giao hàng của <strong>{{ currentOrder.customer.ten || currentOrder.customer.tenKhachHang }}</strong>:</span>
+                </div>
+                <div class="saved-addr-top-actions">
+                  <button type="button" class="btn-change-addr-trigger" @click="openSelectAddressModal"
+                    title="Xem danh sách và đổi sang địa chỉ khác">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                    <span>Thay đổi ({{ currentCustomerSavedAddresses.length }})</span>
+                  </button>
+                  <button type="button" class="saved-addr-add-btn" @click="openQuickAddAddressModal"
+                    title="Thêm địa chỉ mới vào sổ địa chỉ của khách">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                      <line x1="12" y1="5" x2="12" y2="19"></line>
+                      <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    <span>+ Thêm địa chỉ</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Hiển thị duy nhất 1 địa chỉ mặc định / đang được áp dụng -->
+              <div v-if="activeCustomerSavedAddress" class="saved-addr-single-box" @click="openSelectAddressModal"
+                title="Bấm để chọn địa chỉ khác">
+                <div class="single-box-left">
+                  <span v-if="activeCustomerSavedAddress.macDinh" class="pill-default-tag">Mặc định</span>
+                  <span v-else class="pill-active-tag">Đang chọn</span>
+                  <span class="single-box-text">
+                    {{ [activeCustomerSavedAddress.diaChiCuThe, activeCustomerSavedAddress.phuong, activeCustomerSavedAddress.thanhPho || activeCustomerSavedAddress.tinhThanhPho].filter(Boolean).join(', ') }}
+                  </span>
+                </div>
+                <div class="single-box-right">
+                  <span class="change-link-text">Đổi địa chỉ &rsaquo;</span>
+                </div>
               </div>
             </div>
             <div v-else-if="currentOrder.customer" class="pos-del-saved-addresses-bar empty-addr-bar">
@@ -5547,6 +5595,79 @@ onUnmounted(() => {
               </svg>
               <span>{{ isSavingCustomer ? 'Đang lưu...' : 'Lưu khách hàng' }}</span>
             </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- MODAL: CHỌN ĐỊA CHỈ KHÁCH HÀNG (POPUP LẤY ĐỊA CHỈ KHÁC) -->
+    <transition name="fade">
+      <div v-if="isSelectAddressModalOpen" class="pos-modal-overlay" @click.self="closeSelectAddressModal">
+        <div class="pos-modal-dialog modal-customer-dialog modal-select-address-dialog">
+          <div class="pos-modal-head cust-modal-header select-addr-modal-head">
+            <div class="modal-head-title">
+              <div class="modal-title-icon customer-icon-badge addr-icon-badge">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M12 21s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 7.2c0 7.3-8 11.8-8 11.8z"></path>
+                  <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+              </div>
+              <div class="modal-title-text-group">
+                <h3 class="cust-modal-title">Chọn địa chỉ giao hàng</h3>
+                <span class="cust-modal-subtitle">
+                  {{ currentOrder?.customer ? `Sổ địa chỉ của khách: ${currentOrder.customer.ten || currentOrder.customer.tenKhachHang}` : 'Chọn địa chỉ nhận hàng đã lưu' }}
+                </span>
+              </div>
+            </div>
+            <button class="pos-modal-close" @click="closeSelectAddressModal" title="Đóng (Esc)">×</button>
+          </div>
+
+          <div class="pos-modal-body select-addr-modal-body">
+            <div class="select-addr-list">
+              <div
+                v-for="addr in currentCustomerSavedAddresses"
+                :key="addr.id"
+                class="select-addr-card"
+                :class="{
+                  'active': activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id
+                }"
+                @click="selectAddressFromModal(addr)"
+              >
+                <div class="select-addr-radio-col">
+                  <span class="custom-radio-circle" :class="{ 'checked': activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id }">
+                    <span v-if="activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id" class="inner-dot"></span>
+                  </span>
+                </div>
+                <div class="select-addr-info-col">
+                  <div class="select-addr-top">
+                    <span class="select-addr-name">
+                      {{ addr.tenChiChi || currentOrder?.customer?.ten || currentOrder?.customer?.tenKhachHang || 'Địa chỉ nhận hàng' }}
+                    </span>
+                    <span v-if="addr.macDinh" class="pill-default-tag">Mặc định</span>
+                    <span v-if="activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id" class="pill-active-tag">Đang chọn</span>
+                  </div>
+                  <div class="select-addr-detail">
+                    {{ [addr.diaChiCuThe, addr.phuong, addr.thanhPho || addr.tinhThanhPho].filter(Boolean).join(', ') }}
+                  </div>
+                </div>
+                <div class="select-addr-btn-col">
+                  <button type="button" class="btn-pick-addr" :class="{ 'is-active': activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id }" @click.stop="selectAddressFromModal(addr)">
+                    {{ activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id ? 'Đang dùng' : 'Chọn' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pos-modal-footer cust-modal-footer select-addr-footer">
+            <button type="button" class="btn-open-quick-add" @click="closeSelectAddressModal(); openQuickAddAddressModal()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>+ Thêm địa chỉ mới</span>
+            </button>
+            <button class="btn-cust-cancel" @click="closeSelectAddressModal">Đóng</button>
           </div>
         </div>
       </div>

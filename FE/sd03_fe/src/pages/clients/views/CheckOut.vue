@@ -277,6 +277,16 @@ const orderId = ref("");
 
 /* ---------- Tự điền khi đã đăng nhập ---------- */
 const selectedAddr = ref("new");
+const isAddressModalOpen = ref(false);
+const currentSelectedSavedAddr = computed(() => {
+  if (selectedAddr.value === "new") return null;
+  return savedAddresses.value.find((a) => a.id === selectedAddr.value) || savedAddresses.value[0] || null;
+});
+
+function selectAddrAndClose(id) {
+  chooseAddress(id);
+  isAddressModalOpen.value = false;
+}
 
 function chooseAddress(id) {
   selectedAddr.value = id;
@@ -1123,27 +1133,39 @@ const confirmQrPayment = async () => {
             <span class="co-title-ico"><i class="bi bi-geo-alt-fill"></i></span>Thông tin giao hàng
           </h5>
 
-          <!-- Địa chỉ đã lưu -->
+          <!-- Địa chỉ đã lưu (Mặc định 1 địa chỉ + Popup chọn địa chỉ khác) -->
           <div v-if="isLoggedIn && savedAddresses.length" class="mb-4">
-            <label class="co-label">Chọn địa chỉ đã lưu</label>
-            <label v-for="a in savedAddresses" :key="a.id" :for="'addr-' + a.id" class="co-option"
-              :class="{ active: selectedAddr === a.id }">
-              <input :id="'addr-' + a.id" name="addr" class="form-check-input co-radio" type="radio" :value="a.id"
-                :checked="selectedAddr === a.id" @change="chooseAddress(a.id)" />
-              <span class="flex-grow-1 min-w-0">
-                <span class="d-block fw-semibold small">
-                  {{ a.name || userInfo(currentUser).name }} ·
-                  {{ a.phone || userInfo(currentUser).phone }}
-                  <span v-if="a.isDefault" class="badge bg-primary ms-1">Mặc định</span>
-                </span>
-                <span class="d-block small text-muted">{{ a.address }}</span>
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label class="co-label mb-0">
+                <i class="bi bi-geo-alt-fill text-primary me-1"></i>Địa chỉ nhận hàng mặc định
+              </label>
+              <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-bold"
+                @click="isAddressModalOpen = true">
+                <i class="bi bi-arrow-repeat me-1"></i>Thay đổi
+              </button>
+            </div>
+
+            <div class="co-selected-addr-box p-3 border rounded-3 bg-light d-flex align-items-center justify-content-between cursor-pointer"
+              style="cursor: pointer; transition: all 0.2s ease;"
+              @click="isAddressModalOpen = true"
+              title="Bấm để chọn địa chỉ khác">
+              <div class="min-w-0 me-3">
+                <div class="fw-bold text-dark small mb-1 d-flex align-items-center gap-2">
+                  <span>{{ currentSelectedSavedAddr?.name || userInfo(currentUser).name }}</span>
+                  <span>·</span>
+                  <span>{{ currentSelectedSavedAddr?.phone || userInfo(currentUser).phone }}</span>
+                  <span v-if="currentSelectedSavedAddr?.isDefault" class="badge bg-primary">Mặc định</span>
+                  <span v-else-if="selectedAddr === 'new'" class="badge bg-secondary">Địa chỉ mới</span>
+                  <span v-else class="badge bg-info text-dark">Đã lưu</span>
+                </div>
+                <div class="text-muted small text-truncate">
+                  {{ currentSelectedSavedAddr ? currentSelectedSavedAddr.address : 'Đang sử dụng địa chỉ mới tự nhập bên dưới' }}
+                </div>
+              </div>
+              <span class="text-primary small fw-semibold flex-shrink-0">
+                Chọn địa chỉ khác <i class="bi bi-chevron-right ms-1"></i>
               </span>
-            </label>
-            <label for="addr-new" class="co-option mb-0" :class="{ active: selectedAddr === 'new' }">
-              <input id="addr-new" name="addr" class="form-check-input co-radio" type="radio" value="new"
-                :checked="selectedAddr === 'new'" @change="chooseAddress('new')" />
-              <span class="small fw-semibold"><i class="bi bi-plus-circle me-1"></i>Nhập địa chỉ mới</span>
-            </label>
+            </div>
           </div>
 
           <div class="row g-3">
@@ -1577,6 +1599,71 @@ const confirmQrPayment = async () => {
         </div>
       </div>
     </transition>
+    <!-- POPUP CHỌN ĐỊA CHỈ KHÁCH HÀNG (CHECKOUT ONLINE) -->
+    <div v-if="isAddressModalOpen" class="modal fade show d-block" style="background: rgba(0,0,0,0.5); z-index: 1055;"
+      tabindex="-1" @click.self="isAddressModalOpen = false">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 540px;">
+        <div class="modal-content rounded-4 border-0 shadow">
+          <div class="modal-header border-bottom py-3 px-4">
+            <h6 class="modal-title fw-bold text-dark mb-0">
+              <i class="bi bi-geo-alt-fill text-primary me-2"></i>Chọn địa chỉ nhận hàng
+            </h6>
+            <button type="button" class="btn-close" @click="isAddressModalOpen = false"></button>
+          </div>
+          <div class="modal-body p-3">
+            <div class="d-flex flex-column gap-2">
+              <div
+                v-for="a in savedAddresses"
+                :key="a.id"
+                class="p-3 rounded-3 border d-flex align-items-center justify-content-between"
+                :style="selectedAddr === a.id ? 'border-color: #2563eb !important; background: #eff6ff;' : 'cursor: pointer; background: #fff;'"
+                @click="selectAddrAndClose(a.id)"
+              >
+                <div class="min-w-0 me-2">
+                  <div class="fw-semibold small text-dark mb-1 d-flex align-items-center gap-2">
+                    <span>{{ a.name || userInfo(currentUser).name }}</span>
+                    <span>·</span>
+                    <span>{{ a.phone || userInfo(currentUser).phone }}</span>
+                    <span v-if="a.isDefault" class="badge bg-primary">Mặc định</span>
+                    <span v-if="selectedAddr === a.id" class="badge bg-success">Đang dùng</span>
+                  </div>
+                  <div class="small text-muted">{{ a.address }}</div>
+                </div>
+                <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-bold"
+                  :class="selectedAddr === a.id ? 'btn-primary' : 'btn-outline-secondary'"
+                  @click.stop="selectAddrAndClose(a.id)">
+                  {{ selectedAddr === a.id ? 'Đang dùng' : 'Chọn' }}
+                </button>
+              </div>
+
+              <div
+                class="p-3 rounded-3 border d-flex align-items-center justify-content-between"
+                :style="selectedAddr === 'new' ? 'border-color: #2563eb !important; background: #eff6ff;' : 'cursor: pointer; background: #fff;'"
+                @click="selectAddrAndClose('new')"
+              >
+                <div class="d-flex align-items-center gap-2">
+                  <i class="bi bi-plus-circle text-primary fs-5"></i>
+                  <div>
+                    <div class="fw-semibold small text-dark">Nhập địa chỉ mới</div>
+                    <div class="small text-muted">Tự điền thông tin và địa chỉ giao hàng bên dưới</div>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-bold"
+                  :class="selectedAddr === 'new' ? 'btn-primary' : 'btn-outline-secondary'"
+                  @click.stop="selectAddrAndClose('new')">
+                  {{ selectedAddr === 'new' ? 'Đang dùng' : 'Chọn' }}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer border-top py-2 px-4 justify-content-end">
+            <button type="button" class="btn btn-secondary rounded-pill px-4 btn-sm" @click="isAddressModalOpen = false">
+              Đóng
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
