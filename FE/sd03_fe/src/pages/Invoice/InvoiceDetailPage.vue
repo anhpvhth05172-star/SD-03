@@ -171,6 +171,58 @@ const thoiGianBuoc = (s) => {
   return rec?.thoiGian ? formatDateTime(rec.thoiGian) : null
 }
 
+const buocTiepTheoChinh = computed(() => {
+  if (!data.value || isTerminal.value) return null
+  const steps = visibleSteps.value
+  const curIdx = steps.indexOf(data.value.trangThai)
+  if (curIdx !== -1) {
+    const nextStep = steps[curIdx + 1]
+    if (nextStep && tiepTheoList.value.includes(nextStep)) {
+      return nextStep
+    }
+  }
+  return tiepTheoList.value.find((tt) => tt !== 'Đã hủy' && tt !== 'Chờ hoàn tiền' && tt !== 'Giao hàng thất bại')
+    || tiepTheoList.value.find((tt) => tt !== 'Đã hủy')
+    || tiepTheoList.value[0]
+    || null
+})
+
+const cacBuocPhu = computed(() => {
+  if (!data.value || isTerminal.value) return []
+  const main = buocTiepTheoChinh.value
+  return tiepTheoList.value.filter((tt) => tt !== main)
+})
+
+const nhanHanhDongChinh = (tenTrangThai) => {
+  switch (tenTrangThai) {
+    case 'Đã xác nhận': return 'Xác nhận đơn hàng'
+    case 'Chờ giao hàng': return 'Bàn giao cho GHN'
+    case 'Đang giao hàng': return 'Bắt đầu vận chuyển'
+    case 'Đã giao hàng': return 'Xác nhận đã giao hàng'
+    case 'Đã hoàn thành': return 'Hoàn tất đơn hàng'
+    case 'Chờ hoàn tiền': return 'Chuyển Chờ hoàn tiền'
+    case 'Đã hoàn tiền': return 'Xác nhận hoàn tiền'
+    default: return `Chuyển sang: ${tenTrangThai}`
+  }
+}
+
+const nhanNutPhu = (tenTrangThai) => {
+  switch (tenTrangThai) {
+    case 'Chờ hoàn tiền': return 'Chờ hoàn tiền'
+    case 'Đã hoàn tiền': return 'Hoàn tiền'
+    case 'Giao hàng thất bại': return 'Giao thất bại'
+    case 'Đã hủy': return 'Hủy đơn'
+    default: return tenTrangThai
+  }
+}
+
+const classNutPhu = (tenTrangThai) => {
+  if (tenTrangThai === 'Chờ hoàn tiền' || tenTrangThai === 'Đã hoàn tiền') return 'btn-status-refund'
+  if (tenTrangThai === 'Giao hàng thất bại') return 'btn-status-fail'
+  if (tenTrangThai === 'Đã hủy') return 'btn-status-cancel'
+  return 'btn-status-outline'
+}
+
 const handleStepClick = (s) => {
   if (updatingStatus.value) return
   if (laTrangThaiTiepTheo(s)) {
@@ -990,7 +1042,71 @@ onBeforeUnmount(() => {
                 </div>
               </div>
 
-              <p v-if="data.ngayCapNhat" class="status-updated">
+              <!-- Thanh button thao tác thay đổi trạng thái đơn hàng -->
+              <div v-if="!isTerminal && tiepTheoList.length" class="status-action-bar">
+                <div class="status-action-info">
+                  <span v-if="data.ngayCapNhat" class="status-updated">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    Cập nhật lần cuối: {{ formatDateTime(data.ngayCapNhat) }}
+                    <template v-if="chot(data.nguoiCapNhat)"> • {{ data.nguoiCapNhat }}</template>
+                  </span>
+                </div>
+
+                <div class="status-action-btns">
+                  <!-- Nút chuyển bước tiếp theo chính (Action chính nổi bật) -->
+                  <button
+                    v-if="buocTiepTheoChinh"
+                    class="btn-status-action btn-status-primary"
+                    type="button"
+                    :disabled="updatingStatus || isCheDoXem"
+                    :title="isCheDoXem ? 'Chưa mở ca làm việc (chế độ xem)' : `Chuyển đơn hàng sang: ${buocTiepTheoChinh}`"
+                    @click="chuyenTrangThai(buocTiepTheoChinh)"
+                  >
+                    <span v-if="updatingStatus" class="btn-spinner"></span>
+                    <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                    <span>{{ nhanHanhDongChinh(buocTiepTheoChinh) }}</span>
+                  </button>
+
+                  <!-- Các nút chuyển trạng thái phụ (Chờ hoàn tiền, Giao thất bại, Hủy) -->
+                  <button
+                    v-for="phu in cacBuocPhu"
+                    :key="phu"
+                    class="btn-status-action"
+                    :class="classNutPhu(phu)"
+                    type="button"
+                    :disabled="updatingStatus || isCheDoXem"
+                    :title="isCheDoXem ? 'Chưa mở ca làm việc (chế độ xem)' : `Chuyển sang: ${phu}`"
+                    @click="chuyenTrangThai(phu)"
+                  >
+                    <svg v-if="phu === 'Chờ hoàn tiền' || phu === 'Đã hoàn tiền'" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                      <path d="M3 3v5h5" />
+                    </svg>
+                    <svg v-else-if="phu === 'Giao hàng thất bại'" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <svg v-else-if="phu === 'Đã hủy'" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="15" y1="9" x2="9" y2="15" />
+                      <line x1="9" y1="9" x2="15" y2="15" />
+                    </svg>
+                    <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                    <span>{{ nhanNutPhu(phu) }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Nếu là đơn kết thúc (Đã hoàn thành / Đã hủy / Đã hoàn tiền) -->
+              <p v-else-if="data.ngayCapNhat" class="status-updated">
                 Cập nhật lần cuối: {{ formatDateTime(data.ngayCapNhat) }}
                 <template v-if="chot(data.nguoiCapNhat)"> • {{ data.nguoiCapNhat }}</template>
               </p>
@@ -1847,6 +1963,130 @@ onBeforeUnmount(() => {
 .btn-primary svg {
   width: 16px;
   height: 16px;
+}
+
+/* ===== Action Bar thay đổi trạng thái đơn hàng ===== */
+.status-action-bar {
+  margin-top: 18px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.status-action-info {
+  display: flex;
+  align-items: center;
+}
+
+.status-action-info .status-updated {
+  margin-top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.status-action-btns {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn-status-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.btn-status-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn-status-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Nút chính chuyển tiếp (Xác nhận, Giao GHN, Vận chuyển, v.v.) */
+.btn-status-primary {
+  background: linear-gradient(135deg, #d02a2a 0%, #b31f1f 100%);
+  color: #fff;
+  border-color: #b31f1f;
+  box-shadow: 0 3px 10px rgba(208, 42, 42, 0.28);
+}
+
+.btn-status-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #be2222 0%, #9a1818 100%);
+  box-shadow: 0 5px 14px rgba(208, 42, 42, 0.38);
+}
+
+/* Nút hoàn tiền */
+.btn-status-refund {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.btn-status-refund:hover:not(:disabled) {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+/* Nút giao thất bại */
+.btn-status-fail {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.btn-status-fail:hover:not(:disabled) {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+/* Nút hủy đơn */
+.btn-status-cancel {
+  background: #f8fafc;
+  color: #64748b;
+  border-color: #cbd5e1;
+}
+
+.btn-status-cancel:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #334155;
+  border-color: #94a3b8;
+}
+
+.btn-status-outline {
+  background: #fff;
+  color: #334155;
+  border-color: #e2e8f0;
+}
+
+.btn-status-outline:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
 }
 
 .btn-outline {
