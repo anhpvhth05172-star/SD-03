@@ -21,7 +21,15 @@ export const exportInvoices = (params) =>
   http.get('/hoa-don/export', { params, responseType: 'blob' }).then((r) => r.data)
 
 export const updateInvoiceStatus = (id, trangThai, ghiChu = '', nguoiThaoTac = '') =>
-  http.put(`/hoa-don/${id}/trang-thai`, { trangThai, ghiChu, nguoiThaoTac }).then((r) => r.data)
+  http.put(`/hoa-don/${id}/trang-thai`, { trangThai, ghiChu, nguoiThaoTac }).then((r) => {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('polyshoes:order-updated', JSON.stringify({ id, trangThai, ts: Date.now() }))
+        window.dispatchEvent(new CustomEvent('polyshoes:order-status-changed', { detail: { id, trangThai } }))
+      }
+    } catch {}
+    return r.data
+  })
 
 export const getInvoiceHistory = (id) =>
   http.get(`/hoa-don/${id}/lich-su`).then((r) => r.data)

@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import * as store from "../store";
 import { getUser, getToken as getSessionToken, isKhachHangDangNhap } from "@/utils/auth";
+import { notifyToast } from "@/utils/notify";
 
 const { money } = store;
 const route = useRoute();
@@ -67,22 +68,42 @@ const PAY_LABEL = {
   4: "Thanh toán qua VNPAY",
 };
 
+// Chuẩn hóa mã trạng thái bất kể back-end trả về tiếng Việt hay code
+function toStandardStatusCode(st) {
+  if (!st) return 'CHO_XAC_NHAN';
+  const s = String(st).toUpperCase().trim();
+  if (s.includes('CHO_THANH_TOAN') || s.includes('CHỜ THANH TOÁN')) return 'CHO_THANH_TOAN';
+  if (s.includes('CHO_XAC_NHAN') || s.includes('CHỜ XÁC NHẬN')) return 'CHO_XAC_NHAN';
+  if (s.includes('DA_XAC_NHAN') || s.includes('ĐÃ XÁC NHẬN')) return 'DA_XAC_NHAN';
+  if (s.includes('CHO_GIAO_HANG') || s.includes('CHỜ GIAO HÀNG')) return 'CHO_GIAO_HANG';
+  if (s.includes('DANG_GIAO_HANG') || s.includes('ĐANG GIAO HÀNG')) return 'DANG_GIAO_HANG';
+  if (s.includes('DA_GIAO_HANG') || s.includes('ĐÃ GIAO HÀNG')) return 'DA_GIAO_HANG';
+  if (s.includes('GIAO_HANG_THAT_BAI') || s.includes('GIAO HÀNG THẤT BẠI')) return 'GIAO_HANG_THAT_BAI';
+  if (s.includes('DA_HOAN_THANH') || s.includes('ĐÃ HOÀN THÀNH')) return 'DA_HOAN_THANH';
+  if (s.includes('CHO_HOAN_TIEN') || s.includes('CHỜ HOÀN TIỀN')) return 'CHO_HOAN_TIEN';
+  if (s.includes('DA_HOAN_TIEN') || s.includes('ĐÃ HOÀN TIỀN')) return 'DA_HOAN_TIEN';
+  if (s.includes('DA_HUY') || s.includes('ĐÃ HỦY')) return 'DA_HUY';
+  return s;
+}
+
 // Trạng thái đơn (khớp TRANG_THAI_MAP của BE) -> nhãn, màu, bước tiến độ
-// step: 0-3 là bước hiện tại, 4 = hoàn tất, -1 = kết thúc không giao (hủy / hoàn tiền)
 const STATUS = {
-  CHO_THANH_TOAN: { label: "Chờ thanh toán", tone: "warn", step: 1 },
-  CHO_XAC_NHAN: { label: "Chờ xác nhận", tone: "warn", step: 1 },
-  DA_XAC_NHAN: { label: "Đã xác nhận", tone: "info", step: 2 },
+  CHO_THANH_TOAN: { label: "Chờ thanh toán", tone: "warn", step: 0 },
+  CHO_XAC_NHAN: { label: "Chờ xác nhận", tone: "warn", step: 0 },
+  DA_XAC_NHAN: { label: "Đã xác nhận", tone: "info", step: 1 },
   CHO_GIAO_HANG: { label: "Chờ giao hàng", tone: "info", step: 2 },
-  DANG_GIAO_HANG: { label: "Đang giao hàng", tone: "info", step: 2 },
+  DANG_GIAO_HANG: { label: "Đang vận chuyển", tone: "info", step: 3 },
   DA_GIAO_HANG: { label: "Đã giao hàng", tone: "ok", step: 4 },
-  DA_HOAN_THANH: { label: "Đã hoàn thành", tone: "ok", step: 4 },
+  DA_HOAN_THANH: { label: "Đã hoàn thành", tone: "ok", step: 5 },
+  GIAO_HANG_THAT_BAI: { label: "Giao hàng thất bại", tone: "danger", step: 4 },
   DA_HUY: { label: "Đã hủy", tone: "danger", step: -1 },
   CHO_HOAN_TIEN: { label: "Chờ hoàn tiền (Sự cố kho)", tone: "danger", step: -1 },
   DA_HOAN_TIEN: { label: "Đã hoàn tiền", tone: "danger", step: -1 },
 };
-const statusInfo = (code) =>
-  STATUS[code] || { label: code || "Đang xử lý", tone: "info", step: 1 };
+const statusInfo = (code) => {
+  const std = toStandardStatusCode(code);
+  return STATUS[std] || { label: code || "Đang xử lý", tone: "info", step: 0 };
+};
 
 function fmtDate(raw) {
   if (!raw) return "";
@@ -92,15 +113,21 @@ function fmtDate(raw) {
 
 // Chuẩn hóa 1 hóa đơn từ BE thành object dùng cho giao diện
 function normalize(h) {
-  const st = HD.status(h);
+  const rawStatus = h.maTrangThai || h.trangThai;
+  const st = toStandardStatusCode(rawStatus);
   const payId = HD.payId(h);
   return {
     id: HD.id(h),
     customerId: HD.customerId(h),
     code: String(HD.code(h)),
     date: fmtDate(HD.date(h)),
+    updatedDate: fmtDate(h.ngayCapNhat),
     ts: new Date(HD.date(h) || 0).getTime() || 0,
     status: st,
+    maTrangThai: st,
+    rawStatusText: h.trangThai || "",
+    loaiDon: h.loaiDon || "",
+    maLoaiDon: h.maLoaiDon || "",
     statusInfo: statusInfo(st),
     name: HD.name(h),
     phone: HD.phone(h),
@@ -311,8 +338,6 @@ function backFromDetail() {
   }
 }
 
-const searchCache = new Map();
-
 const doSearch = async (codeToSearch) => {
   if (searching.value) return;
   const raw = String(codeToSearch ?? searchInput.value ?? "").trim();
@@ -327,19 +352,6 @@ const doSearch = async (codeToSearch) => {
   currentResult.value = null;
   phoneOrders.value = [];
 
-  // Trả về ngay lập tức nếu đã có trong bộ nhớ đệm
-  if (searchCache.has(query)) {
-    const cached = searchCache.get(query);
-    if (cached.length === 1) {
-      currentResult.value = cached[0];
-    } else {
-      phoneOrders.value = cached;
-      const hasPending = cached.some(isPendingOrder);
-      phoneFilter.value = hasPending ? "PENDING" : "COMPLETED";
-    }
-    return;
-  }
-
   searching.value = true;
   try {
     const data = await getJson(`/api/v1/hoa-don/tra-cuu?maHoaDon=${encodeURIComponent(query)}`);
@@ -350,13 +362,11 @@ const doSearch = async (codeToSearch) => {
     } else if (list.length === 1) {
       currentResult.value = list[0];
       phoneOrders.value = [];
-      searchCache.set(query, list);
     } else {
       phoneOrders.value = list;
       currentResult.value = null;
       const hasPending = list.some(isPendingOrder);
       phoneFilter.value = hasPending ? "PENDING" : "COMPLETED";
-      searchCache.set(query, list);
     }
   } catch (e) {
     if (e.status === 404) {
@@ -379,37 +389,124 @@ function backToList() {
   loadRecent(); // làm mới trạng thái đơn
 }
 
-/* ---------- Tiến độ giao hàng theo trạng thái thật ---------- */
-const stepIndex = computed(() => currentResult.value?.statusInfo.step ?? 1);
+/* ---------- Tiến độ đơn hàng đồng bộ theo bán hàng tại quầy ---------- */
+const DELIVERY_STEPS = [
+  { code: 'CHO_XAC_NHAN', name: 'Đã đặt hàng', icon: 'bi-check-lg' },
+  { code: 'DA_XAC_NHAN', name: 'Đã xác nhận', icon: 'bi-box-seam' },
+  { code: 'CHO_GIAO_HANG', name: 'Chờ giao hàng', icon: 'bi-boxes' },
+  { code: 'DANG_GIAO_HANG', name: 'Đang vận chuyển', icon: 'bi-truck' },
+  { code: 'DA_GIAO_HANG', name: 'Đã giao hàng', icon: 'bi-house-check' },
+  { code: 'DA_HOAN_THANH', name: 'Đã hoàn thành', icon: 'bi-patch-check-fill' },
+];
+
+const POS_STEPS = [
+  { code: 'CHO_XAC_NHAN', name: 'Tạo đơn hàng', icon: 'bi-receipt' },
+  { code: 'DA_XAC_NHAN', name: 'Đã thanh toán', icon: 'bi-credit-card-2-front' },
+  { code: 'DA_HOAN_THANH', name: 'Đã hoàn thành', icon: 'bi-bag-check-fill' },
+];
+
+const FAILED_DELIVERY_STEP = {
+  code: 'GIAO_HANG_THAT_BAI',
+  name: 'Giao thất bại',
+  icon: 'bi-exclamation-triangle-fill'
+};
+
+const isDeliveryOrder = computed(() => {
+  const o = currentResult.value;
+  if (!o) return true;
+  const loai = String(o.loaiDon || o.maLoaiDon || '').toUpperCase();
+  if (loai.includes('ONLINE')) return true;
+  if (loai.includes('GIAO_HANG') || loai.includes('GIAO HÀNG')) return true;
+  if (o.address && o.address.trim() && o.address.trim() !== 'Nhận tại quầy') return true;
+  if (Number(o.ship) > 0) return true;
+  return false;
+});
+
+const activeStepsList = computed(() => {
+  const o = currentResult.value;
+  if (!o) return DELIVERY_STEPS;
+  const stCode = toStandardStatusCode(o.status || o.maTrangThai);
+  if (stCode === 'GIAO_HANG_THAT_BAI') {
+    return [
+      DELIVERY_STEPS[0],
+      DELIVERY_STEPS[1],
+      DELIVERY_STEPS[2],
+      DELIVERY_STEPS[3],
+      FAILED_DELIVERY_STEP
+    ];
+  }
+  if (!isDeliveryOrder.value) {
+    return POS_STEPS;
+  }
+  return DELIVERY_STEPS;
+});
+
+const currentStepIdx = computed(() => {
+  const o = currentResult.value;
+  if (!o) return 0;
+  const stCode = toStandardStatusCode(o.status || o.maTrangThai);
+  if (stCode === 'CHO_THANH_TOAN') return 0;
+  const steps = activeStepsList.value;
+  const idx = steps.findIndex(s => s.code === stCode);
+  if (idx !== -1) return idx;
+  return 0;
+});
 
 // Đơn đã kết thúc theo hướng không giao (hủy / hoàn tiền)
-const isEnded = (o) => !!o && ["DA_HUY", "DA_HOAN_TIEN"].includes(o.status);
-const endedText = (o) =>
-  o?.status === "DA_HOAN_TIEN"
-    ? "Đơn hàng đã được hoàn tiền"
-    : "Đơn hàng này đã bị hủy";
+const isEnded = (o) => {
+  if (!o) return false;
+  const st = toStandardStatusCode(o.status || o.maTrangThai);
+  return ['DA_HUY', 'DA_HOAN_TIEN', 'CHO_HOAN_TIEN'].includes(st);
+};
+
+const endedText = (o) => {
+  const st = toStandardStatusCode(o?.status || o?.maTrangThai);
+  if (st === 'CHO_HOAN_TIEN') return 'Đơn hàng đang chờ hoàn tiền (Sự cố tồn kho)';
+  if (st === 'DA_HOAN_TIEN') return 'Đơn hàng đã được hoàn tiền thành công';
+  return 'Đơn hàng này đã bị hủy';
+};
 
 const isCancelled = computed(() => isEnded(currentResult.value));
 
-const stepClass = (i) => ({
-  done: i < stepIndex.value,
-  current: i === stepIndex.value,
-});
+function getStepNote(step, idx) {
+  if (!currentResult.value) return '';
+  const o = currentResult.value;
+  const curIdx = currentStepIdx.value;
+  const isAllDone = toStandardStatusCode(o.status || o.maTrangThai) === 'DA_HOAN_THANH';
 
-const confirmNote = computed(() => {
-  const s = currentResult.value?.status;
-  if (s === "CHO_THANH_TOAN") return "Chờ thanh toán";
-  if (s === "CHO_XAC_NHAN") return "Chờ cửa hàng xác nhận";
-  return "Cửa hàng đã xác nhận";
-});
-
-const shipNote = computed(() => {
-  const s = currentResult.value?.status;
-  if (s === "DA_XAC_NHAN") return "Đang đóng gói";
-  if (s === "CHO_GIAO_HANG") return "Chờ bàn giao vận chuyển";
-  if (s === "DANG_GIAO_HANG") return "Dự kiến 1-2 ngày";
-  return "Dự kiến 1-2 ngày";
-});
+  if (step.code === 'CHO_XAC_NHAN') {
+    if (toStandardStatusCode(o.status) === 'CHO_THANH_TOAN') return 'Chờ thanh toán VNPay';
+    return o.date || 'Đã ghi nhận đơn';
+  }
+  if (step.code === 'DA_XAC_NHAN') {
+    if (!isDeliveryOrder.value) {
+      return idx <= curIdx ? 'Thanh toán thành công' : 'Chờ thanh toán';
+    }
+    return idx <= curIdx ? 'Cửa hàng đã xác nhận' : 'Chờ xác nhận';
+  }
+  if (step.code === 'CHO_GIAO_HANG') {
+    if (idx < curIdx || isAllDone) return 'Đã bàn giao cho GHN';
+    if (idx === curIdx) return 'Đã đóng gói, chờ GHN';
+    return 'Chờ đóng gói';
+  }
+  if (step.code === 'DANG_GIAO_HANG') {
+    if (idx < curIdx || isAllDone) return 'Đã giao tới nơi';
+    if (idx === curIdx) return 'Dự kiến 1-2 ngày';
+    return 'Chờ vận chuyển';
+  }
+  if (step.code === 'DA_GIAO_HANG') {
+    if (idx <= curIdx || isAllDone) return 'Giao hàng thành công';
+    return 'Nhận hàng & kiểm tra';
+  }
+  if (step.code === 'DA_HOAN_THANH') {
+    if (idx <= curIdx || isAllDone) return 'Đơn hàng hoàn tất';
+    return 'Hoàn tất giao dịch';
+  }
+  if (step.code === 'GIAO_HANG_THAT_BAI') {
+    return 'Giao hàng không thành công';
+  }
+  return '';
+}
 
 /* ================= PHẦN THÊM CHO GIAO DIỆN ================= */
 // Tab lọc theo trạng thái
@@ -468,8 +565,29 @@ const toggleExpand = (o) => {
   };
 };
 
-// Thanh tiến độ mini trong thẻ đơn (4 đoạn)
-const miniActive = (o, i) => o.statusInfo.step > i;
+const miniStepCount = (o) => {
+  const loai = String(o?.loaiDon || o?.maLoaiDon || '').toUpperCase();
+  const coGiao = loai.includes('ONLINE') || loai.includes('GIAO_HANG') || (o?.address && o.address.trim() !== 'Nhận tại quầy') || Number(o?.ship) > 0;
+  return coGiao ? 6 : 3;
+};
+
+// Thanh tiến độ mini trong thẻ đơn
+const miniActive = (o, i) => {
+  const stCode = toStandardStatusCode(o?.status || o?.maTrangThai);
+  if (stCode === 'CHO_THANH_TOAN') return i === 0;
+  const count = miniStepCount(o);
+  let cur = 0;
+  if (count === 3) {
+    if (stCode === 'CHO_XAC_NHAN') cur = 1;
+    else if (stCode === 'DA_XAC_NHAN') cur = 2;
+    else if (stCode === 'DA_HOAN_THANH') cur = 3;
+  } else {
+    const list = ['CHO_XAC_NHAN', 'DA_XAC_NHAN', 'CHO_GIAO_HANG', 'DANG_GIAO_HANG', 'DA_GIAO_HANG', 'DA_HOAN_THANH'];
+    const found = list.indexOf(stCode);
+    cur = found !== -1 ? found + 1 : 1;
+  }
+  return cur > i;
+};
 
 // Tạm tính = tổng các dòng sản phẩm
 const subtotal = (o) => o.items.reduce((s, i) => s + i.price * i.qty, 0);
@@ -489,18 +607,106 @@ async function copyCode(code) {
   }
 }
 
+// Polling và Realtime listener
+let pollTimer = null;
+
+async function pollRealtimeUpdate() {
+  if (typeof document !== 'undefined' && document.hidden) return;
+
+  const targetCode = currentResult.value?.code || (searched.value ? searchInput.value : null);
+  if (!targetCode && !myId.value) return;
+
+  try {
+    if (targetCode) {
+      const data = await getJson(`/api/v1/hoa-don/tra-cuu?maHoaDon=${encodeURIComponent(targetCode)}`);
+      const list = (Array.isArray(data) ? data : [data]).map(normalize);
+      if (!list.length) return;
+
+      if (currentResult.value) {
+        const fresh = list.find((o) => o.code === currentResult.value.code) || list[0];
+        if (fresh && currentResult.value) {
+          const oldCode = toStandardStatusCode(currentResult.value.status);
+          const newCode = toStandardStatusCode(fresh.status);
+          if (oldCode !== newCode) {
+            const oldLabel = currentResult.value.statusInfo?.label || oldCode;
+            const newLabel = fresh.statusInfo?.label || newCode;
+
+            // Cập nhật kết quả đơn hàng ngay tức thì
+            currentResult.value = fresh;
+
+            // Cập nhật trong phoneOrders nếu đang có danh sách
+            const pIdx = phoneOrders.value.findIndex((o) => o.code === fresh.code);
+            if (pIdx !== -1) {
+              phoneOrders.value[pIdx] = fresh;
+            }
+
+            // Hiển thị thông báo Toast realtime góc trên bên phải
+            notifyToast(
+              'Đơn hàng vừa cập nhật trạng thái!',
+              `Mã #${fresh.code}: "${oldLabel}" → "${newLabel}"`,
+              newCode === 'DA_HUY' || newCode === 'CHO_HOAN_TIEN' || newCode === 'GIAO_HANG_THAT_BAI' ? 'warning' : 'success',
+              5000
+            );
+          } else {
+            currentResult.value.note = fresh.note;
+            currentResult.value.updatedDate = fresh.updatedDate;
+          }
+        }
+      } else if (phoneOrders.value.length > 0) {
+        phoneOrders.value = list;
+      }
+    } else if (myId.value && !searched.value) {
+      loadRecent();
+    }
+  } catch {
+    // Polling ngầm không bắn lỗi
+  }
+}
+
+function startRealtime() {
+  stopRealtime();
+  pollTimer = window.setInterval(pollRealtimeUpdate, 3500);
+}
+
+function stopRealtime() {
+  if (pollTimer) {
+    window.clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function handleVisibilityChange() {
+  if (!document.hidden) {
+    pollRealtimeUpdate();
+  }
+}
+
+function handleStorageEvent(e) {
+  if (e.key === 'polyshoes:order-updated') {
+    pollRealtimeUpdate();
+  }
+}
+
+function handleCustomStatusEvent() {
+  pollRealtimeUpdate();
+}
+
 onMounted(async () => {
   myId.value = await resolveCustomerId();
   loadRecent();
   if (route.query.code) doSearch(route.query.code);
-  refreshTimer = window.setInterval(() => {
-    if (document.hidden || !myId.value) return;
-    if (searched.value && searchInput.value) doSearch(searchInput.value);
-    else loadRecent();
-  }, 30000);
+  startRealtime();
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  window.addEventListener('storage', handleStorageEvent);
+  window.addEventListener('polyshoes:order-status-changed', handleCustomStatusEvent);
 });
-let refreshTimer = null;
-onUnmounted(() => window.clearInterval(refreshTimer));
+
+onUnmounted(() => {
+  stopRealtime();
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+  window.removeEventListener('storage', handleStorageEvent);
+  window.removeEventListener('polyshoes:order-status-changed', handleCustomStatusEvent);
+});
 </script>
 
 <template>
@@ -691,7 +897,7 @@ onUnmounted(() => window.clearInterval(refreshTimer));
           <!-- Tiến độ mini -->
           <div v-if="!isEnded(o)" class="ol-mini" :class="o.statusInfo.tone">
             <span
-              v-for="i in 4"
+              v-for="i in miniStepCount(o)"
               :key="i"
               class="ol-mini-seg"
               :class="{ on: miniActive(o, i - 1) }"
@@ -873,7 +1079,7 @@ onUnmounted(() => window.clearInterval(refreshTimer));
             <!-- Tiến độ mini -->
             <div v-if="!isEnded(o)" class="ol-mini" :class="o.statusInfo.tone">
               <span
-                v-for="i in 4"
+                v-for="i in miniStepCount(o)"
                 :key="i"
                 class="ol-mini-seg"
                 :class="{ on: miniActive(o, i - 1) }"
@@ -1011,39 +1217,50 @@ onUnmounted(() => window.clearInterval(refreshTimer));
 
         <div class="ol-result-body">
           <!-- Đơn đã hủy / hoàn tiền -->
-          <div v-if="isCancelled" class="ol-cancel-box">
-            <i class="bi bi-x-circle-fill"></i>
+          <div v-if="isCancelled" class="ol-cancel-box" :class="{
+            'is-refund-waiting': currentResult.status === 'CHO_HOAN_TIEN',
+            'is-refunded': currentResult.status === 'DA_HOAN_TIEN'
+          }">
+            <i v-if="currentResult.status === 'CHO_HOAN_TIEN'" class="bi bi-exclamation-triangle-fill text-warning"></i>
+            <i v-else-if="currentResult.status === 'DA_HOAN_TIEN'" class="bi bi-arrow-counterclockwise text-info"></i>
+            <i v-else class="bi bi-x-circle-fill text-danger"></i>
             <div>
               <div class="fw-bold">{{ endedText(currentResult) }}</div>
               <div class="small">
-                <template v-if="currentResult.cancelReason">{{ currentResult.cancelReason }}. </template>
-                <template v-else>Vui lòng liên hệ hotline </template>
-                <strong>1900 1234</strong> nếu cần hỗ trợ.
+                <template v-if="currentResult.status === 'CHO_HOAN_TIEN'">
+                  Sản phẩm trong kho vừa hết trước thời điểm chốt đơn. Bộ phận CSKH PolyShoes sẽ chủ động liên hệ Quý khách qua SĐT để hoàn 100% tiền. Hotline CSKH: <strong>1900 1234</strong>.
+                </template>
+                <template v-else-if="currentResult.status === 'DA_HOAN_TIEN'">
+                  Số tiền thanh toán cho đơn hàng đã được hoàn trả thành công. Cảm ơn Quý khách đã mua sắm tại PolyShoes!
+                </template>
+                <template v-else>
+                  <template v-if="currentResult.cancelReason">{{ currentResult.cancelReason }}. </template>
+                  <template v-else>Đơn hàng đã được hủy trên hệ thống. </template>
+                  Vui lòng liên hệ hotline <strong>1900 1234</strong> nếu cần hỗ trợ.
+                </template>
               </div>
             </div>
           </div>
 
-          <!-- Tiến độ giao hàng -->
+          <!-- Tiến độ giao hàng chuẩn theo bên bán hàng tại quầy -->
           <div v-else class="ol-steps">
-            <div class="ol-step" :class="stepClass(0)">
-              <div class="ol-step-dot"><i class="bi bi-check-lg"></i></div>
-              <div class="ol-step-name">Đã đặt hàng</div>
-              <div class="ol-step-note">{{ currentResult.date }}</div>
-            </div>
-            <div class="ol-step" :class="stepClass(1)">
-              <div class="ol-step-dot"><i class="bi bi-box-seam"></i></div>
-              <div class="ol-step-name">Đã xác nhận</div>
-              <div class="ol-step-note">{{ confirmNote }}</div>
-            </div>
-            <div class="ol-step" :class="stepClass(2)">
-              <div class="ol-step-dot"><i class="bi bi-truck"></i></div>
-              <div class="ol-step-name">Đang vận chuyển</div>
-              <div class="ol-step-note">{{ shipNote }}</div>
-            </div>
-            <div class="ol-step" :class="stepClass(3)">
-              <div class="ol-step-dot"><i class="bi bi-house-check"></i></div>
-              <div class="ol-step-name">Giao thành công</div>
-              <div class="ol-step-note">Nhận hàng &amp; kiểm tra</div>
+            <div
+              v-for="(step, idx) in activeStepsList"
+              :key="step.code"
+              class="ol-step"
+              :class="{
+                done: idx < currentStepIdx || (idx === currentStepIdx && step.code === 'DA_HOAN_THANH'),
+                current: idx === currentStepIdx && step.code !== 'DA_HOAN_THANH',
+                failed: step.code === 'GIAO_HANG_THAT_BAI' && idx === currentStepIdx,
+              }"
+            >
+              <div class="ol-step-dot">
+                <i v-if="idx < currentStepIdx || (idx === currentStepIdx && step.code === 'DA_HOAN_THANH')" class="bi bi-check-lg"></i>
+                <i v-else-if="step.code === 'GIAO_HANG_THAT_BAI'" class="bi bi-exclamation-triangle-fill"></i>
+                <i v-else :class="['bi', step.icon]"></i>
+              </div>
+              <div class="ol-step-name">{{ step.name }}</div>
+              <div class="ol-step-note">{{ getStepNote(step, idx) }}</div>
             </div>
           </div>
 
@@ -1770,6 +1987,16 @@ onUnmounted(() => window.clearInterval(refreshTimer));
   border: 1px solid #fecaca;
   border-radius: 14px;
 }
+.ol-cancel-box.is-refund-waiting {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+.ol-cancel-box.is-refunded {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
 .ol-cancel-box > .bi {
   font-size: 1.8rem;
 }
@@ -1793,8 +2020,8 @@ onUnmounted(() => window.clearInterval(refreshTimer));
   content: "";
   position: absolute;
   top: 22px;
-  left: calc(50% + 30px);
-  right: calc(-50% + 30px);
+  left: calc(50% + 24px);
+  right: calc(-50% + 24px);
   height: 3px;
   border-radius: 3px;
   background: #e5e7eb;
@@ -1828,6 +2055,20 @@ onUnmounted(() => window.clearInterval(refreshTimer));
   box-shadow: 0 0 0 5px var(--ol-red-soft);
   animation: pulse 1.8s ease-in-out infinite;
 }
+.ol-step.failed .ol-step-dot {
+  color: #fff;
+  background: #dc2626;
+  border-color: #dc2626;
+  box-shadow: 0 0 0 5px #fee2e2;
+  animation: pulse-fail 1.8s ease-in-out infinite;
+}
+.ol-step.failed .ol-step-name {
+  color: #dc2626;
+  font-weight: 700;
+}
+.ol-step.failed:not(:last-child)::after {
+  background: #dc2626;
+}
 @keyframes pulse {
   0%,
   100% {
@@ -1835,6 +2076,15 @@ onUnmounted(() => window.clearInterval(refreshTimer));
   }
   50% {
     box-shadow: 0 0 0 9px rgba(214, 40, 40, 0.02);
+  }
+}
+@keyframes pulse-fail {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px #fee2e2;
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(220, 38, 38, 0.08);
   }
 }
 .ol-step-name {
@@ -1849,6 +2099,18 @@ onUnmounted(() => window.clearInterval(refreshTimer));
 .ol-step-note {
   font-size: 0.75rem;
   color: #6b7280;
+}
+
+@media (max-width: 768px) {
+  .ol-steps {
+    overflow-x: auto;
+    padding-bottom: 1.25rem;
+    justify-content: flex-start;
+  }
+  .ol-step {
+    min-width: 100px;
+    flex: 0 0 100px;
+  }
 }
 
 /* Boxes */
