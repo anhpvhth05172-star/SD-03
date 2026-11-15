@@ -162,6 +162,29 @@ export const notifyError = (title, text = '') => {
 }
 
 /**
+ * Hiển thị thông báo Toast góc trên bên phải (không chặn màn hình, không popup modal)
+ */
+export const notifyToastWarning = (title, text = '', timer = 2500) => {
+  return Swal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: 'warning',
+    title: title || 'Cảnh báo tồn kho',
+    text: text || '',
+    showConfirmButton: false,
+    timer: timer,
+    timerProgressBar: true,
+    didOpen: (toast) => {
+      toast.addEventListener('mouseenter', Swal.stopTimer)
+      toast.addEventListener('mouseleave', Swal.resumeTimer)
+    },
+    didClose: () => {
+      setTimeout(cleanupSwalResidualDom, 10)
+    }
+  })
+}
+
+/**
  * Hiển thị thông báo cảnh báo
  */
 export const notifyWarning = (title, text = '', timer = undefined) => {
@@ -249,6 +272,7 @@ export default {
   success: notifySuccess,
   error: notifyError,
   warning: notifyWarning,
+  toastWarning: notifyToastWarning,
   confirm: notifyConfirm,
   deleteConfirm: notifyDeleteConfirm,
   cleanup: cleanupSwalResidualDom

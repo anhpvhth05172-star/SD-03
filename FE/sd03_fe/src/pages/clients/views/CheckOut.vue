@@ -209,19 +209,20 @@ function checkVoucher(detail, ignoreMin = false) {
     return "Chưa đến thời gian áp dụng.";
   if (en && now > new Date(en)) return "Mã giảm giá đã hết hạn.";
 
+  const isPrivate = isPersonal(VF.scope(detail));
   const cid = customer.value?.id ? Number(customer.value.id) : null;
-  if (!cid) {
-    return "Cần đăng nhập tài khoản để dùng mã giảm giá.";
+  if (isPrivate && !cid) {
+    return "Cần đăng nhập tài khoản để dùng mã giảm giá cá nhân.";
   }
 
-  if (hasCustomerReachedLimit(detail, cid)) {
+  if (cid && hasCustomerReachedLimit(detail, cid)) {
     const usage = myVoucherUsage.value[VF.id(detail)];
     const limit = Number(detail.gioiHanMoiTaiKhoan || usage?.gioiHanMoiTaiKhoan || 1);
     const used = Number(usage?.daSuDung || limit);
     return `Bạn đã dùng hết lượt mã này (${used}/${limit} lần).`;
   }
 
-  if (isPersonal(VF.scope(detail))) {
+  if (isPrivate && cid) {
     const allowedIds = VF.customerIds(detail);
     if (!allowedIds.includes(cid)) {
       return "Mã cá nhân không thuộc tài khoản của bạn.";
@@ -718,7 +719,7 @@ function buildHoaDonRequest() {
     toWardCode: toWardCode.value,
 
     chiTiet: cart.items.map((i) => ({
-      idSanPhamChiTiet: i.idSanPhamChiTiet ?? i.spctId ?? i.id,
+      idSanPhamChiTiet: i.idSanPhamChiTiet ?? i.variantId ?? i.spctId ?? i.id,
       soLuong: i.qty,
       donGia: i.price,
     })),
@@ -900,7 +901,7 @@ function copyText(val, label) {
   if (!val) return;
   navigator.clipboard.writeText(String(val)).then(() => {
     showCopyToast(`Đã sao chép ${label}!`);
-  }).catch(() => {});
+  }).catch(() => { });
 }
 
 const playSuccessChime = () => {
@@ -925,7 +926,7 @@ const playSuccessChime = () => {
     playNote(523.25, now, 0.15); // C5
     playNote(659.25, now + 0.12, 0.15); // E5
     playNote(783.99, now + 0.24, 0.3); // G5
-  } catch {}
+  } catch { }
 };
 
 const startAutoCountdown = () => {
@@ -1014,7 +1015,7 @@ const confirmQrPayment = async () => {
         date: new Date().toLocaleString('vi-VN'),
       });
       localStorage.setItem('ps_orders', JSON.stringify(orders.slice(0, 20)));
-    } catch {}
+    } catch { }
 
     done.value = true;
     await clearCart();
@@ -1053,10 +1054,7 @@ const confirmQrPayment = async () => {
       ít phút.
     </p>
     <div class="d-flex justify-content-center flex-wrap gap-2">
-      <RouterLink
-        :to="`/don-hang/${orderId}`"
-        class="btn btn-outline-primary rounded-pill px-4"
-      >
+      <RouterLink :to="`/don-hang/${orderId}`" class="btn btn-outline-primary rounded-pill px-4">
         Chi tiết đơn hàng
       </RouterLink>
       <RouterLink to="/cua-hang" class="btn btn-primary rounded-pill px-4">
@@ -1072,22 +1070,16 @@ const confirmQrPayment = async () => {
     <p class="text-muted-ps">
       Hãy thêm vài đôi giày bạn thích trước khi thanh toán nhé.
     </p>
-    <RouterLink to="/cua-hang" class="btn btn-primary rounded-pill px-4 mt-1"
-      >Xem sản phẩm</RouterLink
-    >
+    <RouterLink to="/cua-hang" class="btn btn-primary rounded-pill px-4 mt-1">Xem sản phẩm</RouterLink>
   </div>
 
   <!-- ===== Trang thanh toán ===== -->
   <div v-else class="co-page">
     <!-- Breadcrumb -->
     <nav class="small mb-3 text-muted-ps">
-      <RouterLink to="/trang-chu" class="text-muted-ps text-decoration-none"
-        >Trang chủ</RouterLink
-      >
+      <RouterLink to="/trang-chu" class="text-muted-ps text-decoration-none">Trang chủ</RouterLink>
       <span class="mx-1">/</span>
-      <RouterLink to="/gio-hang" class="text-muted-ps text-decoration-none"
-        >Giỏ hàng</RouterLink
-      >
+      <RouterLink to="/gio-hang" class="text-muted-ps text-decoration-none">Giỏ hàng</RouterLink>
       <span class="mx-1">/</span>
       <span class="text-dark fw-semibold">Thanh toán</span>
     </nav>
@@ -1117,15 +1109,10 @@ const confirmQrPayment = async () => {
         <div v-if="!isLoggedIn" class="co-login mb-3">
           <div class="d-flex align-items-center gap-2 small">
             <i class="bi bi-person-circle fs-5"></i>
-            <span
-              >Đã có tài khoản? Đăng nhập để tự điền thông tin và nhận mã giảm
-              giá.</span
-            >
+            <span>Đã có tài khoản? Đăng nhập để tự điền thông tin và nhận mã giảm
+              giá.</span>
           </div>
-          <RouterLink
-            to="/khach-hang"
-            class="btn btn-sm btn-dark rounded-pill px-3 fw-bold"
-          >
+          <RouterLink to="/khach-hang" class="btn btn-sm btn-dark rounded-pill px-3 fw-bold">
             Đăng nhập
           </RouterLink>
         </div>
@@ -1133,98 +1120,50 @@ const confirmQrPayment = async () => {
         <!-- Thông tin giao hàng -->
         <section class="co-card mb-3">
           <h5 class="co-title">
-            <span class="co-title-ico"><i class="bi bi-geo-alt-fill"></i></span
-            >Thông tin giao hàng
+            <span class="co-title-ico"><i class="bi bi-geo-alt-fill"></i></span>Thông tin giao hàng
           </h5>
 
           <!-- Địa chỉ đã lưu -->
           <div v-if="isLoggedIn && savedAddresses.length" class="mb-4">
             <label class="co-label">Chọn địa chỉ đã lưu</label>
-            <label
-              v-for="a in savedAddresses"
-              :key="a.id"
-              :for="'addr-' + a.id"
-              class="co-option"
-              :class="{ active: selectedAddr === a.id }"
-            >
-              <input
-                :id="'addr-' + a.id"
-                name="addr"
-                class="form-check-input co-radio"
-                type="radio"
-                :value="a.id"
-                :checked="selectedAddr === a.id"
-                @change="chooseAddress(a.id)"
-              />
+            <label v-for="a in savedAddresses" :key="a.id" :for="'addr-' + a.id" class="co-option"
+              :class="{ active: selectedAddr === a.id }">
+              <input :id="'addr-' + a.id" name="addr" class="form-check-input co-radio" type="radio" :value="a.id"
+                :checked="selectedAddr === a.id" @change="chooseAddress(a.id)" />
               <span class="flex-grow-1 min-w-0">
                 <span class="d-block fw-semibold small">
                   {{ a.name || userInfo(currentUser).name }} ·
                   {{ a.phone || userInfo(currentUser).phone }}
-                  <span v-if="a.isDefault" class="badge bg-primary ms-1"
-                    >Mặc định</span
-                  >
+                  <span v-if="a.isDefault" class="badge bg-primary ms-1">Mặc định</span>
                 </span>
                 <span class="d-block small text-muted">{{ a.address }}</span>
               </span>
             </label>
-            <label
-              for="addr-new"
-              class="co-option mb-0"
-              :class="{ active: selectedAddr === 'new' }"
-            >
-              <input
-                id="addr-new"
-                name="addr"
-                class="form-check-input co-radio"
-                type="radio"
-                value="new"
-                :checked="selectedAddr === 'new'"
-                @change="chooseAddress('new')"
-              />
-              <span class="small fw-semibold"
-                ><i class="bi bi-plus-circle me-1"></i>Nhập địa chỉ mới</span
-              >
+            <label for="addr-new" class="co-option mb-0" :class="{ active: selectedAddr === 'new' }">
+              <input id="addr-new" name="addr" class="form-check-input co-radio" type="radio" value="new"
+                :checked="selectedAddr === 'new'" @change="chooseAddress('new')" />
+              <span class="small fw-semibold"><i class="bi bi-plus-circle me-1"></i>Nhập địa chỉ mới</span>
             </label>
           </div>
 
           <div class="row g-3">
             <div class="col-md-6">
-              <label class="co-label"
-                >Họ và tên <span class="text-danger">*</span></label
-              >
-              <input
-                v-model="f.name"
-                class="form-control co-input"
-                :readonly="lockName"
-                :class="{ 'is-invalid': errors.name, 'bg-light': lockName }"
-                placeholder="Nhập họ tên của bạn"
-              />
+              <label class="co-label">Họ và tên <span class="text-danger">*</span></label>
+              <input v-model="f.name" class="form-control co-input" :readonly="lockName"
+                :class="{ 'is-invalid': errors.name, 'bg-light': lockName }" placeholder="Nhập họ tên của bạn" />
               <div class="invalid-feedback">{{ errors.name }}</div>
             </div>
             <div class="col-md-6">
-              <label class="co-label"
-                >Số điện thoại <span class="text-danger">*</span></label
-              >
-              <input
-                v-model="f.phone"
-                class="form-control co-input"
-                :readonly="lockPhone"
-                :class="{ 'is-invalid': errors.phone, 'bg-light': lockPhone }"
-                placeholder="Nhập số điện thoại"
-              />
+              <label class="co-label">Số điện thoại <span class="text-danger">*</span></label>
+              <input v-model="f.phone" class="form-control co-input" :readonly="lockPhone"
+                :class="{ 'is-invalid': errors.phone, 'bg-light': lockPhone }" placeholder="Nhập số điện thoại" />
               <div class="invalid-feedback">{{ errors.phone }}</div>
             </div>
             <div class="col-12">
-              <label class="co-label"
-                >Email nhận thông báo đơn hàng <span class="text-danger">*</span></label
-              >
-              <input
-                v-model="f.email"
-                type="email"
-                class="form-control co-input"
+              <label class="co-label">Email nhận thông báo đơn hàng <span class="text-danger">*</span></label>
+              <input v-model="f.email" type="email" class="form-control co-input"
                 :class="{ 'is-invalid': errors.email }"
-                placeholder="Nhập địa chỉ email để nhận hóa đơn (ví dụ: nguyenvan@gmail.com)"
-              />
+                placeholder="Nhập địa chỉ email để nhận hóa đơn (ví dụ: nguyenvan@gmail.com)" />
               <div class="invalid-feedback">{{ errors.email }}</div>
             </div>
             <div class="col-md-6">
@@ -1243,27 +1182,17 @@ const confirmQrPayment = async () => {
             </div>
             <div class="col-12">
               <label class="co-label">Địa chỉ cụ thể (số nhà, tên đường) <span class="text-danger">*</span></label>
-              <input
-                v-model="f.address"
-                class="form-control co-input"
-                :readonly="lockAddress"
-                :class="{
-                  'is-invalid': errors.address,
-                  'bg-light': lockAddress,
-                }"
-                placeholder="Ví dụ: 123 Nguyễn Trãi"
-              />
+              <input v-model="f.address" class="form-control co-input" :readonly="lockAddress" :class="{
+                'is-invalid': errors.address,
+                'bg-light': lockAddress,
+              }" placeholder="Ví dụ: 123 Nguyễn Trãi" />
               <div class="invalid-feedback">{{ errors.address }}</div>
             </div>
             <div v-if="shippingError" class="col-12 small text-danger">{{ shippingError }}</div>
             <div class="col-12">
               <label class="co-label">Ghi chú (không bắt buộc)</label>
-              <textarea
-                v-model="f.note"
-                rows="2"
-                class="form-control co-input"
-                placeholder="Ghi chú về đơn hàng, thời gian nhận hàng..."
-              ></textarea>
+              <textarea v-model="f.note" rows="2" class="form-control co-input"
+                placeholder="Ghi chú về đơn hàng, thời gian nhận hàng..."></textarea>
             </div>
           </div>
         </section>
@@ -1275,52 +1204,28 @@ const confirmQrPayment = async () => {
             thức vận chuyển
           </h5>
           <label class="co-option active mb-0">
-            <input
-              name="ship"
-              class="form-check-input co-radio"
-              type="radio"
-              checked
-              disabled
-            />
+            <input name="ship" class="form-check-input co-radio" type="radio" checked disabled />
             <span class="co-ico-box"><i class="bi bi-truck"></i></span>
             <span class="flex-grow-1">
-              <span class="d-block small fw-semibold"
-                >Giao hàng tiêu chuẩn</span
-              >
-              <span class="d-block small text-muted"
-                >Nhận hàng trong 1-3 ngày làm việc</span
-              >
+              <span class="d-block small fw-semibold">Giao hàng tiêu chuẩn</span>
+              <span class="d-block small text-muted">Nhận hàng trong 1-3 ngày làm việc</span>
             </span>
-            <span class="small fw-bold" :class="{ 'text-success': isFreeShip }">{{ shippingLoading ? 'Đang tính...' : (isFreeShip ? '0 ₫ (Miễn phí ship)' : money(shippingFee)) }}</span>
+            <span class="small fw-bold" :class="{ 'text-success': isFreeShip }">{{ shippingLoading ? 'Đang tính...' :
+              (isFreeShip ? '0 ₫ (Miễn phí ship)' : money(shippingFee)) }}</span>
           </label>
         </section>
 
         <!-- Thanh toán -->
         <section class="co-card">
           <h5 class="co-title">
-            <span class="co-title-ico"
-              ><i class="bi bi-credit-card-2-front-fill"></i></span
-            >Phương thức thanh toán
+            <span class="co-title-ico"><i class="bi bi-credit-card-2-front-fill"></i></span>Phương thức thanh toán
           </h5>
 
-          <label
-            for="pay-cod"
-            class="co-option"
-            :class="{ active: f.pay === 'cod' }"
-          >
-            <input
-              id="pay-cod"
-              v-model="f.pay"
-              name="pay"
-              value="cod"
-              type="radio"
-              class="form-check-input co-radio"
-            />
+          <label for="pay-cod" class="co-option" :class="{ active: f.pay === 'cod' }">
+            <input id="pay-cod" v-model="f.pay" name="pay" value="cod" type="radio" class="form-check-input co-radio" />
             <span class="co-ico-box"><i class="bi bi-cash-coin"></i></span>
             <span class="flex-grow-1">
-              <span class="d-block fw-semibold"
-                >Thanh toán khi nhận hàng (COD)</span
-              >
+              <span class="d-block fw-semibold">Thanh toán khi nhận hàng (COD)</span>
               <!-- <span class="d-block small text-muted">
                 Thanh toán tiền mặt trực tiếp cho nhân viên giao hàng khi nhận
                 hàng.
@@ -1328,26 +1233,12 @@ const confirmQrPayment = async () => {
             </span>
           </label>
 
-          <label
-            for="pay-vnpay"
-            class="co-option mb-0"
-            :class="{ active: f.pay === 'vnpay' }"
-          >
-            <input
-              id="pay-vnpay"
-              v-model="f.pay"
-              name="pay"
-              value="vnpay"
-              type="radio"
-              class="form-check-input co-radio"
-            />
+          <label for="pay-vnpay" class="co-option mb-0" :class="{ active: f.pay === 'vnpay' }">
+            <input id="pay-vnpay" v-model="f.pay" name="pay" value="vnpay" type="radio"
+              class="form-check-input co-radio" />
             <span class="co-ico-box vnpay-ico-box">
-              <span
-                class="fw-bold"
-                style="font-size: 0.85rem; letter-spacing: -0.5px"
-              >
-                <span style="color: #005baa">VN</span
-                ><span style="color: #e11b22">PAY</span>
+              <span class="fw-bold" style="font-size: 0.85rem; letter-spacing: -0.5px">
+                <span style="color: #005baa">VN</span><span style="color: #e11b22">PAY</span>
               </span>
             </span>
             <span class="flex-grow-1">
@@ -1374,22 +1265,16 @@ const confirmQrPayment = async () => {
           <!-- Sản phẩm -->
           <section class="co-card mb-3">
             <div class="co-cart-head">
-              <span
-                ><i class="bi bi-bag-check-fill text-danger me-2"></i>Sản phẩm
-                trong đơn</span
-              >
+              <span><i class="bi bi-bag-check-fill text-danger me-2"></i>Sản phẩm
+                trong đơn</span>
               <span class="co-count">{{ totalQty }}</span>
             </div>
 
             <div class="co-items">
               <div v-for="i in cart.items" :key="itemKey(i)" class="co-item">
                 <div class="co-thumb">
-                  <img
-                    v-if="itemImage(i) && !imgFailed[itemKey(i)]"
-                    :src="itemImage(i)"
-                    :alt="i.name"
-                    @error="imgFailed[itemKey(i)] = true"
-                  />
+                  <img v-if="itemImage(i) && !imgFailed[itemKey(i)]" :src="itemImage(i)" :alt="i.name"
+                    @error="imgFailed[itemKey(i)] = true" />
                   <span v-else class="co-thumb-fb">👟</span>
                   <span class="co-thumb-qty">{{ i.qty }}</span>
                 </div>
@@ -1398,9 +1283,7 @@ const confirmQrPayment = async () => {
                   <div class="d-flex flex-wrap gap-1 mt-1">
                     <span v-if="i.color" class="co-chip">{{ i.color }}</span>
                     <span v-if="i.size" class="co-chip">Size {{ i.size }}</span>
-                    <span class="co-chip"
-                      >{{ money(i.price) }} × {{ i.qty }}</span
-                    >
+                    <span class="co-chip">{{ money(i.price) }} × {{ i.qty }}</span>
                   </div>
                 </div>
                 <div class="small fw-bold text-nowrap">
@@ -1413,24 +1296,14 @@ const confirmQrPayment = async () => {
           <!-- Mã giảm giá -->
           <section class="co-card mb-3">
             <h6 class="co-title mb-3">
-              <span class="co-title-ico"
-                ><i class="bi bi-ticket-perforated-fill"></i></span
-              >Mã giảm giá
+              <span class="co-title-ico"><i class="bi bi-ticket-perforated-fill"></i></span>Mã giảm giá
             </h6>
 
             <div v-if="!voucher" class="d-flex gap-2">
-              <input
-                v-model="voucherCode"
-                class="form-control co-input text-uppercase"
-                placeholder="Nhập mã giảm giá"
-                @keyup.enter="applyVoucher"
-              />
-              <button
-                class="btn btn-primary co-apply"
-                type="button"
-                :disabled="applying || (!voucherCode && !selectedVoucherId)"
-                @click="applyVoucher"
-              >
+              <input v-model="voucherCode" class="form-control co-input text-uppercase" placeholder="Nhập mã giảm giá"
+                @keyup.enter="applyVoucher" />
+              <button class="btn btn-primary co-apply" type="button"
+                :disabled="applying || (!voucherCode && !selectedVoucherId)" @click="applyVoucher">
                 {{ applying ? "Đang kiểm tra..." : "Áp dụng" }}
               </button>
             </div>
@@ -1445,10 +1318,7 @@ const confirmQrPayment = async () => {
               <div class="flex-grow-1 small">
                 <div>
                   Mã: <strong>{{ voucher.code }}</strong>
-                  <span
-                    class="badge bg-success ms-1"
-                    >Đang áp dụng</span
-                  >
+                  <span class="badge bg-success ms-1">Đang áp dụng</span>
                 </div>
                 <div class="text-success fw-semibold">
                   Đã giảm -{{ money(discount) }}
@@ -1456,18 +1326,15 @@ const confirmQrPayment = async () => {
                 <div class="d-flex align-items-center gap-2 mt-1">
                   <span class="text-muted small">Muốn đổi mã? Bấm "Áp dụng" vào mã khác ở danh sách bên dưới</span>
                   <span class="text-muted small">·</span>
-                  <button type="button" class="btn btn-sm btn-link text-muted p-0 text-decoration-none small" @click="onRemoveClick">
+                  <button type="button" class="btn btn-sm btn-link text-muted p-0 text-decoration-none small"
+                    @click="onRemoveClick">
                     Gỡ mã
                   </button>
                 </div>
               </div>
             </div>
 
-            <div
-              v-if="voucherMsg.text"
-              class="small mt-2"
-              :class="voucherMsg.ok ? 'text-success' : 'text-danger'"
-            >
+            <div v-if="voucherMsg.text" class="small mt-2" :class="voucherMsg.ok ? 'text-success' : 'text-danger'">
               {{ voucherMsg.text }}
             </div>
 
@@ -1484,15 +1351,10 @@ const confirmQrPayment = async () => {
                 </span>
               </div>
               <div class="co-voucher-list">
-                <div
-                  v-for="o in voucherOptions"
-                  :key="o.v.id"
-                  class="co-vcard"
-                  :class="{
-                    active: voucher && voucher.id === o.v.id,
-                    disabled: !o.eligible,
-                  }"
-                >
+                <div v-for="o in voucherOptions" :key="o.v.id" class="co-vcard" :class="{
+                  active: voucher && voucher.id === o.v.id,
+                  disabled: !o.eligible,
+                }">
                   <div class="co-vleft"><i class="bi bi-percent"></i></div>
                   <div class="flex-grow-1 min-w-0">
                     <div class="fw-bold small d-flex align-items-center flex-wrap gap-1">
@@ -1513,8 +1375,7 @@ const confirmQrPayment = async () => {
                     <div class="co-vexp">
                       <span v-if="o.expire">HSD: {{ o.expire }}</span>
                       <span v-if="o.left !== null">
-                        · Còn {{ Math.max(0, o.left) }} lượt</span
-                      >
+                        · Còn {{ Math.max(0, o.left) }} lượt</span>
                     </div>
                     <div v-if="!o.eligible" class="co-vexp text-danger">
                       {{ o.reason || `Mua thêm ${money(o.missing)} để dùng mã này` }}
@@ -1523,19 +1384,12 @@ const confirmQrPayment = async () => {
                       Giảm được {{ money(o.discount) }}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    class="btn btn-sm co-vbtn"
-                    :class="
-                      voucher && voucher.id === o.v.id
-                        ? 'btn-success'
-                        : o.eligible
-                          ? 'btn-outline-primary'
-                          : 'btn-outline-secondary'
-                    "
-                    :disabled="!o.eligible"
-                    @click="toggleVoucher(o)"
-                  >
+                  <button type="button" class="btn btn-sm co-vbtn" :class="voucher && voucher.id === o.v.id
+                      ? 'btn-success'
+                      : o.eligible
+                        ? 'btn-outline-primary'
+                        : 'btn-outline-secondary'
+                    " :disabled="!o.eligible" @click="toggleVoucher(o)">
                     {{
                       voucher && voucher.id === o.v.id
                         ? "✓ Đang dùng"
@@ -1555,9 +1409,7 @@ const confirmQrPayment = async () => {
           <!-- Tóm tắt -->
           <section class="co-card">
             <h6 class="co-title mb-3">
-              <span class="co-title-ico"
-                ><i class="bi bi-receipt-cutoff"></i></span
-              >Tóm tắt đơn hàng
+              <span class="co-title-ico"><i class="bi bi-receipt-cutoff"></i></span>Tóm tắt đơn hàng
             </h6>
 
             <div class="co-row">
@@ -1566,12 +1418,11 @@ const confirmQrPayment = async () => {
             </div>
             <div class="co-row">
               <span>Phí vận chuyển</span>
-              <span class="fw-semibold" :class="{ 'text-success': isFreeShip }">{{ isFreeShip ? '0 ₫ (Miễn phí ship)' : money(shippingFee) }}</span>
+              <span class="fw-semibold" :class="{ 'text-success': isFreeShip }">{{ isFreeShip ? '0 ₫ (Miễn phí ship)' :
+                money(shippingFee) }}</span>
             </div>
             <div v-if="discount" class="co-row text-success">
-              <span
-                >Giảm giá<span v-if="voucher"> [{{ voucher.code }}]</span></span
-              >
+              <span>Giảm giá<span v-if="voucher"> [{{ voucher.code }}]</span></span>
               <span class="fw-semibold">-{{ money(discount) }}</span>
             </div>
 
@@ -1584,22 +1435,12 @@ const confirmQrPayment = async () => {
               <strong>{{ money(discount) }}</strong>
             </div>
 
-            <div
-              v-if="submitError"
-              class="alert alert-danger small py-2 mt-3 mb-0"
-            >
+            <div v-if="submitError" class="alert alert-danger small py-2 mt-3 mb-0">
               {{ submitError }}
             </div>
 
-            <button
-              class="btn btn-primary w-100 co-submit"
-              :disabled="submitting"
-              @click="submit"
-            >
-              <span
-                v-if="submitting"
-                class="spinner-border spinner-border-sm me-2"
-              ></span>
+            <button class="btn btn-primary w-100 co-submit" :disabled="submitting" @click="submit">
+              <span v-if="submitting" class="spinner-border spinner-border-sm me-2"></span>
               {{
                 submitting
                   ? "Đang xử lý..."
@@ -1646,8 +1487,8 @@ const confirmQrPayment = async () => {
                 <!-- Đếm ngược tự động -->
                 <div class="qr-auto-box" :class="{ disabled: !isAutoConfirmEnabled }">
                   <div class="form-check form-switch d-inline-flex align-items-center gap-2 mb-1">
-                    <input class="form-check-input" type="checkbox" id="chkAutoConfirm"
-                      :checked="isAutoConfirmEnabled" @change="toggleAutoConfirm" />
+                    <input class="form-check-input" type="checkbox" id="chkAutoConfirm" :checked="isAutoConfirmEnabled"
+                      @change="toggleAutoConfirm" />
                     <label class="form-check-label small fw-semibold cursor-pointer" for="chkAutoConfirm">
                       Tự động hoàn thành (mô phỏng quét xong)
                     </label>
@@ -1678,7 +1519,8 @@ const confirmQrPayment = async () => {
                     <span class="detail-label">Số tài khoản:</span>
                     <div class="detail-value-copy">
                       <span class="fw-bold font-monospace text-primary fs-6">{{ qrModalData.accountNo }}</span>
-                      <button type="button" class="btn-copy-mini" @click="copyText(qrModalData.accountNo, 'Số tài khoản')">
+                      <button type="button" class="btn-copy-mini"
+                        @click="copyText(qrModalData.accountNo, 'Số tài khoản')">
                         Sao chép
                       </button>
                     </div>
@@ -1689,7 +1531,8 @@ const confirmQrPayment = async () => {
                       <span class="badge bg-danger-subtle text-danger fw-bold font-monospace fs-6 px-2 py-1">
                         {{ qrModalData.maHoaDon }}
                       </span>
-                      <button type="button" class="btn-copy-mini" @click="copyText(qrModalData.maHoaDon, 'Nội dung chuyển khoản')">
+                      <button type="button" class="btn-copy-mini"
+                        @click="copyText(qrModalData.maHoaDon, 'Nội dung chuyển khoản')">
                         Sao chép
                       </button>
                     </div>
@@ -1714,7 +1557,8 @@ const confirmQrPayment = async () => {
 
           <!-- Footer -->
           <div class="qr-modal-footer">
-            <a v-if="qrModalData.paymentUrl" :href="qrModalData.paymentUrl" target="_blank" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1">
+            <a v-if="qrModalData.paymentUrl" :href="qrModalData.paymentUrl" target="_blank"
+              class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1">
               <i class="bi bi-box-arrow-up-right"></i>
               <span>Mở cổng VNPAY (Thẻ/Ví)</span>
             </a>
@@ -1753,6 +1597,7 @@ const confirmQrPayment = async () => {
   border-radius: 16px;
   box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
 }
+
 .co-step {
   display: flex;
   align-items: center;
@@ -1761,6 +1606,7 @@ const confirmQrPayment = async () => {
   font-weight: 600;
   font-size: 0.88rem;
 }
+
 .co-step-dot {
   width: 30px;
   height: 30px;
@@ -1772,27 +1618,33 @@ const confirmQrPayment = async () => {
   background: #f1f5f9;
   color: #94a3b8;
 }
+
 .co-step.done .co-step-dot {
   background: #16a34a;
   color: #fff;
 }
+
 .co-step.done {
   color: #16a34a;
 }
+
 .co-step.current .co-step-dot {
   background: var(--bs-primary, #d62828);
   color: #fff;
   box-shadow: 0 0 0 4px rgba(214, 40, 40, 0.15);
 }
+
 .co-step.current {
   color: #111827;
 }
+
 .co-step-line {
   flex: 0 1 70px;
   height: 3px;
   border-radius: 3px;
   background: #e5e7eb;
 }
+
 .co-step-line.done {
   background: #16a34a;
 }
@@ -1805,6 +1657,7 @@ const confirmQrPayment = async () => {
   border-radius: 18px;
   box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
 }
+
 .co-login {
   display: flex;
   align-items: center;
@@ -1817,6 +1670,7 @@ const confirmQrPayment = async () => {
   border: 1px solid #fde68a;
   border-radius: 14px;
 }
+
 .co-title {
   display: flex;
   align-items: center;
@@ -1825,6 +1679,7 @@ const confirmQrPayment = async () => {
   margin-bottom: 1.1rem;
   color: #111827;
 }
+
 .co-title-ico {
   width: 34px;
   height: 34px;
@@ -1835,6 +1690,7 @@ const confirmQrPayment = async () => {
   color: var(--bs-primary, #d62828);
   background: rgba(var(--bs-primary-rgb, 214, 40, 40), 0.1);
 }
+
 .co-label {
   display: block;
   font-size: 0.85rem;
@@ -1842,11 +1698,13 @@ const confirmQrPayment = async () => {
   margin-bottom: 0.35rem;
   color: #334155;
 }
+
 .co-input {
   border-radius: 12px;
   padding: 0.65rem 0.9rem;
   font-size: 0.92rem;
 }
+
 .co-input:focus {
   border-color: var(--bs-primary);
   box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.15);
@@ -1868,22 +1726,27 @@ const confirmQrPayment = async () => {
     background-color 0.15s,
     box-shadow 0.15s;
 }
+
 .co-option:hover {
   border-color: var(--bs-primary);
 }
+
 .co-option.active {
   border-color: var(--bs-primary);
   background: rgba(var(--bs-primary-rgb), 0.05);
   box-shadow: 0 4px 14px rgba(var(--bs-primary-rgb), 0.12);
 }
+
 .co-radio {
   margin: 0;
   flex-shrink: 0;
   cursor: pointer;
 }
+
 .co-radio:focus {
   box-shadow: none;
 }
+
 .co-ico-box {
   flex-shrink: 0;
   width: 44px;
@@ -1895,6 +1758,7 @@ const confirmQrPayment = async () => {
   background: #f8f9fa;
   border-radius: 12px;
 }
+
 .vnpay-ico-box {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
@@ -1905,6 +1769,7 @@ const confirmQrPayment = async () => {
   position: sticky;
   top: 1rem;
 }
+
 .co-cart-head {
   display: flex;
   align-items: center;
@@ -1914,6 +1779,7 @@ const confirmQrPayment = async () => {
   border-bottom: 1px solid #eef0f3;
   font-weight: 800;
 }
+
 .co-count {
   min-width: 28px;
   text-align: center;
@@ -1924,20 +1790,24 @@ const confirmQrPayment = async () => {
   background: rgba(var(--bs-primary-rgb), 0.1);
   border-radius: 999px;
 }
+
 .co-items {
   max-height: 340px;
   overflow-y: auto;
   padding-right: 2px;
 }
+
 .co-item {
   display: flex;
   align-items: center;
   gap: 0.9rem;
   margin-bottom: 0.9rem;
 }
+
 .co-item:last-child {
   margin-bottom: 0;
 }
+
 .co-thumb {
   position: relative;
   flex: 0 0 66px;
@@ -1948,15 +1818,18 @@ const confirmQrPayment = async () => {
   border-radius: 14px;
   background: linear-gradient(145deg, #fdf2f2, #fbe9ee);
 }
+
 .co-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   border-radius: 14px;
 }
+
 .co-thumb-fb {
   font-size: 1.8rem;
 }
+
 .co-thumb-qty {
   position: absolute;
   top: -6px;
@@ -1973,6 +1846,7 @@ const confirmQrPayment = async () => {
   border: 2px solid #fff;
   border-radius: 999px;
 }
+
 .co-item-name {
   font-size: 0.88rem;
   font-weight: 700;
@@ -1983,6 +1857,7 @@ const confirmQrPayment = async () => {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
 .co-chip {
   display: inline-block;
   padding: 0.1rem 0.55rem;
@@ -2000,6 +1875,7 @@ const confirmQrPayment = async () => {
   padding-inline: 1.1rem;
   font-weight: 700;
 }
+
 .co-voucher-ok {
   display: flex;
   align-items: center;
@@ -2009,10 +1885,12 @@ const confirmQrPayment = async () => {
   border: 1px dashed #86efac;
   border-radius: 12px;
 }
-.co-voucher-ok > .bi-ticket-perforated-fill {
+
+.co-voucher-ok>.bi-ticket-perforated-fill {
   font-size: 1.4rem;
   color: #16a34a;
 }
+
 .co-x {
   width: 28px;
   height: 28px;
@@ -2023,6 +1901,7 @@ const confirmQrPayment = async () => {
   font-size: 0.7rem;
   cursor: pointer;
 }
+
 .co-x:hover {
   background: rgba(220, 38, 38, 0.2);
 }
@@ -2032,6 +1911,7 @@ const confirmQrPayment = async () => {
   overflow-y: auto;
   padding-right: 2px;
 }
+
 .co-vcard {
   display: flex;
   align-items: center;
@@ -2047,12 +1927,15 @@ const confirmQrPayment = async () => {
     border-color 0.15s,
     box-shadow 0.15s;
 }
+
 .co-vcard:hover:not(.disabled) {
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
 }
-.co-vcard > .flex-grow-1 {
+
+.co-vcard>.flex-grow-1 {
   padding: 0.6rem 0;
 }
+
 .co-vleft {
   align-self: stretch;
   flex: 0 0 46px;
@@ -2062,22 +1945,27 @@ const confirmQrPayment = async () => {
   color: #fff;
   background: linear-gradient(160deg, #ef4444, #b91c1c);
 }
+
 .co-vcard.active {
   border: 1px solid var(--bs-primary);
   background: rgba(var(--bs-primary-rgb), 0.06);
 }
+
 .co-vcard.disabled {
   opacity: 0.6;
   background: #f8f9fa;
   border-color: #dee2e6;
 }
+
 .co-vcard.disabled .co-vleft {
   background: #94a3b8;
 }
+
 .co-vexp {
   font-size: 0.74rem;
   color: #6b7280;
 }
+
 .co-vbtn {
   white-space: nowrap;
   font-weight: 600;
@@ -2093,6 +1981,7 @@ const confirmQrPayment = async () => {
   font-size: 0.92rem;
   color: #475569;
 }
+
 .co-total {
   display: flex;
   justify-content: space-between;
@@ -2101,11 +1990,13 @@ const confirmQrPayment = async () => {
   padding-top: 1rem;
   border-top: 2px dashed #e5e7eb;
 }
+
 .co-saved {
   text-align: right;
   font-size: 0.82rem;
   color: #15803d;
 }
+
 .co-submit {
   margin-top: 1.1rem;
   padding: 0.85rem;
@@ -2116,10 +2007,12 @@ const confirmQrPayment = async () => {
     transform 0.15s,
     box-shadow 0.15s;
 }
+
 .co-submit:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 12px 26px rgba(var(--bs-primary-rgb), 0.36);
 }
+
 .co-perks {
   display: flex;
   flex-wrap: wrap;
@@ -2131,6 +2024,7 @@ const confirmQrPayment = async () => {
   font-size: 0.78rem;
   color: #64748b;
 }
+
 .co-perks i {
   margin-right: 5px;
 }
@@ -2146,6 +2040,7 @@ const confirmQrPayment = async () => {
   border-radius: 24px;
   box-shadow: 0 10px 34px rgba(15, 23, 42, 0.08);
 }
+
 .co-success-ico {
   width: 84px;
   height: 84px;
@@ -2158,11 +2053,13 @@ const confirmQrPayment = async () => {
   border-radius: 50%;
   box-shadow: 0 10px 24px rgba(22, 163, 74, 0.35);
 }
+
 .co-success-ico.empty {
   background: #f1f5f9;
   color: #94a3b8;
   box-shadow: none;
 }
+
 .co-success-code {
   display: inline-flex;
   align-items: center;
@@ -2173,10 +2070,12 @@ const confirmQrPayment = async () => {
   border: 1px dashed #fca5a5;
   border-radius: 14px;
 }
+
 .co-success-code strong {
   color: #dc2626;
   font-size: 1.15rem;
 }
+
 .co-copy {
   width: 30px;
   height: 30px;
@@ -2186,6 +2085,7 @@ const confirmQrPayment = async () => {
   color: #64748b;
   cursor: pointer;
 }
+
 .co-copy:hover {
   color: #dc2626;
   border-color: #dc2626;
@@ -2196,17 +2096,21 @@ const confirmQrPayment = async () => {
     position: static;
   }
 }
+
 @media (max-width: 575.98px) {
   .co-step-name {
     display: none;
   }
+
   .co-step.current .co-step-name {
     display: inline;
   }
+
   .co-card {
     padding: 1.1rem;
   }
 }
+
 /* ===== QR Payment Modal (VietQR / VNPAY) ===== */
 .qr-modal-backdrop {
   position: fixed;
@@ -2219,6 +2123,7 @@ const confirmQrPayment = async () => {
   justify-content: center;
   padding: 1rem;
 }
+
 .qr-modal-card {
   background: #ffffff;
   border-radius: 16px;
@@ -2230,16 +2135,19 @@ const confirmQrPayment = async () => {
   overflow: hidden;
   animation: qrPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
 @keyframes qrPopIn {
   from {
     opacity: 0;
     transform: scale(0.95) translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
 }
+
 .qr-modal-header {
   padding: 1.1rem 1.4rem;
   border-bottom: 1px solid #f1f5f9;
@@ -2248,26 +2156,31 @@ const confirmQrPayment = async () => {
   justify-content: space-between;
   background: #f8fafc;
 }
+
 .qr-header-left {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
 }
+
 .qr-header-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
+
 .viet-txt {
   font-weight: 900;
   color: #005baa;
   font-size: 1.15rem;
 }
+
 .qr-txt {
   font-weight: 900;
   color: #e11b22;
   font-size: 1.15rem;
 }
+
 .napas-badge {
   background: #0284c7;
   color: #fff;
@@ -2276,12 +2189,14 @@ const confirmQrPayment = async () => {
   padding: 2px 6px;
   border-radius: 4px;
 }
+
 .qr-header-title {
   margin: 0;
   font-size: 1.05rem;
   font-weight: 700;
   color: #0f172a;
 }
+
 .btn-close-qr {
   border: none;
   background: #e2e8f0;
@@ -2296,30 +2211,36 @@ const confirmQrPayment = async () => {
   justify-content: center;
   transition: all 0.2s;
 }
+
 .btn-close-qr:hover {
   background: #cbd5e1;
   color: #0f172a;
 }
+
 .qr-modal-body {
   padding: 1.4rem;
 }
+
 .qr-body-grid {
   display: grid;
   grid-template-columns: 240px 1fr;
   gap: 1.5rem;
   align-items: start;
 }
+
 @media (max-width: 640px) {
   .qr-body-grid {
     grid-template-columns: 1fr;
   }
 }
+
 .qr-img-column {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
 }
+
 .qr-box {
   width: 220px;
   height: 220px;
@@ -2333,18 +2254,21 @@ const confirmQrPayment = async () => {
   justify-content: center;
   margin-bottom: 0.6rem;
 }
+
 .qr-image {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
   border-radius: 6px;
 }
+
 .qr-instruction {
   font-size: 0.8rem;
   color: #64748b;
   line-height: 1.3;
   margin-bottom: 0.8rem;
 }
+
 .qr-auto-box {
   background: #f8fafc;
   border: 1px dashed #cbd5e1;
@@ -2353,36 +2277,43 @@ const confirmQrPayment = async () => {
   width: 100%;
   transition: all 0.2s;
 }
+
 .qr-auto-box.disabled {
   opacity: 0.6;
 }
+
 .qr-timer-text {
   font-size: 0.8rem;
   color: #475569;
 }
+
 .qr-info-column {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
 }
+
 .qr-amount-card {
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
   border-radius: 10px;
   padding: 0.8rem 1rem;
 }
+
 .qr-amount-lbl {
   font-size: 0.8rem;
   color: #166534;
   font-weight: 500;
   display: block;
 }
+
 .qr-amount-val {
   font-size: 1.5rem;
   font-weight: 800;
   color: #15803d;
   letter-spacing: -0.5px;
 }
+
 .qr-details-table {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
@@ -2392,21 +2323,25 @@ const confirmQrPayment = async () => {
   flex-direction: column;
   gap: 0.55rem;
 }
+
 .qr-detail-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   font-size: 0.85rem;
 }
+
 .detail-label {
   color: #64748b;
   font-weight: 500;
 }
+
 .detail-value-copy {
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
+
 .btn-copy-mini {
   background: #ffffff;
   border: 1px solid #cbd5e1;
@@ -2418,11 +2353,13 @@ const confirmQrPayment = async () => {
   cursor: pointer;
   transition: all 0.15s;
 }
+
 .btn-copy-mini:hover {
   background: #f1f5f9;
   border-color: #94a3b8;
   color: #0f172a;
 }
+
 .qr-notice-card {
   background: #fffbeb;
   border: 1px solid #fde68a;
@@ -2432,6 +2369,7 @@ const confirmQrPayment = async () => {
   color: #92400e;
   line-height: 1.35;
 }
+
 .qr-copy-toast {
   background: #1e293b;
   color: #fff;
@@ -2442,6 +2380,7 @@ const confirmQrPayment = async () => {
   align-items: center;
   align-self: flex-start;
 }
+
 .qr-modal-footer {
   padding: 0.9rem 1.4rem;
   border-top: 1px solid #f1f5f9;
@@ -2449,6 +2388,7 @@ const confirmQrPayment = async () => {
   display: flex;
   align-items: center;
 }
+
 .cursor-pointer {
   cursor: pointer;
 }

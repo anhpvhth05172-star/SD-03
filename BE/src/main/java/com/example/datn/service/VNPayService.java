@@ -259,19 +259,28 @@ public class VNPayService {
         } else {
             if ("CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
                 try {
-                    hoaDonService.huyDonChoThanhToan(hoaDon.getId());
-                    log.info("VNPay thất bại ({}) → đã xóa đơn tạm {} để giỏ hàng khôi phục", vnpResponseCode, maHoaDon);
+                    // Không hủy đơn ngay: Treo đơn hàng 5 phút để khách có thể thanh toán lại
+                    hoaDon.setNgayCapNhat(LocalDateTime.now());
+                    String failNote = String.format("[Thanh toán chưa hoàn tất (Lỗi: %s) - Treo đơn 5 phút để thanh toán lại]", vnpResponseCode);
+                    String currentNote = hoaDon.getGhiChu() != null ? hoaDon.getGhiChu().trim() : "";
+                    if (!currentNote.contains("Treo đơn 5 phút")) {
+                        String updated = currentNote.isEmpty() ? failNote : currentNote + " " + failNote;
+                        if (updated.length() > 1000) updated = updated.substring(0, 1000);
+                        hoaDon.setGhiChu(updated);
+                    }
+                    hoaDonRepository.save(hoaDon);
+                    log.info("VNPay chưa thành công ({}) → Treo đơn tạm {} trong 5 phút thay vì hủy luôn", vnpResponseCode, maHoaDon);
                 } catch (Exception e) {
-                    log.error("Lỗi khi hủy đơn CHO_THANH_TOAN {}: {}", maHoaDon, e.getMessage());
+                    log.error("Lỗi khi cập nhật ghi chú treo đơn {}: {}", maHoaDon, e.getMessage());
                 }
             }
         }
 
         return VNPayCallbackResponse.builder()
             .success(isSuccess)
-            .message(message)
-            .orderId(isSuccess && hoaDon != null ? hoaDon.getId() : null)
-            .maHoaDon(isSuccess ? maHoaDon : null)
+            .message(isSuccess ? message : message + " Đơn hàng của bạn sẽ được treo giữ chỗ trong 5 phút để bạn có thể thanh toán lại.")
+            .orderId(hoaDon != null ? hoaDon.getId() : null)
+            .maHoaDon(maHoaDon)
             .amount(amount)
             .bankCode(vnpBankCode)
             .transactionNo(vnpTransactionNo)

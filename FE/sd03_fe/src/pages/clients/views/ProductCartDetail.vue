@@ -25,7 +25,9 @@ onMounted(async () => {
       res = await fetch(`/api/v1/hoa-don/tra-cuu?maHoaDon=${encodeURIComponent(idOrCode)}`);
     }
     if (res && res.ok) {
-      const data = await res.json();
+      const rawData = await res.json();
+      const data = Array.isArray(rawData) ? rawData[0] : rawData;
+      if (!data) return;
       order.value = {
         id: data.maHoaDon || data.id,
         date: data.ngayTao || "—",

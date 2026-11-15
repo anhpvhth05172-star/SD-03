@@ -6,7 +6,7 @@ import { Html5Qrcode } from 'html5-qrcode'
 import http from '@/api/http'
 import { getProvinces, getWards, getServices, tinhPhi } from '@/api/shipping'
 import { DS_63_TINH_THANH } from '@/api/diaGioi'
-import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyToastWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import { formatVnd, formatDateTime } from '@/utils/format'
 import { getDangMo, moCa, getTongKet, ketCa, getDanhSachCaLam } from '@/api/giaoCa'
 import { inBienLaiDoiSoatK80 } from '@/utils/printShiftReceipt'
@@ -22,7 +22,7 @@ const router = useRouter()
 
 const activeShift = ref(null)
 const isLoadingShift = ref(false)
-const isCheDoXem = computed(() => !laAdmin() && !activeShift.value?.id)
+const isCheDoXem = computed(() => !activeShift.value?.id)
 
 const kiemTraQuyenBanHang = (actionName = 'thêm sản phẩm vào giỏ hàng') => {
   if (laAdmin()) return true
@@ -382,42 +382,9 @@ const recalculateAvailableStocks = () => {
 }
 
 const syncCartPricesWithCatalog = (sourceList = allProducts.value) => {
-  if (!Array.isArray(pendingOrders.value) || !Array.isArray(sourceList) || sourceList.length === 0) return
-  const prodMap = new Map(sourceList.map(p => [Number(p.id), p]))
-  let hasPriceChange = false
-
-  for (const order of pendingOrders.value) {
-    if (!Array.isArray(order.cart)) continue
-    for (const item of order.cart) {
-      const freshProd = prodMap.get(Number(item.idCtsp))
-      if (!freshProd) continue
-
-      const freshOriginalPrice = Number(freshProd.price || freshProd.giaBan || 0)
-      const freshEffectivePrice = getEffectivePrice(freshProd)
-      const freshDisc = freshProd.discount || (freshProd.phanTramGiam ? `-${Math.round(freshProd.phanTramGiam)}%` : null)
-      const freshGiaSauGiam = freshProd.giaSauGiam !== undefined && freshProd.giaSauGiam !== null ? Number(freshProd.giaSauGiam) : null
-      const freshPhanTramGiam = freshProd.phanTramGiam !== undefined && freshProd.phanTramGiam !== null ? Number(freshProd.phanTramGiam) : null
-
-      if (
-        item.price !== freshEffectivePrice ||
-        item.originalPrice !== freshOriginalPrice ||
-        item.discount !== freshDisc ||
-        item.giaSauGiam !== freshGiaSauGiam ||
-        item.phanTramGiam !== freshPhanTramGiam
-      ) {
-        item.originalPrice = freshOriginalPrice
-        item.price = freshEffectivePrice
-        item.discount = freshDisc
-        item.giaSauGiam = freshGiaSauGiam
-        item.phanTramGiam = freshPhanTramGiam
-        hasPriceChange = true
-      }
-    }
-  }
-
-  if (hasPriceChange) {
-    savePendingOrdersToStorage()
-  }
+  // Yêu cầu: Khi thay đổi giá sản phẩm thì giá trong giỏ hàng vẫn giữ nguyên
+  // Chỉ cập nhật giá khi người dùng chủ động thêm lại sản phẩm vào giỏ
+  return
 }
 
 const setServerProductsList = (rawList) => {
@@ -482,7 +449,7 @@ const reconcilePendingOrdersWithServerStock = () => {
   }
 
   if (adjustedMessages.length > 0) {
-    notifyWarning('Cập nhật tồn kho thực tế', adjustedMessages.join('; '))
+    notifyToastWarning('Cập nhật tồn kho thực tế', adjustedMessages.join('; '))
   }
 }
 
@@ -682,6 +649,10 @@ const selectOrderTab = (index) => {
 
 const closeOrderTab = async (index, event) => {
   if (event) event.stopPropagation()
+  if (isCheDoXem.value) {
+    notifyWarning('Chế độ xem', 'Hệ thống đang ở Chế độ xem (chưa mở ca làm việc). Bạn không thể xóa hoặc đóng hóa đơn!')
+    return
+  }
   const target = pendingOrders.value[index]
   if (!target) return
 
@@ -793,7 +764,7 @@ const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
     const extraMsg = reservedOther > 0
       ? ` (Đang giữ ${reservedOther} sản phẩm ở hóa đơn chờ khác)`
       : ''
-    notifyWarning('Tồn kho không đủ!', `Sản phẩm này chỉ còn ${currentAvailableStock} sản phẩm khả dụng${extraMsg}.`)
+    notifyToastWarning('Tồn kho không đủ!', `Sản phẩm này chỉ còn ${currentAvailableStock} sản phẩm khả dụng${extraMsg}.`)
     return
   }
 
@@ -803,6 +774,13 @@ const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
   const prodName = productVariant.tenSp || productVariant.tenSanPham || 'Sản phẩm'
 
   if (existingItem) {
+    const oldPrice = Number(existingItem.price || 0)
+    if (oldPrice !== Number(effectivePrice)) {
+      notifyWarning(
+        'Đã thay đổi giá sản phẩm',
+        `Sản phẩm "${prodName}" có giá mới là ${formatVnd(effectivePrice)} (giá trong giỏ trước đó là ${formatVnd(oldPrice)}). Đã cập nhật đơn giá mới!`
+      )
+    }
     existingItem.quantity += qtyToAdd
     existingItem.price = effectivePrice
     existingItem.originalPrice = Number(productVariant.price || productVariant.giaBan || 0)
@@ -906,7 +884,7 @@ const updateCartItemQty = async (item, rawNewQty, event = null) => {
     const extraMsg = reservedOther > 0
       ? ` (đang giữ ${reservedOther} sản phẩm ở hóa đơn chờ khác)`
       : ''
-    notifyWarning(
+    notifyToastWarning(
       'Vượt quá tồn kho khả dụng!',
       `Tối đa có thể đặt cho đơn này là ${maxAllowedForThisOrder} sản phẩm${extraMsg}.`
     )
@@ -981,13 +959,13 @@ const handleBarcodeSearchSubmit = async () => {
   if (found) {
     const stock = getRemainingStock(found.id)
     if (stock <= 0) {
-      notifyWarning('Hết hàng', `Sản phẩm "${found.tenSp || found.tenSanPham}" đã hết tồn kho khả dụng!`)
+      notifyToastWarning('Hết hàng', `Sản phẩm "${found.tenSp || found.tenSanPham}" đã hết tồn kho khả dụng!`)
       return
     }
     addToCart(found, 1)
     barcodeSearchText.value = ''
   } else {
-    notifyWarning('Không tìm thấy', `Không tìm thấy sản phẩm nào khớp với mã "${code}"`)
+    notifyToastWarning('Không tìm thấy', `Không tìm thấy sản phẩm nào khớp với mã "${code}"`)
   }
 }
 
@@ -1002,7 +980,13 @@ const getRemainingStock = (idCtsp) => {
 const handleCashGivenInput = (e) => {
   if (!currentOrder.value) return
   currentOrder.value.customCashGiven = true
-  currentOrder.value.cashGiven = e.target.value === '' ? 0 : Math.max(0, Number(e.target.value))
+  const raw = String(e.target.value || '').replace(/[^0-9]/g, '')
+  if (raw === '') {
+    currentOrder.value.cashGiven = 0
+    return
+  }
+  const val = Number(raw)
+  currentOrder.value.cashGiven = Math.min(1000000000, Math.max(0, val))
 }
 
 const customerSearchQuery = ref('')
@@ -1798,7 +1782,7 @@ const toggleModalRow = (product, event) => {
   if (stock <= 0) {
     const reservedOther = getReservedInOtherOrders(product.id)
     const extra = reservedOther > 0 ? ` (đang giữ ${reservedOther} sản phẩm ở các đơn chờ khác)` : ''
-    notifyWarning('Hết hàng', `Sản phẩm này hiện đã hết tồn kho khả dụng${extra}!`)
+    notifyToastWarning('Hết hàng', `Sản phẩm này hiện đã hết tồn kho khả dụng${extra}!`)
     return
   }
   toggleModalSelect(product.id)
@@ -1826,7 +1810,7 @@ const handleSelectProductFromModal = (product) => {
   if (stock <= 0) {
     const reservedOther = getReservedInOtherOrders(product.id)
     const extra = reservedOther > 0 ? ` (đang giữ ${reservedOther} sản phẩm ở các đơn chờ khác)` : ''
-    notifyWarning('Hết hàng', `Sản phẩm này hiện đã hết tồn kho khả dụng${extra}!`)
+    notifyToastWarning('Hết hàng', `Sản phẩm này hiện đã hết tồn kho khả dụng${extra}!`)
     return
   }
   toggleModalSelect(product.id)
@@ -1838,7 +1822,7 @@ const quickAddSingleProductFromModal = (product) => {
   if (stock <= 0) {
     const reservedOther = getReservedInOtherOrders(product.id)
     const extra = reservedOther > 0 ? ` (đang giữ ${reservedOther} sản phẩm ở các đơn chờ khác)` : ''
-    notifyWarning('Hết hàng', `Sản phẩm này hiện đã hết tồn kho khả dụng${extra}!`)
+    notifyToastWarning('Hết hàng', `Sản phẩm này hiện đã hết tồn kho khả dụng${extra}!`)
     return
   }
   addToCart(product, 1, false)
@@ -1851,7 +1835,7 @@ const confirmModalSelection = () => {
     .filter(Boolean)
 
   if (products.length === 0) {
-    notifyWarning('Chưa chọn sản phẩm', 'Vui lòng chọn ít nhất 1 sản phẩm để thêm vào giỏ hàng.')
+    notifyToastWarning('Chưa chọn sản phẩm', 'Vui lòng chọn ít nhất 1 sản phẩm để thêm vào giỏ hàng.')
     return
   }
 
@@ -1872,7 +1856,7 @@ const confirmModalSelection = () => {
     notifySuccess('Thành công', `Đã thêm ${added} sản phẩm vào giỏ hàng!`)
     closeProductPicker()
   } else if (outOfStock > 0) {
-    notifyWarning('Hết hàng', 'Tất cả sản phẩm đã chọn đều đã hết hàng tồn kho.')
+    notifyToastWarning('Hết hàng', 'Tất cả sản phẩm đã chọn đều đã hết hàng tồn kho.')
   }
 }
 
@@ -2094,7 +2078,7 @@ const handleScannedResult = async (decodedText) => {
     if (found) {
       const stock = getRemainingStock(found.id)
       if (stock <= 0) {
-        notifyWarning('Hết hàng', `Sản phẩm "${found.tenSp || found.tenSanPham}" đã hết tồn kho khả dụng!`)
+        notifyToastWarning('Hết hàng', `Sản phẩm "${found.tenSp || found.tenSanPham}" đã hết tồn kho khả dụng!`)
         continue
       }
 
@@ -2947,16 +2931,12 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
   }
 }, { immediate: true })
 
-watch(finalTotal, (newTotal) => {
-  if (currentOrder.value && !currentOrder.value.customCashGiven) {
-    currentOrder.value.cashGiven = newTotal
-  }
-}, { immediate: true })
+watch(finalTotal, () => {
+  // Không tự động điền đè số tiền khách đưa để bảo đảm tính chuẩn xác khi thu tiền
+})
 
 watch(activeOrderIndex, () => {
-  if (currentOrder.value && !currentOrder.value.customCashGiven) {
-    currentOrder.value.cashGiven = finalTotal.value
-  }
+  // Giữ nguyên trạng thái tiền khách đưa của từng tab đơn hàng
 })
 
 const getVoucherIneligibilityReason = (v) => {
@@ -3466,18 +3446,39 @@ const handleCheckout = async (options = {}) => {
   }
 
   if (currentOrder.value.paymentMethod === 'TIEN_MAT') {
-    if (!currentOrder.value.cashGiven || currentOrder.value.cashGiven === 0) {
-      currentOrder.value.cashGiven = finalTotal.value
-    } else if (currentOrder.value.cashGiven < finalTotal.value) {
-      notifyWarning('Chưa đủ tiền', `Số tiền khách đưa chưa đủ! Cần thêm ${formatVnd(finalTotal.value - currentOrder.value.cashGiven)}`)
+    const cash = Number(currentOrder.value.cashGiven || 0)
+    if (cash <= 0) {
+      notifyWarning('Chưa nhập tiền khách trả', 'Vui lòng nhập số tiền khách hàng thanh toán!')
+      return
+    }
+    if (cash < finalTotal.value) {
+      notifyWarning('Chưa đủ tiền', `Số tiền khách đưa chưa đủ! Cần thêm ${formatVnd(finalTotal.value - cash)}`)
+      return
+    }
+    if (cash > 1000000000) {
+      notifyWarning('Số tiền không hợp lệ', 'Số tiền khách đưa không được vượt quá 1.000.000.000₫!')
       return
     }
   }
 
   if (currentOrder.value.paymentMethod === 'KET_HOP') {
-    const totalPaid = Number(currentOrder.value.cashGiven || 0) + Number(currentOrder.value.transferGiven || 0)
+    const cash = Number(currentOrder.value.cashGiven || 0)
+    const transfer = Number(currentOrder.value.transferGiven || 0)
+    if (cash < 0 || transfer < 0) {
+      notifyWarning('Số tiền không hợp lệ', 'Số tiền thanh toán không được là số âm!')
+      return
+    }
+    const totalPaid = cash + transfer
+    if (totalPaid <= 0) {
+      notifyWarning('Chưa nhập số tiền', 'Vui lòng nhập số tiền thanh toán (tiền mặt / chuyển khoản)!')
+      return
+    }
     if (totalPaid < finalTotal.value) {
       notifyWarning('Chưa đủ tiền', `Tổng tiền thanh toán kết hợp chưa đủ! Cần thêm ${formatVnd(finalTotal.value - totalPaid)}`)
+      return
+    }
+    if (totalPaid > 1000000000) {
+      notifyWarning('Số tiền không hợp lệ', 'Tổng tiền thanh toán không được vượt quá 1.000.000.000₫!')
       return
     }
   }
@@ -3836,10 +3837,10 @@ const printReceipt = () => {
         letter-spacing: 0.5px;
       }
       .receipt-barcode-code {
-        font-family: 'SFMono-Regular', Consolas, monospace;
+        font-family: 'JetBrains Mono', 'Fira Code', monospace;
         font-size: 11.5px;
         font-weight: 600;
-        letter-spacing: 2px;
+        letter-spacing: 0.02em;
         color: #64748b;
         margin-top: 2px;
       }
@@ -4376,7 +4377,7 @@ onUnmounted(() => {
                 <span class="tab-order-name">{{ order.title }}</span>
                 <span class="tab-order-code" v-if="order.code">({{ order.code }})</span>
                 <span class="tab-cart-qty" v-if="order.cart.length > 0">{{ order.cart.length }}</span>
-                <button class="tab-close-icon" @click="closeOrderTab(idx, $event)" title="Đóng hóa đơn này">
+                <button v-if="!isCheDoXem" class="tab-close-icon" @click="closeOrderTab(idx, $event)" title="Đóng hóa đơn này">
                   ×
                 </button>
               </div>
@@ -4413,11 +4414,6 @@ onUnmounted(() => {
                 <button class="btn-tool-action btn-tool-product" @click="openProductPicker"
                   title="Mở danh mục chọn sản phẩm">
                   <span>Chọn sản phẩm</span>
-                </button>
-
-                <button v-if="currentOrder && currentOrder.cart.length > 0" class="btn-tool-action btn-tool-clear"
-                  @click="clearCurrentCart" title="Làm trống toàn bộ giỏ hàng">
-                  <span>Làm trống</span>
                 </button>
               </div>
             </div>
@@ -4727,7 +4723,7 @@ onUnmounted(() => {
                   @change="onServiceChange">
                   <option v-for="s in currentOrder.deliveryInfo.services" :key="s.serviceTypeId"
                     :value="s.serviceTypeId">
-                    {{ s.shortName || ('Dịch vụ GHN #' + s.serviceTypeId) }}
+                    {{ s.shortName || ('Dịch vụ GHN #' + s.serviceTypeId) }} — {{ isFreeShipEligible ? 'Miễn phí (0₫)' : formatVnd(currentOrder.deliveryInfo.shippingFee || currentOrder.deliveryInfo.rawShippingFee || 30000) }}
                   </option>
                 </select>
               </div>
@@ -4758,19 +4754,31 @@ onUnmounted(() => {
                 </span>
               </div>
 
-              <button v-if="!isCurrentDeliveryAddressSaved" type="button" class="btn-save-addr-profile"
-                :disabled="!isCurrentDeliveryAddressComplete || isSavingCustomerAddress"
-                @click="saveDeliveryAddressToCustomerProfile(false)"
-                title="Lưu ngay Tỉnh/Phường/Số nhà này vào hồ sơ khách hàng">
-                <span v-if="isSavingCustomerAddress" class="fee-spinner"></span>
-                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  stroke-width="2.2">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                  <polyline points="7 3 7 8 15 8"></polyline>
-                </svg>
-                <span>{{ isSavingCustomerAddress ? 'Đang lưu...' : 'Lưu vào hồ sơ KH' }}</span>
-              </button>
+              <div class="save-profile-actions d-flex gap-2">
+                <button type="button" class="btn-save-addr-profile btn-quick-add-addr"
+                  @click="openQuickAddAddressModal"
+                  title="Mở form thêm trực tiếp địa chỉ mới cho khách hàng">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  <span>Thêm địa chỉ khách hàng</span>
+                </button>
+
+                <button v-if="!isCurrentDeliveryAddressSaved" type="button" class="btn-save-addr-profile"
+                  :disabled="!isCurrentDeliveryAddressComplete || isSavingCustomerAddress"
+                  @click="saveDeliveryAddressToCustomerProfile(false)"
+                  title="Lưu ngay Tỉnh/Phường/Số nhà này vào hồ sơ khách hàng">
+                  <span v-if="isSavingCustomerAddress" class="fee-spinner"></span>
+                  <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2.2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                  </svg>
+                  <span>{{ isSavingCustomerAddress ? 'Đang lưu...' : 'Lưu vào hồ sơ KH' }}</span>
+                </button>
+              </div>
             </div>
 
             <!-- Thanh trạng thái & Phí vận chuyển GHN -->

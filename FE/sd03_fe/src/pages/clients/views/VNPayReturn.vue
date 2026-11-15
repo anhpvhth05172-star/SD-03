@@ -229,8 +229,8 @@ async function retryPayment() {
               <div class="status-icon bg-white text-danger rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center shadow-sm">
                 <i class="bi bi-x-lg fs-1"></i>
               </div>
-              <h4 class="fw-bold mb-1">Thanh toán không thành công</h4>
-              <p class="mb-0 opacity-75 small">Đơn hàng tạm thời đã bị hủy — giỏ hàng của bạn vẫn được giữ nguyên</p>
+              <h4 class="fw-bold mb-1">Thanh toán chưa hoàn tất</h4>
+              <p class="mb-0 opacity-75 small">Đơn hàng của bạn đang được treo giữ trong 5 phút để bạn có thể tiếp tục thanh toán lại</p>
             </div>
 
             <div class="card-body p-4 p-md-5">

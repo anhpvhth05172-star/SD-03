@@ -20,14 +20,15 @@ public class PendingPaymentCleanupJob {
     private final HoaDonService hoaDonService;
 
     /**
-     * Chạy định kỳ mỗi 1 phút: quét các đơn hàng CHO_THANH_TOAN (VNPAY) đã tạo quá 15 phút
+     * Chạy định kỳ mỗi 1 phút: quét các đơn hàng CHO_THANH_TOAN (VNPAY) đã tạo quá 5 phút
      * mà khách hàng không hoàn tất thanh toán -> tự động hủy đơn và hoàn trả tồn kho giữ chỗ.
      * Mỗi đơn hàng được hủy trong một transaction độc lập (REQUIRES_NEW).
      */
     @Scheduled(fixedDelay = 60 * 1000)
     public void cancelExpiredPendingOrders() {
         try {
-            LocalDateTime limit = LocalDateTime.now().minusMinutes(15);
+            // Treo đơn hàng 5 phút: quá 5 phút chưa thanh toán thành công mới hủy
+            LocalDateTime limit = LocalDateTime.now().minusMinutes(5);
             List<HoaDon> expired = hoaDonRepository
                     .findByTrangThaiAndNgayTaoBefore("CHO_THANH_TOAN", limit);
 

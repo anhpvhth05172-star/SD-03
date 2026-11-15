@@ -81,6 +81,8 @@ const mapServerItem = (item) => ({
   canhBao: item.canhBao || null,
 });
 
+let isMergingCart = false;
+
 // Lấy giỏ hàng từ BE khi đã đăng nhập
 export async function fetchCart() {
   const user = getUser();
@@ -93,6 +95,39 @@ export async function fetchCart() {
   cart.loading = true;
   cart.error = null;
   try {
+    // Giữ nguyên giỏ hàng: Gộp các món khách đã nhặt khi chưa đăng nhập lên server
+    if (!isMergingCart) {
+      isMergingCart = true;
+      try {
+        const localSaved = (() => {
+          try {
+            return JSON.parse(localStorage.getItem("ps_cart")) || [];
+          } catch {
+            return [];
+          }
+        })();
+        const sourceList = Array.isArray(cart.items) && cart.items.length > 0 ? cart.items : localSaved;
+        const guestItems = sourceList.filter(
+          (i) => !i.idGioHangChiTiet && (i.idSanPhamChiTiet || i.variantId)
+        );
+        if (guestItems.length > 0) {
+          for (const gItem of guestItems) {
+            try {
+              await themVaoGioHangApi({
+                idKhachHang: user.idKhachHang,
+                idSanPhamChiTiet: gItem.idSanPhamChiTiet || gItem.variantId,
+                soLuong: Number(gItem.qty || 1),
+              });
+            } catch (mergeErr) {
+              console.warn("Không thể gộp item khách vãng lai vào giỏ server:", gItem, mergeErr);
+            }
+          }
+        }
+      } finally {
+        isMergingCart = false;
+      }
+    }
+
     const res = await layGioHangApi(user.idKhachHang);
     cart.serverCart = res;
     if (res && Array.isArray(res.items)) {

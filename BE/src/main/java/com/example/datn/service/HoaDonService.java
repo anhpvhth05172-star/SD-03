@@ -1193,17 +1193,12 @@ boolean isTaiQuay = "TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon())) || "TAI_QUA
                 throw new IllegalArgumentException("Phí vận chuyển từ GHN không hợp lệ");
             }
             req.setPhiVanChuyen(BigDecimal.valueOf(phi));
-        } catch (IllegalArgumentException ex) {
-            String msg = ex.getMessage() != null ? ex.getMessage().toLowerCase(java.util.Locale.ROOT) : "";
-            if (msg.contains("to ward not found") || msg.contains("from ward not found")) {
-                BigDecimal fallbackPhi = req.getPhiVanChuyen();
-                if (fallbackPhi == null || fallbackPhi.compareTo(BigDecimal.valueOf(1000)) <= 0) {
-                    fallbackPhi = BigDecimal.valueOf(30000);
-                }
-                req.setPhiVanChuyen(fallbackPhi);
-                return;
+        } catch (Exception ex) {
+            BigDecimal fallbackPhi = req.getPhiVanChuyen();
+            if (fallbackPhi == null || fallbackPhi.compareTo(BigDecimal.valueOf(1000)) <= 0) {
+                fallbackPhi = BigDecimal.valueOf(30000);
             }
-            throw ex;
+            req.setPhiVanChuyen(fallbackPhi);
         }
     }
 
@@ -1454,8 +1449,8 @@ private NhanVien timNhanVien(Long id) {
             throw new IllegalArgumentException("Phiếu giảm giá không hoạt động");
         }
         boolean laPos = "TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon())) || "TAI_QUAY_GIAO_HANG".equals(toMaLoaiDon(req.getLoaiDon()));
-        if (!laPos && req.getIdKhachHang() == null) {
-            throw new IllegalArgumentException("Vui lòng chọn khách hàng để sử dụng phiếu giảm giá");
+        if (!laPos && req.getIdKhachHang() == null && "CA_NHAN".equalsIgnoreCase(phieu.getPhamVi())) {
+            throw new IllegalArgumentException("Vui lòng đăng nhập để sử dụng phiếu giảm giá cá nhân");
         }
         if ("CA_NHAN".equalsIgnoreCase(phieu.getPhamVi())) {
             if (req.getIdKhachHang() == null
@@ -2137,9 +2132,11 @@ private NhanVien timNhanVien(Long id) {
         }
 
         PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
-        if (phieu != null && req.getIdKhachHang() != null) {
-            kiemTraGioiHanSuDung(phieu, req.getIdKhachHang(), hoaDon.getId());
-            ghiLichSuSuDung(hoaDon, phieu);
+        if (phieu != null) {
+            if (req.getIdKhachHang() != null) {
+                kiemTraGioiHanSuDung(phieu, req.getIdKhachHang(), hoaDon.getId());
+                ghiLichSuSuDung(hoaDon, phieu);
+            }
             int daDung = phieu.getSoLuongDaSuDung() != null ? phieu.getSoLuongDaSuDung() : 0;
             phieu.setSoLuongDaSuDung(daDung + 1);
             phieuGiamGiaRepository.save(phieu);

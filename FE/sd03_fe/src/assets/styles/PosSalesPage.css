@@ -1,11 +1,141 @@
-
+/* ==========================================================================
+   PRODUCT MANAGEMENT TYPOGRAPHY SYSTEM SYNC
+   ========================================================================== */
 .pos-page {
+  --font-family: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --text-heading: #0f172a;
+  --text-body: #334155;
+  --text-label: #475569;
+  --text-muted: #64748b;
+  --text-light: #94a3b8;
+  --color-primary: #dc2626;
+  --color-primary-hover: #b91c1c;
+  --color-primary-dark: #991b1b;
+  --color-primary-light: #fef2f2;
+  --color-primary-border: #fecdd3;
+  --border-default: #e2e8f0;
+  --border-subtle: #f1f5f9;
+
   width: 100%;
   min-height: calc(100vh - 76px);
   padding: 0 0 24px;
-  color: #1e293b;
-  font-family: inherit;
+  color: var(--text-body);
+  font-family: var(--font-family) !important;
+  font-size: 13.5px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
   box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.pos-page *,
+.pos-page *::before,
+.pos-page *::after,
+.pos-modal-overlay *,
+.pos-modal-dialog *,
+.pos-receipt-preview-dialog * {
+  font-family: var(--font-family);
+  letter-spacing: -0.01em;
+  box-sizing: border-box;
+}
+
+/* Codes, SKU, barcodes, invoice IDs */
+.pos-page code,
+.pos-page pre,
+.pos-page .code-tag,
+.pos-page .code-pill,
+.pos-page .code-pill-modal,
+.pos-page .prod-code-sub,
+.pos-page .barcode-text,
+.pos-page .clock-time,
+.pos-page .shift-code,
+.pos-page .order-code-badge,
+.pos-page .mini-order-code,
+.pos-page .recent-inv-code,
+.pos-page .stk-number,
+.pos-page .memo-badge,
+.pos-page .receipt-barcode-code,
+.pos-modal-dialog code,
+.pos-modal-dialog .code-pill-modal {
+  font-family: var(--font-mono) !important;
+  letter-spacing: 0.02em !important;
+}
+
+/* Headings & Section Titles */
+.pos-page h1, .pos-page h2, .pos-page h3, .pos-page h4, .pos-page h5, .pos-page h6,
+.pos-page .panel-title,
+.pos-page .card-title,
+.pos-page .pos-delivery-title,
+.pos-modal-dialog h3,
+.pos-modal-dialog .pos-modal-title,
+.pos-modal-dialog .modal-head-title h3 {
+  font-family: var(--font-family) !important;
+  color: var(--text-heading);
+  letter-spacing: -0.01em;
+}
+
+/* Form labels & Filter labels */
+.pos-page label,
+.pos-page .form-label,
+.pos-page .filter-label,
+.pos-modal-dialog label,
+.pos-modal-dialog .form-label {
+  font-family: var(--font-family) !important;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-label);
+  letter-spacing: -0.01em;
+}
+
+/* Inputs, Selects, Textareas */
+.pos-page input,
+.pos-page select,
+.pos-page textarea,
+.pos-modal-dialog input,
+.pos-modal-dialog select,
+.pos-modal-dialog textarea {
+  font-family: var(--font-family) !important;
+  font-size: 13px;
+  color: var(--text-heading);
+  letter-spacing: -0.01em;
+}
+
+/* Table Headers (matching ProductListPage .data-table th) */
+.pos-page table th,
+.pos-modal-dialog table th,
+.cart-table thead th,
+.pos-prod-table thead th,
+.modal-prod-table thead th {
+  font-family: var(--font-family) !important;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: 0.04em !important;
+}
+
+/* Table Body Cells */
+.pos-page table td,
+.pos-modal-dialog table td,
+.cart-table tbody td,
+.pos-prod-table tbody td,
+.modal-prod-table tbody td {
+  font-family: var(--font-family) !important;
+  font-size: 13px;
+  color: var(--text-body);
+  letter-spacing: -0.01em;
+}
+
+/* Buttons */
+.pos-page button,
+.pos-modal-dialog button,
+.pos-hdr-btn,
+.pos-order-tab,
+.btn-tool-action {
+  font-family: var(--font-family) !important;
+  letter-spacing: -0.01em;
 }
 
 .pos-top-bar {
@@ -38,8 +168,8 @@
   border-radius: 8px;
   font-size: 13px;
   font-weight: 800;
-  color: #d92d20;
-  letter-spacing: 0.3px;
+  color: #dc2626;
+  letter-spacing: -0.01em;
 }
 
 .station-divider {
@@ -107,11 +237,11 @@
 }
 
 .clock-time {
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 15px;
   font-weight: 800;
   color: #0f172a;
-  letter-spacing: 0.5px;
+  letter-spacing: -0.01em;
 }
 
 .clock-date {
@@ -160,7 +290,7 @@
 .staff-avatar {
   width: 28px;
   height: 28px;
-  background: #d92d20;
+  background: #dc2626;
   color: #ffffff;
   border-radius: 50%;
   display: flex;
@@ -641,7 +771,7 @@
 }
 
 .prod-code-sub {
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 11.5px;
   color: #64748b;
   font-weight: 500;
@@ -1463,7 +1593,7 @@ input:checked + .toggle-slider:before {
   padding: 3px 9px;
   border-radius: 6px;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
@@ -1907,7 +2037,7 @@ input:checked + .toggle-slider:before {
   font-weight: 700;
   color: #475569;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
 }
 
 .btn-browse-vouchers {
@@ -2126,7 +2256,7 @@ input:checked + .toggle-slider:before {
 }
 
 .selected-voucher-code {
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-weight: 800;
   color: #b91c1c;
   font-size: 13px;
@@ -2227,7 +2357,7 @@ input:checked + .toggle-slider:before {
 .hero-lbl {
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   color: rgba(255, 255, 255, 0.85);
   text-transform: uppercase;
   display: block;
@@ -2629,7 +2759,7 @@ input:checked + .toggle-slider:before {
   height: 36px;
   border-radius: 10px;
   background: #fef2f2;
-  color: #d92d20;
+  color: #dc2626;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2715,7 +2845,7 @@ input:checked + .toggle-slider:before {
 .btn-modal-submit {
   height: 38px;
   padding: 0 20px;
-  background: #d92d20;
+  background: #dc2626;
   color: #ffffff;
   border: none;
   font-size: 13px;
@@ -2815,9 +2945,9 @@ input:checked + .toggle-slider:before {
   height: 38px;
   padding: 0 28px 0 11px;
   background-color: #ffffff;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   color: #334155;
   cursor: pointer;
@@ -3045,7 +3175,7 @@ input:checked + .toggle-slider:before {
   pointer-events: none;
   z-index: 3;
   white-space: nowrap;
-  letter-spacing: -0.2px;
+  letter-spacing: -0.01em;
 }
 
 .prod-img-discount-badge.mini {
@@ -3062,7 +3192,7 @@ input:checked + .toggle-slider:before {
 
 .code-pill-modal {
   display: inline-block;
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 13px;
   font-weight: 600;
   color: #1e293b;
@@ -3582,7 +3712,7 @@ input:checked + .toggle-slider:before {
 }
 
 .best-code-chip {
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 11px;
   font-weight: 800;
   color: #b91c1c;
@@ -3655,7 +3785,7 @@ input:checked + .toggle-slider:before {
   font-weight: 700;
   color: #991b1b;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: -0.01em;
 }
 
 .best-banner-title {
@@ -3665,7 +3795,7 @@ input:checked + .toggle-slider:before {
 }
 
 .best-code-tag {
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 14px;
   font-weight: 800;
   color: #dc2626;
@@ -3798,13 +3928,13 @@ input:checked + .toggle-slider:before {
   font-size: 19px;
   font-weight: 900;
   line-height: 1.1;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.01em;
 }
 
 .voucher-type-sub {
   font-size: 9.5px;
   font-weight: 800;
-  letter-spacing: 0.5px;
+  letter-spacing: -0.01em;
   margin-top: 3px;
   opacity: 0.9;
 }
@@ -3839,7 +3969,7 @@ input:checked + .toggle-slider:before {
 }
 
 .voucher-card-code {
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 13.5px;
   font-weight: 800;
   color: #0f172a;
@@ -4219,7 +4349,7 @@ input:checked + .toggle-slider:before {
 }
 
 .pos-manual-code-inp:focus {
-  border-color: #d92d20;
+  border-color: #dc2626;
   box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.08);
 }
 
@@ -4561,7 +4691,7 @@ input:checked + .toggle-slider:before {
   color: #64748b;
   font-weight: 600;
   margin-left: 2px;
-  letter-spacing: 0.2px;
+  letter-spacing: -0.01em;
 }
 
 .pos-order-tab.active .tab-order-code {
@@ -4634,7 +4764,7 @@ input:checked + .toggle-slider:before {
 .vietqr-brand-logo {
   font-size: 15px;
   font-weight: 800;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.01em;
 }
 
 .vietqr-text-viet {
@@ -4642,7 +4772,7 @@ input:checked + .toggle-slider:before {
 }
 
 .vietqr-text-qr {
-  color: #d92d20;
+  color: #dc2626;
 }
 
 .bank-napas-tag {
@@ -4725,7 +4855,7 @@ input:checked + .toggle-slider:before {
   font-size: 22px;
   font-weight: 800;
   color: #dc2626;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.01em;
 }
 
 .btn-copy-chip {
@@ -4795,7 +4925,7 @@ input:checked + .toggle-slider:before {
 .bank-info-row .info-v.strong-text {
   font-weight: 700;
   color: #0f172a;
-  letter-spacing: 0.3px;
+  letter-spacing: -0.01em;
 }
 
 .info-v-copy {
@@ -4805,11 +4935,11 @@ input:checked + .toggle-slider:before {
 }
 
 .copy-text-code {
-  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-weight: 700;
   color: #0f172a;
   font-size: 13.5px;
-  letter-spacing: 0.5px;
+  letter-spacing: -0.01em;
 }
 
 .copy-text-code.highlight-memo {
@@ -4941,7 +5071,7 @@ input:checked + .toggle-slider:before {
 .thermal-receipt-box {
   background: #ffffff;
   padding: 24px 20px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #1e293b;
   font-size: 12.5px;
   border-radius: 12px;
@@ -4960,7 +5090,7 @@ input:checked + .toggle-slider:before {
   font-size: 19px;
   font-weight: 900;
   color: #0f172a;
-  letter-spacing: 0.5px;
+  letter-spacing: -0.01em;
   margin-bottom: 4px;
 }
 
@@ -4982,15 +5112,15 @@ input:checked + .toggle-slider:before {
   font-size: 14.5px;
   font-weight: 800;
   color: #0f172a;
-  letter-spacing: 0.8px;
+  letter-spacing: -0.01em;
 }
 
 .receipt-barcode-code {
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 11.5px;
   font-weight: 600;
   color: #64748b;
-  letter-spacing: 2px;
+  letter-spacing: 0.02em;
   margin-top: 2px;
 }
 
@@ -5038,7 +5168,7 @@ input:checked + .toggle-slider:before {
   font-weight: 700;
   color: #475569;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: -0.01em;
 }
 
 .receipt-items-table tbody tr {
@@ -5127,7 +5257,7 @@ input:checked + .toggle-slider:before {
   font-size: 18px;
   font-weight: 900;
   color: #dc2626;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.01em;
 }
 
 /* Footer ghi chú */
@@ -5229,10 +5359,10 @@ input:checked + .toggle-slider:before {
   box-shadow: 0 2px 0 #cbd5e1;
   padding: 4px 10px;
   border-radius: 6px;
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 12.5px;
   font-weight: 800;
-  color: #d92d20;
+  color: #dc2626;
   min-width: 44px;
   text-align: center;
 }
@@ -5313,7 +5443,7 @@ input:checked + .toggle-slider:before {
   color: #fff;
   padding: 2px 7px;
   border-radius: 4px;
-  letter-spacing: 0.3px;
+  letter-spacing: -0.01em;
 }
 
 .bank-modal-head-actions {
@@ -5429,7 +5559,7 @@ input:checked + .toggle-slider:before {
 .cqr-store-brand {
   font-size: 20px;
   font-weight: 900;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.02em;
   color: #0f172a;
   margin-bottom: 4px;
 }
@@ -5482,7 +5612,7 @@ input:checked + .toggle-slider:before {
   font-size: 11px;
   font-weight: 700;
   color: #dc2626;
-  letter-spacing: 0.5px;
+  letter-spacing: -0.01em;
   margin-bottom: 2px;
 }
 
@@ -5490,7 +5620,7 @@ input:checked + .toggle-slider:before {
   font-size: 26px;
   font-weight: 900;
   color: #b91c1c;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.01em;
 }
 
 .cqr-bank-recap {
@@ -5551,7 +5681,7 @@ input:checked + .toggle-slider:before {
   font-weight: 800;
   color: #15803d;
   margin: 0 0 6px 0;
-  letter-spacing: 0.5px;
+  letter-spacing: -0.01em;
 }
 
 .bso-amount {
@@ -5624,7 +5754,7 @@ input:checked + .toggle-slider:before {
 
 .bank-clean-brand .qr-txt {
   font-weight: 800;
-  color: #d92d20;
+  color: #dc2626;
   font-size: 13px;
 }
 
@@ -5635,7 +5765,7 @@ input:checked + .toggle-slider:before {
   color: #ffffff;
   padding: 1px 5px;
   border-radius: 3px;
-  letter-spacing: 0.3px;
+  letter-spacing: -0.01em;
 }
 
 .bank-clean-title {
@@ -5721,7 +5851,7 @@ input:checked + .toggle-slider:before {
 .bank-clean-amount-box {
   background: #ffffff;
   border: 1px solid #fee2e2;
-  border-left: 4px solid #d92d20;
+  border-left: 4px solid #dc2626;
   border-radius: 10px;
   padding: 10px 14px;
   box-shadow: 0 1px 2px rgba(217, 45, 32, 0.05);
@@ -5733,7 +5863,7 @@ input:checked + .toggle-slider:before {
   font-weight: 600;
   color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: -0.01em;
   margin-bottom: 2px;
 }
 
@@ -5746,8 +5876,8 @@ input:checked + .toggle-slider:before {
 .bank-clean-amount-value {
   font-size: 21px;
   font-weight: 900;
-  color: #d92d20;
-  letter-spacing: -0.3px;
+  color: #dc2626;
+  letter-spacing: -0.01em;
 }
 
 .btn-clean-copy-amount {
@@ -5757,7 +5887,7 @@ input:checked + .toggle-slider:before {
   padding: 4px 8px;
   font-size: 11.5px;
   font-weight: 700;
-  color: #d92d20;
+  color: #dc2626;
   background: #fef2f2;
   border: 1px solid #fecaca;
   border-radius: 6px;
@@ -5836,18 +5966,18 @@ input:checked + .toggle-slider:before {
 }
 
 .stk-number {
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-weight: 800;
   font-size: 13.5px;
   color: #0f172a;
-  letter-spacing: 0.5px;
+  letter-spacing: -0.01em;
 }
 
 .memo-badge {
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-weight: 800;
   font-size: 12.5px;
-  color: #d92d20;
+  color: #dc2626;
   background: #fef2f2;
   border: 1px solid #fecaca;
   padding: 1px 7px;
@@ -5927,7 +6057,7 @@ input:checked + .toggle-slider:before {
   font-size: 13px;
   font-weight: 800;
   color: #ffffff;
-  background: #d92d20;
+  background: #dc2626;
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -6155,7 +6285,7 @@ input:checked + .toggle-slider:before {
 }
 
 .recent-inv-code {
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-weight: 800;
   color: #dc2626;
   background: #fef2f2;
@@ -6381,7 +6511,7 @@ input:checked + .toggle-slider:before {
   color: #a16207;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.3px;
+  letter-spacing: -0.01em;
   padding: 4px 9px;
   border-radius: 6px;
   border: 1px solid #fde047;
@@ -6496,7 +6626,7 @@ input:checked + .toggle-slider:before {
   font-weight: 600;
   color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: -0.01em;
 }
 
 .shift-info-val {
@@ -6660,7 +6790,7 @@ input:checked + .toggle-slider:before {
   font-weight: 700;
   color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: -0.01em;
 }
 
 .sum-card-val {
