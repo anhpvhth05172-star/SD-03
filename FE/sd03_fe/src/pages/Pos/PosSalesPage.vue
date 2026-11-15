@@ -6,7 +6,7 @@ import { Html5Qrcode } from 'html5-qrcode'
 import http from '@/api/http'
 import { getProvinces, getWards, getServices, tinhPhi } from '@/api/shipping'
 import { DS_63_TINH_THANH } from '@/api/diaGioi'
-import { notifySuccess, notifyWarning, notifyToastWarning, notifyError, notifyConfirm } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyToastWarning, notifyToast, notifyError, notifyConfirm } from '@/utils/notify'
 import { formatVnd, formatDateTime } from '@/utils/format'
 import { getDangMo, moCa, getTongKet, ketCa, getDanhSachCaLam } from '@/api/giaoCa'
 import { inBienLaiDoiSoatK80 } from '@/utils/printShiftReceipt'
@@ -2858,7 +2858,6 @@ const nextVoucherSuggestion = computed(() => {
   }
 })
 
-let isConfirmingVoucherUpgrade = false
 
 watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrder.value?.customer?.id], ([newSubTotal, newBest], [, , oldCustId]) => {
   if (!currentOrder.value) return
@@ -2893,7 +2892,7 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
   }
 
   if (!currentOrder.value.selectedVoucher) {
-    if (newBest?.voucher) {
+    if (newBest?.voucher && !currentOrder.value.userRemovedVoucher) {
       currentOrder.value.selectedVoucher = newBest.voucher
       currentOrder.value.userSelectedVoucherManually = false
     }
@@ -2902,31 +2901,21 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
     const curDisc = calculateVoucherDiscount(curV, newSubTotal)
     const newDisc = calculateVoucherDiscount(newBest.voucher, newSubTotal)
 
-    // Nếu mã mới có mức giảm tốt hơn mã đang áp dụng và chưa từng từ chối mã này trên đơn hiện tại
-    if (newDisc > curDisc && !isConfirmingVoucherUpgrade && currentOrder.value.declinedUpgradeVoucherId !== newBest.voucher.id) {
-      isConfirmingVoucherUpgrade = true
+    // Khi thêm sản phẩm đạt mức giảm tốt hơn: tự động áp dụng ngay mà không hỏi popup xác nhận
+    if (newDisc > curDisc) {
       const curCode = curV.ma || curV.maPhieuGiamGia || 'Mã hiện tại'
       const newCode = newBest.voucher.ma || newBest.voucher.maPhieuGiamGia || 'Mã mới'
 
-      notifyConfirm(
-        'Phát hiện mã giảm giá tốt hơn!',
-        `Đơn hàng đang áp dụng mã "${curCode}" (giảm ${formatVnd(curDisc)}). Khi thêm sản phẩm, mã "${newCode}" có mức giảm tốt hơn (giảm ${formatVnd(newDisc)}). Bạn có muốn đổi sang dùng mã giảm giá mới không?`,
-        'Dùng mã mới',
-        'Giữ mã cũ'
-      ).then((ok) => {
-        isConfirmingVoucherUpgrade = false
-        if (ok && currentOrder.value) {
-          currentOrder.value.selectedVoucher = newBest.voucher
-          currentOrder.value.userSelectedVoucherManually = false
-          currentOrder.value.declinedUpgradeVoucherId = null
-          notifySuccess('Đổi mã thành công', `Đã chuyển sang dùng mã "${newCode}" (giảm ${formatVnd(newDisc)})!`)
-        } else if (currentOrder.value) {
-          currentOrder.value.userSelectedVoucherManually = true
-          currentOrder.value.declinedUpgradeVoucherId = newBest.voucher.id
-        }
-      }).catch(() => {
-        isConfirmingVoucherUpgrade = false
-      })
+      currentOrder.value.selectedVoucher = newBest.voucher
+      currentOrder.value.userSelectedVoucherManually = false
+      currentOrder.value.declinedUpgradeVoucherId = null
+
+      notifyToast(
+        'Đã tự động áp dụng mã tốt hơn!',
+        `Đơn hàng tự động đổi sang mã "${newCode}" (giảm ${formatVnd(newDisc)}) thay cho "${curCode}"`,
+        'success',
+        2500
+      )
     }
   }
 }, { immediate: true })
