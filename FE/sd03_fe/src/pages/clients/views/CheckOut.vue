@@ -60,7 +60,6 @@ async function fetchCustomer() {
     return null;
   }
 
-  // API thông tin phiên trả đúng hồ sơ khách hàng mà không cần gọi danh sách quản trị.
   try {
     const profile = await getJson("/api/auth/thong-tin");
     return { ...u, ...profile, id: profile.id ?? u.idKhachHang ?? u.id };

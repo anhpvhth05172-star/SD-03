@@ -314,20 +314,31 @@ public class EmailService {
             String maDon = (maHoaDon != null && !maHoaDon.isBlank()) ? maHoaDon.trim() : "";
             String subject;
             String ttLower = (trangThai != null ? trangThai : "").toLowerCase();
+            String ldLower = (loaiDon != null ? loaiDon : "").toLowerCase();
+            boolean laGiaoHang = ldLower.contains("giao hàng") || ldLower.contains("online");
+
             if (ttLower.contains("hoàn tiền") || ttLower.contains("cho_hoan_tien")) {
-                subject = "[PolyShoes] Thông báo đơn hàng #" + maDon + " đang chờ hoàn tiền do hết hàng tồn kho";
+                subject = "[PolyShoes] Thông báo đơn hàng #" + maDon + " đang chờ hoàn tiền";
             } else if (ttLower.contains("đã hoàn tiền") || ttLower.contains("da_hoan_tien")) {
                 subject = "[PolyShoes] Đơn hàng #" + maDon + " đã được hoàn tiền thành công";
             } else if (ttLower.contains("hủy") || ttLower.contains("da_huy")) {
                 subject = "[PolyShoes] Thông báo hủy đơn hàng #" + maDon;
-            } else if (ttLower.contains("đang giao") || ttLower.contains("dang_giao")) {
+            } else if (ttLower.contains("đang giao") || ttLower.contains("dang_giao") || ttLower.contains("vận chuyển")) {
                 subject = "[PolyShoes] Đơn hàng #" + maDon + " đang được vận chuyển đến bạn";
+            } else if (ttLower.contains("chờ giao") || ttLower.contains("cho_giao")) {
+                subject = "[PolyShoes] Đơn hàng #" + maDon + " đã đóng gói, chờ bên vận chuyển tiếp nhận";
             } else if (ttLower.contains("đã giao") || ttLower.contains("hoàn thành") || ttLower.contains("da_hoan_thanh")) {
                 subject = "[PolyShoes] Giao hàng thành công đơn hàng #" + maDon;
-            } else if (ttLower.contains("xác nhận") || ttLower.contains("da_xac_nhan")) {
-                subject = "[PolyShoes] Đơn hàng #" + maDon + " đã được xác nhận thành công";
+            } else if (ttLower.contains("chờ xác nhận") || ttLower.contains("cho_xac_nhan")) {
+                subject = laGiaoHang
+                    ? "[PolyShoes] Đặt hàng thành công! Đơn hàng #" + maDon + " đang chờ xác nhận"
+                    : "[PolyShoes] Hóa đơn bán hàng #" + maDon + " đang chờ xác nhận";
+            } else if (ttLower.contains("đã xác nhận") || ttLower.contains("da_xac_nhan")) {
+                subject = laGiaoHang
+                    ? "[PolyShoes] Đơn giao hàng #" + maDon + " đã được xác nhận thành công"
+                    : "[PolyShoes] Đơn hàng #" + maDon + " đã được xác nhận thành công";
             } else {
-                subject = "[PolyShoes] Cập nhật đơn hàng #" + maDon + " (" + (trangThai != null ? trangThai : "") + ")";
+                subject = "[PolyShoes] Thông tin đơn hàng #" + maDon + " (" + (trangThai != null ? trangThai : "") + ")";
             }
             helper.setSubject(subject);
 

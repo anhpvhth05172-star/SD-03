@@ -28,6 +28,8 @@ public interface KhachHangRepository extends JpaRepository<KhachHang, Long> {
 
     Optional<KhachHang> findByEmail(String email);
 
+    Optional<KhachHang> findFirstBySoDienThoai(String soDienThoai);
+
     @Query("select k from KhachHang k where k.email = :taiKhoan or k.tenTaiKhoan = :taiKhoan")
     Optional<KhachHang> findByEmailOrTenTaiKhoan(@Param("taiKhoan") String taiKhoan);
 

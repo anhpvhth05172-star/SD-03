@@ -111,15 +111,7 @@ public class VNPayService {
         hoaDonRepository.save(hoaDon);
 
         try {
-            KhachHang kh = hoaDon.getKhachHang();
-            if (kh != null && kh.getEmail() != null && !kh.getEmail().isBlank()) {
-                String tenKH = kh.getTenKhachHang() != null ? kh.getTenKhachHang() : "Quý khách";
-                String soTienStr = String.format("%,.0f", hoaDon.getTienSauGiamGia());
-                String diaChi = hoaDon.getDiaChiNhanHang() != null ? hoaDon.getDiaChiNhanHang() : "Không có";
-                emailService.guiMailDatHangThanhCong(
-                    kh.getEmail(), tenKH, hoaDon.getMaHoaDon(), soTienStr, "Chuyển khoản QR", diaChi
-                );
-            }
+            hoaDonService.guiEmailHoaDonTuDong(hoaDon, null);
         } catch (Exception ex) {
             log.warn("Lỗi gửi email xác nhận đơn QR {}: {}", hoaDon.getMaHoaDon(), ex.getMessage());
         }
@@ -215,15 +207,7 @@ public class VNPayService {
 
                 log.info("VNPay thành công → đơn {} chuyển sang CHO_XAC_NHAN (GD: {})", maHoaDon, vnpTransactionNo);
                 try {
-                    KhachHang kh = hoaDon.getKhachHang();
-                    if (kh != null && kh.getEmail() != null && !kh.getEmail().isBlank()) {
-                        String tenKH = kh.getTenKhachHang() != null ? kh.getTenKhachHang() : "Quý khách";
-                        String soTienStr = String.format("%,.0f", amount);
-                        String diaChi = hoaDon.getDiaChiNhanHang() != null ? hoaDon.getDiaChiNhanHang() : "Không có";
-                        emailService.guiMailDatHangThanhCong(
-                            kh.getEmail(), tenKH, maHoaDon, soTienStr, "VNPay QR", diaChi
-                        );
-                    }
+                    hoaDonService.guiEmailHoaDonTuDong(hoaDon, null);
                 } catch (Exception ex) {
                     log.warn("Lỗi gửi email xác nhận đơn VNPay {}: {}", maHoaDon, ex.getMessage());
                 }

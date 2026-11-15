@@ -490,6 +490,7 @@ const savePendingOrdersToStorage = () => {
       deliveryInfo: {
         recipientName: o.deliveryInfo?.recipientName || '',
         recipientPhone: o.deliveryInfo?.recipientPhone || '',
+        recipientEmail: o.deliveryInfo?.recipientEmail || '',
         recipientAddress: o.deliveryInfo?.recipientAddress || '',
         province: o.deliveryInfo?.province || null,
         ward: o.deliveryInfo?.ward || null,
@@ -538,6 +539,7 @@ const restorePendingOrdersFromStorage = () => {
       deliveryInfo: {
         recipientName: o.deliveryInfo?.recipientName || '',
         recipientPhone: o.deliveryInfo?.recipientPhone || '',
+        recipientEmail: o.deliveryInfo?.recipientEmail || '',
         recipientAddress: o.deliveryInfo?.recipientAddress || '',
         province: o.deliveryInfo?.province || null,
         ward: o.deliveryInfo?.ward || null,
@@ -610,6 +612,7 @@ const createNewOrder = (silent = false) => {
     deliveryInfo: {
       recipientName: '',
       recipientPhone: '',
+      recipientEmail: '',
       recipientAddress: '',
       province: null,
       ward: null,
@@ -1154,6 +1157,7 @@ const applySavedAddressToDeliveryForm = async (addrObj, cust = null, showToast =
   if (activeCust) {
     d.recipientName = activeCust.ten || activeCust.tenKhachHang || d.recipientName || ''
     d.recipientPhone = activeCust.soDienThoai || d.recipientPhone || ''
+    d.recipientEmail = activeCust.email || d.recipientEmail || ''
   }
 
   d.recipientAddress = addrObj.diaChiCuThe || ''
@@ -1207,6 +1211,7 @@ const fetchAndSyncCustomerAddresses = async (cust, autoFillIfDelivery = true, sh
       const d = currentOrder.value.deliveryInfo
       d.recipientName = cust.ten || cust.tenKhachHang || d.recipientName || ''
       d.recipientPhone = cust.soDienThoai || d.recipientPhone || ''
+      d.recipientEmail = cust.email || d.recipientEmail || ''
 
       if (defaultAddress) {
         await applySavedAddressToDeliveryForm(defaultAddress, cust, showToast)
@@ -1458,6 +1463,7 @@ const selectCustomer = async (cust) => {
     if (currentOrder.value.isDelivery) {
       currentOrder.value.deliveryInfo.recipientName = cust.ten || cust.tenKhachHang || ''
       currentOrder.value.deliveryInfo.recipientPhone = cust.soDienThoai || ''
+      currentOrder.value.deliveryInfo.recipientEmail = cust.email || ''
     }
     await fetchAndSyncCustomerAddresses(cust, true, false)
   }
@@ -1468,6 +1474,7 @@ const fillDeliveryFromCustomer = async () => {
   const cust = currentOrder.value.customer
   currentOrder.value.deliveryInfo.recipientName = cust.ten || cust.tenKhachHang || ''
   currentOrder.value.deliveryInfo.recipientPhone = cust.soDienThoai || ''
+  currentOrder.value.deliveryInfo.recipientEmail = cust.email || ''
   await fetchAndSyncCustomerAddresses(cust, true, true)
 }
 
@@ -1476,6 +1483,7 @@ const clearDeliveryForm = () => {
   if (!d) return
   d.recipientName = ''
   d.recipientPhone = ''
+  d.recipientEmail = ''
   d.province = null
   d.ward = null
   d.recipientAddress = ''
@@ -1495,6 +1503,7 @@ watch(() => currentOrder.value?.isDelivery, async (enabled) => {
     const d = currentOrder.value.deliveryInfo
     if (!d.recipientName) d.recipientName = cust.ten || cust.tenKhachHang || ''
     if (!d.recipientPhone) d.recipientPhone = cust.soDienThoai || ''
+    if (!d.recipientEmail) d.recipientEmail = cust.email || ''
     const cached = customerAddressesMap[cust.id]
     if (cached?.defaultAddress && !d.province) {
       await applySavedAddressToDeliveryForm(cached.defaultAddress, cust, false)
@@ -3619,7 +3628,9 @@ const handleCheckout = async (options = {}) => {
       trangThai: targetStatus,
       ghiChu: currentOrder.value.note || (isDeliveryOrder ? 'Đơn giao hàng tạo tại quầy POS' : 'Bán hàng tại quầy POS'),
       idKhachHang: currentOrder.value.customer ? currentOrder.value.customer.id : null,
-      email: currentOrder.value.customer?.email || null,
+      email: (delivery?.recipientEmail && delivery.recipientEmail.trim())
+        ? delivery.recipientEmail.trim()
+        : (currentOrder.value.customer?.email ? currentOrder.value.customer.email.trim() : null),
       idNhanVien: employeeId,
       idPhuongThucThanhToan: paymentMethodId,
       idPhieuGiamGia: currentOrder.value.selectedVoucher ? currentOrder.value.selectedVoucher.id : null,
@@ -4725,6 +4736,24 @@ onUnmounted(() => {
                   <input type="tel" class="pos-del-control with-icon"
                     placeholder="Nhập SĐT liên hệ giao hàng (VD: 0987...)"
                     v-model="currentOrder.deliveryInfo.recipientPhone" maxlength="11" />
+                </div>
+              </div>
+
+              <!-- Email người nhận -->
+              <div class="pos-del-field">
+                <label class="pos-del-label">
+                  Email người nhận (để gửi hóa đơn & thông tin đơn hàng)
+                </label>
+                <div class="pos-del-input-wrap">
+                  <span class="pos-del-field-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                      <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                  </span>
+                  <input type="email" class="pos-del-control with-icon"
+                    placeholder="Nhập email để tự động gửi thông tin đơn hàng..."
+                    v-model="currentOrder.deliveryInfo.recipientEmail" />
                 </div>
               </div>
 

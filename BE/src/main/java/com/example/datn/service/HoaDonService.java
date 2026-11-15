@@ -279,8 +279,13 @@ public class HoaDonService {
         if (h == null) return;
         try {
             String email = emailNhan;
-            if (isBlank(email) && h.getKhachHang() != null) {
-                email = h.getKhachHang().getEmail();
+            if (isBlank(email) && h.getKhachHang() != null && h.getKhachHang().getId() != null) {
+                try {
+                    Optional<KhachHang> khOpt = khachHangRepository.findById(h.getKhachHang().getId());
+                    if (khOpt.isPresent() && !isBlank(khOpt.get().getEmail())) {
+                        email = khOpt.get().getEmail().trim();
+                    }
+                } catch (Exception ignored) {}
             }
             if (isBlank(email) && h.getGhiChu() != null && h.getGhiChu().contains("[EMAIL:")) {
                 try {
@@ -288,6 +293,14 @@ public class HoaDonService {
                     int end = h.getGhiChu().indexOf("]", start);
                     if (end > start) {
                         email = h.getGhiChu().substring(start, end).trim();
+                    }
+                } catch (Exception ignored) {}
+            }
+            if (isBlank(email) && !isBlank(h.getSoDienThoaiKhachHang())) {
+                try {
+                    Optional<KhachHang> khOpt = khachHangRepository.findFirstBySoDienThoai(h.getSoDienThoaiKhachHang().trim());
+                    if (khOpt.isPresent() && !isBlank(khOpt.get().getEmail())) {
+                        email = khOpt.get().getEmail().trim();
                     }
                 } catch (Exception ignored) {}
             }
@@ -331,7 +344,7 @@ public class HoaDonService {
                 tenKh,
                 h.getMaHoaDon(),
                 toTenTrangThai(h.getTrangThai()),
-                toTenLoaiDon(h.getLoaiDon()),
+                toTenLoaiDon(h.getLoaiDon(), h.getDiaChiNhanHang()),
                 !isBlank(h.getDiaChiNhanHang()) ? h.getDiaChiNhanHang() : "Nhận tại quầy",
                 nf.format(tongHang),
                 nf.format(tienGiam),
@@ -1232,6 +1245,10 @@ boolean isTaiQuay = "TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon())) || "TAI_QUA
         hoaDon.setKhachHang(req.getIdKhachHang() != null
             ? timKhachHang(req.getIdKhachHang())
             : null);
+        if (hoaDon.getKhachHang() == null && !isBlank(req.getSoDienThoaiKhachHang())) {
+            khachHangRepository.findFirstBySoDienThoai(req.getSoDienThoaiKhachHang().trim())
+                .ifPresent(hoaDon::setKhachHang);
+        }
         hoaDon.setNhanVien(req.getIdNhanVien() != null
             ? nhanVienRepository.findById(req.getIdNhanVien())
                 .orElseThrow(() -> new IllegalArgumentException("Nhân viên không tồn tại"))
@@ -1565,7 +1582,7 @@ private NhanVien timNhanVien(Long id) {
                 }
             }
         }
-        chiTietHoaDonRepository.saveAll(entities);
+        chiTietHoaDonRepository.saveAllAndFlush(entities);
     }
 
     private void hoanTonKho(Long idHoaDon) {
@@ -2115,7 +2132,7 @@ private NhanVien timNhanVien(Long id) {
                 spct.setSoLuong(ton - d.req().getSoLuong());
                 sanPhamChiTietRepository.save(spct);
             }
-            chiTietHoaDonRepository.saveAll(entities);
+            chiTietHoaDonRepository.saveAllAndFlush(entities);
         }
 
         return toFullDTO(hoaDon);
