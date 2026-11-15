@@ -4800,19 +4800,6 @@ onUnmounted(() => {
                     v-model="currentOrder.deliveryInfo.recipientAddress" />
                 </div>
               </div>
-
-              <!-- Gói dịch vụ vận chuyển (nếu có) -->
-              <div class="pos-del-field"
-                v-if="currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length">
-                <label class="pos-del-label">Gói dịch vụ vận chuyển GHN</label>
-                <select class="pos-del-control" v-model="currentOrder.deliveryInfo.serviceTypeId"
-                  @change="onServiceChange">
-                  <option v-for="s in currentOrder.deliveryInfo.services" :key="s.serviceTypeId"
-                    :value="s.serviceTypeId">
-                    {{ s.shortName || ('Dịch vụ GHN #' + s.serviceTypeId) }} — {{ isFreeShipEligible ? 'Miễn phí (0₫)' : formatVnd(currentOrder.deliveryInfo.shippingFee || currentOrder.deliveryInfo.rawShippingFee || 30000) }}
-                  </option>
-                </select>
-              </div>
             </div>
 
             <!-- Tùy chọn & Nút lưu địa chỉ vào hồ sơ khách hàng cho các lần mua sau -->
