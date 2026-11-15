@@ -2,8 +2,8 @@
    PRODUCT MANAGEMENT TYPOGRAPHY SYSTEM SYNC
    ========================================================================== */
 .pos-page {
-  --font-family: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-family: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, monospace;
   --text-heading: #0f172a;
   --text-body: #334155;
   --text-label: #475569;
@@ -5323,7 +5323,7 @@ input:checked + .toggle-slider:before {
 .thermal-receipt-box {
   background: #ffffff;
   padding: 24px 20px;
-  font-family: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-family) !important;
   color: #1e293b;
   font-size: 12.5px;
   border-radius: 12px;

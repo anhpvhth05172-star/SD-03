@@ -1,7 +1,8 @@
 :root {
   --bs-primary: #dc2626;
   --bs-primary-rgb: 220, 38, 38;
-  --bs-body-font-family: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, sans-serif;
+  --bs-body-font-family: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --bs-font-sans-serif: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --bs-body-color: #0f172a;
   --bs-link-color: #dc2626;
   --bs-link-hover-color: #b91c1c;
