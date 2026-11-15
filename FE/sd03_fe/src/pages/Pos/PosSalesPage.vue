@@ -769,25 +769,23 @@ const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
   }
 
   const cart = currentOrder.value.cart
-  const existingItem = cart.find(i => Number(i.idCtsp) === Number(productVariant.id))
   const effectivePrice = getEffectivePrice(productVariant)
   const prodName = productVariant.tenSp || productVariant.tenSanPham || 'Sản phẩm'
 
-  if (existingItem) {
-    const oldPrice = Number(existingItem.price || 0)
-    if (oldPrice !== Number(effectivePrice)) {
-      notifyWarning(
-        'Đã thay đổi giá sản phẩm',
-        `Sản phẩm "${prodName}" có giá mới là ${formatVnd(effectivePrice)} (giá trong giỏ trước đó là ${formatVnd(oldPrice)}). Đã cập nhật đơn giá mới!`
-      )
-    }
-    existingItem.quantity += qtyToAdd
-    existingItem.price = effectivePrice
-    existingItem.originalPrice = Number(productVariant.price || productVariant.giaBan || 0)
-    existingItem.discount = productVariant.discount || (productVariant.phanTramGiam ? `-${Math.round(productVariant.phanTramGiam)}%` : null)
-    existingItem.phanTramGiam = productVariant.phanTramGiam !== undefined ? productVariant.phanTramGiam : null
-    existingItem.giaSauGiam = productVariant.giaSauGiam !== undefined ? productVariant.giaSauGiam : null
+  // Tìm dòng có cùng biến thể và cùng đơn giá (nếu giá không đổi thì cộng dồn số lượng)
+  const existingSamePriceItem = cart.find(
+    i => Number(i.idCtsp) === Number(productVariant.id) && Number(i.price) === Number(effectivePrice)
+  )
+  // Kiểm tra xem có dòng nào trước đó của biến thể này nhưng có giá khác không
+  const existingDiffPriceItem = cart.find(
+    i => Number(i.idCtsp) === Number(productVariant.id) && Number(i.price) !== Number(effectivePrice)
+  )
+
+  if (existingSamePriceItem) {
+    existingSamePriceItem.quantity += qtyToAdd
   } else {
+    // Giá mới khác với giá các dòng đã có (hoặc sản phẩm chưa có trong giỏ):
+    // Thêm dòng mới theo giá mới nhất, GIỮ NGUYÊN dòng ban đầu không bị update giá
     cart.push({
       idCtsp: productVariant.id,
       idSanPham: productVariant.idSanPham || productVariant.sanPham?.id || (targetProd ? targetProd.idSanPham : null),
@@ -806,6 +804,12 @@ const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
       maxStock: getServerBaseStock(targetProd || productVariant),
       img: productVariant.img || ''
     })
+    if (existingDiffPriceItem) {
+      notifyToastInfo(
+        'Đã thêm dòng với giá mới',
+        `Sản phẩm "${prodName}" được thêm với giá mới ${formatVnd(effectivePrice)} (dòng cũ giá ${formatVnd(existingDiffPriceItem.price)} được giữ nguyên)`
+      )
+    }
   }
 
   recalculateAvailableStocks()
@@ -823,7 +827,15 @@ const getMaxAllowedForCartItem = (item) => {
     ? getServerBaseStock(targetProd)
     : Number(item.maxStock || (Number(item.quantity || 1) + getRemainingStock(item.idCtsp)))
   const reservedOther = getReservedInOtherOrders(item.idCtsp)
-  return Math.max(1, serverStock - reservedOther)
+  let qtyInSameOrderOtherLines = 0
+  if (currentOrder.value?.cart) {
+    for (const c of currentOrder.value.cart) {
+      if (c !== item && Number(c.idCtsp) === Number(item.idCtsp)) {
+        qtyInSameOrderOtherLines += Number(c.quantity || 0)
+      }
+    }
+  }
+  return Math.max(1, serverStock - reservedOther - qtyInSameOrderOtherLines)
 }
 
 const handleCartItemQtyInput = (item, event) => {
@@ -911,7 +923,15 @@ const removeCartItem = async (item, skipConfirm = false) => {
     if (!ok) return
   }
 
-  const idx = currentOrder.value.cart.findIndex(i => Number(i.idCtsp) === Number(item.idCtsp))
+  let idx = currentOrder.value.cart.indexOf(item)
+  if (idx === -1) {
+    idx = currentOrder.value.cart.findIndex(
+      i => Number(i.idCtsp) === Number(item.idCtsp) && Number(i.price) === Number(item.price)
+    )
+  }
+  if (idx === -1) {
+    idx = currentOrder.value.cart.findIndex(i => Number(i.idCtsp) === Number(item.idCtsp))
+  }
   if (idx !== -1) {
     currentOrder.value.cart.splice(idx, 1)
     recalculateAvailableStocks()
@@ -2596,7 +2616,7 @@ const tinhPhiVanChuyen = async () => {
       toWardName: d.ward.name,
       serviceTypeId: d.serviceTypeId || undefined,
       items: (currentOrder.value.cart || []).map(item => ({
-        idSanPhamChiTiet: item.id || item.spctId || item.idSanPhamChiTiet,
+        idSanPhamChiTiet: item.idCtsp || item.id || item.spctId || item.idSanPhamChiTiet,
         soLuong: item.soLuong || item.quantity || 1
       }))
     })
@@ -3222,41 +3242,8 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
             continue
           }
 
-          const oldOriginalPrice = Number(item.originalPrice || item.price || 0)
-          const newOriginalPrice = Number(freshProd.price || freshProd.giaBan || 0)
-          const oldEffectivePrice = Number(item.price || 0)
-          const newEffectivePrice = getEffectivePrice(freshProd)
-          const oldDisc = normalizeDiscountStr(item.discount)
-          const newDisc = normalizeDiscountStr(freshProd.discount)
-
-          if (oldOriginalPrice !== newOriginalPrice) {
-            item.originalPrice = newOriginalPrice
-            item.price = newEffectivePrice
-            item.discount = freshProd.discount || null
-            changes.push(
-              `Đổi giá: Sản phẩm "${item.name}" (Size ${item.size} - ${item.color})${orderLabel} thay đổi giá gốc từ ${formatVnd(oldOriginalPrice)} → ${formatVnd(newOriginalPrice)} (Đơn giá mới: ${formatVnd(newEffectivePrice)})`
-            )
-          }
-          else if (oldEffectivePrice !== newEffectivePrice || oldDisc !== newDisc) {
-            item.originalPrice = newOriginalPrice
-            item.price = newEffectivePrice
-            item.discount = freshProd.discount || (freshProd.phanTramGiam ? `-${Math.round(freshProd.phanTramGiam)}%` : null)
-            item.phanTramGiam = freshProd.phanTramGiam !== undefined ? freshProd.phanTramGiam : null
-            item.giaSauGiam = freshProd.giaSauGiam !== undefined ? freshProd.giaSauGiam : null
-            if (!newDisc) {
-              changes.push(
-                `Đợt giảm giá kết thúc: Sản phẩm "${item.name}" (Size ${item.size} - ${item.color})${orderLabel} đã hết khuyến mãi (${oldDisc || 'KM'}), đơn giá về giá gốc ${formatVnd(newEffectivePrice)}`
-              )
-            } else if (!oldDisc) {
-              changes.push(
-                `Đợt giảm giá mới: Sản phẩm "${item.name}" (Size ${item.size} - ${item.color})${orderLabel} được áp dụng khuyến mãi ${newDisc} (${formatVnd(oldEffectivePrice)} → ${formatVnd(newEffectivePrice)})`
-              )
-            } else {
-              changes.push(
-                `Đợt giảm giá thay đổi: Sản phẩm "${item.name}" (Size ${item.size} - ${item.color})${orderLabel} đổi mức khuyến mãi từ ${oldDisc} → ${newDisc} (Đơn giá: ${formatVnd(oldEffectivePrice)} → ${formatVnd(newEffectivePrice)})`
-              )
-            }
-          }
+          // Yêu cầu: Không tự động ghi đè đơn giá các sản phẩm đã có trong giỏ hàng.
+          // Sản phẩm đã thêm ban đầu vẫn giữ nguyên đơn giá lúc thêm; nếu đổi giá/khuyến mãi và thêm mới thì sẽ nhận giá mới ở dòng mới.
         }
       }
 
@@ -4490,7 +4477,7 @@ onUnmounted(() => {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(item, idx) in currentOrder.cart" :key="item.idCtsp">
+                    <tr v-for="(item, idx) in currentOrder.cart" :key="item.idCtsp + '_' + item.price + '_' + idx">
                       <td class="text-center cell-stt">{{ idx + 1 }}</td>
                       <td>
                         <div class="product-item-wrap">

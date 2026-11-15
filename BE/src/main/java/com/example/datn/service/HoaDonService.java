@@ -1321,7 +1321,6 @@ private NhanVien timNhanVien(Long id) {
 
     private List<DongTinh> tinhToanVaLuu(HoaDon hoaDon, HoaDonRequest req) {
         List<DongTinh> dong = new ArrayList<>();
-        Set<String> maDaCo = new HashSet<>();
         if (req.getChiTiet() == null || req.getChiTiet().isEmpty()) {
             throw new IllegalArgumentException("Hóa đơn phải có ít nhất một sản phẩm");
         }
@@ -1331,9 +1330,6 @@ private NhanVien timNhanVien(Long id) {
             .distinct()
             .sorted()
             .toList();
-        if (ids.size() != req.getChiTiet().size()) {
-            throw new IllegalArgumentException("Mỗi dòng chi tiết phải chọn một biến thể riêng");
-        }
         Map<Long, SanPhamChiTiet> lockedById = new HashMap<>();
         sanPhamChiTietRepository.findAllByIdForUpdate(ids)
             .forEach(item -> lockedById.put(item.getId(), item));
@@ -1341,6 +1337,28 @@ private NhanVien timNhanVien(Long id) {
             throw new IllegalArgumentException("Một hoặc nhiều biến thể sản phẩm không tồn tại");
         }
         Map<Long, GiaKhuyenMai> giaTheoBienThe = giaService.tinhGia(lockedById.values());
+
+        // Tổng hợp tổng số lượng theo từng biến thể sản phẩm để kiểm tra tồn kho
+        Map<Long, Integer> tongSoLuongTheoCtsp = new HashMap<>();
+        for (ChiTietHoaDonRequest d : req.getChiTiet()) {
+            if (d.getIdSanPhamChiTiet() == null) {
+                throw new IllegalArgumentException("Dòng chi tiết thiếu mã sản phẩm");
+            }
+            if (d.getSoLuong() == null || d.getSoLuong() < 1) {
+                throw new IllegalArgumentException("Số lượng phải lớn hơn 0");
+            }
+            tongSoLuongTheoCtsp.merge(d.getIdSanPhamChiTiet(), d.getSoLuong(), Integer::sum);
+        }
+
+        for (Map.Entry<Long, Integer> entry : tongSoLuongTheoCtsp.entrySet()) {
+            SanPhamChiTiet spct = lockedById.get(entry.getKey());
+            if (spct.getSoLuong() != null && entry.getValue() > spct.getSoLuong()) {
+                throw new IllegalArgumentException(
+                    "Sản phẩm " + spct.getMaChiTietSanPham() + " chỉ còn " + spct.getSoLuong() + " trong kho"
+                );
+            }
+        }
+
         for (ChiTietHoaDonRequest d : req.getChiTiet()) {
             SanPhamChiTiet spct = lockedById.get(d.getIdSanPhamChiTiet());
             boolean spctNgungBan = Boolean.FALSE.equals(spct.getTrangThai());
@@ -1351,20 +1369,11 @@ private NhanVien timNhanVien(Long id) {
                     "Sản phẩm " + spct.getMaChiTietSanPham() + " đã ngừng bán"
                 );
             }
-            if (!maDaCo.add(spct.getMaChiTietSanPham())) {
-                throw new IllegalArgumentException(
-                    "Sản phẩm " + spct.getMaChiTietSanPham() + " bị trùng ở nhiều dòng chi tiết"
-                );
-            }
-            if (d.getSoLuong() == null || d.getSoLuong() < 1) {
-                throw new IllegalArgumentException("Số lượng phải lớn hơn 0");
-            }
-            if (spct.getSoLuong() != null && d.getSoLuong() > spct.getSoLuong()) {
-                throw new IllegalArgumentException(
-                    "Sản phẩm " + spct.getMaChiTietSanPham() + " chỉ còn " + spct.getSoLuong() + " trong kho"
-                );
-            }
-            BigDecimal donGia = giaTheoBienThe.get(spct.getId()).giaSauGiam();
+            BigDecimal donGiaDb = giaTheoBienThe.get(spct.getId()).giaSauGiam();
+            // Nếu đơn giá được gửi từ giỏ hàng (> 0), tôn trọng đơn giá lúc thêm vào giỏ; nếu không lấy giá DB hiện tại
+            BigDecimal donGia = (d.getDonGia() != null && d.getDonGia().compareTo(BigDecimal.ZERO) > 0)
+                ? d.getDonGia()
+                : donGiaDb;
             if (donGia == null || donGia.compareTo(BigDecimal.ZERO) <= 0) {
                 throw new IllegalArgumentException("Giá bán của biến thể không hợp lệ");
             }

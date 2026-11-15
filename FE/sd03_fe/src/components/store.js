@@ -72,7 +72,8 @@ const mapServerItem = (item) => ({
   brand: item.maCtsp || "",
   color: item.mauSac || "",
   size: item.kichCo || "",
-  price: Number(item.giaHienTai != null ? item.giaHienTai : item.donGia || 0),
+  price: Number(item.donGia != null && item.donGia > 0 ? item.donGia : (item.giaHienTai || 0)),
+  giaHienTai: Number(item.giaHienTai || 0),
   donGia: Number(item.donGia || 0),
   img: item.hinhAnh || null,
   qty: item.soLuong || 1,
@@ -191,8 +192,11 @@ export async function dongBoGioHangSauDangNhap() {
 // Thêm sản phẩm vào giỏ hàng (kết nối BE)
 export async function addToCart(p, variantId, size, qty = 1, color = "") {
   const user = getUser();
+  const effectivePrice = Number(p.giaBan ?? p.giaBanMin ?? p.price ?? 0);
   if (!user || !user.idKhachHang) {
-    const existing = cart.items.find((item) => Number(item.idSanPhamChiTiet ?? item.variantId) === Number(variantId));
+    const existing = cart.items.find(
+      (item) => Number(item.idSanPhamChiTiet ?? item.variantId) === Number(variantId) && Number(item.price) === effectivePrice
+    );
     const available = Number(p.stock ?? p.tonKho ?? 999);
     if (existing) {
       existing.qty = Math.min(Number(existing.qty || 0) + Number(qty || 1), available);
@@ -205,7 +209,8 @@ export async function addToCart(p, variantId, size, qty = 1, color = "") {
         brand: p.tenThuongHieu || p.brand || "",
         color,
         size,
-        price: Number(p.giaBan ?? p.giaBanMin ?? p.price ?? 0),
+        price: effectivePrice,
+        donGia: effectivePrice,
         img: p.img || null,
         qty: Math.min(Number(qty || 1), available),
         stock: available,
@@ -236,7 +241,9 @@ export async function addToCart(p, variantId, size, qty = 1, color = "") {
     };
   } catch (err) {
     // Fallback lưu giỏ hàng local nếu phiên đăng nhập hết hạn hoặc lỗi kết nối
-    const existing = cart.items.find((item) => Number(item.idSanPhamChiTiet ?? item.variantId) === Number(variantId));
+    const existing = cart.items.find(
+      (item) => Number(item.idSanPhamChiTiet ?? item.variantId) === Number(variantId) && Number(item.price) === effectivePrice
+    );
     const available = Number(p.stock ?? p.tonKho ?? 999);
     if (existing) {
       existing.qty = Math.min(Number(existing.qty || 0) + Number(qty || 1), available);
@@ -249,7 +256,8 @@ export async function addToCart(p, variantId, size, qty = 1, color = "") {
         brand: p.tenThuongHieu || p.brand || "",
         color,
         size,
-        price: Number(p.giaBan ?? p.giaBanMin ?? p.price ?? 0),
+        price: effectivePrice,
+        donGia: effectivePrice,
         img: p.img || null,
         qty: Math.min(Number(qty || 1), available),
         stock: available,

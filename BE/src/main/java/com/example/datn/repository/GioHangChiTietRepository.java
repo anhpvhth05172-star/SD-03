@@ -16,6 +16,8 @@ public interface GioHangChiTietRepository extends JpaRepository<GioHangChiTiet, 
 
     Optional<GioHangChiTiet> findByGioHangIdAndSanPhamChiTietId(Integer idGioHang, Long idSanPhamChiTiet);
 
+    Optional<GioHangChiTiet> findByGioHangIdAndSanPhamChiTietIdAndDonGia(Integer idGioHang, Long idSanPhamChiTiet, Integer donGia);
+
     Optional<GioHangChiTiet> findByIdAndGioHangKhachHangId(Integer id, Long idKhachHang);
 
     List<GioHangChiTiet> findByGioHangIdOrderByNgayThemDesc(Integer idGioHang);

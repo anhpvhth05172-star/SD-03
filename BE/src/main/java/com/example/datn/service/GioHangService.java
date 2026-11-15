@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -62,19 +63,28 @@ public class GioHangService {
                 .findFirstByKhachHangIdAndTrangThaiOrderByIdDesc(khachHang.getId(), TRANG_THAI_GIO_HANG)
                 .orElseGet(() -> taoGioHangMoi(khachHang));
 
+        // Tìm dòng giỏ hàng có cùng biến thể VÀ cùng đơn giá
         GioHangChiTiet item = gioHangChiTietRepository
-                .findByGioHangIdAndSanPhamChiTietId(gioHang.getId(), spct.getId())
+                .findByGioHangIdAndSanPhamChiTietIdAndDonGia(gioHang.getId(), spct.getId(), donGia)
                 .orElse(null);
 
-        int soLuongTrongGio = (item != null && item.getSoLuong() != null) ? item.getSoLuong() : 0;
-        int soLuongMoi = soLuongTrongGio + req.getSoLuong();
+        // Tổng số lượng của biến thể này đang có trong giỏ hàng (mọi dòng giá khác nhau)
+        List<GioHangChiTiet> tatCaDongCuaGio = gioHangChiTietRepository.findByGioHangIdOrderByNgayThemDesc(gioHang.getId());
+        int soLuongTrongGioCungCtsp = tatCaDongCuaGio.stream()
+                .filter(i -> i.getSanPhamChiTiet() != null && Objects.equals(i.getSanPhamChiTiet().getId(), spct.getId()))
+                .mapToInt(i -> i.getSoLuong() != null ? i.getSoLuong() : 0)
+                .sum();
 
-        if (soLuongMoi > MAX_SO_LUONG_MOI_DONG) {
+        int soLuongHienTaiCuaDong = (item != null && item.getSoLuong() != null) ? item.getSoLuong() : 0;
+        int soLuongMoiCuaDong = soLuongHienTaiCuaDong + req.getSoLuong();
+        int tongSoLuongMoiCuaCtsp = soLuongTrongGioCungCtsp + req.getSoLuong();
+
+        if (soLuongMoiCuaDong > MAX_SO_LUONG_MOI_DONG) {
             throw new IllegalArgumentException("Mỗi sản phẩm chỉ được mua tối đa " + MAX_SO_LUONG_MOI_DONG
-                    + " trong một giỏ hàng (hiện có " + soLuongTrongGio + ")");
+                    + " trong một giỏ hàng (hiện có " + soLuongTrongGioCungCtsp + ")");
         }
-        if (soLuongMoi > tonKho) {
-            throw new IllegalArgumentException(thongBaoVuotTonKho(soLuongTrongGio, tonKho));
+        if (tongSoLuongMoiCuaCtsp > tonKho) {
+            throw new IllegalArgumentException(thongBaoVuotTonKho(soLuongTrongGioCungCtsp, tonKho));
         }
 
         LocalDateTime now = LocalDateTime.now();
@@ -83,9 +93,11 @@ public class GioHangService {
             item.setGioHang(gioHang);
             item.setSanPhamChiTiet(spct);
             item.setNgayThem(now);
+            item.setDonGia(donGia);
+            item.setSoLuong(req.getSoLuong());
+        } else {
+            item.setSoLuong(soLuongMoiCuaDong);
         }
-        item.setSoLuong(soLuongMoi);
-        item.setDonGia(donGia);
         GioHangChiTiet saved = gioHangChiTietRepository.save(item);
 
         gioHang.setNgayCapNhat(now);
@@ -99,9 +111,9 @@ public class GioHangService {
                 .tenSanPham(sanPham.getTenSanPham())
                 .mauSac(spct.getMauSac() != null ? spct.getMauSac().getTenMau() : null)
                 .kichCo(spct.getKichCo() != null ? spct.getKichCo().getTenKichCo() : null)
-                .soLuong(soLuongMoi)
+                .soLuong(saved.getSoLuong())
                 .donGia(donGia)
-                .thanhTien(BigDecimal.valueOf(donGia).multiply(BigDecimal.valueOf(soLuongMoi)))
+                .thanhTien(BigDecimal.valueOf(donGia).multiply(BigDecimal.valueOf(saved.getSoLuong())))
                 .tongSoLuongGioHang(gioHangChiTietRepository.tongSoLuongTheoGioHang(gioHang.getId()))
                 .message("Đã thêm sản phẩm vào giỏ hàng")
                 .build();
@@ -151,12 +163,19 @@ public class GioHangService {
 
         kiemTraBanDuoc(spct);
         int tonKho = tonKhoCua(spct);
-        if (req.getSoLuong() > tonKho) {
-            throw new IllegalArgumentException("Kho chỉ còn " + tonKho + " sản phẩm");
+        List<GioHangChiTiet> itemsInCart = gioHangChiTietRepository.findByGioHangIdOrderByNgayThemDesc(item.getGioHang().getId());
+        int soLuongKhacCuaCtsp = itemsInCart.stream()
+                .filter(i -> !i.getId().equals(item.getId()) && i.getSanPhamChiTiet() != null && Objects.equals(i.getSanPhamChiTiet().getId(), spct.getId()))
+                .mapToInt(i -> i.getSoLuong() != null ? i.getSoLuong() : 0)
+                .sum();
+        if (req.getSoLuong() + soLuongKhacCuaCtsp > tonKho) {
+            throw new IllegalArgumentException("Kho chỉ còn " + tonKho + " sản phẩm (các dòng khác đang giữ " + soLuongKhacCuaCtsp + ")");
         }
 
         item.setSoLuong(req.getSoLuong());
-        item.setDonGia(tinhDonGia(spct));
+        if (item.getDonGia() == null) {
+            item.setDonGia(tinhDonGia(spct));
+        }
         gioHangChiTietRepository.save(item);
 
         GioHang gioHang = item.getGioHang();
@@ -317,7 +336,10 @@ public class GioHangService {
                 canhBao = "Giá đã thay đổi so với lúc bạn thêm vào giỏ";
             }
 
-            BigDecimal thanhTien = giaHienTai.multiply(BigDecimal.valueOf(soLuong));
+            BigDecimal giaBanDong = (d.getDonGia() != null && d.getDonGia() > 0)
+                    ? BigDecimal.valueOf(d.getDonGia())
+                    : giaHienTai;
+            BigDecimal thanhTien = giaBanDong.multiply(BigDecimal.valueOf(soLuong));
             if (conHang) {
                 tongTien = tongTien.add(thanhTien);
                 tongSoLuong += soLuong;
