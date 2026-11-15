@@ -310,7 +310,26 @@ public class EmailService {
 
             helper.setFrom(tu, "PolyShoes Shop");
             helper.setTo(toEmail.trim());
-            helper.setSubject("[PolyShoes] Thông tin chi tiết đơn hàng " + (maHoaDon != null ? maHoaDon : ""));
+
+            String maDon = (maHoaDon != null && !maHoaDon.isBlank()) ? maHoaDon.trim() : "";
+            String subject;
+            String ttLower = (trangThai != null ? trangThai : "").toLowerCase();
+            if (ttLower.contains("hoàn tiền") || ttLower.contains("cho_hoan_tien")) {
+                subject = "[PolyShoes] Thông báo đơn hàng #" + maDon + " đang chờ hoàn tiền do hết hàng tồn kho";
+            } else if (ttLower.contains("đã hoàn tiền") || ttLower.contains("da_hoan_tien")) {
+                subject = "[PolyShoes] Đơn hàng #" + maDon + " đã được hoàn tiền thành công";
+            } else if (ttLower.contains("hủy") || ttLower.contains("da_huy")) {
+                subject = "[PolyShoes] Thông báo hủy đơn hàng #" + maDon;
+            } else if (ttLower.contains("đang giao") || ttLower.contains("dang_giao")) {
+                subject = "[PolyShoes] Đơn hàng #" + maDon + " đang được vận chuyển đến bạn";
+            } else if (ttLower.contains("đã giao") || ttLower.contains("hoàn thành") || ttLower.contains("da_hoan_thanh")) {
+                subject = "[PolyShoes] Giao hàng thành công đơn hàng #" + maDon;
+            } else if (ttLower.contains("xác nhận") || ttLower.contains("da_xac_nhan")) {
+                subject = "[PolyShoes] Đơn hàng #" + maDon + " đã được xác nhận thành công";
+            } else {
+                subject = "[PolyShoes] Cập nhật đơn hàng #" + maDon + " (" + (trangThai != null ? trangThai : "") + ")";
+            }
+            helper.setSubject(subject);
 
             String htmlContent = buildInvoiceEmailTemplate(
                 tenKhachHang != null ? tenKhachHang.trim() : "Quý khách",
@@ -370,6 +389,38 @@ public class EmailService {
             ));
         }
 
+        String statusAlertHtml = "";
+        String ttLower = (trangThai != null ? trangThai : "").toLowerCase();
+        if (ttLower.contains("hoàn tiền") || ttLower.contains("cho_hoan_tien")) {
+            statusAlertHtml = """
+                <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px;">
+                  <div style="font-weight: 700; color: #b91c1c; font-size: 14.5px; margin-bottom: 5px;">⚠️ SỰ CỐ TỒN KHO - ĐƠN HÀNG CHỜ HOÀN TIỀN</div>
+                  <div style="font-size: 13px; color: #7f1d1d; line-height: 1.5;">
+                    Hệ thống đã nhận thanh toán cho đơn hàng <strong>#%s</strong>. Tuy nhiên do sản phẩm trong kho vừa hết trước thời điểm chốt đơn, đơn hàng đã được chuyển sang trạng thái <strong>CHỜ HOÀN TIỀN</strong>.<br/>
+                    Bộ phận Chăm sóc khách hàng PolyShoes sẽ chủ động liên hệ sớm nhất để hỗ trợ hoàn lại 100%% số tiền đã thanh toán cho Quý khách. Xin chân thành cáo lỗi vì sự bất tiện này!
+                  </div>
+                </div>
+            """.formatted(escapeHtml(maHoaDon));
+        } else if (ttLower.contains("hủy") || ttLower.contains("da_huy")) {
+            statusAlertHtml = """
+                <div style="background-color: #fff1f2; border: 1px solid #ffe4e6; border-left: 4px solid #e11d48; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #9f1239;">
+                  Đơn hàng <strong>#%s</strong> hiện đã được cập nhật trạng thái <strong>ĐÃ HỦY</strong>. Nếu có bất kỳ thắc mắc nào, Quý khách vui lòng liên hệ hotline PolyShoes để được hỗ trợ.
+                </div>
+            """.formatted(escapeHtml(maHoaDon));
+        } else if (ttLower.contains("đang giao") || ttLower.contains("dang_giao")) {
+            statusAlertHtml = """
+                <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #2563eb; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #1e40af;">
+                  📦 Đơn hàng <strong>#%s</strong> đang trên đường vận chuyển tới địa chỉ nhận hàng của Quý khách. Vui lòng chú ý điện thoại khi shipper liên hệ!
+                </div>
+            """.formatted(escapeHtml(maHoaDon));
+        } else if (ttLower.contains("hoàn thành") || ttLower.contains("đã giao")) {
+            statusAlertHtml = """
+                <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #16a34a; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #166534;">
+                  🎉 Đơn hàng <strong>#%s</strong> đã được giao thành công! PolyShoes xin cảm ơn Quý khách đã mua sắm!
+                </div>
+            """.formatted(escapeHtml(maHoaDon));
+        }
+
         return """
         <!DOCTYPE html>
         <html lang="vi">
@@ -401,6 +452,7 @@ public class EmailService {
             </div>
             <div class="email-body">
               <p>Kính gửi <strong>%s</strong>,</p>
+              %s
               <p>PolyShoes xin gửi thông tin chi tiết đơn hàng của Quý khách:</p>
 
               <div class="info-box">
@@ -445,6 +497,7 @@ public class EmailService {
         """.formatted(
             escapeHtml(maHoaDon),
             escapeHtml(tenKhachHang),
+            statusAlertHtml,
             escapeHtml(maHoaDon),
             escapeHtml(ngayTao),
             escapeHtml(trangThai),

@@ -3308,22 +3308,16 @@ const applyVoucher = async (voucher) => {
     const curCode = curV.ma || curV.maPhieuGiamGia || 'Mã hiện tại'
     const newCode = voucher.ma || voucher.maPhieuGiamGia || 'Mã mới'
 
-    let title = 'Xác nhận đổi mã giảm giá'
-    let msg = `Đơn hàng đang áp dụng mã "${curCode}" (giảm ${formatVnd(curDisc)}). `
-    if (newDisc > curDisc) {
-      title = 'Phát hiện mã giảm giá tốt hơn!'
-      msg += `Mã mới "${newCode}" có mức giảm tốt hơn (giảm ${formatVnd(newDisc)}). Bạn có xác nhận muốn đổi sang dùng mã giảm giá mới này không?`
-    } else {
-      msg += `Mã mới "${newCode}" có mức giảm là ${formatVnd(newDisc)}. Bạn có chắc chắn muốn đổi sang mã này không?`
+    // Nếu mã mới giảm ít hơn mã hiện tại thì mới cần hỏi xác nhận; nếu giảm tốt hơn hoặc bằng thì tự động áp dụng luôn
+    if (newDisc < curDisc) {
+      const ok = await notifyConfirm(
+        'Đổi sang mã có mức giảm ít hơn?',
+        `Đơn hàng đang áp dụng mã "${curCode}" (giảm ${formatVnd(curDisc)}). Mã "${newCode}" có mức giảm ít hơn (${formatVnd(newDisc)}). Bạn có chắc chắn muốn đổi không?`,
+        'Vẫn đổi mã',
+        'Giữ mã cũ'
+      )
+      if (!ok) return
     }
-
-    const ok = await notifyConfirm(
-      title,
-      msg,
-      'Dùng mã mới',
-      'Giữ mã cũ'
-    )
-    if (!ok) return
   }
 
   currentOrder.value.selectedVoucher = voucher

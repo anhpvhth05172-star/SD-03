@@ -664,6 +664,7 @@ public class HoaDonService {
         }
         BigDecimal tienSauGiamMoi = hoaDon.getTienSauGiamGia() != null ? hoaDon.getTienSauGiamGia() : BigDecimal.ZERO;
         ghiLichSuCapNhat(hoaDon, req.getGhiChu(), tienSauGiamCu, tienSauGiamMoi);
+        guiEmailHoaDonTuDong(hoaDon, req != null ? req.getEmail() : null);
         return toFullDTO(hoaDon);
     }
 
@@ -809,6 +810,7 @@ public class HoaDonService {
                 "Hệ thống"
             );
         }
+        guiEmailHoaDonTuDong(saved, null);
         return toFullDTO(saved);
     }
 
@@ -1857,6 +1859,7 @@ private NhanVien timNhanVien(Long id) {
             ghiLichSuTrangThai(saved, tu, "CHO_HOAN_TIEN", 
                 "Sự cố tồn kho: Khách thanh toán VNPAY thành công nhưng kho không đủ: " + lyDoThieuKho + ". Đơn chuyển sang Chờ hoàn tiền.", 
                 "VNPAY (Hệ thống)");
+            guiEmailHoaDonTuDong(saved, null);
             return toFullDTO(saved);
         }
     }

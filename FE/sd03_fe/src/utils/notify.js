@@ -111,7 +111,6 @@ export const notifySuccess = (title, text = '', timer = 1400) => {
     timer: timer,
     timerProgressBar: false,
     backdrop: false,
-    allowOutsideClick: true,
     allowEscapeKey: true,
     customClass: {
       popup: 'custom-swal-popup is-non-blocking-popup',
