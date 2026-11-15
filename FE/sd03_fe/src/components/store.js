@@ -16,7 +16,17 @@ export const money = (n) => {
 // ===== Cart State =====
 const saved = (() => {
   try {
-    return JSON.parse(localStorage.getItem("ps_cart")) || [];
+    const user = getUser();
+    const raw = JSON.parse(localStorage.getItem("ps_cart")) || [];
+    // Nếu chưa đăng nhập: bỏ qua các item thuộc về tài khoản trước đó (có idGioHangChiTiet)
+    if (!user || !user.idKhachHang) {
+      const guestOnly = raw.filter((i) => !i.idGioHangChiTiet);
+      if (guestOnly.length !== raw.length) {
+        localStorage.setItem("ps_cart", JSON.stringify(guestOnly));
+      }
+      return guestOnly;
+    }
+    return raw;
   } catch {
     return [];
   }
@@ -55,12 +65,18 @@ export const cartTotal = computed(() => {
 // [SỬA] Xóa giỏ hàng ở phía client (dùng khi đăng xuất).
 // KHÔNG gọi API nên giỏ hàng trên server vẫn còn cho lần đăng nhập sau.
 export function resetCartLocal() {
-  cart.items = [];
+  cart.items.splice(0, cart.items.length);
   cart.serverCart = null;
   cart.loading = false;
   cart.error = null;
   localStorage.removeItem("ps_cart");
   localStorage.setItem("ps_cart", "[]");
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("auth:logout", () => {
+    resetCartLocal();
+  });
 }
 
 const mapServerItem = (item) => ({
@@ -88,8 +104,14 @@ let isMergingCart = false;
 export async function fetchCart() {
   const user = getUser();
   if (!user || !user.idKhachHang) {
-    // Giỏ của khách vãng lai được lưu cục bộ để có thể đặt hàng không cần tài khoản.
+    // Giỏ của khách vãng lai: đảm bảo không giữ lại các item thuộc tài khoản cũ (có idGioHangChiTiet)
     cart.serverCart = null;
+    const hasServerItem = Array.isArray(cart.items) && cart.items.some((i) => i.idGioHangChiTiet);
+    if (hasServerItem) {
+      const guestOnly = cart.items.filter((i) => !i.idGioHangChiTiet);
+      cart.items.splice(0, cart.items.length, ...guestOnly);
+      localStorage.setItem("ps_cart", JSON.stringify(guestOnly));
+    }
     return cart.items;
   }
 

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { cartCount, fetchCart } from "@/pages/clients/store";
+import { cartCount, fetchCart, resetCartLocal } from "@/pages/clients/store";
 import { getUser, dangXuat } from "@/utils/auth";
 import "@/pages/clients/css/style.css";
 
@@ -68,8 +68,8 @@ onUnmounted(() => {
 
 const handleLogout = () => {
   dangXuat();
+  resetCartLocal();
   user.value = null;
-  fetchCart();
   closeDropdowns();
   router.push("/trang-chu");
 };

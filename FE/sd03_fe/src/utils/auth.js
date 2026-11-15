@@ -47,6 +47,14 @@ export const dangXuat = () => {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(REFRESH_KEY)
   localStorage.removeItem(USER_KEY)
+  localStorage.removeItem('ps_cart')
+  localStorage.removeItem('ps_cart_applied_voucher')
+  localStorage.removeItem('ps_applied_voucher')
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('auth:logout'))
+    }
+  } catch {}
 }
 
 export const isTokenExpired = (token) => {

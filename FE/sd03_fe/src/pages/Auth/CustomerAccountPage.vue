@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import http from '@/api/http'
 import { getUser, dangXuat, getRefreshToken, isKhachHangDangNhap } from '@/utils/auth'
 import { huyPhien } from '@/api/auth'
-import { money } from '@/components/store'
+import { money, resetCartLocal } from '@/components/store'
 
 const router = useRouter()
 const localUser = ref(getUser())
@@ -222,6 +222,7 @@ const xulyDangXuat = async () => {
     // Bỏ qua lỗi gọi API hủy phiên
   }
   dangXuat()
+  resetCartLocal()
   router.push('/khach-hang')
 }
 
