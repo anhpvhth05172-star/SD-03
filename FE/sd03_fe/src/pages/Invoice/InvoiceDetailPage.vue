@@ -1264,29 +1264,6 @@ onBeforeUnmount(() => {
               </svg>
               In hóa đơn
             </button>
-            <div v-if="!isTerminal && !isDaHoanThanh && tiepTheoMenuList.length" ref="statusMenuRef" class="status-menu-wrap">
-              <button class="btn btn-outline" type="button" :disabled="updatingStatus" @click="toggleStatusMenu">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M5 12h14M12 5l7 7-7 7" />
-                </svg>
-                {{ updatingStatus ? 'Đang xử lý...' : 'Chuyển trạng thái' }}
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
-              </button>
-              <div v-if="showStatusMenu" class="status-menu" role="menu">
-                <button
-                  v-for="tt in tiepTheoMenuList"
-                  :key="tt"
-                  class="status-menu-item"
-                  type="button"
-                  role="menuitem"
-                  @click="chonMenu(tt)"
-                >
-                  {{ tt }}
-                </button>
-              </div>
-            </div>
             <button
               v-if="coTheHuy && !isTerminal"
               class="btn btn-outline btn-huy-don"
