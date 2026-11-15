@@ -1732,10 +1732,10 @@ const loadFilterAttributes = async (force = false) => {
       if (raw) {
         const cached = JSON.parse(raw)
         if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000 &&
-            Array.isArray(cached.brands) && cached.brands.length > 0 &&
-            Array.isArray(cached.categories) && cached.categories.length > 0 &&
-            Array.isArray(cached.colors) && cached.colors.length > 0 &&
-            Array.isArray(cached.sizes) && cached.sizes.length > 0) {
+          Array.isArray(cached.brands) && cached.brands.length > 0 &&
+          Array.isArray(cached.categories) && cached.categories.length > 0 &&
+          Array.isArray(cached.colors) && cached.colors.length > 0 &&
+          Array.isArray(cached.sizes) && cached.sizes.length > 0) {
           brandsList.value = cached.brands
           categoriesList.value = cached.categories
           colorsList.value = cached.colors
@@ -1743,7 +1743,7 @@ const loadFilterAttributes = async (force = false) => {
           return
         }
       }
-    } catch {}
+    } catch { }
   }
 
   // 2. Tải trực tiếp từ các endpoint API backend
@@ -1813,7 +1813,7 @@ const loadFilterAttributes = async (force = false) => {
         sizes: sizesList.value,
         timestamp: Date.now()
       }))
-    } catch {}
+    } catch { }
   }
 }
 
@@ -2498,7 +2498,7 @@ const loadProvinces = async () => {
         return
       }
     }
-  } catch {}
+  } catch { }
 
   // 2. Fallback ngay lập tức danh sách 63 tỉnh thành cục bộ để giao diện không bị trống
   provincesList.value = DS_63_TINH_THANH.map((p, idx) => ({
@@ -2519,7 +2519,7 @@ const loadProvinces = async () => {
         provincesList.value = mapped
         try {
           sessionStorage.setItem('pos_provinces_cache', JSON.stringify(mapped))
-        } catch {}
+        } catch { }
       }
     }
   } catch {
@@ -4125,7 +4125,7 @@ const loadInitialData = async () => {
           setServerProductsList(parsed)
         }
       }
-    } catch {}
+    } catch { }
 
     // 1. Tải song song với axios client (có auth header và baseURL tự động)
     const reqs = [
@@ -4234,7 +4234,7 @@ const loadInitialData = async () => {
       setServerProductsList(loadedProducts)
       try {
         sessionStorage.setItem('pos_products_cache', JSON.stringify(loadedProducts))
-      } catch {}
+      } catch { }
     }
 
     if (!restoredOrders || pendingOrders.value.length === 0) {
@@ -4273,7 +4273,7 @@ const handleDiscountChanged = async () => {
       setServerProductsList(activeProds)
       try {
         sessionStorage.setItem('pos_products_cache', JSON.stringify(activeProds))
-      } catch {}
+      } catch { }
     }
   } catch (e) {
     console.warn('Lỗi tải lại sản phẩm khi đợt giảm giá thay đổi:', e)
@@ -4432,7 +4432,8 @@ onUnmounted(() => {
                 <span class="tab-order-name">{{ order.title }}</span>
                 <span class="tab-order-code" v-if="order.code">({{ order.code }})</span>
                 <span class="tab-cart-qty" v-if="order.cart.length > 0">{{ order.cart.length }}</span>
-                <button v-if="!isCheDoXem" class="tab-close-icon" @click="closeOrderTab(idx, $event)" title="Đóng hóa đơn này">
+                <button v-if="!isCheDoXem" class="tab-close-icon" @click="closeOrderTab(idx, $event)"
+                  title="Đóng hóa đơn này">
                   ×
                 </button>
               </div>
@@ -4533,10 +4534,14 @@ onUnmounted(() => {
                       <td class="text-center">
                         <div class="price-stack" style="white-space: nowrap !important;">
                           <span class="price-active" style="white-space: nowrap !important;">{{ formatVnd(item.price)
- }}</span>
+                          }}</span>
                           <span v-if="item.originalPrice && item.originalPrice > item.price"
                             class="price-strikethrough">
                             {{ formatVnd(item.originalPrice) }}
+                            <strong v-if="normalizeDiscountStr(item.discount)"
+                              style="color: #dc2626; font-size: 11px; margin-left: 4px; text-decoration: none; display: inline-block;">
+                              ({{ normalizeDiscountStr(item.discount) }})
+                            </strong>
                           </span>
                         </div>
                       </td>
@@ -4626,12 +4631,14 @@ onUnmounted(() => {
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                     <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
                   </svg>
-                  <span>Địa chỉ giao hàng của <strong>{{ currentOrder.customer.ten || currentOrder.customer.tenKhachHang }}</strong>:</span>
+                  <span>Địa chỉ giao hàng của <strong>{{ currentOrder.customer.ten || currentOrder.customer.tenKhachHang
+                      }}</strong>:</span>
                 </div>
                 <div class="saved-addr-top-actions">
                   <button type="button" class="btn-change-addr-trigger" @click="openSelectAddressModal"
                     title="Xem danh sách và đổi sang địa chỉ khác">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2.2">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
@@ -4651,7 +4658,10 @@ onUnmounted(() => {
                   <span v-if="activeCustomerSavedAddress.macDinh" class="pill-default-tag">Mặc định</span>
                   <span v-else class="pill-active-tag">Đang chọn</span>
                   <span class="single-box-text">
-                    {{ [activeCustomerSavedAddress.diaChiCuThe, activeCustomerSavedAddress.phuong, activeCustomerSavedAddress.thanhPho || activeCustomerSavedAddress.tinhThanhPho].filter(Boolean).join(', ') }}
+                    {{ [activeCustomerSavedAddress.diaChiCuThe, activeCustomerSavedAddress.phuong,
+                    activeCustomerSavedAddress.thanhPho ||
+                    activeCustomerSavedAddress.tinhThanhPho].filter(Boolean).join(',
+                    ') }}
                   </span>
                 </div>
                 <div class="single-box-right">
@@ -4752,7 +4762,9 @@ onUnmounted(() => {
                 <select class="pos-del-control" v-model="currentOrder.deliveryInfo.ward" @change="onWardChange"
                   :disabled="!currentOrder.deliveryInfo.province || currentOrder.deliveryInfo.wardsLoading">
                   <option :value="null" disabled>
-                    {{ currentOrder.deliveryInfo.wardsLoading ? 'Đang tải danh sách Phường / Xã...' : '-- Chọn Phường / Xã --' }}
+                    {{ currentOrder.deliveryInfo.wardsLoading ? 'Đang tải danh sách Phường / Xã...' : '-- Chọn Phường /
+                    Xã
+                    --' }}
                   </option>
                   <option v-for="w in wardsList" :key="w.id" :value="w">{{ w.name }}</option>
                 </select>
@@ -4796,7 +4808,7 @@ onUnmounted(() => {
                   <input type="checkbox" class="custom-chk pos-chk"
                     v-model="currentOrder.deliveryInfo.saveToCustomerProfile" />
                   <span>Tự động lưu làm địa chỉ mặc định của <strong>{{ currentOrder.customer.ten ||
- currentOrder.customer.tenKhachHang }}</strong> khi Thanh toán</span>
+                    currentOrder.customer.tenKhachHang }}</strong> khi Thanh toán</span>
                 </label>
                 <span v-else class="save-profile-saved-note">
                   Lần mua tiếp theo hệ thống sẽ tự động điền Tỉnh/Phường/Số nhà này cho khách.
@@ -4827,8 +4839,8 @@ onUnmounted(() => {
                 <span class="carrier-address-preview"
                   v-if="currentOrder.deliveryInfo.province && currentOrder.deliveryInfo.ward">
                   Giao tới: <strong>{{ [currentOrder.deliveryInfo.recipientAddress,
- currentOrder.deliveryInfo.ward?.name,
- currentOrder.deliveryInfo.province?.name].filter(Boolean).join(', ') }}</strong>
+                  currentOrder.deliveryInfo.ward?.name,
+                  currentOrder.deliveryInfo.province?.name].filter(Boolean).join(', ') }}</strong>
                 </span>
                 <span class="carrier-address-hint" v-else>
                   Vui lòng chọn Tỉnh/Thành phố và Phường/Xã để tự động tính cước phí vận chuyển
@@ -4854,8 +4866,8 @@ onUnmounted(() => {
                     <strong class="del-fee-amount"
                       :style="{ textDecoration: isFreeShipEligible ? 'line-through' : 'none', color: isFreeShipEligible ? '#94a3b8' : 'inherit' }">
                       {{ formatVnd(currentOrder.deliveryInfo.rawShippingFee || currentOrder.deliveryInfo.shippingFee ||
- 0)
- }}
+                        0)
+                      }}
                     </strong>
                     <strong v-if="isFreeShipEligible" style="color: #059669; font-size: 15px; font-weight: 800;">
                       0 ₫
@@ -4942,7 +4954,7 @@ onUnmounted(() => {
                 v-if="currentOrder.deliveryInfo.recipientName || currentOrder.deliveryInfo.recipientPhone">
                 Người nhận: <strong>{{ currentOrder.deliveryInfo.recipientName || 'Chưa nhập tên' }}</strong>
                 <template v-if="currentOrder.deliveryInfo.recipientPhone"> ({{ currentOrder.deliveryInfo.recipientPhone
- }})</template>
+                }})</template>
               </span>
               <span class="delivery-summary-txt" v-else>
                 Vui lòng điền <strong>Form thông tin giao hàng</strong> ngay bên dưới giỏ hàng
@@ -4960,7 +4972,7 @@ onUnmounted(() => {
               <div class="selected-voucher-content">
                 <div class="selected-voucher-top">
                   <span class="selected-voucher-code">{{ currentOrder.selectedVoucher.ma ||
- currentOrder.selectedVoucher.maPhieuGiamGia }}</span>
+                    currentOrder.selectedVoucher.maPhieuGiamGia }}</span>
                   <span class="badge bg-success text-white" style="font-size: 10px; padding: 2px 6px;">
                     Tốt nhất
                   </span>
@@ -4969,7 +4981,7 @@ onUnmounted(() => {
                 <div class="selected-voucher-desc">
                   {{ currentOrder.selectedVoucher.ten }}
                   <span v-if="currentOrder.selectedVoucher.hoaDonToiThieu"> • Đơn từ {{
- formatVnd(currentOrder.selectedVoucher.hoaDonToiThieu) }}</span>
+                    formatVnd(currentOrder.selectedVoucher.hoaDonToiThieu) }}</span>
                 </div>
               </div>
             </div>
@@ -4992,7 +5004,7 @@ onUnmounted(() => {
                 </div>
                 <div class="upsell-desc">
                   Ưu đãi giảm thêm lên tới <strong class="upsell-benefit">{{
- formatVnd(nextVoucherSuggestion.potentialDiscount) }}</strong>
+                    formatVnd(nextVoucherSuggestion.potentialDiscount) }}</strong>
                 </div>
               </div>
             </div>
@@ -5089,7 +5101,7 @@ onUnmounted(() => {
             v-if="currentOrder && currentOrder.paymentMethod !== 'CHUYEN_KHOAN'">
             <span class="change-label">{{ changeDue >= 0 ? 'Tiền thừa trả khách:' : 'Khách còn thiếu:' }}</span>
             <span class="change-value">{{ changeDue >= 0 ? formatVnd(changeDue) : formatVnd(Math.abs(changeDue))
- }}</span>
+            }}</span>
           </div>
 
           <div class="bank-qr-trigger-box"
@@ -5161,7 +5173,9 @@ onUnmounted(() => {
                   <select v-model="modalFilters.idThuongHieu" class="filter-select"
                     :class="{ active: !!modalFilters.idThuongHieu }">
                     <option value="">Tất cả thương hiệu</option>
-                    <option v-for="b in brandsList" :key="b.id || b.ten" :value="b.ten || b.id">{{ b.ten || b.tenThuongHieu }}
+                    <option v-for="b in brandsList" :key="b.id || b.ten" :value="b.ten || b.id">{{ b.ten ||
+                      b.tenThuongHieu
+                    }}
                     </option>
                   </select>
                 </div>
@@ -5170,7 +5184,8 @@ onUnmounted(() => {
                   <select v-model="modalFilters.idLoaiGiay" class="filter-select"
                     :class="{ active: !!modalFilters.idLoaiGiay }">
                     <option value="">Tất cả thể loại</option>
-                    <option v-for="c in categoriesList" :key="c.id || c.ten" :value="c.ten || c.id">{{ c.ten || c.tenLoaiGiay }}
+                    <option v-for="c in categoriesList" :key="c.id || c.ten" :value="c.ten || c.id">{{ c.ten ||
+                      c.tenLoaiGiay }}
                     </option>
                   </select>
                 </div>
@@ -5188,7 +5203,9 @@ onUnmounted(() => {
                   <select v-model="modalFilters.idKichCo" class="filter-select"
                     :class="{ active: !!modalFilters.idKichCo }">
                     <option value="">Tất cả kích cỡ</option>
-                    <option v-for="s in sizesList" :key="s.id || s.ten" :value="s.ten || s.id">{{ s.ten || s.tenKichCo }}</option>
+                    <option v-for="s in sizesList" :key="s.id || s.ten" :value="s.ten || s.id">{{ s.ten || s.tenKichCo
+                    }}
+                    </option>
                   </select>
                 </div>
 
@@ -5210,7 +5227,9 @@ onUnmounted(() => {
                 Đã chọn <strong>{{ modalSelectedIds.length }}</strong> sản phẩm
                 <template v-if="filteredModalVariants.length === 0">(không có kết quả khớp bộ lọc)</template>
               </span>
-              <button v-if="modalSelectedIds.length > 0" class="btn-clear-selection" @click="modalSelectedIds = []">Bỏ chọn tất cả</button>
+              <button v-if="modalSelectedIds.length > 0" class="btn-clear-selection" @click="modalSelectedIds = []">Bỏ
+                chọn
+                tất cả</button>
             </div>
 
             <div class="pos-prod-table-wrap">
@@ -5276,20 +5295,21 @@ onUnmounted(() => {
                     <td class="text-center">
                       <div class="prod-modal-price-box">
                         <span class="price-now">{{ formatVnd(getEffectivePrice(item)) }}</span>
-                        <span v-if="item.discount && item.discount !== '-'" class="price-was">{{ formatVnd(item.price || item.giaBan) }}</span>
+                        <span v-if="item.discount && item.discount !== '-'" class="price-was">{{ formatVnd(item.price ||
+                          item.giaBan) }}</span>
                       </div>
                     </td>
                     <td class="text-center" @click.stop>
                       <button class="btn-select-add-cart"
                         :disabled="(item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0"
                         @click="quickAddSingleProductFromModal(item)">
-                        <svg v-if="(item.stock !== undefined ? item.stock : (item.soLuong || 0)) > 0" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                          stroke-width="2.5">
+                        <svg v-if="(item.stock !== undefined ? item.stock : (item.soLuong || 0)) > 0" width="13"
+                          height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                           <line x1="12" y1="5" x2="12" y2="19"></line>
                           <line x1="5" y1="12" x2="19" y2="12"></line>
                         </svg>
                         {{ (item.stock !== undefined ? item.stock : (item.soLuong || 0)) <= 0 ? 'Hết hàng' : 'Thêm' }}
-                      </button>
+                          </button>
                     </td>
                   </tr>
                   <tr v-if="paginatedModalVariants.length === 0">
@@ -5307,19 +5327,13 @@ onUnmounted(() => {
           </div>
 
           <!-- Phân trang chuẩn giống Quản lý sản phẩm -->
-          <div v-if="modalTotalPages > 1" class="table-card-foot" style="border-top: 1px solid #e2e8f0; background: #ffffff;">
-            <PaginationBar
-              :page="modalCurrentPage"
-              :total-pages="modalTotalPages"
-              :total-elements="modalTotalElements"
-              :page-size="modalPageSize"
-              :sizes="pageSizeOptions"
+          <div v-if="modalTotalPages > 1" class="table-card-foot"
+            style="border-top: 1px solid #e2e8f0; background: #ffffff;">
+            <PaginationBar :page="modalCurrentPage" :total-pages="modalTotalPages" :total-elements="modalTotalElements"
+              :page-size="modalPageSize" :sizes="pageSizeOptions"
               :from="paginatedModalVariants.length ? modalCurrentPage * modalPageSize + 1 : 0"
-              :to="modalCurrentPage * modalPageSize + paginatedModalVariants.length"
-              label="sản phẩm"
-              @change="changeModalPage"
-              @size-change="(sz) => { modalPageSize = sz; modalCurrentPage = 0 }"
-            />
+              :to="modalCurrentPage * modalPageSize + paginatedModalVariants.length" label="sản phẩm"
+              @change="changeModalPage" @size-change="(sz) => { modalPageSize = sz; modalCurrentPage = 0 }" />
           </div>
 
           <div class="pos-prod-footer pos-prod-footer-with-action">
@@ -5425,7 +5439,7 @@ onUnmounted(() => {
                     <div class="scanned-item-info">
                       <span class="scanned-item-name">{{ item.tenSp }}</span>
                       <span class="scanned-item-meta">Size {{ item.size }} • {{ item.color }} • {{ formatVnd(item.price)
- }}</span>
+                      }}</span>
                     </div>
                     <span class="scanned-item-qty">x{{ item.count }}</span>
                   </div>
@@ -5623,7 +5637,8 @@ onUnmounted(() => {
               <div class="modal-title-text-group">
                 <h3 class="cust-modal-title">Chọn địa chỉ giao hàng</h3>
                 <span class="cust-modal-subtitle">
-                  {{ currentOrder?.customer ? `Sổ địa chỉ của khách: ${currentOrder.customer.ten || currentOrder.customer.tenKhachHang}` : 'Chọn địa chỉ nhận hàng đã lưu' }}
+                  {{ currentOrder?.customer ? `Sổ địa chỉ của khách: ${currentOrder.customer.ten ||
+                    currentOrder.customer.tenKhachHang}` : 'Chọn địa chỉ nhận hàng đã lưu' }}
                 </span>
               </div>
             </div>
@@ -5632,34 +5647,35 @@ onUnmounted(() => {
 
           <div class="pos-modal-body select-addr-modal-body">
             <div class="select-addr-list">
-              <div
-                v-for="addr in currentCustomerSavedAddresses"
-                :key="addr.id"
-                class="select-addr-card"
-                :class="{
-                  'active': activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id
-                }"
-                @click="selectAddressFromModal(addr)"
-              >
+              <div v-for="addr in currentCustomerSavedAddresses" :key="addr.id" class="select-addr-card" :class="{
+                'active': activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id
+              }" @click="selectAddressFromModal(addr)">
                 <div class="select-addr-radio-col">
-                  <span class="custom-radio-circle" :class="{ 'checked': activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id }">
-                    <span v-if="activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id" class="inner-dot"></span>
+                  <span class="custom-radio-circle"
+                    :class="{ 'checked': activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id }">
+                    <span v-if="activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id"
+                      class="inner-dot"></span>
                   </span>
                 </div>
                 <div class="select-addr-info-col">
                   <div class="select-addr-top">
                     <span class="select-addr-name">
-                      {{ addr.tenChiChi || currentOrder?.customer?.ten || currentOrder?.customer?.tenKhachHang || 'Địa chỉ nhận hàng' }}
+                      {{ addr.tenChiChi || currentOrder?.customer?.ten || currentOrder?.customer?.tenKhachHang || 'Địa
+                      chỉ
+                      nhận hàng' }}
                     </span>
                     <span v-if="addr.macDinh" class="pill-default-tag">Mặc định</span>
-                    <span v-if="activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id" class="pill-active-tag">Đang chọn</span>
+                    <span v-if="activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id"
+                      class="pill-active-tag">Đang chọn</span>
                   </div>
                   <div class="select-addr-detail">
                     {{ [addr.diaChiCuThe, addr.phuong, addr.thanhPho || addr.tinhThanhPho].filter(Boolean).join(', ') }}
                   </div>
                 </div>
                 <div class="select-addr-btn-col">
-                  <button type="button" class="btn-pick-addr" :class="{ 'is-active': activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id }" @click.stop="selectAddressFromModal(addr)">
+                  <button type="button" class="btn-pick-addr"
+                    :class="{ 'is-active': activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id }"
+                    @click.stop="selectAddressFromModal(addr)">
                     {{ activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id ? 'Đang dùng' : 'Chọn' }}
                   </button>
                 </div>
@@ -5668,7 +5684,8 @@ onUnmounted(() => {
           </div>
 
           <div class="pos-modal-footer cust-modal-footer select-addr-footer">
-            <button type="button" class="btn-open-quick-add" @click="closeSelectAddressModal(); openQuickAddAddressModal()">
+            <button type="button" class="btn-open-quick-add"
+              @click="closeSelectAddressModal(); openQuickAddAddressModal()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -5797,7 +5814,7 @@ onUnmounted(() => {
                 <label class="quick-addr-opt-item">
                   <input type="checkbox" class="custom-chk" v-model="quickAddressForm.saveToCustomerProfile" />
                   <span>Lưu vào sổ địa chỉ của khách hàng <strong>{{ currentOrder.customer.ten ||
- currentOrder.customer.tenKhachHang }}</strong></span>
+                    currentOrder.customer.tenKhachHang }}</strong></span>
                 </label>
                 <label class="quick-addr-opt-item" v-if="quickAddressForm.saveToCustomerProfile">
                   <input type="checkbox" class="custom-chk" v-model="quickAddressForm.isDefault" />
@@ -5905,7 +5922,7 @@ onUnmounted(() => {
                   <div class="bank-clean-row">
                     <span class="clean-row-lbl">Hóa đơn:</span>
                     <span class="clean-row-val">{{ currentOrder?.title }} (<strong>{{ currentOrder?.code
- }}</strong>)</span>
+                        }}</strong>)</span>
                   </div>
 
                   <div class="bank-clean-row">
@@ -6004,7 +6021,9 @@ onUnmounted(() => {
 
               <!-- Tiêu đề & Thông tin đơn -->
               <div class="receipt-bill-heading">
-                <div class="receipt-bill-title">{{ completedInvoiceData.isDelivery ? 'PHIẾU GIAO HÀNG (POS)' : 'HÓA ĐƠN BÁN LẺ(POS)' }}</div>
+                <div class="receipt-bill-title">{{ completedInvoiceData.isDelivery ? 'PHIẾU GIAO HÀNG (POS)' : 'HÓA ĐƠN
+                BÁN
+                LẺ(POS)' }}</div>
                 <div class="receipt-barcode-code">*{{ completedInvoiceData.code }}*</div>
               </div>
 
@@ -6016,7 +6035,7 @@ onUnmounted(() => {
                 <div class="meta-row">
                   <span class="meta-k">Trạng thái:</span>
                   <span class="meta-v"><strong style="color: #2563eb;">{{ completedInvoiceData.trangThai ||
- (completedInvoiceData.isDelivery ? 'Chờ xác nhận' : 'Đã hoàn thành') }}</strong></span>
+                    (completedInvoiceData.isDelivery ? 'Chờ xác nhận' : 'Đã hoàn thành') }}</strong></span>
                 </div>
                 <div class="meta-row">
                   <span class="meta-k">Thời gian:</span>
@@ -6271,8 +6290,9 @@ onUnmounted(() => {
               </div>
               <div class="shift-info-item">
                 <span class="shift-info-label">Khung giờ ca:</span>
-                <span class="shift-info-val font-weight-bold">{{ selectedCa ? (selectedCa.batDau?.substring(0, 5) + ' — ' +
- selectedCa.ketThuc?.substring(0, 5)) : '--:--' }}</span>
+                <span class="shift-info-val font-weight-bold">{{ selectedCa ? (selectedCa.batDau?.substring(0, 5) + ' —
+                  ' +
+                selectedCa.ketThuc?.substring(0, 5)) : '--:--' }}</span>
               </div>
               <div class="shift-info-item">
                 <span class="shift-info-label">Điểm bán hàng:</span>
@@ -6353,7 +6373,7 @@ onUnmounted(() => {
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
               <span>{{ moCaSubmitting ? 'Đang mở ca...' : ('Xác nhận mở ' + (selectedCa?.ten || 'ca làm việc'))
- }}</span>
+              }}</span>
             </button>
           </div>
         </div>
@@ -6375,7 +6395,7 @@ onUnmounted(() => {
               <div class="modal-title-text-group">
                 <h3>Kết thúc ca làm việc & Đối soát</h3>
                 <span class="modal-badge-count">Ca: {{ activeShift?.maCa }} • Mở lúc: {{
- formatDateTime(activeShift?.thoiGianMo) }}</span>
+                  formatDateTime(activeShift?.thoiGianMo) }}</span>
               </div>
             </div>
             <button class="pos-modal-close" @click="isKetCaModalOpen = false" title="Đóng (Esc)">×</button>

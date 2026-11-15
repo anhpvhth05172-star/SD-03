@@ -440,18 +440,18 @@ public class EmailService {
           <style>
             body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px; color: #333; }
             .email-container { max-width: 620px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #e1e8ed; }
-            .email-header { background: linear-gradient(135deg, #1e3a8a, #2563eb); color: #ffffff; padding: 26px 24px; text-align: center; }
-            .email-header h1 { margin: 0; font-size: 24px; font-weight: 700; }
-            .email-header p { margin: 6px 0 0; opacity: 0.9; font-size: 14px; }
+            .email-header { background: linear-gradient(135deg, #0f172a, #dc2626); color: #ffffff; padding: 26px 24px; text-align: center; }
+            .email-header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+            .email-header p { margin: 6px 0 0; opacity: 0.95; font-size: 14px; }
             .email-body { padding: 28px 24px; line-height: 1.6; }
             .info-box { background: #f8fafc; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; border: 1px solid #e2e8f0; font-size: 13.5px; }
             .info-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
             .info-row:last-child { margin-bottom: 0; }
-            .table-products { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            .table-products { width: 100%%; border-collapse: collapse; margin-bottom: 20px; }
             .table-products th { background: #f1f5f9; padding: 8px 12px; font-size: 12px; text-transform: uppercase; color: #475569; font-weight: 700; border-bottom: 2px solid #cbd5e1; }
             .totals-box { border-top: 2px dashed #e2e8f0; padding-top: 14px; font-size: 14px; }
             .total-row { display: flex; justify-content: space-between; margin-bottom: 6px; color: #475569; }
-            .grand-total { font-size: 16px; font-weight: 800; color: #d92d20; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e2e8f0; }
+            .grand-total { font-size: 16px; font-weight: 800; color: #dc2626; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e2e8f0; }
             .email-footer { background: #f8fafc; padding: 18px 24px; text-align: center; font-size: 12.5px; color: #64748b; border-top: 1px solid #e2e8f0; }
           </style>
         </head>
@@ -467,9 +467,9 @@ public class EmailService {
               <p>PolyShoes xin gửi thông tin chi tiết đơn hàng của Quý khách:</p>
 
               <div class="info-box">
-                <div class="info-row"><span>Mã đơn hàng:</span><strong style="color: #1e3a8a;">#%s</strong></div>
+                <div class="info-row"><span>Mã đơn hàng:</span><strong style="color: #dc2626;">#%s</strong></div>
                 <div class="info-row"><span>Thời gian đặt:</span><span>%s</span></div>
-                <div class="info-row"><span>Trạng thái:</span><strong style="color: #2563eb;">%s</strong></div>
+                <div class="info-row"><span>Trạng thái:</span><strong style="color: #0f172a;">%s</strong></div>
                 <div class="info-row"><span>Hình thức:</span><span>%s</span></div>
                 <div class="info-row"><span>Địa chỉ nhận:</span><span>%s</span></div>
               </div>
