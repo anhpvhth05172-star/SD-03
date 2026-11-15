@@ -3,21 +3,26 @@ package com.example.datn.config;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.repository.HoaDonRepository;
 import com.example.datn.service.HoaDonService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-@Slf4j
 @Component
-@RequiredArgsConstructor
 public class PendingPaymentCleanupJob {
+
+    private static final Logger log = LoggerFactory.getLogger(PendingPaymentCleanupJob.class);
 
     private final HoaDonRepository hoaDonRepository;
     private final HoaDonService hoaDonService;
+
+    public PendingPaymentCleanupJob(HoaDonRepository hoaDonRepository, HoaDonService hoaDonService) {
+        this.hoaDonRepository = hoaDonRepository;
+        this.hoaDonService = hoaDonService;
+    }
 
     /**
      * Chạy định kỳ mỗi 1 phút: quét các đơn hàng CHO_THANH_TOAN (VNPAY) đã tạo quá 5 phút
