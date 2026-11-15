@@ -51,6 +51,13 @@ const selectedCa = computed(() => {
   return dsCaChiaSan.value.find((c) => c.id === moCaForm.idCaLich) || null
 })
 
+const selectedCaTimeRange = computed(() => {
+  if (!selectedCa.value) return '--:--'
+  const bd = selectedCa.value.batDau?.substring(0, 5) || ''
+  const kt = selectedCa.value.ketThuc?.substring(0, 5) || ''
+  return bd && kt ? `${bd} — ${kt}` : '--:--'
+})
+
 const isKetCaModalOpen = ref(false)
 const ketCaSummary = ref(null)
 const ketCaLoading = ref(false)
@@ -1136,6 +1143,21 @@ const activeCustomerSavedAddress = computed(() => {
   }
   return list.find(a => a.macDinh) || list[0]
 })
+
+const activeCustomerAddressFull = computed(() => {
+  const a = activeCustomerSavedAddress.value
+  if (!a) return ''
+  return [a.diaChiCuThe, a.phuong, a.thanhPho || a.tinhThanhPho].filter(Boolean).join(', ')
+})
+
+const getAddressCardName = (addr) => {
+  return addr?.tenChiChi || currentOrder.value?.customer?.ten || currentOrder.value?.customer?.tenKhachHang || 'Địa chỉ nhận hàng'
+}
+
+const formatAddressDetail = (addr) => {
+  if (!addr) return ''
+  return [addr.diaChiCuThe, addr.phuong, addr.thanhPho || addr.tinhThanhPho].filter(Boolean).join(', ')
+}
 
 const isSelectAddressModalOpen = ref(false)
 const openSelectAddressModal = () => {
@@ -2688,6 +2710,14 @@ watch(() => currentOrder.value?.cart?.length, () => {
 
 const isReceiptModalOpen = ref(false)
 const completedInvoiceData = ref(null)
+const receiptBillTitle = computed(() => {
+  if (!completedInvoiceData.value) return 'HÓA ĐƠN BÁN LẺ(POS)'
+  return completedInvoiceData.value.isDelivery ? 'PHIẾU GIAO HÀNG (POS)' : 'HÓA ĐƠN BÁN LẺ(POS)'
+})
+const receiptStatusText = computed(() => {
+  if (!completedInvoiceData.value) return ''
+  return completedInvoiceData.value.trangThai || (completedInvoiceData.value.isDelivery ? 'Chờ xác nhận' : 'Đã hoàn thành')
+})
 const isProcessingCheckout = ref(false)
 
 // --- MỤC 5: LỊCH SỬ ĐƠN VỪA BÁN TRONG CA & IN LẠI HÓA ĐƠN NHANH ---
@@ -4658,7 +4688,7 @@ onUnmounted(() => {
                   <span v-if="activeCustomerSavedAddress.macDinh" class="pill-default-tag">Mặc định</span>
                   <span v-else class="pill-active-tag">Đang chọn</span>
                   <span class="single-box-text">
-                    {{ [activeCustomerSavedAddress.diaChiCuThe, activeCustomerSavedAddress.phuong, activeCustomerSavedAddress.thanhPho || activeCustomerSavedAddress.tinhThanhPho].filter(Boolean).join(', ') }}
+                    {{ activeCustomerAddressFull }}
                   </span>
                 </div>
                 <div class="single-box-right">
@@ -4758,9 +4788,8 @@ onUnmounted(() => {
                 </label>
                 <select class="pos-del-control" v-model="currentOrder.deliveryInfo.ward" @change="onWardChange"
                   :disabled="!currentOrder.deliveryInfo.province || currentOrder.deliveryInfo.wardsLoading">
-                  <option :value="null" disabled>
-                    {{ currentOrder.deliveryInfo.wardsLoading ? 'Đang tải danh sách Phường / Xã...' : '-- Chọn Phường / Xã --' }}
-                  </option>
+                  <option :value="null" disabled v-if="currentOrder.deliveryInfo.wardsLoading">Đang tải danh sách Phường / Xã...</option>
+                  <option :value="null" disabled v-else>-- Chọn Phường / Xã --</option>
                   <option v-for="w in wardsList" :key="w.id" :value="w">{{ w.name }}</option>
                 </select>
               </div>
@@ -5655,14 +5684,14 @@ onUnmounted(() => {
                 <div class="select-addr-info-col">
                   <div class="select-addr-top">
                     <span class="select-addr-name">
-                      {{ addr.tenChiChi || currentOrder?.customer?.ten || currentOrder?.customer?.tenKhachHang || 'Địa chỉ nhận hàng' }}
+                      {{ getAddressCardName(addr) }}
                     </span>
                     <span v-if="addr.macDinh" class="pill-default-tag">Mặc định</span>
                     <span v-if="activeCustomerSavedAddress && activeCustomerSavedAddress.id === addr.id"
                       class="pill-active-tag">Đang chọn</span>
                   </div>
                   <div class="select-addr-detail">
-                    {{ [addr.diaChiCuThe, addr.phuong, addr.thanhPho || addr.tinhThanhPho].filter(Boolean).join(', ') }}
+                    {{ formatAddressDetail(addr) }}
                   </div>
                 </div>
                 <div class="select-addr-btn-col">
@@ -6014,7 +6043,7 @@ onUnmounted(() => {
 
               <!-- Tiêu đề & Thông tin đơn -->
               <div class="receipt-bill-heading">
-                <div class="receipt-bill-title">{{ completedInvoiceData.isDelivery ? 'PHIẾU GIAO HÀNG (POS)' : 'HÓA ĐƠN BÁN LẺ(POS)' }}</div>
+                <div class="receipt-bill-title">{{ receiptBillTitle }}</div>
                 <div class="receipt-barcode-code">*{{ completedInvoiceData.code }}*</div>
               </div>
 
@@ -6025,8 +6054,7 @@ onUnmounted(() => {
                 </div>
                 <div class="meta-row">
                   <span class="meta-k">Trạng thái:</span>
-                  <span class="meta-v"><strong style="color: #2563eb;">{{ completedInvoiceData.trangThai ||
-                    (completedInvoiceData.isDelivery ? 'Chờ xác nhận' : 'Đã hoàn thành') }}</strong></span>
+                  <span class="meta-v"><strong style="color: #2563eb;">{{ receiptStatusText }}</strong></span>
                 </div>
                 <div class="meta-row">
                   <span class="meta-k">Thời gian:</span>
@@ -6281,7 +6309,7 @@ onUnmounted(() => {
               </div>
               <div class="shift-info-item">
                 <span class="shift-info-label">Khung giờ ca:</span>
-                <span class="shift-info-val font-weight-bold">{{ selectedCa ? (selectedCa.batDau?.substring(0, 5) + ' — ' + selectedCa.ketThuc?.substring(0, 5)) : '--:--' }}</span>
+                <span class="shift-info-val font-weight-bold">{{ selectedCaTimeRange }}</span>
               </div>
               <div class="shift-info-item">
                 <span class="shift-info-label">Điểm bán hàng:</span>
