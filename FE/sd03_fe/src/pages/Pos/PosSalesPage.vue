@@ -4643,11 +4643,7 @@ onUnmounted(() => {
                   </button>
                   <button type="button" class="saved-addr-add-btn" @click="openQuickAddAddressModal"
                     title="Thêm địa chỉ mới vào sổ địa chỉ của khách">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
-                      <line x1="12" y1="5" x2="12" y2="19"></line>
-                      <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    <span>+ Thêm địa chỉ</span>
+                    <span>Thêm địa chỉ</span>
                   </button>
                 </div>
               </div>
@@ -5681,7 +5677,7 @@ onUnmounted(() => {
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
-              <span>+ Thêm địa chỉ mới</span>
+              <span>Thêm địa chỉ mới</span>
             </button>
             <button class="btn-cust-cancel" @click="closeSelectAddressModal">Đóng</button>
           </div>
