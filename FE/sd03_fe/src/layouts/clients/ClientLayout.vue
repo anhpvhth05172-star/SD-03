@@ -494,11 +494,6 @@ const handleLogout = () => {
                     <span>Liên hệ & khiếu nại</span>
                   </RouterLink>
                 </li>
-                <li>
-                  <RouterLink to="/gioi-thieu" class="client-footer-link">
-                    <span>Chính sách đổi trả 7 ngày</span>
-                  </RouterLink>
-                </li>
               </ul>
             </div>
 
