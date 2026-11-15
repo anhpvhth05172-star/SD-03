@@ -4812,16 +4812,6 @@ onUnmounted(() => {
               </div>
 
               <div class="save-profile-actions d-flex gap-2">
-                <button type="button" class="btn-save-addr-profile btn-quick-add-addr"
-                  @click="openQuickAddAddressModal"
-                  title="Mở form thêm trực tiếp địa chỉ mới cho khách hàng">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
-                  <span>Thêm địa chỉ khách hàng</span>
-                </button>
-
                 <button v-if="!isCurrentDeliveryAddressSaved" type="button" class="btn-save-addr-profile"
                   :disabled="!isCurrentDeliveryAddressComplete || isSavingCustomerAddress"
                   @click="saveDeliveryAddressToCustomerProfile(false)"
