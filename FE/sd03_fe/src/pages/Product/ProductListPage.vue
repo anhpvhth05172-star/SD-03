@@ -784,10 +784,17 @@ onUnmounted(() => {
               <td class="text-center text-muted">{{ currentPage * pageSize + idx + 1 }}</td>
               <td class="text-center code-plain-text">{{ item.maSanPham || `SP0${item.id}` }}</td>
               <td>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                  <img v-if="item.hinhAnhDaiDien" :src="item.hinhAnhDaiDien" alt="Ảnh SP"
-                    style="width: 40px; height: 40px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0; flex-shrink: 0;"
-                    @error="item.hinhAnhDaiDien = null" />
+                <div class="product-cell-wrapper">
+                  <div class="product-thumbnail-box">
+                    <img v-if="item.hinhAnhDaiDien" :src="item.hinhAnhDaiDien" alt="Ảnh SP" class="product-thumb-img"
+                      @error="item.hinhAnhDaiDien = null" />
+                    <div v-else class="product-thumb-placeholder">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                      </svg>
+                    </div>
+                    <span v-if="hasProductDiscount(item)" class="image-discount-badge">{{ item.discount }}</span>
+                  </div>
                   <div class="product-details-col">
                     <span class="name-plain-text">{{ item.tenSanPham }}</span>
                     <span v-if="item.doiTuong" class="target-badge">{{ item.doiTuong }}</span>
@@ -801,10 +808,7 @@ onUnmounted(() => {
               </td>
               <td class="text-center price-plain-text">
                 <div v-if="hasProductDiscount(item)" class="product-price-discount-box">
-                  <div class="product-sale-price-row">
-                    <span class="product-sale-price">{{ formatProductDiscountedPrice(item) }}</span>
-                    <span class="badge-discount-pill">{{ item.discount }}</span>
-                  </div>
+                  <span class="product-sale-price">{{ formatProductDiscountedPrice(item) }}</span>
                   <span class="product-original-price">{{ formatProductPrice(item) }}</span>
                 </div>
                 <span v-else>{{ formatProductPrice(item) }}</span>
