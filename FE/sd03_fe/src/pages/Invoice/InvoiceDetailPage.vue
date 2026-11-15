@@ -161,6 +161,16 @@ const laDaQua = (ten) => {
   return cur > -1 && i > -1 && i < cur
 }
 
+const thoiGianBuoc = (s) => {
+  const code = TRANG_THAI_CODE[s] || s
+  const list = data.value?.lichSu || lichSuKetThuc.value || []
+  const rec = list.find((h) => {
+    const c = h.maTrangThaiSau || h.trangThaiSau || h.trangThai
+    return c === code || c === s
+  })
+  return rec?.thoiGian ? formatDateTime(rec.thoiGian) : null
+}
+
 const handleStepClick = (s) => {
   if (updatingStatus.value) return
   if (laTrangThaiTiepTheo(s)) {
@@ -634,8 +644,8 @@ const load = async (silent = false) => {
         .then((res) => { khInfo.value = res })
         .catch(() => { khInfo.value = null })
     }
-    lichSuKetThuc.value = []
-    if (TRANG_THAI_KET_THUC.includes(freshInvoice?.trangThai)) {
+    lichSuKetThuc.value = freshInvoice?.lichSu || []
+    if (!lichSuKetThuc.value.length) {
       getInvoiceHistory(freshInvoice.id)
         .then((res) => { lichSuKetThuc.value = res || [] })
         .catch(() => { lichSuKetThuc.value = [] })
@@ -971,9 +981,11 @@ onBeforeUnmount(() => {
                   <span class="stepper-label">{{ nhanBuoc(s) }}</span>
                   <span v-if="i === 0" class="stepper-time">{{ formatDateTime(data.ngayTao) }}</span>
                   <span v-else-if="laTrangThaiHienTai(s) && i > 0" class="stepper-time">
-                    {{ formatDateTime(data.ngayCapNhat) }}
+                    {{ thoiGianBuoc(s) || formatDateTime(data.ngayCapNhat) }}
                   </span>
-                  <span v-else-if="laDaQua(s)" class="stepper-time stepper-done">✓ Hoàn thành</span>
+                  <span v-else-if="laDaQua(s)" class="stepper-time stepper-done">
+                    {{ thoiGianBuoc(s) || '✓ Hoàn thành' }}
+                  </span>
                   <span v-else class="stepper-time">&nbsp;</span>
                 </div>
               </div>

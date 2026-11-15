@@ -122,6 +122,9 @@ function normalize(h) {
     code: String(HD.code(h)),
     date: fmtDate(HD.date(h)),
     updatedDate: fmtDate(h.ngayCapNhat),
+    rawDate: HD.date(h),
+    rawUpdatedDate: h.ngayCapNhat,
+    history: h.lichSu || h.history || [],
     ts: new Date(HD.date(h) || 0).getTime() || 0,
     status: st,
     maTrangThai: st,
@@ -181,15 +184,18 @@ const isMine = (o) =>
 // Lấy chi tiết hóa đơn theo id; trả về null nếu không phải đơn của mình
 async function fetchById(id) {
   const o = normalize(await getJson(`${HOA_DON_API}/cua-toi/${id}`));
-  if (o.status === "DA_HUY") {
+  if (!o.history || !o.history.length) {
     try {
       const history = await getJson(`${HOA_DON_API}/cua-toi/${id}/lich-su`);
-      o.cancelReason = (history || []).find((item) =>
-        item.maTrangThaiSau === "DA_HUY" && /3 lần giao hàng thất bại/i.test(item.ghiChu || ""),
-      )?.ghiChu || "";
+      o.history = history || [];
     } catch {
-      o.cancelReason = "";
+      o.history = [];
     }
+  }
+  if (o.status === "DA_HUY") {
+    o.cancelReason = (o.history || []).find((item) =>
+      item.maTrangThaiSau === "DA_HUY" && /3 lần giao hàng thất bại/i.test(item.ghiChu || ""),
+    )?.ghiChu || "";
   }
   return isMine(o) ? o : null;
 }
@@ -325,9 +331,19 @@ const displayedPhoneOrders = computed(() => {
   return phoneOrders.value.filter(isPendingOrder);
 });
 
-function selectOrder(o) {
+async function selectOrder(o) {
   currentResult.value = o;
   window.scrollTo({ top: 0, behavior: "smooth" });
+  if (o && o.id && (!o.history || !o.history.length)) {
+    try {
+      const history = await getJson(`${HOA_DON_API}/cua-toi/${o.id}/lich-su`);
+      if (history && history.length && currentResult.value?.id === o.id) {
+        currentResult.value.history = history;
+      }
+    } catch {
+      // ignore
+    }
+  }
 }
 
 function backFromDetail() {
@@ -468,43 +484,65 @@ const endedText = (o) => {
 
 const isCancelled = computed(() => isEnded(currentResult.value));
 
+function formatStepTime(raw) {
+  if (!raw) return '';
+  if (typeof raw === 'string' && /^\d{2}:\d{2}:\d{2}\s+\d{2}\/\d{2}\/\d{4}$/.test(raw.trim())) {
+    return raw.trim();
+  }
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return String(raw);
+  const pad = (n) => String(n).padStart(2, '0');
+  const hh = pad(d.getHours());
+  const mm = pad(d.getMinutes());
+  const ss = pad(d.getSeconds());
+  const dd = pad(d.getDate());
+  const MM = pad(d.getMonth() + 1);
+  const yyyy = d.getFullYear();
+  return `${hh}:${mm}:${ss} ${dd}/${MM}/${yyyy}`;
+}
+
 function getStepNote(step, idx) {
   if (!currentResult.value) return '';
   const o = currentResult.value;
   const curIdx = currentStepIdx.value;
   const isAllDone = toStandardStatusCode(o.status || o.maTrangThai) === 'DA_HOAN_THANH';
 
+  // Nếu bước này chưa tới, không hiển thị gì
+  if (idx > curIdx && !isAllDone) {
+    return '';
+  }
+
+  const historyList = o.history || [];
+
+  // 1. Bước 0: Tạo đơn / Đã đặt hàng
   if (step.code === 'CHO_XAC_NHAN') {
-    if (toStandardStatusCode(o.status) === 'CHO_THANH_TOAN') return 'Chờ thanh toán VNPay';
-    return o.date || 'Đã ghi nhận đơn';
+    const rec = historyList.slice().reverse().find((h) => {
+      const code = toStandardStatusCode(h.maTrangThaiSau || h.trangThaiSau || h.trangThai);
+      return code === 'CHO_XAC_NHAN';
+    });
+    if (rec && rec.thoiGian) return formatStepTime(rec.thoiGian);
+    return formatStepTime(o.rawDate || o.date);
   }
-  if (step.code === 'DA_XAC_NHAN') {
-    if (!isDeliveryOrder.value) {
-      return idx <= curIdx ? 'Thanh toán thành công' : 'Chờ thanh toán';
-    }
-    return idx <= curIdx ? 'Cửa hàng đã xác nhận' : 'Chờ xác nhận';
+
+  // 2. Tìm thời gian thao tác trong lịch sử khớp mã trạng thái của bước này
+  const rec = historyList.find((h) => {
+    const code = toStandardStatusCode(h.maTrangThaiSau || h.trangThaiSau || h.trangThai);
+    return code === step.code;
+  });
+  if (rec && rec.thoiGian) {
+    return formatStepTime(rec.thoiGian);
   }
-  if (step.code === 'CHO_GIAO_HANG') {
-    if (idx < curIdx || isAllDone) return 'Đã bàn giao cho GHN';
-    if (idx === curIdx) return 'Đã đóng gói, chờ GHN';
-    return 'Chờ đóng gói';
+
+  // 3. Nếu là bước hiện tại mà chưa có bản ghi lịch sử riêng
+  if (idx === curIdx) {
+    return formatStepTime(o.rawUpdatedDate || o.updatedDate || o.rawDate || o.date);
   }
-  if (step.code === 'DANG_GIAO_HANG') {
-    if (idx < curIdx || isAllDone) return 'Đã giao tới nơi';
-    if (idx === curIdx) return 'Dự kiến 1-2 ngày';
-    return 'Chờ vận chuyển';
+
+  // 4. Nếu bước đã qua mà thiếu log lịch sử (ví dụ đơn cũ)
+  if (idx < curIdx || isAllDone) {
+    return formatStepTime(o.rawUpdatedDate || o.updatedDate || o.rawDate || o.date);
   }
-  if (step.code === 'DA_GIAO_HANG') {
-    if (idx <= curIdx || isAllDone) return 'Giao hàng thành công';
-    return 'Nhận hàng & kiểm tra';
-  }
-  if (step.code === 'DA_HOAN_THANH') {
-    if (idx <= curIdx || isAllDone) return 'Đơn hàng hoàn tất';
-    return 'Hoàn tất giao dịch';
-  }
-  if (step.code === 'GIAO_HANG_THAT_BAI') {
-    return 'Giao hàng không thành công';
-  }
+
   return '';
 }
 
@@ -650,6 +688,10 @@ async function pollRealtimeUpdate() {
           } else {
             currentResult.value.note = fresh.note;
             currentResult.value.updatedDate = fresh.updatedDate;
+            currentResult.value.rawUpdatedDate = fresh.rawUpdatedDate;
+            if (fresh.history && fresh.history.length) {
+              currentResult.value.history = fresh.history;
+            }
           }
         }
       } else if (phoneOrders.value.length > 0) {
@@ -2097,8 +2139,10 @@ onUnmounted(() => {
   color: #111;
 }
 .ol-step-note {
-  font-size: 0.75rem;
+  font-size: 0.73rem;
   color: #6b7280;
+  min-height: 1.15rem;
+  line-height: 1.3;
 }
 
 @media (max-width: 768px) {

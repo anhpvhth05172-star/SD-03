@@ -1649,6 +1649,7 @@ private NhanVien timNhanVien(Long id) {
             .toList();
         dto.setChiTiet(lines);
         dto.setTrangThaiTiepTheo(tenTrangThaiTiepTheo(h));
+        dto.setLichSu(lichSuHoaDon(h.getId()));
         return dto;
     }
 
@@ -1980,6 +1981,7 @@ private NhanVien timNhanVien(Long id) {
             HoaDonDTO dto = toDTO(h);
             dto.setChiTiet(linesByHdId.getOrDefault(h.getId(), List.of()));
             dto.setTrangThaiTiepTheo(tenTrangThaiTiepTheo(h));
+            dto.setLichSu(lichSuHoaDon(h.getId()));
             enrichGhiChuHuy(h, dto);
             return dto;
         }).toList();
