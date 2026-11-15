@@ -2938,17 +2938,26 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
   if (currentOrder.value.selectedVoucher && !isVoucherEligible(currentOrder.value.selectedVoucher)) {
     const droppedV = currentOrder.value.selectedVoucher
     const vCode = droppedV.ma || droppedV.maPhieuGiamGia || 'Voucher'
-    const minReq = Number(droppedV.hoaDonToiThieu || 0)
 
     currentOrder.value.selectedVoucher = newBest?.voucher || null
     currentOrder.value.userSelectedVoucherManually = false
     currentOrder.value.userRemovedVoucher = false
 
-    if (minReq > 0 && newSubTotal < minReq) {
-      notifyWarning(
-        'Không đủ điều kiện áp dụng voucher',
-        `Tổng tiền hàng giảm xuống ${formatVnd(newSubTotal)}, chưa đạt mức tối thiểu ${formatVnd(minReq)} của mã "${vCode}". ${newBest?.voucher ? `Hệ thống chuyển sang mã "${newBest.voucher.ma}".` : 'Đã gỡ phiếu giảm giá.'}`,
-        4500
+    if (newBest?.voucher) {
+      const newCode = newBest.voucher.ma || newBest.voucher.maPhieuGiamGia || 'Mã mới'
+      const newDisc = calculateVoucherDiscount(newBest.voucher, newSubTotal)
+      notifyToast(
+        'Tự động áp dụng mã tốt nhất',
+        `Mã "${vCode}" không đủ điều kiện khi giảm số lượng, hệ thống đã tự động chuyển sang mã "${newCode}" (giảm ${formatVnd(newDisc)}).`,
+        'info',
+        3000
+      )
+    } else {
+      notifyToast(
+        'Đã gỡ phiếu giảm giá',
+        `Mã "${vCode}" đã được tự động gỡ do tổng tiền hàng (${formatVnd(newSubTotal)}) không còn đủ điều kiện tối thiểu.`,
+        'info',
+        2500
       )
     }
     return

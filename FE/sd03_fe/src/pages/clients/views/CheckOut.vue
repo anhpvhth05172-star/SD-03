@@ -531,12 +531,29 @@ function onRemoveClick() {
   sessionStorage.removeItem("ps_selected_voucher_code");
   removeVoucher();
 }
-// Giỏ thay đổi làm không còn đủ điều kiện -> gỡ voucher
+// Giỏ thay đổi làm không còn đủ điều kiện -> tự động tìm mã tốt nhất
 watch(orderTotal, () => {
   if (voucher.value && orderTotal.value < (voucher.value.min || 0)) {
+    const oldCode = voucher.value.code;
     removeVoucher();
-    voucherMsg.text = "Mã giảm giá đã bị gỡ vì đơn hàng không đủ điều kiện.";
-    voucherMsg.ok = false;
+
+    // Tự động tìm voucher tốt nhất còn đủ điều kiện
+    const eligible = availableVouchers.value
+      .filter((v) => !checkVoucher(v))
+      .map((v) => ({ v, d: calcDiscount(toVoucher(v), orderTotal.value) }))
+      .filter((x) => x.d > 0)
+      .sort((a, b) => b.d - a.d);
+
+    if (eligible.length > 0) {
+      const best = eligible[0].v;
+      voucher.value = toVoucher(best);
+      selectedVoucherId.value = VF.id(best);
+      voucherMsg.text = `Mã "${oldCode}" không đủ điều kiện, đã tự động chuyển sang mã tốt nhất "${VF.code(best)}".`;
+      voucherMsg.ok = true;
+    } else {
+      voucherMsg.text = `Mã "${oldCode}" đã được gỡ vì đơn hàng không đủ điều kiện tối thiểu.`;
+      voucherMsg.ok = false;
+    }
   }
 });
 
