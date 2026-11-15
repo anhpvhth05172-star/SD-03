@@ -24,6 +24,11 @@ import { getUser } from '@/utils/auth'
 import { notifyError, notifyConfirm, notifySuccess, notifyWarning } from '@/utils/notify'
 import { taoVaTaiPdf } from '@/utils/pdf'
 import SearchableSelect from '@/components/SearchableSelect.vue'
+import { getDangMo } from '@/api/giaoCa'
+import { laAdmin } from '@/utils/session'
+
+const activeShift = ref(null)
+const isCheDoXem = computed(() => !laAdmin() && !activeShift.value?.id)
 
 const route = useRoute()
 const router = useRouter()
@@ -184,6 +189,10 @@ const layTenNguoiThaoTac = () => {
 
 const chuyenTrangThai = async (ten) => {
   if (!data.value || updatingStatus.value) return
+  if (ten === 'Đã hủy' && isCheDoXem.value) {
+    notifyWarning('Đang ở chế độ xem', 'Bạn chưa mở ca làm việc. Không thể xóa hoặc hủy hóa đơn!')
+    return
+  }
   if (!laTrangThaiTiepTheo(ten)) {
     notifyWarning('Chưa thể chuyển', `Không thể chuyển sang trạng thái "${ten}" từ "${data.value.trangThai}".`)
     return
@@ -230,6 +239,10 @@ const toggleStatusMenu = () => {
 
 const huyDon = async () => {
   if (!data.value || updatingStatus.value || !coTheHuy.value) return
+  if (isCheDoXem.value) {
+    notifyWarning('Đang ở chế độ xem', 'Bạn chưa mở ca làm việc. Không thể xóa hoặc hủy hóa đơn!')
+    return
+  }
   const ma = data.value.maHoaDon || `#${data.value.id}`
   const ok = await notifyConfirm(
     'Xác nhận hủy đơn?',
@@ -674,6 +687,7 @@ const taiPdfHienTai = async () => {
 
 watch(() => route.params.id, load)
 onMounted(async () => {
+  getDangMo().then((res) => { activeShift.value = res }).catch(() => {})
   await load()
   document.addEventListener('click', onDocClick, true)
   document.addEventListener('keydown', onEscape)
@@ -1265,7 +1279,8 @@ onBeforeUnmount(() => {
               v-if="coTheHuy && !isTerminal"
               class="btn btn-outline btn-huy-don"
               type="button"
-              :disabled="updatingStatus"
+              :disabled="updatingStatus || isCheDoXem"
+              :title="isCheDoXem ? 'Chưa mở ca làm việc (đang ở chế độ xem)' : 'Hủy đơn'"
               @click="huyDon"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">

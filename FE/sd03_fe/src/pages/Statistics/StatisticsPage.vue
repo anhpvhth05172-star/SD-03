@@ -494,6 +494,8 @@ const chuyenCheDoSoSanh = () => {
 /* ---------------------------------- So sánh & tăng trưởng ---------------------------------- */
 const ssCheDo = ref('thang')
 const ssNam = ref(new Date().getFullYear())
+const ssThang1 = ref('')
+const ssThang2 = ref('')
 const ssTu1 = ref('')
 const ssDen1 = ref('')
 const ssTu2 = ref('')
@@ -503,6 +505,31 @@ const ssData = ref(null)
 const ssDangTai = ref(false)
 const ssErr = ref('')
 
+const tinhKhoangThang = (thangStr) => {
+  if (!thangStr) return { tu: '', den: '' }
+  const parts = String(thangStr).split('-')
+  if (parts.length < 2) return { tu: '', den: '' }
+  const y = parseInt(parts[0], 10)
+  const m = parseInt(parts[1], 10)
+  if (isNaN(y) || isNaN(m)) return { tu: '', den: '' }
+  const lastDay = new Date(y, m, 0).getDate()
+  const pad = (n) => String(n).padStart(2, '0')
+  return {
+    tu: `${y}-${pad(m)}-01`,
+    den: `${y}-${pad(m)}-${pad(lastDay)}`,
+  }
+}
+
+watch([ssThang1, ssThang2], () => {
+  const k1 = tinhKhoangThang(ssThang1.value)
+  ssTu1.value = k1.tu
+  ssDen1.value = k1.den
+
+  const k2 = tinhKhoangThang(ssThang2.value)
+  ssTu2.value = k2.tu
+  ssDen2.value = k2.den
+})
+
 const SS_CHE_DO = [
   { key: 'thang', label: 'Theo Tháng (12 tháng)' },
   { key: 'quy', label: 'Theo Quý (4 quý)' },
@@ -511,7 +538,7 @@ const SS_CHE_DO = [
 ]
 
 const ssDu4Ngay = computed(() =>
-  Boolean(ssTu1.value && ssDen1.value && ssTu2.value && ssDen2.value)
+  Boolean(ssThang1.value && ssThang2.value)
 )
 
 const ssCoTheTai = computed(() => ssCheDo.value !== '2ky' || ssDu4Ngay.value)
@@ -545,6 +572,8 @@ const taiSoSanh = async () => {
 const datLaiSoSanh = () => {
   ssCheDo.value = 'thang'
   ssNam.value = new Date().getFullYear()
+  ssThang1.value = ''
+  ssThang2.value = ''
   ssTu1.value = ''
   ssDen1.value = ''
   ssTu2.value = ''
@@ -1607,20 +1636,12 @@ onMounted(async () => {
 
           <template v-if="ssCheDo === '2ky'">
             <div class="filter-input-col">
-              <label class="filter-label">KỲ 1: TỪ NGÀY</label>
-              <input type="date" v-model="ssTu1" class="form-control" />
+              <label class="filter-label">KỲ 1: CHỌN THÁNG</label>
+              <input type="month" v-model="ssThang1" class="form-control" />
             </div>
             <div class="filter-input-col">
-              <label class="filter-label">KỲ 1: ĐẾN NGÀY</label>
-              <input type="date" v-model="ssDen1" class="form-control" />
-            </div>
-            <div class="filter-input-col">
-              <label class="filter-label">KỲ 2: TỪ NGÀY</label>
-              <input type="date" v-model="ssTu2" class="form-control" />
-            </div>
-            <div class="filter-input-col">
-              <label class="filter-label">KỲ 2: ĐẾN NGÀY</label>
-              <input type="date" v-model="ssDen2" class="form-control" />
+              <label class="filter-label">KỲ 2: CHỌN THÁNG</label>
+              <input type="month" v-model="ssThang2" class="form-control" />
             </div>
           </template>
 

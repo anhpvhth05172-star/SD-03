@@ -144,6 +144,50 @@ export async function fetchCart() {
   }
 }
 
+// Đồng bộ giỏ hàng từ máy khách lên tài khoản sau khi đăng nhập để không mất sản phẩm
+export async function dongBoGioHangSauDangNhap() {
+  const user = getUser();
+  if (!user || !user.idKhachHang) return;
+
+  let localItems = [];
+  try {
+    localItems = JSON.parse(localStorage.getItem("ps_cart")) || [];
+  } catch {
+    localItems = [];
+  }
+  if (!Array.isArray(localItems) || localItems.length === 0) {
+    await fetchCart();
+    return;
+  }
+
+  try {
+    const serverCart = await layGioHangApi(user.idKhachHang);
+    const serverItems = Array.isArray(serverCart?.items) ? serverCart.items : [];
+    const serverVariantIds = new Set(serverItems.map((i) => Number(i.idSanPhamChiTiet)));
+
+    for (const item of localItems) {
+      const vId = Number(item.idSanPhamChiTiet || item.variantId);
+      if (!vId) continue;
+      if (!serverVariantIds.has(vId)) {
+        try {
+          await themVaoGioHangApi({
+            idKhachHang: user.idKhachHang,
+            idSanPhamChiTiet: vId,
+            soLuong: Number(item.qty) || 1,
+          });
+          serverVariantIds.add(vId);
+        } catch (e) {
+          console.warn("Không thể đồng bộ sản phẩm vào giỏ server:", vId, e);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Lỗi đồng bộ giỏ hàng sau đăng nhập:", err);
+  } finally {
+    await fetchCart();
+  }
+}
+
 // Thêm sản phẩm vào giỏ hàng (kết nối BE)
 export async function addToCart(p, variantId, size, qty = 1, color = "") {
   const user = getUser();
