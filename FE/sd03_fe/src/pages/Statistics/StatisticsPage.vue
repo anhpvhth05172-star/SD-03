@@ -1228,7 +1228,7 @@ onMounted(async () => {
             </tr>
             <tr v-for="(item, idx) in sanPhamDaBanTrang" :key="idx">
               <td>{{ pageDon * sizeDon + idx + 1 }}</td>
-              <td><span class="badge bg-light text-dark fw-bold">{{ item.maSanPham }}</span></td>
+              <td><span class="sku-badge">{{ item.maSanPham }}</span></td>
               <td>
                 <div class="fw-bold">{{ item.tenSanPham }}</div>
                 <div class="text-muted small">{{ item.bienThe }}</div>
@@ -1524,7 +1524,7 @@ onMounted(async () => {
             </tr>
             <tr v-for="(sp, idx) in sanPhamBangTrang" :key="sp.idSanPham || idx">
               <td>{{ pageBangSp * sizeBangSp + idx + 1 }}</td>
-              <td><span class="badge bg-light text-dark fw-bold">{{ sp.maSanPham }}</span></td>
+              <td><span class="sku-badge">{{ sp.maSanPham }}</span></td>
               <td>
                 <div class="product-cell-wrap">
                   <div class="product-thumb">
@@ -1850,9 +1850,9 @@ onMounted(async () => {
               <tbody>
                 <tr v-for="(t, i) in ssTop" :key="t.maSanPham">
                   <td>{{ i + 1 }}</td>
-                  <td class="fw-bold">{{ t.maSanPham }}</td>
+                  <td><span class="sku-badge">{{ t.maSanPham }}</span></td>
                   <td>{{ t.tenSanPham }}</td>
-                  <td><span class="badge bg-light text-dark border">{{ t.tenThuongHieu }}</span></td>
+                  <td>{{ t.tenThuongHieu || '—' }}</td>
                   <td class="text-end fw-bold">{{ new Intl.NumberFormat('vi-VN').format(t.tongBan) }}</td>
                   <td class="text-end fw-bold text-success">{{ formatVnd(t.tongDoanhThu) }}</td>
                   <td v-for="(v, j) in t.banTheoKy" :key="j" class="text-end">
@@ -1924,10 +1924,14 @@ onMounted(async () => {
   padding: 24px;
   background-color: #f8fafc;
   min-height: 100vh;
-  font-family: inherit;
+  font-family: var(--font-family, 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, sans-serif);
+  color: #334155;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Page Header */
+/* -------------------------------------------------------------
+   PAGE HEADER
+------------------------------------------------------------- */
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -1935,15 +1939,20 @@ onMounted(async () => {
   margin-bottom: 20px;
 }
 .page-title {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
-  color: #1e293b;
+  color: #0f172a;
   margin: 0;
+  letter-spacing: -0.025em;
+  font-family: var(--font-display, inherit);
+  line-height: 1.3;
 }
 .page-subtitle {
-  font-size: 14px;
+  font-size: 13.5px;
   color: #64748b;
   margin: 4px 0 0 0;
+  font-weight: 450;
+  line-height: 1.4;
 }
 .page-header-text {
   display: flex;
@@ -1955,21 +1964,22 @@ onMounted(async () => {
   gap: 10px;
   flex-wrap: wrap;
 }
+
 .btn-compare-mode {
   height: 38px;
   padding: 0 16px;
   border: 1.5px solid #6366f1;
-  border-radius: 9px;
+  border-radius: 8px;
   background: #eef2ff;
   color: #4f46e5;
-  font-size: 13.5px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.12);
+  box-shadow: 0 1px 2px rgba(79, 70, 229, 0.1);
   font-family: inherit;
 }
 .btn-compare-mode:hover {
@@ -1977,7 +1987,7 @@ onMounted(async () => {
   color: #ffffff;
   border-color: #4f46e5;
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.28);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
 }
 .btn-compare-mode:active {
   transform: translateY(0);
@@ -1987,17 +1997,17 @@ onMounted(async () => {
   height: 38px;
   padding: 0 16px;
   border: 1.5px solid #10b981;
-  border-radius: 9px;
+  border-radius: 8px;
   background: #ecfdf5;
   color: #059669;
-  font-size: 13.5px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: 7px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.12);
+  box-shadow: 0 1px 2px rgba(16, 185, 129, 0.1);
   font-family: inherit;
 }
 .btn-action-outline:hover {
@@ -2005,7 +2015,7 @@ onMounted(async () => {
   color: #ffffff;
   border-color: #10b981;
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.28);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
 }
 .btn-action-outline:active {
   transform: translateY(0);
@@ -2018,24 +2028,23 @@ onMounted(async () => {
   height: 36px;
   padding: 0 14px;
   border: 1.5px solid #cbd5e1;
-  border-radius: 9px;
+  border-radius: 8px;
   background: #ffffff;
   color: #1e293b;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   font-family: inherit;
   margin-bottom: 10px;
   width: fit-content;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 .btn-back:hover {
   background: #f1f5f9;
-  border-color: #64748b;
+  border-color: #94a3b8;
   color: #0f172a;
-  transform: translateX(-3px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transform: translateX(-2px);
 }
 .btn-back:active {
   transform: translateX(0);
@@ -2045,29 +2054,36 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  height: 38px;
+  padding: 0 16px;
   border: 1px solid #cbd5e1;
   background: #ffffff;
   border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   color: #334155;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.18s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  font-family: inherit;
 }
 .btn-mail-outline:hover {
-  background: #f1f5f9;
+  background: #f8fafc;
   border-color: #94a3b8;
+  color: #0f172a;
+  transform: translateY(-1px);
 }
 
-/* 1. Filter Card */
+/* -------------------------------------------------------------
+   1. BỘ LỌC THỐNG KÊ (FILTER CARD)
+------------------------------------------------------------- */
 .filter-card {
   background: #ffffff;
   border-radius: 12px;
   padding: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   margin-bottom: 20px;
-  border: 1px solid #f1f5f9;
+  border: 1px solid #e2e8f0;
 }
 .filter-header-row {
   display: flex;
@@ -2080,23 +2096,34 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   font-weight: 700;
-  color: #1e293b;
-  font-size: 15px;
+  color: #0f172a;
+  font-size: 15.5px;
+  font-family: var(--font-display, inherit);
+  letter-spacing: -0.015em;
 }
+.filter-title i {
+  font-size: 17px;
+  color: #6366f1;
+}
+
 .quick-pills-group {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 .quick-pill-btn {
-  padding: 6px 14px;
+  height: 32px;
+  padding: 0 14px;
   border-radius: 20px;
-  border: 1.5px solid #e2e8f0;
+  border: 1px solid #e2e8f0;
   background: #ffffff;
   font-size: 12.5px;
   font-weight: 600;
   color: #64748b;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   font-family: inherit;
@@ -2104,15 +2131,15 @@ onMounted(async () => {
 .quick-pill-btn:hover {
   background: #f8fafc;
   border-color: #cbd5e1;
-  color: #1e293b;
+  color: #0f172a;
   transform: translateY(-1px);
 }
 .quick-pill-btn.is-active {
   background: #4f46e5;
   color: #ffffff;
   border-color: #4f46e5;
-  font-weight: 700;
-  box-shadow: 0 3px 10px rgba(79, 70, 229, 0.3);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
 }
 
 .filter-inputs-grid {
@@ -2136,6 +2163,24 @@ onMounted(async () => {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+
+.filter-inputs-grid .form-control,
+.filter-inputs-grid .form-select {
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  color: #0f172a;
+  background-color: #ffffff;
+  box-shadow: none;
+  font-family: inherit;
+}
+.filter-inputs-grid .form-control:focus,
+.filter-inputs-grid .form-select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
 .search-input-wrap {
   position: relative;
 }
@@ -2147,6 +2192,7 @@ onMounted(async () => {
   color: #94a3b8;
   font-size: 13px;
 }
+
 .btn-reset {
   display: inline-flex;
   align-items: center;
@@ -2154,9 +2200,9 @@ onMounted(async () => {
   height: 38px;
   padding: 0 14px;
   background: #ffffff;
-  border: 1.5px solid #cbd5e1;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: #475569;
   cursor: pointer;
@@ -2166,7 +2212,7 @@ onMounted(async () => {
   font-family: inherit;
 }
 .btn-reset:hover {
-  background: #f1f5f9;
+  background: #f8fafc;
   border-color: #94a3b8;
   color: #0f172a;
   transform: translateY(-1px);
@@ -2182,10 +2228,10 @@ onMounted(async () => {
   height: 38px;
   padding: 0 16px;
   background: #4f46e5;
-  border: 1.5px solid #4f46e5;
+  border: 1px solid #4f46e5;
   border-radius: 8px;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12.5px;
+  font-weight: 600;
   color: #ffffff;
   cursor: pointer;
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
@@ -2212,7 +2258,7 @@ onMounted(async () => {
   border: 1.5px solid #ef4444;
   border-radius: 8px;
   color: #dc2626;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 12.5px;
   cursor: pointer;
   transition: all 0.18s ease;
@@ -2225,6 +2271,7 @@ onMounted(async () => {
   transform: translateY(-1px);
   box-shadow: 0 3px 8px rgba(239, 68, 68, 0.25);
 }
+
 .filter-status-banner {
   margin-top: 14px;
   padding-top: 12px;
@@ -2234,13 +2281,16 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-weight: 450;
 }
 .status-dot {
   color: #3b82f6;
   font-size: 14px;
 }
 
-/* 2. KPI Cards Grid */
+/* -------------------------------------------------------------
+   2. HÀNG 5 THẺ KPI (KPI CARDS GRID)
+------------------------------------------------------------- */
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -2250,7 +2300,7 @@ onMounted(async () => {
 .kpi-card {
   position: relative;
   background: #ffffff;
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 18px 20px;
   border: 1px solid #e2e8f0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
@@ -2259,7 +2309,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 148px;
+  min-height: 142px;
 }
 .kpi-card:hover {
   transform: translateY(-2px);
@@ -2290,6 +2340,7 @@ onMounted(async () => {
 .icon-blue { background: #f0f9ff; color: #0284c7; border: 1px solid #e0f2fe; }
 .icon-purple { background: #faf5ff; color: #7c3aed; border: 1px solid #f3e8ff; }
 .icon-orange { background: #fff7ed; color: #ea580c; border: 1px solid #ffedd5; }
+.icon-red { background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; }
 
 .kpi-toggle-btn {
   width: 28px;
@@ -2320,7 +2371,7 @@ onMounted(async () => {
   left: 0;
   right: 0;
   height: 3px;
-  border-radius: 14px 14px 0 0;
+  border-radius: 12px 12px 0 0;
 }
 .kpi-green.is-active {
   border-color: #10b981;
@@ -2377,12 +2428,24 @@ onMounted(async () => {
   border-color: #f97316;
 }
 
+.kpi-rose.is-active {
+  border-color: #ef4444;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.12);
+}
+.kpi-rose.is-active::before { background: #ef4444; }
+.kpi-rose.is-active .kpi-toggle-btn {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+}
+
 .kpi-value {
   font-size: 21px;
   font-weight: 700;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.025em;
   line-height: 1.25;
   color: #0f172a;
+  font-family: var(--font-display, inherit);
 }
 .text-green { color: #059669; }
 .text-amber { color: #d97706; }
@@ -2391,7 +2454,7 @@ onMounted(async () => {
 .text-orange { color: #ea580c; }
 
 .kpi-title {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   color: #64748b;
   margin-top: 4px;
@@ -2410,23 +2473,26 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   font-size: 11.5px;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 .kpi-dual-row .label {
   color: #64748b;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  font-weight: 450;
 }
 .kpi-dual-row .val {
   font-weight: 600;
-  color: #1e293b;
+  color: #0f172a;
 }
 
-/* 3. Khung chi tiết động */
+/* -------------------------------------------------------------
+   3. KHUNG CHI TIẾT ĐỘNG (KPI DETAIL CARD)
+------------------------------------------------------------- */
 .kpi-detail-card {
   background: #ffffff;
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 20px 22px;
   border: 1px solid #e2e8f0;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
@@ -2454,11 +2520,12 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 .detail-heading {
-  font-size: 16px;
+  font-size: 15.5px;
   font-weight: 700;
   color: #0f172a;
   margin: 0;
-  letter-spacing: -0.2px;
+  letter-spacing: -0.015em;
+  font-family: var(--font-display, inherit);
 }
 .detail-count-badge {
   background: #f1f5f9;
@@ -2489,10 +2556,11 @@ onMounted(async () => {
   color: #475569;
   cursor: pointer;
   transition: all 0.15s ease;
+  font-family: inherit;
 }
 .sub-tab-btn:hover {
   background: #f8fafc;
-  color: #1e293b;
+  color: #0f172a;
   border-color: #cbd5e1;
 }
 .sub-tab-btn.is-active {
@@ -2513,6 +2581,7 @@ onMounted(async () => {
   color: #0f172a;
   font-weight: 700;
 }
+
 .btn-collapse {
   height: 34px;
   padding: 0 12px;
@@ -2527,6 +2596,7 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  font-family: inherit;
 }
 .btn-collapse:hover {
   background: #fee2e2;
@@ -2534,7 +2604,7 @@ onMounted(async () => {
   border-color: #fecaca;
 }
 
-/* Detail Filter Bar - Đồng bộ chiều cao 36px */
+/* Detail Filter Bar */
 .detail-filter-bar {
   display: flex;
   gap: 10px;
@@ -2557,13 +2627,15 @@ onMounted(async () => {
   z-index: 2;
 }
 .detail-filter-bar .search-wrap .form-control {
-  height: 36px;
+  height: 38px;
   padding-left: 36px;
   border-radius: 8px;
   border: 1px solid #cbd5e1;
   font-size: 13px;
   background: #ffffff;
   box-shadow: none;
+  color: #0f172a;
+  font-family: inherit;
 }
 .detail-filter-bar .search-wrap .form-control:focus {
   border-color: #3b82f6;
@@ -2571,15 +2643,17 @@ onMounted(async () => {
 }
 .detail-filter-bar .select-filter,
 .detail-filter-bar .select-sort {
-  height: 36px;
+  height: 38px;
   width: auto;
   min-width: 160px;
   border-radius: 8px;
   border: 1px solid #cbd5e1;
   font-size: 13px;
+  color: #0f172a;
   background-color: #ffffff;
   padding: 0 32px 0 12px;
   box-shadow: none;
+  font-family: inherit;
 }
 .detail-filter-bar .select-filter:focus,
 .detail-filter-bar .select-sort:focus {
@@ -2590,49 +2664,62 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 36px;
+  height: 38px;
   padding: 0 14px;
   border: 1px solid #cbd5e1;
   background: #ffffff;
   border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
   color: #475569;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;
+  font-family: inherit;
 }
 .btn-reset-detail:hover {
-  background: #f1f5f9;
+  background: #f8fafc;
   color: #0f172a;
   border-color: #94a3b8;
 }
 
-/* Custom Table - Header màu trung tính, không wrap, border gọn */
-.custom-detail-table {
+/* -------------------------------------------------------------
+   ĐỒNG BỘ CẢ 2 BẢNG THỐNG KÊ (DETAIL TABLE & PRODUCT TABLE)
+------------------------------------------------------------- */
+.custom-detail-table,
+.custom-product-table {
   border-collapse: separate;
   border-spacing: 0;
   margin-bottom: 0;
+  width: 100%;
 }
-.custom-detail-table th {
+.custom-detail-table th,
+.custom-product-table th {
   background: #f8fafc !important;
   color: #475569 !important;
-  font-size: 11px !important;
+  font-size: 11.5px !important;
   font-weight: 700 !important;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   padding: 11px 12px !important;
   border-top: 1px solid #e2e8f0 !important;
   border-bottom: 1px solid #e2e8f0 !important;
+  border-left: none !important;
+  border-right: none !important;
   white-space: nowrap;
+  font-family: var(--font-family, inherit);
 }
-.custom-detail-table td {
+.custom-detail-table td,
+.custom-product-table td {
   font-size: 13px;
   padding: 12px;
   border-bottom: 1px solid #f1f5f9;
   vertical-align: middle;
+  color: #334155;
+  font-family: var(--font-family, inherit);
 }
-.custom-detail-table tbody tr:hover td {
+.custom-detail-table tbody tr:hover td,
+.custom-product-table tbody tr:hover td {
   background-color: #f8fafc;
 }
 
@@ -2642,6 +2729,7 @@ onMounted(async () => {
   cursor: pointer;
   text-decoration: none;
   transition: color 0.15s ease;
+  font-size: 13px;
 }
 .order-code-link:hover {
   color: #1d4ed8;
@@ -2650,6 +2738,19 @@ onMounted(async () => {
 .staff-badge {
   color: #334155;
   font-weight: 500;
+  font-size: 13px;
+}
+
+.sku-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #1e293b;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
 /* Badges phân loại */
@@ -2712,16 +2813,24 @@ onMounted(async () => {
   border-color: #bfdbfe;
 }
 
-/* Detail Pagination */
-.detail-pagination-row {
+/* -------------------------------------------------------------
+   ĐỒNG BỘ PHÂN TRANG (PAGINATION BARS)
+------------------------------------------------------------- */
+.detail-pagination-row,
+.table-pagination-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-top: 16px;
-  font-size: 13px;
+  font-size: 12.5px;
   color: #64748b;
   flex-wrap: wrap;
   gap: 12px;
+}
+.pagination-info {
+  font-size: 12.5px;
+  color: #64748b;
+  font-weight: 500;
 }
 .pagination-pages {
   display: flex;
@@ -2734,12 +2843,14 @@ onMounted(async () => {
   border: 1px solid #e2e8f0;
   background: #ffffff;
   font-size: 12.5px;
+  font-weight: 500;
   color: #475569;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: all 0.15s ease;
+  font-family: inherit;
 }
 .page-nav-btn:hover:not(:disabled),
 .page-num-btn:hover:not(.is-active) {
@@ -2764,14 +2875,26 @@ onMounted(async () => {
   font-weight: 600;
   user-select: none;
 }
+.pagination-size-select select {
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-size: 12.5px;
+  color: #475569;
+  padding: 0 28px 0 10px;
+  background-color: #ffffff;
+  font-family: inherit;
+}
 
-/* 4. Chart Section */
+/* -------------------------------------------------------------
+   4. PHẦN BIỂU ĐỒ BÁN HÀNG THEO NGÀY
+------------------------------------------------------------- */
 .chart-section-card {
   background: #ffffff;
   border-radius: 12px;
   padding: 20px;
-  border: 1px solid #f1f5f9;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 .chart-header-row {
   display: flex;
@@ -2780,21 +2903,29 @@ onMounted(async () => {
   margin-bottom: 16px;
 }
 .chart-title {
-  font-size: 16px;
+  font-size: 15.5px;
   font-weight: 700;
-  color: #1e293b;
+  color: #0f172a;
   margin: 0;
   display: flex;
   align-items: center;
   gap: 8px;
+  letter-spacing: -0.015em;
+  font-family: var(--font-display, inherit);
+}
+.chart-title i {
+  font-size: 17px;
 }
 .chart-subtitle {
   font-size: 13px;
   color: #64748b;
   margin: 3px 0 0 0;
+  font-weight: 450;
 }
 
-/* 5. Two Donut Charts Grid */
+/* -------------------------------------------------------------
+   5. HAI BIỂU ĐỒ TRÒN (THƯƠNG HIỆU & TRẠNG THÁI)
+------------------------------------------------------------- */
 .charts-two-col-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2804,8 +2935,8 @@ onMounted(async () => {
   background: #ffffff;
   border-radius: 12px;
   padding: 20px;
-  border: 1px solid #f1f5f9;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 .donut-card-header {
   display: flex;
@@ -2817,9 +2948,14 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 700;
-  color: #1e293b;
+  color: #0f172a;
+  letter-spacing: -0.015em;
+  font-family: var(--font-display, inherit);
+}
+.donut-title i {
+  font-size: 17px;
 }
 .badge-tag {
   background: #f8fafc;
@@ -2827,6 +2963,7 @@ onMounted(async () => {
   padding: 3px 8px;
   border-radius: 12px;
   font-size: 11px;
+  font-weight: 500;
   color: #64748b;
 }
 .donut-content-wrap {
@@ -2847,16 +2984,19 @@ onMounted(async () => {
   font-size: 11px;
   fill: #64748b;
   font-weight: 500;
+  font-family: var(--font-family, inherit);
 }
 .donut-center-value {
   font-size: 12px;
-  fill: #1e293b;
+  fill: #0f172a;
   font-weight: 700;
+  font-family: var(--font-display, inherit);
 }
 .donut-center-num {
   font-size: 18px;
-  fill: #1e293b;
+  fill: #0f172a;
   font-weight: 700;
+  font-family: var(--font-display, inherit);
 }
 
 .donut-legend-list {
@@ -2867,13 +3007,15 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding: 6px 0;
-  font-size: 13px;
+  font-size: 12.5px;
   border-bottom: 1px dashed #f1f5f9;
 }
 .legend-label-col {
   display: flex;
   align-items: center;
   gap: 8px;
+  color: #475569;
+  font-weight: 500;
 }
 .legend-color-dot {
   width: 8px;
@@ -2882,7 +3024,7 @@ onMounted(async () => {
 }
 .legend-pct-col {
   font-weight: 700;
-  color: #1e293b;
+  color: #0f172a;
 }
 
 .donut-legend-horizontal {
@@ -2898,6 +3040,7 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   color: #475569;
+  font-weight: 500;
 }
 .legend-badge .dot {
   width: 7px;
@@ -2905,13 +3048,15 @@ onMounted(async () => {
   border-radius: 50%;
 }
 
-/* 6. Product Stats Table (Bottom) */
+/* -------------------------------------------------------------
+   6. BẢNG THỐNG KÊ SẢN PHẨM (DƯỚI CÙNG)
+------------------------------------------------------------- */
 .product-stats-card {
   background: #ffffff;
   border-radius: 12px;
   padding: 20px;
-  border: 1px solid #f1f5f9;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 .card-header-bar {
   display: flex;
@@ -2919,60 +3064,102 @@ onMounted(async () => {
   align-items: center;
   margin-bottom: 16px;
 }
-.card-header-bar .title-with-icon {
+.card-header-bar .title-with-icon,
+.card-title-left {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 16px;
+  font-size: 15.5px;
   font-weight: 700;
-  color: #1e293b;
+  color: #0f172a;
+  letter-spacing: -0.015em;
+  font-family: var(--font-display, inherit);
+}
+.card-heading {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.015em;
+  font-family: var(--font-display, inherit);
 }
 .header-tools {
   display: flex;
   align-items: center;
   gap: 10px;
 }
+.header-tools .search-wrap {
+  position: relative;
+  min-width: 200px;
+}
+.header-tools .search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 13px;
+  pointer-events: none;
+}
+.header-tools .search-wrap .form-control {
+  height: 34px;
+  padding-left: 32px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 12.5px;
+  color: #0f172a;
+  background-color: #ffffff;
+}
+.header-tools .search-wrap .form-control:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+.header-tools .select-sort {
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 12.5px;
+  color: #0f172a;
+  background-color: #ffffff;
+  padding: 0 28px 0 10px;
+}
 .btn-reset-table {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
-  border: 1px solid #e2e8f0;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
   background: #ffffff;
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
   color: #475569;
   cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
 }
-.custom-product-table th {
-  background: #e8ded4;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 10px 12px;
-  border-bottom: none;
-  text-transform: uppercase;
+.btn-reset-table:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #94a3b8;
 }
-.custom-product-table td {
-  font-size: 13px;
-  padding: 12px;
-  border-bottom: 1px solid #f1f5f9;
-}
+
 .product-cell-wrap {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 .product-thumb {
-  width: 44px;
-  height: 44px;
-  border-radius: 6px;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
   overflow: hidden;
   background: #f1f5f9;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  border: 1px solid #e2e8f0;
 }
 .product-thumb img {
   width: 100%;
@@ -2983,16 +3170,37 @@ onMounted(async () => {
   color: #94a3b8;
   font-size: 18px;
 }
-.table-pagination-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 16px;
+.product-name-text {
   font-size: 13px;
-  color: #64748b;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.35;
 }
 
-/* Modal */
+/* -------------------------------------------------------------
+   7. CHẾ ĐỘ SO SÁNH (COMPARISON MODE)
+------------------------------------------------------------- */
+.content-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  margin-bottom: 20px;
+}
+.ss-loading,
+.ss-empty {
+  font-size: 13px;
+  font-weight: 450;
+}
+.ss-error {
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+/* -------------------------------------------------------------
+   MODAL
+------------------------------------------------------------- */
 .modal-backdrop-custom {
   position: fixed;
   inset: 0;
@@ -3008,7 +3216,7 @@ onMounted(async () => {
   width: 100%;
   max-width: 480px;
   overflow: hidden;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
 }
 .modal-header-custom {
   display: flex;
@@ -3017,8 +3225,15 @@ onMounted(async () => {
   padding: 16px 20px;
   border-bottom: 1px solid #e2e8f0;
 }
+.modal-header-custom h5 {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
 .modal-body-custom {
   padding: 20px;
+  font-size: 13px;
 }
 .modal-footer-custom {
   display: flex;
@@ -3029,7 +3244,9 @@ onMounted(async () => {
   background: #f8fafc;
 }
 
-/* Responsive */
+/* -------------------------------------------------------------
+   RESPONSIVE
+------------------------------------------------------------- */
 @media (max-width: 1200px) {
   .kpi-grid {
     grid-template-columns: repeat(3, 1fr);
