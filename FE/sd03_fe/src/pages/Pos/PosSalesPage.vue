@@ -4610,22 +4610,6 @@ onUnmounted(() => {
             </div>
 
             <div class="pos-delivery-head-actions">
-              <button type="button" class="btn-del-action-add" @click="openQuickAddAddressModal"
-                title="Thêm nhanh địa chỉ mới cho phần giao hàng">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-                <span>Thêm nhanh địa chỉ</span>
-              </button>
-              <button v-if="currentOrder.customer" type="button" class="btn-del-action-fill"
-                @click="fillDeliveryFromCustomer" title="Lấy họ tên, SĐT và địa chỉ từ khách hàng đã chọn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-                <span>Điền từ khách hàng</span>
-              </button>
               <button type="button" class="btn-del-action-reset" @click="clearDeliveryForm"
                 title="Làm mới các ô thông tin nhận hàng">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
