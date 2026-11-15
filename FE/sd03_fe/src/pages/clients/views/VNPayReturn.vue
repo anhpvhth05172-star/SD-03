@@ -169,16 +169,16 @@ async function retryPayment() {
               <div class="status-icon bg-white text-danger rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center shadow-sm">
                 <i class="bi bi-x-lg fs-1"></i>
               </div>
-              <h4 class="fw-bold mb-1">Thanh toán không thành công</h4>
-              <p class="mb-0 opacity-75 small">Đơn hàng tạm thời đã bị hủy — giỏ hàng của bạn vẫn được giữ nguyên</p>
+              <h4 class="fw-bold mb-1">Thanh toán chưa hoàn tất</h4>
+              <p class="mb-0 opacity-75 small">Đơn hàng của bạn đang được treo giữ trong 5 phút — giỏ hàng vẫn được lưu</p>
             </div>
 
             <div class="card-body p-4 p-md-5">
-              <div class="alert alert-danger mb-4">
+              <div class="alert alert-warning mb-4">
                 <div class="d-flex align-items-start gap-2">
-                  <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0 mt-1"></i>
+                  <i class="bi bi-clock-history fs-5 flex-shrink-0 mt-1"></i>
                   <div>
-                    <strong>Lý do: </strong>{{ result?.message || "Giao dịch không thành công." }}
+                    <strong>Thông báo: </strong>Đơn hàng #{{ result?.maHoaDon || result?.orderId || '' }} chưa hoàn tất thanh toán ({{ result?.message || "Giao dịch bị gián đoạn" }}). Hệ thống sẽ treo giữ đơn hàng trong vòng 5 phút trước khi tự động hủy.
                   </div>
                 </div>
               </div>

@@ -174,10 +174,17 @@ public class VNPayService {
         } else {
             if ("CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
                 try {
-                    hoaDonService.huyDonChoThanhToan(hoaDon.getId());
-                    log.info("VNPay thất bại ({}) → đã xóa đơn tạm {} để giỏ hàng khôi phục", vnpResponseCode, maHoaDon);
+                    // Treo đơn hàng 5 phút thay vì hủy ngay lập tức
+                    String note = hoaDon.getGhiChu() != null ? hoaDon.getGhiChu() : "";
+                    String append = "[VNPay chưa hoàn tất: " + message + " - Treo đơn chờ thanh toán trong 5 phút]";
+                    if (!note.contains("Treo đơn chờ thanh toán trong 5 phút")) {
+                        hoaDon.setGhiChu(note.isBlank() ? append : note + " | " + append);
+                    }
+                    hoaDon.setNgayCapNhat(LocalDateTime.now());
+                    hoaDonRepository.save(hoaDon);
+                    log.info("VNPay chưa thành công ({}) → Đơn {} được treo 5 phút ở trạng thái CHO_THANH_TOAN", vnpResponseCode, maHoaDon);
                 } catch (Exception e) {
-                    log.error("Lỗi khi hủy đơn CHO_THANH_TOAN {}: {}", maHoaDon, e.getMessage());
+                    log.error("Lỗi khi cập nhật ghi chú treo đơn CHO_THANH_TOAN {}: {}", maHoaDon, e.getMessage());
                 }
             }
         }
@@ -185,8 +192,8 @@ public class VNPayService {
         return VNPayCallbackResponse.builder()
             .success(isSuccess)
             .message(message)
-            .orderId(isSuccess && hoaDon != null ? hoaDon.getId() : null)
-            .maHoaDon(isSuccess ? maHoaDon : null)
+            .orderId(hoaDon != null ? hoaDon.getId() : null)
+            .maHoaDon(maHoaDon)
             .amount(amount)
             .bankCode(vnpBankCode)
             .transactionNo(vnpTransactionNo)

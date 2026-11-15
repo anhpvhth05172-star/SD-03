@@ -1351,10 +1351,6 @@ private NhanVien timNhanVien(Long id) {
         if (!Boolean.TRUE.equals(phieu.getTrangThai())) {
             throw new IllegalArgumentException("Phiếu giảm giá không hoạt động");
         }
-        boolean laPos = "TAI_QUAY".equals(toMaLoaiDon(req.getLoaiDon())) || "TAI_QUAY_GIAO_HANG".equals(toMaLoaiDon(req.getLoaiDon()));
-        if (!laPos && req.getIdKhachHang() == null) {
-            throw new IllegalArgumentException("Vui lòng chọn khách hàng để sử dụng phiếu giảm giá");
-        }
         if ("CA_NHAN".equalsIgnoreCase(phieu.getPhamVi())) {
             if (req.getIdKhachHang() == null
                 || !khachHangPhieuGiamGiaRepository.existsByPhieuGiamGia_IdAndKhachHang_IdAndTrangThaiTrue(
@@ -1656,6 +1652,9 @@ private NhanVien timNhanVien(Long id) {
         if (hoaDon == null) return;
         if (!"CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
             throw new IllegalArgumentException("Chỉ hủy được đơn ở trạng thái Chờ thanh toán");
+        }
+        if (lichSuSuDungRepository != null) {
+            lichSuSuDungRepository.deleteByHoaDonId(id);
         }
         chiTietHoaDonRepository.deleteByHoaDonId(id);
         lichSuHoaDonRepository.deleteByHoaDonId(id);

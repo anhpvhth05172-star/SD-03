@@ -237,7 +237,7 @@ watch(() => route.fullPath, () => {
   <section class="panel shift-panel">
     <div class="shift-heading">
       <span class="status-badge" :class="caHienTai ? 'status-yellow' : 'status-gray'">
-        {{ caHienTai ? 'ĐANG TRONG CA' : 'CHƯA VÀO CA LÀM VIỆC' }}
+        {{ caHienTai ? 'ĐANG TRONG CA' : 'ĐANG XEM' }}
       </span>
       <h1 class="screen-title">{{ isAdmin ? 'Theo dõi ca làm việc' : 'Mở ca làm việc & Kiểm đếm tiền ban đầu' }}</h1>
     </div>

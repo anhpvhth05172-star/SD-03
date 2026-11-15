@@ -1,50 +1,41 @@
-//package com.example.datn.config;
-//
-//import com.example.datn.entity.HoaDon;
-//import com.example.datn.entity.LichSuHoaDon;
-//import com.example.datn.repository.HoaDonRepository;
-//import com.example.datn.repository.LichSuHoaDonRepository;
-//import com.example.datn.service.VNPayService;
-//import lombok.RequiredArgsConstructor;
-//import lombok.extern.slf4j.Slf4j;
-//import org.springframework.scheduling.annotation.Scheduled;
-//import org.springframework.stereotype.Component;
-//import org.springframework.transaction.annotation.Transactional;
-//
-//import java.time.LocalDateTime;
-//import java.util.List;
-//
-//@Slf4j
-//@Component
-//@RequiredArgsConstructor
-//public class PendingPaymentCleanupJob {
-//
-//    private final HoaDonRepository hoaDonRepository;
-//    private final LichSuHoaDonRepository lichSuHoaDonRepository;
-//
-//    @Scheduled(fixedDelay = 5 * 60 * 1000)
-//    @Transactional
-//    public void cancelExpiredPendingOrders() {
-//        LocalDateTime limit = LocalDateTime.now().minusMinutes(15);
-//        List<HoaDon> expired = hoaDonRepository
-//                .findByTrangThaiAndNgayTaoBefore(VNPayService.TT_CHO_THANH_TOAN, limit);
-//
-//        for (HoaDon hd : expired) {
-//            hd.setTrangThai(VNPayService.TT_DA_HUY);
-//            hd.setGhiChu("Hết hạn thanh toán VNPay, đơn tự động hủy");
-//            hd.setNgayCapNhat(LocalDateTime.now());
-//            hd.setNguoiCapNhat("SYSTEM");
-//            hoaDonRepository.save(hd);
-//
-//            LichSuHoaDon ls = new LichSuHoaDon();
-//            ls.setHoaDon(hd);
-//            ls.setTrangThai(hd.getTrangThai());
-//            ls.setHanhDong("HET_HAN_THANH_TOAN");
-//            ls.setGhiChu("Đơn chờ thanh toán quá 15 phút, tự động hủy");
-//            lichSuHoaDonRepository.save(ls);
-//        }
-//        if (!expired.isEmpty()) {
-//            log.info("Đã hủy {} đơn VNPay hết hạn", expired.size());
-//        }
-//    }
-//}
+package com.example.datn.config;
+
+import com.example.datn.entity.HoaDon;
+import com.example.datn.repository.HoaDonRepository;
+import com.example.datn.service.HoaDonService;
+import java.time.LocalDateTime;
+import java.util.List;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class PendingPaymentCleanupJob {
+
+    private final HoaDonRepository hoaDonRepository;
+    private final HoaDonService hoaDonService;
+
+    @Scheduled(fixedDelay = 60 * 1000)
+    public void cancelExpiredPendingOrders() {
+        // Treo đơn 5 phút sau khi thanh toán không thành công, quá 5 phút sẽ tự động hủy
+        LocalDateTime limit = LocalDateTime.now().minusMinutes(5);
+        List<HoaDon> expired = hoaDonRepository
+                .findByTrangThaiAndNgayTaoBefore("CHO_THANH_TOAN", limit);
+
+        for (HoaDon hd : expired) {
+            try {
+                hoaDonService.huyDonChoThanhToan(hd.getId());
+                log.info("Đã tự động hủy đơn chờ thanh toán quá 5 phút: {}", hd.getMaHoaDon());
+            } catch (Exception ex) {
+                log.warn("Lỗi khi tự động hủy đơn chờ {}: {}", hd.getMaHoaDon(), ex.getMessage());
+            }
+        }
+        if (!expired.isEmpty()) {
+            log.info("PendingPaymentCleanupJob: Đã dọn dẹp {} đơn treo quá 5 phút", expired.size());
+        }
+    }
+}

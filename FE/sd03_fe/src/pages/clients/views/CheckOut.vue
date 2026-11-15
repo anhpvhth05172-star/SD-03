@@ -209,18 +209,19 @@ function checkVoucher(detail, ignoreMin = false) {
   if (en && now > new Date(en)) return "Mã giảm giá đã hết hạn.";
 
   const cid = customer.value?.id ? Number(customer.value.id) : null;
-  if (!cid) {
-    return "Cần đăng nhập tài khoản để dùng mã giảm giá.";
+  const personal = isPersonal(VF.scope(detail));
+  if (personal && !cid) {
+    return "Cần đăng nhập tài khoản để dùng mã giảm giá cá nhân.";
   }
 
-  if (hasCustomerReachedLimit(detail, cid)) {
+  if (cid && hasCustomerReachedLimit(detail, cid)) {
     const usage = myVoucherUsage.value[VF.id(detail)];
     const limit = Number(detail.gioiHanMoiTaiKhoan || usage?.gioiHanMoiTaiKhoan || 1);
     const used = Number(usage?.daSuDung || limit);
     return `Bạn đã dùng hết lượt mã này (${used}/${limit} lần).`;
   }
 
-  if (isPersonal(VF.scope(detail))) {
+  if (personal && cid) {
     const allowedIds = VF.customerIds(detail);
     if (!allowedIds.includes(cid)) {
       return "Mã cá nhân không thuộc tài khoản của bạn.";

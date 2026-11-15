@@ -69,17 +69,17 @@ function checkVoucher(detail, total, ignoreMin = false) {
 
   const rawCid = user.value?.idKhachHang ?? user.value?.id;
   const cid = rawCid != null ? Number(rawCid) : null;
-  if (!cid) return false;
+  const personal = isPersonal(VF.scope(detail));
+  if (personal && !cid) return false;
 
-  if (VF.usedCustomerIds(detail).includes(cid)) return false;
-  const usage = myVoucherUsage.value[VF.id(detail)];
-  if (usage) {
-    const limit = Number(detail.gioiHanMoiTaiKhoan || usage.gioiHanMoiTaiKhoan || 1);
-    if (Number(usage.daSuDung || 0) >= limit) return false;
-  }
-
-  if (isPersonal(VF.scope(detail))) {
-    if (!VF.customerIds(detail).includes(cid)) return false;
+  if (cid) {
+    if (VF.usedCustomerIds(detail).includes(cid)) return false;
+    const usage = myVoucherUsage.value[VF.id(detail)];
+    if (usage) {
+      const limit = Number(detail.gioiHanMoiTaiKhoan || usage.gioiHanMoiTaiKhoan || 1);
+      if (Number(usage.daSuDung || 0) >= limit) return false;
+    }
+    if (personal && !VF.customerIds(detail).includes(cid)) return false;
   }
 
   if (!ignoreMin) {

@@ -5,6 +5,7 @@ import { dangNhap, dangNhapNhanVien } from '@/api/auth'
 import { lienKetSauDangNhap } from '@/api/chat'
 import { luuPhien, getMaAnDanh } from '@/utils/auth'
 import { datVaiTro, datNguoiDung } from '@/utils/session'
+import { dongBoGioHangSauDangNhap } from '@/components/store'
 
 const router = useRouter()
 const route = useRoute()
@@ -42,6 +43,8 @@ const submit = async () => {
     } else {
       // Gắn cuộc trò chuyện ẩn danh (nếu có) vào tài khoản để không mất hội thoại cũ
       lienKetSauDangNhap(getMaAnDanh()).catch(() => {})
+      // Đồng bộ giỏ hàng khách vừa chọn lúc chưa đăng nhập vào tài khoản
+      await dongBoGioHangSauDangNhap().catch(() => {})
       router.push(duongDanSauDangNhap('/trang-chu'))
     }
   } catch (e) {

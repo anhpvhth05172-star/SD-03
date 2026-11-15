@@ -193,6 +193,50 @@ export const notifyWarning = (title, text = '', timer = undefined) => {
 }
 
 /**
+ * Hiển thị thông báo dạng Toast ở góc trên bên phải (không modal popup, không nút xác nhận)
+ */
+export const notifyToast = (title, text = '', type = 'warning', timer = 2500) => {
+  const icon = MINIMAL_ICONS[type] || MINIMAL_ICONS.warning
+  const contentHtml = `
+    <div style="display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 2px 4px;">
+      <div style="flex-shrink: 0; margin-top: 1px;">${icon}</div>
+      <div style="flex: 1;">
+        <div style="font-weight: 700; font-size: 13.5px; color: #1e293b; line-height: 1.3;">${formatHighlight(title)}</div>
+        ${text ? `<div style="font-size: 12px; color: #64748b; margin-top: 3px; line-height: 1.35;">${formatHighlight(text)}</div>` : ''}
+      </div>
+    </div>
+  `
+
+  return Swal.fire({
+    toast: true,
+    position: 'top-end',
+    html: contentHtml,
+    showConfirmButton: false,
+    timer: timer,
+    timerProgressBar: true,
+    backdrop: false,
+    customClass: {
+      popup: 'custom-swal-toast-top-end',
+      container: 'custom-swal-toast-container'
+    },
+    didOpen: (toast) => {
+      toast.addEventListener('mouseenter', Swal.stopTimer)
+      toast.addEventListener('mouseleave', Swal.resumeTimer)
+    },
+    didClose: () => {
+      setTimeout(cleanupSwalResidualDom, 10)
+    }
+  })
+}
+
+/**
+ * Thông báo tồn kho không đủ / hết hàng ở góc trên bên phải
+ */
+export const notifyStockWarning = (title = 'Hết hàng', text = '') => {
+  return notifyToast(title, text, 'warning', 3000)
+}
+
+/**
  * Hộp thoại xác nhận (Confirm modal)
  */
 export const notifyConfirm = async (
@@ -249,6 +293,8 @@ export default {
   success: notifySuccess,
   error: notifyError,
   warning: notifyWarning,
+  toast: notifyToast,
+  stockWarning: notifyStockWarning,
   confirm: notifyConfirm,
   deleteConfirm: notifyDeleteConfirm,
   cleanup: cleanupSwalResidualDom
