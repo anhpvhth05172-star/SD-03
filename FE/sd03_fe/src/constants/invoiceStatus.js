@@ -99,7 +99,8 @@ export const isTerminal = (invoice) =>
 
 export const trangThaiTiepTheoOf = (invoice) => {
   if (!invoice) return []
-  if (Array.isArray(invoice.trangThaiTiepTheo) && invoice.trangThaiTiepTheo.length > 0) {
+  if (invoice.trangThai === 'Đã hoàn thành' || invoice.maTrangThai === 'DA_HOAN_THANH') return []
+  if (Array.isArray(invoice.trangThaiTiepTheo)) {
     return invoice.trangThaiTiepTheo
   }
   const meta = loaiDonMeta(invoice)

@@ -71,29 +71,63 @@ export const payStatusOf = (target, optionalInvoice = null) => {
 
   if (invoice) {
     const loaiDon = String(invoice.loaiDon || invoice.maLoaiDon || '').toUpperCase()
-    const isPos = loaiDon.includes('TẠI QUẦY') || loaiDon.includes('TAI_QUAY')
-
-    // 1. Đơn bán tại quầy (kể cả có giao hàng): Khách luôn thanh toán tại quầy trước khi tạo hóa đơn
-    if (isPos) {
-      return 'Đã thanh toán'
-    }
-
-    // 2. Đơn online: kiểm tra phương thức thanh toán chuyển khoản / VNPAY
     const pttt = String(invoice.tenPhuongThucThanhToan || invoice.phuongThucThanhToan?.ten || invoice.tenPhuongThuc || '').toUpperCase()
     const maPttt = String(invoice.maPhuongThucThanhToan || invoice.phuongThucThanhToan?.ma || '').toUpperCase()
     const idPttt = Number(invoice.idPhuongThucThanhToan || invoice.phuongThucThanhToan?.id || 0)
 
     const isVnPay = pttt.includes('VNPAY') || maPttt.includes('VNPAY') || idPttt === 4
     const isChuyenKhoan = pttt.includes('CHUYỂN KHOẢN') || pttt.includes('CHUYEN_KHOAN') || maPttt.includes('CHUYEN_KHOAN') || idPttt === 2
-    const isCod = pttt.includes('COD') || pttt.includes('KHI NHẬN HÀNG') || maPttt.includes('COD') || idPttt === 11 || idPttt === 1
+    const isCashCod = pttt.includes('COD') || pttt.includes('KHI NHẬN HÀNG') || pttt.includes('TIỀN MẶT') || maPttt.includes('COD') || maPttt.includes('TM') || idPttt === 11 || idPttt === 1 || idPttt === 19
 
-    if ((isVnPay || isChuyenKhoan) && !isCod) {
+    // Đơn giao hàng tận nơi
+    const hasDelivery = Boolean(
+      (invoice.diaChiNhanHang && invoice.diaChiNhanHang.trim().length > 0 && invoice.diaChiNhanHang.trim() !== 'Nhận tại quầy')
+      || Number(invoice.phiVanChuyen) > 0
+      || loaiDon.includes('GIAO_HANG') || loaiDon.includes('GIAO HÀNG')
+      || loaiDon === 'ONLINE'
+    )
+
+    // 1. Đơn chuyển khoản hoặc VNPay (trả trước)
+    if ((isVnPay || isChuyenKhoan) && !isCashCod) {
       if (trangThai !== 'Chờ thanh toán' && trangThai !== 'CHO_THANH_TOAN') {
         return 'Đã thanh toán'
       }
+      return 'Chưa thanh toán'
+    }
+
+    // 2. Đơn có giao hàng mà chọn Tiền mặt (COD): khách nhận hàng mới trả tiền
+    // Chỉ khi đã giao hàng thành công (Đã giao hàng / Đã hoàn thành) mới là Đã thanh toán
+    if (hasDelivery && isCashCod) {
+      if (trangThai === 'Đã giao hàng' || trangThai === 'Đã hoàn thành') {
+        return 'Đã thanh toán'
+      }
+      return 'Chưa thanh toán'
+    }
+
+    // 3. Đơn bán tại quầy nhận ngay (không giao hàng): khách trả tiền mặt lấy hàng ngay
+    const isPos = loaiDon.includes('TẠI QUẦY') || loaiDon.includes('TAI_QUAY')
+    if (isPos && !hasDelivery) {
+      return 'Đã thanh toán'
     }
   }
 
   return 'Chưa thanh toán'
+}
+
+export const formatTimeAgo = (iso) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const now = new Date()
+  const diffSec = Math.floor((now.getTime() - d.getTime()) / 1000)
+  if (diffSec < 0 || diffSec < 60) return 'Vừa xong'
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin} phút trước`
+  const diffHour = Math.floor(diffMin / 60)
+  if (diffHour < 24) return `${diffHour} giờ trước`
+  const diffDay = Math.floor(diffHour / 24)
+  if (diffDay < 7) return `${diffDay} ngày trước`
+  const p = (x) => String(x).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())} - ${p(d.getDate())}/${p(d.getMonth() + 1)}`
 }
 

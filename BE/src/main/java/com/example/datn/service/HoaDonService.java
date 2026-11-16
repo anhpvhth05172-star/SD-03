@@ -98,9 +98,9 @@ public class HoaDonService {
         TRANSITION_MAP.put("CHO_GIAO_HANG", List.of("DANG_GIAO_HANG", "DA_HUY", "CHO_HOAN_TIEN"));
         TRANSITION_MAP.put("DANG_GIAO_HANG", List.of("DA_GIAO_HANG", "GIAO_HANG_THAT_BAI", "CHO_HOAN_TIEN"));
         TRANSITION_MAP.put("DA_GIAO_HANG", List.of("DA_HOAN_THANH", "CHO_HOAN_TIEN"));
-        TRANSITION_MAP.put("DA_HOAN_THANH", List.of("DA_HOAN_TIEN", "CHO_HOAN_TIEN"));
-        TRANSITION_MAP.put("GIAO_HANG_THAT_BAI", List.of("DANG_GIAO_HANG", "CHO_HOAN_TIEN", "DA_HUY"));
-        TRANSITION_MAP.put("CHO_HOAN_TIEN", List.of("DA_HOAN_TIEN", "DA_HUY"));
+        TRANSITION_MAP.put("DA_HOAN_THANH", List.of());
+        TRANSITION_MAP.put("GIAO_HANG_THAT_BAI", List.of("CHO_HOAN_TIEN", "DA_HOAN_TIEN", "DA_HUY"));
+        TRANSITION_MAP.put("CHO_HOAN_TIEN", List.of("DA_HOAN_TIEN"));
         TRANSITION_MAP.put("DA_HUY", List.of());
         TRANSITION_MAP.put("DA_HOAN_TIEN", List.of());
     }
@@ -110,8 +110,8 @@ public class HoaDonService {
         TRANSITION_MAP_POS.put("CHO_XAC_NHAN",
                 List.of("DA_XAC_NHAN", "DA_HOAN_THANH", "DA_HUY", "CHO_HOAN_TIEN", "DA_HOAN_TIEN"));
         TRANSITION_MAP_POS.put("DA_XAC_NHAN", List.of("DA_HOAN_THANH", "DA_HUY", "CHO_HOAN_TIEN"));
-        TRANSITION_MAP_POS.put("DA_HOAN_THANH", List.of("DA_HOAN_TIEN", "CHO_HOAN_TIEN"));
-        TRANSITION_MAP_POS.put("CHO_HOAN_TIEN", List.of("DA_HOAN_TIEN", "DA_HUY"));
+        TRANSITION_MAP_POS.put("DA_HOAN_THANH", List.of());
+        TRANSITION_MAP_POS.put("CHO_HOAN_TIEN", List.of("DA_HOAN_TIEN"));
         TRANSITION_MAP_POS.put("DA_HUY", List.of());
         TRANSITION_MAP_POS.put("DA_HOAN_TIEN", List.of());
     }
@@ -254,11 +254,18 @@ public class HoaDonService {
         BigDecimal tongHang = h.getTongTien() != null ? h.getTongTien().subtract(phiShip) : BigDecimal.ZERO;
 
         java.time.format.DateTimeFormatter dtf = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy");
-        String ngayTao = h.getNgayTao() != null ? h.getNgayTao().format(dtf) : "";
+        java.time.LocalDateTime thoiDiemDat = h.getNgayTao() != null ? h.getNgayTao()
+                : (h.getNgayCapNhat() != null ? h.getNgayCapNhat() : java.time.LocalDateTime.now());
+        String ngayTao = thoiDiemDat.format(dtf);
+        String sdt = !isBlank(h.getSoDienThoaiKhachHang()) ? h.getSoDienThoaiKhachHang().trim()
+                : (h.getKhachHang() != null && !isBlank(h.getKhachHang().getSoDienThoai())
+                        ? h.getKhachHang().getSoDienThoai().trim()
+                        : "");
 
         emailService.guiMailHoaDon(
                 email.trim(),
                 tenKh,
+                sdt,
                 h.getMaHoaDon(),
                 toTenTrangThai(h.getTrangThai()),
                 toTenLoaiDon(h.getLoaiDon()),
@@ -276,13 +283,17 @@ public class HoaDonService {
             return;
         try {
             String email = emailNhan;
+            if (isBlank(email) && h.getKhachHang() != null) {
+                email = h.getKhachHang().getEmail();
+            }
             if (isBlank(email) && h.getKhachHang() != null && h.getKhachHang().getId() != null) {
                 try {
                     Optional<KhachHang> khOpt = khachHangRepository.findById(h.getKhachHang().getId());
                     if (khOpt.isPresent() && !isBlank(khOpt.get().getEmail())) {
                         email = khOpt.get().getEmail().trim();
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
             if (isBlank(email) && h.getGhiChu() != null && h.getGhiChu().contains("[EMAIL:")) {
                 try {
@@ -296,11 +307,13 @@ public class HoaDonService {
             }
             if (isBlank(email) && !isBlank(h.getSoDienThoaiKhachHang())) {
                 try {
-                    Optional<KhachHang> khOpt = khachHangRepository.findFirstBySoDienThoai(h.getSoDienThoaiKhachHang().trim());
+                    Optional<KhachHang> khOpt = khachHangRepository
+                            .findFirstBySoDienThoai(h.getSoDienThoaiKhachHang().trim());
                     if (khOpt.isPresent() && !isBlank(khOpt.get().getEmail())) {
                         email = khOpt.get().getEmail().trim();
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
             if (isBlank(email)) {
                 log.info("Đơn hàng #{} không có email người nhận, bỏ qua gửi email tự động.", h.getMaHoaDon());
@@ -336,22 +349,28 @@ public class HoaDonService {
 
             java.time.format.DateTimeFormatter dtf = java.time.format.DateTimeFormatter
                     .ofPattern("HH:mm:ss dd/MM/yyyy");
-            String ngayTao = h.getNgayTao() != null ? h.getNgayTao().format(dtf) : "";
+            java.time.LocalDateTime thoiDiemDat = h.getNgayTao() != null ? h.getNgayTao()
+                    : (h.getNgayCapNhat() != null ? h.getNgayCapNhat() : java.time.LocalDateTime.now());
+            String ngayTao = thoiDiemDat.format(dtf);
+            String sdt = !isBlank(h.getSoDienThoaiKhachHang()) ? h.getSoDienThoaiKhachHang().trim()
+                    : (h.getKhachHang() != null && !isBlank(h.getKhachHang().getSoDienThoai())
+                            ? h.getKhachHang().getSoDienThoai().trim()
+                            : "");
 
             emailService.guiMailHoaDonAsync(
-                email.trim(),
-                tenKh,
-                h.getMaHoaDon(),
-                toTenTrangThai(h.getTrangThai()),
-                toTenLoaiDon(h.getLoaiDon(), h.getDiaChiNhanHang()),
-                !isBlank(h.getDiaChiNhanHang()) ? h.getDiaChiNhanHang() : "Nhận tại quầy",
-                nf.format(tongHang),
-                nf.format(tienGiam),
-                nf.format(phiShip),
-                nf.format(tienSauGiam),
-                ngayTao,
-                dongList
-            );
+                    email.trim(),
+                    tenKh,
+                    sdt,
+                    h.getMaHoaDon(),
+                    toTenTrangThai(h.getTrangThai()),
+                    toTenLoaiDon(h.getLoaiDon(), h.getDiaChiNhanHang()),
+                    !isBlank(h.getDiaChiNhanHang()) ? h.getDiaChiNhanHang() : "Nhận tại quầy",
+                    nf.format(tongHang),
+                    nf.format(tienGiam),
+                    nf.format(phiShip),
+                    nf.format(tienSauGiam),
+                    ngayTao,
+                    dongList);
             log.info("Đã kích hoạt gửi email tự động cho hóa đơn #{} tới {}", h.getMaHoaDon(), email.trim());
         } catch (Exception e) {
             log.warn("Lỗi chuẩn bị gửi email tự động cho hóa đơn #{}: {}", h.getMaHoaDon(), e.getMessage());
@@ -760,8 +779,17 @@ public class HoaDonService {
         if (maMoi.equals(maHienTai)) {
             throw new IllegalArgumentException("Trạng thái không thay đổi");
         }
-        if ("DA_HUY".equals(maMoi) && !"CHO_XAC_NHAN".equals(maHienTai) && !"DA_XAC_NHAN".equals(maHienTai)) {
+        if ("DA_HUY".equals(maMoi) && !"CHO_XAC_NHAN".equals(maHienTai) && !"DA_XAC_NHAN".equals(maHienTai) && !"GIAO_HANG_THAT_BAI".equals(maHienTai)) {
             throw new IllegalArgumentException("Đơn hàng đã được xác nhận, không thể hủy đơn.");
+        }
+        if ("GIAO_HANG_THAT_BAI".equals(maHienTai)) {
+            boolean daTT = daThanhToanTruoc(hoaDon);
+            if (daTT && "DA_HUY".equals(maMoi)) {
+                throw new IllegalArgumentException("Đơn hàng đã thanh toán trước, khi giao thất bại cần chuyển sang hoàn tiền cho khách.");
+            }
+            if (!daTT && ("CHO_HOAN_TIEN".equals(maMoi) || "DA_HOAN_TIEN".equals(maMoi))) {
+                throw new IllegalArgumentException("Đơn hàng thanh toán khi nhận hàng (COD) chưa thu tiền, không thể hoàn tiền.");
+            }
         }
         List<String> choPhep = chonBangChuyenTrangThai(hoaDon).getOrDefault(maHienTai, List.of());
         if (!choPhep.contains(maMoi)) {
@@ -788,7 +816,7 @@ public class HoaDonService {
         boolean laLanThatBaiThuBa = "GIAO_HANG_THAT_BAI".equals(maMoi)
                 && lichSuHoaDonRepository.countByHoaDonIdAndTrangThai(id,
                         "GIAO_HANG_THAT_BAI") >= SO_LAN_GIAO_THAT_BAI_TU_DONG_HUY - 1;
-        if (("DA_HUY".equals(maMoi) || "DA_HOAN_TIEN".equals(maMoi) || "CHO_HOAN_TIEN".equals(maMoi))
+        if (("DA_HUY".equals(maMoi) || "DA_HOAN_TIEN".equals(maMoi) || "CHO_HOAN_TIEN".equals(maMoi) || "GIAO_HANG_THAT_BAI".equals(maMoi))
                 && daTruKho(hoaDon)) {
             hoanTonKho(id);
         }
@@ -814,17 +842,16 @@ public class HoaDonService {
             lichSuSuDungRepository.deleteByHoaDonId(hoaDon.getId());
         }
         if (laLanThatBaiThuBa) {
-            hoaDon.setTrangThai("DA_HUY");
+            hoaDon.setTrangThai("CHO_HOAN_TIEN");
             hoaDon.setNguoiCapNhat(nguoiCapNhatHienTai());
             hoaDon.setNgayCapNhat(LocalDateTime.now());
             saved = hoaDonRepository.save(hoaDon);
-            // Giao thất bại lần thứ ba tự hủy đơn; hoàn tồn đúng một lần.
             hoanTonKho(id);
             ghiLichSuTrangThai(
                     saved,
                     "GIAO_HANG_THAT_BAI",
-                    "DA_HUY",
-                    "Tự động hủy sau " + SO_LAN_GIAO_THAT_BAI_TU_DONG_HUY + " lần giao hàng thất bại",
+                    "CHO_HOAN_TIEN",
+                    "Tự động chuyển sang Chờ hoàn tiền sau " + SO_LAN_GIAO_THAT_BAI_TU_DONG_HUY + " lần giao hàng thất bại",
                     "Hệ thống");
         }
         guiEmailHoaDonTuDong(saved, null);
@@ -974,7 +1001,7 @@ public class HoaDonService {
     public FormDataResponse formData() {
         List<FormDataResponse.KhachHangOption> khachHangs = khachHangRepository.findAll().stream()
                 .map(k -> new FormDataResponse.KhachHangOption(
-                        k.getId(), k.getTenKhachHang(), k.getSoDienThoai(), k.getTrangThai()))
+                        k.getId(), k.getTenKhachHang(), k.getSoDienThoai(), k.getEmail(), k.getTrangThai()))
                 .toList();
         List<FormDataResponse.NhanVienOption> nhanViens = nhanVienRepository.findAll().stream()
                 .map(n -> new FormDataResponse.NhanVienOption(n.getId(), n.getTenTaiKhoan()))
@@ -1260,7 +1287,7 @@ public class HoaDonService {
                 : null);
         if (hoaDon.getKhachHang() == null && !isBlank(req.getSoDienThoaiKhachHang())) {
             khachHangRepository.findFirstBySoDienThoai(req.getSoDienThoaiKhachHang().trim())
-                .ifPresent(hoaDon::setKhachHang);
+                    .ifPresent(hoaDon::setKhachHang);
         }
         hoaDon.setNhanVien(req.getIdNhanVien() != null
                 ? nhanVienRepository.findById(req.getIdNhanVien())
@@ -1600,6 +1627,7 @@ public class HoaDonService {
                 }
             }
         }
+        chiTietHoaDonRepository.saveAll(entities);
         chiTietHoaDonRepository.saveAllAndFlush(entities);
     }
 
@@ -1694,9 +1722,50 @@ public class HoaDonService {
         if (!laLoaiDonHopLe(h)) {
             return List.of();
         }
-        return chonBangChuyenTrangThai(h).getOrDefault(h.getTrangThai(), List.of()).stream()
+        List<String> raw = chonBangChuyenTrangThai(h).getOrDefault(h.getTrangThai(), List.of());
+        if ("GIAO_HANG_THAT_BAI".equals(h.getTrangThai())) {
+            boolean daTT = daThanhToanTruoc(h);
+            if (daTT) {
+                // Đã thanh toán trước (VNPAY / CK / Tại quầy): BẮT BUỘC hoàn tiền
+                raw = List.of("CHO_HOAN_TIEN", "DA_HOAN_TIEN");
+            } else {
+                // Đơn COD tiền mặt chưa thanh toán: Giao thất bại là KẾT THÚC LUÔN (Terminal State).
+                // Hàng hoàn về kho, tự động hoàn tồn kho, không cần thêm nút thao tác nào nữa.
+                raw = List.of();
+            }
+        }
+        return raw.stream()
                 .map(HoaDonService::toTenTrangThai)
                 .toList();
+    }
+
+    public boolean daThanhToanTruoc(HoaDon h) {
+        if (h == null) return false;
+        String loaiDon = h.getLoaiDon();
+        boolean coGiaoHang = !isBlank(h.getDiaChiNhanHang())
+                && !"Nhận tại quầy".equalsIgnoreCase(h.getDiaChiNhanHang().trim())
+                || (h.getPhiVanChuyen() != null && h.getPhiVanChuyen().compareTo(BigDecimal.ZERO) > 0)
+                || "TAI_QUAY_GIAO_HANG".equalsIgnoreCase(loaiDon)
+                || "ONLINE".equalsIgnoreCase(loaiDon);
+
+        PhuongThucThanhToan pt = h.getPhuongThucThanhToan();
+        String pttt = pt != null ? (pt.getTenPhuongThuc() + "").toUpperCase() : "";
+        String maPttt = pt != null ? (pt.getMaPhuongThuc() + "").toUpperCase() : "";
+        Long idPt = pt != null ? pt.getId() : null;
+
+        boolean isVnPay = pttt.contains("VNPAY") || maPttt.contains("VNPAY") || (idPt != null && idPt == 4);
+        boolean isChuyenKhoan = pttt.contains("CHUYỂN KHOẢN") || pttt.contains("CHUYEN_KHOAN") || maPttt.contains("CHUYEN_KHOAN") || (idPt != null && idPt == 2);
+        boolean isCashCod = pttt.contains("COD") || pttt.contains("TIỀN MẶT") || pttt.contains("KHI NHẬN HÀNG") || maPttt.contains("COD") || maPttt.contains("TM") || (idPt != null && (idPt == 11 || idPt == 1 || idPt == 19));
+
+        if ((isVnPay || isChuyenKhoan) && !isCashCod) {
+            return true;
+        }
+
+        if (!coGiaoHang) {
+            return true;
+        }
+
+        return false;
     }
 
     private ChiTietHoaDonDTO toLineDTO(ChiTietHoaDon e) {
@@ -2182,6 +2251,7 @@ public class HoaDonService {
                 spct.setSoLuong(ton - d.req().getSoLuong());
                 sanPhamChiTietRepository.save(spct);
             }
+            chiTietHoaDonRepository.saveAll(entities);
             chiTietHoaDonRepository.saveAllAndFlush(entities);
         }
 

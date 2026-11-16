@@ -83,11 +83,94 @@ const getOptionLabel = (opt) => {
   return String(opt)
 }
 
+const COLOR_HEX_MAP = {
+  'đen': '#111827',
+  'black': '#111827',
+  'trắng': '#ffffff',
+  'white': '#ffffff',
+  'đỏ': '#ef4444',
+  'red': '#ef4444',
+  'xanh dương': '#3b82f6',
+  'blue': '#3b82f6',
+  'xanh lam': '#3b82f6',
+  'xanh lá': '#22c55e',
+  'green': '#22c55e',
+  'xanh lục': '#22c55e',
+  'vàng': '#eab308',
+  'yellow': '#eab308',
+  'cam': '#f97316',
+  'orange': '#f97316',
+  'hồng': '#ec4899',
+  'pink': '#ec4899',
+  'tím': '#a855f7',
+  'purple': '#a855f7',
+  'xám': '#64748b',
+  'gray': '#64748b',
+  'grey': '#64748b',
+  'ghi': '#64748b',
+  'nâu': '#78350f',
+  'brown': '#78350f',
+  'be': '#d4b996',
+  'beige': '#d4b996',
+  'kem': '#fef3c7',
+  'xanh navy': '#1e3a8a',
+  'navy': '#1e3a8a',
+  'xanh mint': '#6ee7b7',
+  'mint': '#6ee7b7',
+  'bạc': '#cbd5e1',
+  'silver': '#cbd5e1',
+  'xanh rêu': '#3f6212',
+  'đỏ đô': '#991b1b',
+  'trắng kem': '#fdfbf7',
+  'đen trắng': '#374151',
+  'xanh tím': '#4d2588',
+  'đỏ tím': '#831843',
+  'xanh nhạt': '#79d7b8',
+  'xanh da trời': '#96ddde'
+}
+
+const isHexOrCssColor = (str) => {
+  if (!str || typeof str !== 'string') return false
+  const s = str.trim()
+  if (s.startsWith('#') && (s.length === 4 || s.length === 7 || s.length === 9)) return true
+  if (s.startsWith('rgb(') || s.startsWith('rgba(') || s.startsWith('hsl(') || s.startsWith('hsla(')) return true
+  return false
+}
+
 const getOptionColor = (opt) => {
   if (!opt || typeof opt !== 'object') return null
-  if (props.colorKey && opt[props.colorKey]) return opt[props.colorKey]
-  if (opt.ma && String(opt.ma).startsWith('#')) return opt.ma
-  if (opt.colorCode) return opt.colorCode
+
+  // 1. Nếu props.colorKey chỉ định thuộc tính có mã màu CSS hợp lệ
+  if (props.colorKey && isHexOrCssColor(opt[props.colorKey])) {
+    return opt[props.colorKey].trim()
+  }
+
+  // 2. Thuộc tính màu sắc trong hệ thống SD-03 lưu mã HEX tại `moTa`
+  if (isHexOrCssColor(opt.moTa)) return opt.moTa.trim()
+
+  // 3. Kiểm tra các trường mã màu thường dùng
+  if (isHexOrCssColor(opt.colorHex)) return opt.colorHex.trim()
+  if (isHexOrCssColor(opt.colorCode)) return opt.colorCode.trim()
+  if (isHexOrCssColor(opt.hex)) return opt.hex.trim()
+  if (isHexOrCssColor(opt.color)) return opt.color.trim()
+  if (isHexOrCssColor(opt.ma)) return opt.ma.trim()
+
+  // 4. Ánh xạ theo tên màu tiếng Việt / tiếng Anh
+  const rawName = String(getOptionLabel(opt) || opt.ten || opt.tenMau || opt.name || '').trim().toLowerCase()
+  if (COLOR_HEX_MAP[rawName]) return COLOR_HEX_MAP[rawName]
+
+  for (const [key, hex] of Object.entries(COLOR_HEX_MAP)) {
+    if (rawName.includes(key)) return hex
+  }
+
+  // 5. Nếu props.colorKey có giá trị hợp lệ không phải mã quản lý kiểu "MS..."
+  if (props.colorKey && opt[props.colorKey] && typeof opt[props.colorKey] === 'string') {
+    const val = opt[props.colorKey].trim()
+    if (!val.toUpperCase().startsWith('MS') && !val.toUpperCase().startsWith('COL')) {
+      return val
+    }
+  }
+
   return null
 }
 
@@ -388,12 +471,14 @@ onUnmounted(() => {
 }
 
 .color-dot-indicator {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  border: 1.5px solid rgba(0, 0, 0, 0.18);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   flex-shrink: 0;
   display: inline-block;
+  margin-right: 4px;
 }
 
 .selected-text {

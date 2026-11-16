@@ -1482,7 +1482,7 @@ const selectCustomer = async (cust) => {
   customerSearchQuery.value = ''
   showCustomerDropdown.value = false
   if (cust) {
-    if (currentOrder.value.isDelivery) {
+    if (currentOrder.value.deliveryInfo) {
       currentOrder.value.deliveryInfo.recipientName = cust.ten || cust.tenKhachHang || ''
       currentOrder.value.deliveryInfo.recipientPhone = cust.soDienThoai || ''
       currentOrder.value.deliveryInfo.recipientEmail = cust.email || ''
@@ -4063,28 +4063,7 @@ const printReceipt = () => {
         margin: 0;
         line-height: 1.35;
       }
-    
-.btn-receipt-view-invoice {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 16px;
-  background: #eff6ff;
-  border: 1px solid #93c5fd;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #1d4ed8;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.btn-receipt-view-invoice:hover {
-  background: #dbeafe;
-  border-color: #60a5fa;
-  color: #1e40af;
-}
-
-</style>
+    </style>
   </head>
   <body>
     <div class="thermal-print-wrap">
@@ -4568,10 +4547,6 @@ onUnmounted(() => {
                           <span v-if="item.originalPrice && item.originalPrice > item.price"
                             class="price-strikethrough">
                             {{ formatVnd(item.originalPrice) }}
-                            <strong v-if="normalizeDiscountStr(item.discount)"
-                              style="color: #dc2626; font-size: 11px; margin-left: 4px; text-decoration: none; display: inline-block;">
-                              ({{ normalizeDiscountStr(item.discount) }})
-                            </strong>
                           </span>
                         </div>
                       </td>
@@ -4795,8 +4770,7 @@ onUnmounted(() => {
               </div>
 
               <!-- Địa chỉ chi tiết -->
-              <div class="pos-del-field"
-                :class="{ 'col-span-2': !(currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length) }">
+              <div class="pos-del-field">
                 <label class="pos-del-label">
                   Địa chỉ cụ thể (Số nhà, ngõ, tên đường, tòa nhà...) <span class="req-star">*</span>
                 </label>

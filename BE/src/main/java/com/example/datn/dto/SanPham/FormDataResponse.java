@@ -20,7 +20,7 @@ public class FormDataResponse {
     private List<PhieuGiamGiaOption> phieuGiamGias;
     private List<SanPhamChiTietOption> sanPhamChiTiets;
 
-    public record KhachHangOption(Long id, String ten, String soDienThoai, Boolean trangThai) {}
+    public record KhachHangOption(Long id, String ten, String soDienThoai, String email, Boolean trangThai) {}
 
     public record NhanVienOption(Long id, String ten) {}
 

@@ -5563,6 +5563,45 @@ input:checked + .toggle-slider:before {
   color: #0f172a;
 }
 
+.btn-receipt-view-invoice {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-receipt-view-invoice svg {
+  width: 15px;
+  height: 15px;
+  color: #2563eb;
+  transition: transform 0.15s ease;
+}
+
+.btn-receipt-view-invoice:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1e40af;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.18);
+  transform: translateY(-1px);
+}
+
+.btn-receipt-view-invoice:hover svg {
+  transform: scale(1.1);
+  color: #1d4ed8;
+}
+
+.btn-receipt-view-invoice:active {
+  transform: translateY(0);
+}
+
 .btn-receipt-print {
   display: inline-flex;
   align-items: center;

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import QuickAddModal from '@/components/QuickAddModal.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import CurrencyInput from '@/components/CurrencyInput.vue'
-import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 import http, { API_ORIGIN } from '@/api/http'
 import { getToken } from '@/utils/auth'
@@ -157,6 +157,47 @@ const removeColor = (id) => {
   selectedColors.value = selectedColors.value.filter(c => c.id !== id)
 }
 
+const getColorDotHex = (c) => {
+  if (!c) return '#111827'
+  if (typeof c === 'string') {
+    if (c.startsWith('#')) return c
+    const name = c.toLowerCase().trim()
+    const map = {
+      'đen': '#111827', 'trắng': '#ffffff', 'đỏ': '#ef4444', 'xanh dương': '#3b82f6',
+      'xanh lá': '#22c55e', 'vàng': '#eab308', 'cam': '#f97316', 'hồng': '#ec4899',
+      'tím': '#a855f7', 'xám': '#64748b', 'ghi': '#64748b', 'nâu': '#78350f',
+      'be': '#d4b996', 'kem': '#fef3c7', 'xanh navy': '#1e3a8a', 'xanh mint': '#6ee7b7',
+      'bạc': '#cbd5e1', 'xanh rêu': '#3f6212', 'đỏ đô': '#991b1b', 'trắng kem': '#fdfbf7',
+      'đen trắng': '#374151', 'xanh tím': '#4d2588', 'đỏ tím': '#831843',
+      'xanh nhạt': '#79d7b8', 'xanh da trời': '#96ddde'
+    }
+    if (map[name]) return map[name]
+    for (const [k, v] of Object.entries(map)) {
+      if (name.includes(k)) return v
+    }
+    return '#111827'
+  }
+  if (c.moTa && String(c.moTa).startsWith('#')) return String(c.moTa).trim()
+  if (c.colorHex && String(c.colorHex).startsWith('#')) return String(c.colorHex).trim()
+  if (c.colorCode && String(c.colorCode).startsWith('#')) return String(c.colorCode).trim()
+  if (c.ma && String(c.ma).startsWith('#')) return String(c.ma).trim()
+  const name = String(c.ten || c.name || c.colorName || '').toLowerCase().trim()
+  const map = {
+    'đen': '#111827', 'trắng': '#ffffff', 'đỏ': '#ef4444', 'xanh dương': '#3b82f6',
+    'xanh lá': '#22c55e', 'vàng': '#eab308', 'cam': '#f97316', 'hồng': '#ec4899',
+    'tím': '#a855f7', 'xám': '#64748b', 'ghi': '#64748b', 'nâu': '#78350f',
+    'be': '#d4b996', 'kem': '#fef3c7', 'xanh navy': '#1e3a8a', 'xanh mint': '#6ee7b7',
+    'bạc': '#cbd5e1', 'xanh rêu': '#3f6212', 'đỏ đô': '#991b1b', 'trắng kem': '#fdfbf7',
+    'đen trắng': '#374151', 'xanh tím': '#4d2588', 'đỏ tím': '#831843',
+    'xanh nhạt': '#79d7b8', 'xanh da trời': '#96ddde'
+  }
+  if (map[name]) return map[name]
+  for (const [k, v] of Object.entries(map)) {
+    if (name.includes(k)) return v
+  }
+  return '#111827'
+}
+
 const handleSelectSize = (valOrEvent) => {
   const val = valOrEvent && valOrEvent.target ? valOrEvent.target.value : valOrEvent
   if (!val) return
@@ -194,7 +235,7 @@ const generateVariants = () => {
     groups.push({
       colorId: color.id,
       colorName: color.ten || color.name,
-      colorCode: color.ma || '#111827',
+      colorCode: getColorDotHex(color),
       sizeSummary: selectedSizes.value.map(s => `Size ${s.ten || s.name}`).join(' • '),
       items
     })
@@ -552,6 +593,22 @@ const saveProduct = async (confirmMerge = false) => {
     }
   }
 
+  if (!confirmMerge) {
+    const variantCount = bienThes.length
+    const variantDesc = variantCount > 0
+      ? `Bạn có chắc chắn muốn thêm sản phẩm "${form.name.trim()}" cùng với ${variantCount} biến thể vào hệ thống?`
+      : `Bạn có chắc chắn muốn thêm sản phẩm "${form.name.trim()}" vào hệ thống?`
+
+    const isConfirmed = await notifyConfirm(
+      'Xác nhận thêm sản phẩm mới',
+      variantDesc,
+      'Xác nhận lưu',
+      'Hủy bỏ',
+      'info'
+    )
+    if (!isConfirmed) return
+  }
+
   const payload = {
     tenSanPham: form.name.trim(),
     idThuongHieu: Number(form.brand),
@@ -766,7 +823,7 @@ onMounted(() => {
 
       <div v-if="selectedColors.length > 0" class="badges-row">
         <span v-for="c in selectedColors" :key="c.id" class="badge-chip">
-          <span class="color-dot" :style="{ backgroundColor: c.ma || '#111827' }"></span>
+          <span class="color-dot" :style="{ backgroundColor: getColorDotHex(c) }"></span>
           {{ c.ten }}
           <button class="btn-remove-chip" @click="removeColor(c.id)">✕</button>
         </span>

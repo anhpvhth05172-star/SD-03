@@ -200,8 +200,9 @@ const nhanHanhDongChinh = (tenTrangThai) => {
     case 'Đang giao hàng': return 'Bắt đầu vận chuyển'
     case 'Đã giao hàng': return 'Xác nhận đã giao hàng'
     case 'Đã hoàn thành': return 'Hoàn tất đơn hàng'
-    case 'Chờ hoàn tiền': return 'Chuyển Chờ hoàn tiền'
+    case 'Chờ hoàn tiền': return 'Chờ hoàn tiền'
     case 'Đã hoàn tiền': return 'Xác nhận hoàn tiền'
+    case 'Đã hủy': return 'Hủy đơn hàng'
     default: return `Chuyển sang: ${tenTrangThai}`
   }
 }
@@ -749,7 +750,7 @@ const taiPdfHienTai = async () => {
 
 watch(() => route.params.id, load)
 onMounted(async () => {
-  getDangMo().then((res) => { activeShift.value = res }).catch(() => {})
+  getDangMo().then((res) => { activeShift.value = res }).catch(() => { })
   await load()
   document.addEventListener('click', onDocClick, true)
   document.addEventListener('keydown', onEscape)
@@ -807,11 +808,13 @@ onBeforeUnmount(() => {
           <div class="banner-row">
             <span class="banner-lbl">Loại đơn:</span>
             <span class="banner-pill-type" :class="loaiDonInfo.badgeClass">
-              <svg v-if="loaiDonInfo.icon === 'store'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg v-if="loaiDonInfo.icon === 'store'" width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                 <polyline points="9 22 9 12 15 12 15 22"></polyline>
               </svg>
-              <svg v-else-if="loaiDonInfo.icon === 'truck'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg v-else-if="loaiDonInfo.icon === 'truck'" width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2">
                 <rect x="1" y="3" width="15" height="13"></rect>
                 <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
                 <circle cx="5.5" cy="18.5" r="2.5"></circle>
@@ -820,7 +823,8 @@ onBeforeUnmount(() => {
               <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="2" y1="12" x2="22" y2="12"></line>
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z">
+                </path>
               </svg>
               <span>{{ loaiDonInfo.label }}</span>
             </span>
@@ -902,26 +906,35 @@ onBeforeUnmount(() => {
                 <td class="receipt-index">{{ i + 1 }}</td>
                 <td>
                   <strong>{{ line.tenSanPham || 'Sản phẩm' }}</strong>
-                  <small>{{ line.maSanPhamChiTiet || '—' }}<template v-if="line.tenMau || line.tenKichCo"> · {{ [line.tenMau, line.tenKichCo].filter(Boolean).join(' / ') }}</template></small>
+                  <small>{{ line.maSanPhamChiTiet || '—' }}<template v-if="line.tenMau || line.tenKichCo"> · {{
+                    [line.tenMau, line.tenKichCo].filter(Boolean).join(' / ') }}</template></small>
                 </td>
                 <td class="receipt-number">{{ formatVnd(line.donGia) }}</td>
                 <td class="receipt-number">{{ line.soLuong }}</td>
                 <td class="receipt-number">{{ formatVnd(line.thanhTien) }}</td>
               </tr>
-              <tr v-if="!(data.chiTiet || []).length"><td colspan="5" class="receipt-empty">Không có sản phẩm</td></tr>
+              <tr v-if="!(data.chiTiet || []).length">
+                <td colspan="5" class="receipt-empty">Không có sản phẩm</td>
+              </tr>
             </tbody>
           </table>
 
           <section class="receipt-totals">
             <p><span>Tiền hàng</span><strong>{{ formatVnd(tienHang) }}</strong></p>
-            <p v-if="coGiamGia"><span>Giảm giá <small>({{ thongTinPhieu }})</small></span><strong>− {{ formatVnd(data.tienGiam) }}</strong></p>
-            <p v-if="Number(data.phiVanChuyen) > 0"><span>Phí vận chuyển</span><strong>{{ formatVnd(data.phiVanChuyen) }}</strong></p>
-            <p class="receipt-grand-total"><span>Tổng thanh toán</span><strong>{{ formatVnd(data.tienSauGiamGia) }}</strong></p>
+            <p v-if="coGiamGia"><span>Giảm giá <small>({{ thongTinPhieu }})</small></span><strong>− {{
+              formatVnd(data.tienGiam)
+            }}</strong></p>
+            <p v-if="Number(data.phiVanChuyen) > 0"><span>Phí vận chuyển</span><strong>{{ formatVnd(data.phiVanChuyen)
+            }}</strong>
+            </p>
+            <p class="receipt-grand-total"><span>Tổng thanh toán</span><strong>{{ formatVnd(data.tienSauGiamGia)
+            }}</strong></p>
             <p><span>Thanh toán</span><strong>{{ data.tenPhuongThucThanhToan || '—' }}</strong></p>
           </section>
 
           <footer class="receipt-footer">
-            <div class="receipt-signatures"><span>Khách hàng<br><small>(Ký, ghi rõ họ tên)</small></span><span>Người bán hàng<br><small>(Ký, ghi rõ họ tên)</small></span></div>
+            <div class="receipt-signatures"><span>Khách hàng<br><small>(Ký, ghi rõ họ tên)</small></span><span>Người bán
+                hàng<br><small>(Ký, ghi rõ họ tên)</small></span></div>
             <strong>Cảm ơn quý khách và hẹn gặp lại!</strong>
             <small>Hóa đơn được in từ hệ thống quản lý PolyShoes.</small>
           </footer>
@@ -935,7 +948,8 @@ onBeforeUnmount(() => {
           <section class="card status-card">
             <div class="card-head">
               <span class="card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                  stroke-linejoin="round">
                   <rect x="4" y="3" width="16" height="18" rx="2" />
                   <path d="M8 8h8M8 12h8M8 16h5" />
                 </svg>
@@ -943,7 +957,8 @@ onBeforeUnmount(() => {
               <h3 class="card-title">Trạng thái đơn hàng</h3>
               <span class="inv-pill" :class="pillClass(data.trangThai)">{{ data.trangThai }}</span>
               <button class="status-history-link" type="button" @click="moLichSu">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                  stroke-linejoin="round">
                   <circle cx="12" cy="12" r="9" />
                   <path d="M12 7v5l3 2" />
                 </svg>
@@ -953,7 +968,8 @@ onBeforeUnmount(() => {
 
             <div v-if="isTerminal" class="terminal-box">
               <span class="terminal-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                  stroke-linejoin="round">
                   <circle cx="12" cy="12" r="9" />
                   <path d="M12 7v6M12 16.5v.5" />
                 </svg>
@@ -968,155 +984,176 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="stepper">
-                <div
-                  v-for="(s, i) in visibleSteps"
-                  :key="s"
-                  class="stepper-step"
-                  :class="{
-                    'is-done': laDaQua(s),
-                    'is-active': laTrangThaiHienTai(s),
-                    'is-fail':
-                      s === 'Giao hàng thất bại' ||
-                      s === 'Đã hủy' ||
-                      s === 'Đã hoàn tiền',
-                    'is-next': laTrangThaiTiepTheo(s) && !laDaQua(s),
-                    'is-clickable': laTrangThaiTiepTheo(s) && !laDaQua(s),
-                  }"
-                  :title="
-                    laTrangThaiTiepTheo(s)
-                      ? `Bấm để xác nhận chuyển sang: ${nhanBuoc(s)}`
-                      : (laTrangThaiHienTai(s) ? 'Trạng thái hiện tại' : (laDaQua(s) ? 'Đã hoàn thành' : nhanBuoc(s)))
-                  "
-                  @click="handleStepClick(s)"
-                >
-                  <span class="stepper-node">
-                    <svg
-                      v-if="
-                        s === 'Giao hàng thất bại' ||
-                        s === 'Đã hủy' ||
-                        s === 'Đã hoàn tiền'
-                      "
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M15 9l-6 6M9 9l6 6" />
-                    </svg>
-                    <svg v-else-if="i === 0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 7v5l3 2" />
-                    </svg>
-                    <svg v-else-if="i === 1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M9 11l2.5 2.5L16 8" />
-                      <rect x="4" y="4" width="16" height="16" rx="3" />
-                    </svg>
-                    <svg v-else-if="i === 2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M3 8l9-4 9 4v8l-9 4-9-4V8z" />
-                      <path d="M3 8l9 4 9-4M12 12v8" />
-                    </svg>
-                    <svg v-else-if="i === 3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" />
-                      <circle cx="7" cy="18" r="2" />
-                      <circle cx="17" cy="18" r="2" />
-                    </svg>
-                    <svg v-else-if="i === 4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M20 6L9 17l-5-5" />
-                    </svg>
-                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 16.5 7.1 18.2l.9-5.5-4-3.9L9.5 8z" />
-                    </svg>
-                  </span>
-                  <span class="stepper-label">{{ nhanBuoc(s) }}</span>
-                  <span v-if="i === 0" class="stepper-time">{{ formatDateTime(data.ngayTao) }}</span>
-                  <span v-else-if="laTrangThaiHienTai(s) && i > 0" class="stepper-time">
-                    {{ thoiGianBuoc(s) || formatDateTime(data.ngayCapNhat) }}
-                  </span>
-                  <span v-else-if="laDaQua(s)" class="stepper-time stepper-done">
-                    {{ thoiGianBuoc(s) || '✓ Hoàn thành' }}
-                  </span>
-                  <span v-else class="stepper-time">&nbsp;</span>
-                </div>
+              <div v-for="(s, i) in visibleSteps" :key="s" class="stepper-step" :class="{
+                'is-done': laDaQua(s),
+                'is-active': laTrangThaiHienTai(s),
+                'is-fail':
+                  s === 'Giao hàng thất bại' ||
+                  s === 'Đã hủy' ||
+                  s === 'Đã hoàn tiền',
+                'is-next': laTrangThaiTiepTheo(s) && !laDaQua(s),
+                'is-clickable': laTrangThaiTiepTheo(s) && !laDaQua(s),
+              }" :title="laTrangThaiTiepTheo(s)
+                ? `Bấm để xác nhận chuyển sang: ${nhanBuoc(s)}`
+                : (laTrangThaiHienTai(s) ? 'Trạng thái hiện tại' : (laDaQua(s) ? 'Đã hoàn thành' : nhanBuoc(s)))
+                " @click="handleStepClick(s)">
+                <span class="stepper-node">
+                  <svg v-if="
+                    s === 'Giao hàng thất bại' ||
+                    s === 'Đã hủy' ||
+                    s === 'Đã hoàn tiền'
+                  " viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M15 9l-6 6M9 9l6 6" />
+                  </svg>
+                  <svg v-else-if="i === 0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                  <svg v-else-if="i === 1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 11l2.5 2.5L16 8" />
+                    <rect x="4" y="4" width="16" height="16" rx="3" />
+                  </svg>
+                  <svg v-else-if="i === 2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 8l9-4 9 4v8l-9 4-9-4V8z" />
+                    <path d="M3 8l9 4 9-4M12 12v8" />
+                  </svg>
+                  <svg v-else-if="i === 3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" />
+                    <circle cx="7" cy="18" r="2" />
+                    <circle cx="17" cy="18" r="2" />
+                  </svg>
+                  <svg v-else-if="i === 4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 16.5 7.1 18.2l.9-5.5-4-3.9L9.5 8z" />
+                  </svg>
+                </span>
+                <span class="stepper-label">{{ nhanBuoc(s) }}</span>
+                <span v-if="i === 0" class="stepper-time">{{ formatDateTime(data.ngayTao) }}</span>
+                <span v-else-if="laTrangThaiHienTai(s) && i > 0" class="stepper-time">
+                  {{ thoiGianBuoc(s) || formatDateTime(data.ngayCapNhat) }}
+                </span>
+                <span v-else-if="laDaQua(s)" class="stepper-time stepper-done">
+                  {{ thoiGianBuoc(s) || '✓ Hoàn thành' }}
+                </span>
+                <span v-else class="stepper-time">&nbsp;</span>
+              </div>
+            </div>
+
+            <!-- Thanh button thao tác thay đổi trạng thái đơn hàng -->
+            <div v-if="!isTerminal && tiepTheoList.length" class="status-action-bar">
+              <div class="status-action-info">
+                <span v-if="data.ngayCapNhat" class="status-updated">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  Cập nhật lần cuối: {{ formatDateTime(data.ngayCapNhat) }}
+                  <template v-if="chot(data.nguoiCapNhat)"> • {{ data.nguoiCapNhat }}</template>
+                </span>
               </div>
 
-              <!-- Thanh button thao tác thay đổi trạng thái đơn hàng -->
-              <div v-if="!isTerminal && tiepTheoList.length" class="status-action-bar">
-                <div class="status-action-info">
-                  <span v-if="data.ngayCapNhat" class="status-updated">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="10" />
-                      <polyline points="12 6 12 12 16 14" />
-                    </svg>
-                    Cập nhật lần cuối: {{ formatDateTime(data.ngayCapNhat) }}
-                    <template v-if="chot(data.nguoiCapNhat)"> • {{ data.nguoiCapNhat }}</template>
-                  </span>
-                </div>
+              <div class="status-action-btns">
+                <!-- Nút chuyển bước tiếp theo chính (Action chính nổi bật) -->
+                <button v-if="buocTiepTheoChinh" class="btn-status-action btn-status-primary" type="button"
+                  :disabled="updatingStatus || isCheDoXem"
+                  :title="isCheDoXem ? 'Chưa mở ca làm việc (chế độ xem)' : `Chuyển đơn hàng sang: ${buocTiepTheoChinh}`"
+                  @click="chuyenTrangThai(buocTiepTheoChinh)">
+                  <span v-if="updatingStatus" class="btn-spinner"></span>
+                  <svg v-else-if="buocTiepTheoChinh === 'Đã hủy'" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="15" y1="9" x2="9" y2="15" />
+                    <line x1="9" y1="9" x2="15" y2="15" />
+                  </svg>
+                  <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                  </svg>
+                  <span>{{ nhanHanhDongChinh(buocTiepTheoChinh) }}</span>
+                </button>
 
-                <div class="status-action-btns">
-                  <!-- Nút chuyển bước tiếp theo chính (Action chính nổi bật) -->
-                  <button
-                    v-if="buocTiepTheoChinh"
-                    class="btn-status-action btn-status-primary"
-                    type="button"
-                    :disabled="updatingStatus || isCheDoXem"
-                    :title="isCheDoXem ? 'Chưa mở ca làm việc (chế độ xem)' : `Chuyển đơn hàng sang: ${buocTiepTheoChinh}`"
-                    @click="chuyenTrangThai(buocTiepTheoChinh)"
-                  >
-                    <span v-if="updatingStatus" class="btn-spinner"></span>
-                    <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M5 12h14M12 5l7 7-7 7" />
-                    </svg>
-                    <span>{{ nhanHanhDongChinh(buocTiepTheoChinh) }}</span>
-                  </button>
-
-                  <!-- Các nút chuyển trạng thái phụ (Chờ hoàn tiền, Giao thất bại, Hủy) -->
-                  <button
-                    v-for="phu in cacBuocPhu"
-                    :key="phu"
-                    class="btn-status-action"
-                    :class="classNutPhu(phu)"
-                    type="button"
-                    :disabled="updatingStatus || isCheDoXem"
-                    :title="isCheDoXem ? 'Chưa mở ca làm việc (chế độ xem)' : `Chuyển sang: ${phu}`"
-                    @click="chuyenTrangThai(phu)"
-                  >
-                    <svg v-if="phu === 'Chờ hoàn tiền' || phu === 'Đã hoàn tiền'" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                      <path d="M3 3v5h5" />
-                    </svg>
-                    <svg v-else-if="phu === 'Giao hàng thất bại'" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="12" />
-                      <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    <svg v-else-if="phu === 'Đã hủy'" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="15" y1="9" x2="9" y2="15" />
-                      <line x1="9" y1="9" x2="15" y2="15" />
-                    </svg>
-                    <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="9 18 15 12 9 6" />
-                    </svg>
-                    <span>{{ nhanNutPhu(phu) }}</span>
-                  </button>
-                </div>
+                <!-- Các nút chuyển trạng thái phụ (Chờ hoàn tiền, Giao thất bại, Hủy) -->
+                <button v-for="phu in cacBuocPhu" :key="phu" class="btn-status-action" :class="classNutPhu(phu)"
+                  type="button" :disabled="updatingStatus || isCheDoXem"
+                  :title="isCheDoXem ? 'Chưa mở ca làm việc (chế độ xem)' : `Chuyển sang: ${phu}`"
+                  @click="chuyenTrangThai(phu)">
+                  <svg v-if="phu === 'Chờ hoàn tiền' || phu === 'Đã hoàn tiền'" width="15" height="15"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                    <path d="M3 3v5h5" />
+                  </svg>
+                  <svg v-else-if="phu === 'Giao hàng thất bại'" width="15" height="15" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  <svg v-else-if="phu === 'Đã hủy'" width="15" height="15" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="15" y1="9" x2="9" y2="15" />
+                    <line x1="9" y1="9" x2="15" y2="15" />
+                  </svg>
+                  <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                  <span>{{ nhanNutPhu(phu) }}</span>
+                </button>
               </div>
+            </div>
 
-              <!-- Nếu là đơn kết thúc (Đã hoàn thành / Đã hủy / Đã hoàn tiền) -->
-              <p v-else-if="data.ngayCapNhat" class="status-updated">
-                Cập nhật lần cuối: {{ formatDateTime(data.ngayCapNhat) }}
-                <template v-if="chot(data.nguoiCapNhat)"> • {{ data.nguoiCapNhat }}</template>
-              </p>
+            <!-- Nếu là đơn đã hoàn thành thành công -->
+            <div v-else-if="isDaHoanThanh" class="status-completed-banner">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              <span>Đơn hàng đã hoàn thành</span>
+              <span v-if="data.ngayCapNhat" class="status-completed-time">
+                • Hoàn tất lúc: {{ formatDateTime(data.ngayCapNhat) }}
+                <template v-if="chot(data.nguoiCapNhat)"> ({{ data.nguoiCapNhat }})</template>
+              </span>
+            </div>
+
+            <!-- Nếu là đơn giao hàng thất bại (kết thúc cho đơn COD) -->
+            <div v-else-if="data.trangThai === 'Giao hàng thất bại'" class="status-failed-banner">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="15" y1="9" x2="9" y2="15" />
+                <line x1="9" y1="9" x2="15" y2="15" />
+              </svg>
+              <span>Đơn hàng giao thất bại (Hàng hoàn về kho • Đã đóng đơn)</span>
+              <span v-if="data.ngayCapNhat" class="status-failed-time">
+                • Cập nhật lúc: {{ formatDateTime(data.ngayCapNhat) }}
+                <template v-if="chot(data.nguoiCapNhat)"> ({{ data.nguoiCapNhat }})</template>
+              </span>
+            </div>
+
+            <!-- Nếu là đơn kết thúc khác (Đã hủy / Đã hoàn tiền) -->
+            <p v-else-if="data.ngayCapNhat" class="status-updated">
+              Cập nhật lần cuối: {{ formatDateTime(data.ngayCapNhat) }}
+              <template v-if="chot(data.nguoiCapNhat)"> • {{ data.nguoiCapNhat }}</template>
+            </p>
           </section>
 
           <div class="info-row">
             <section class="card info-card">
               <div class="card-head">
                 <span class="card-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                    stroke-linejoin="round">
                     <circle cx="12" cy="8" r="4" />
                     <path d="M4 20c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5" />
                   </svg>
@@ -1140,15 +1177,11 @@ onBeforeUnmount(() => {
                   <span class="kv-label">Email</span>
                   <div class="kv-value-with-btn">
                     <span class="kv-value kv-email-text">{{ customerEmail || '—' }}</span>
-                    <button
-                      v-if="customerEmail && customerEmail !== '—'"
-                      class="btn-resend-email"
-                      type="button"
-                      :disabled="sendingEmail"
-                      @click="handleResendEmail"
-                      title="Gửi lại thông tin đơn hàng tới email khách hàng"
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <button v-if="customerEmail && customerEmail !== '—'" class="btn-resend-email" type="button"
+                      :disabled="sendingEmail" @click="handleResendEmail"
+                      title="Gửi lại thông tin đơn hàng tới email khách hàng">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
                         <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
                         <polyline points="22,6 12,13 2,6"></polyline>
                       </svg>
@@ -1162,7 +1195,8 @@ onBeforeUnmount(() => {
             <section class="card info-card">
               <div class="card-head">
                 <span class="card-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                    stroke-linejoin="round">
                     <path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z" />
                     <circle cx="12" cy="10" r="2.5" />
                   </svg>
@@ -1193,7 +1227,8 @@ onBeforeUnmount(() => {
           <section class="card products-card">
             <div class="card-head">
               <span class="card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                  stroke-linejoin="round">
                   <path d="M3 8l9-4 9 4v8l-9 4-9-4V8z" />
                   <path d="M3 8l9 4 9-4M12 12v8" />
                 </svg>
@@ -1204,29 +1239,18 @@ onBeforeUnmount(() => {
 
             <div class="prod-filters">
               <div class="filter-search">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
                   <circle cx="11" cy="11" r="8" />
                   <path d="M21 21l-4.35-4.35" />
                 </svg>
                 <input v-model="timKiemSp" type="text" placeholder="Tìm theo tên hoặc SKU..." />
               </div>
-              <SearchableSelect
-                v-model="locMau"
-                :options="mauLocOptions"
-                value-key="value"
-                label-key="label"
-                placeholder="Tất cả màu sắc"
-                search-placeholder="Tìm màu sắc..."
-                style="width: auto; min-width: 160px"
+              <SearchableSelect v-model="locMau" :options="mauLocOptions" value-key="value" label-key="label"
+                placeholder="Tất cả màu sắc" search-placeholder="Tìm màu sắc..." style="width: auto; min-width: 160px"
                 @change="(v) => { locMau = v ?? '' }" />
-              <SearchableSelect
-                v-model="locKichCo"
-                :options="kichCoLocOptions"
-                value-key="value"
-                label-key="label"
-                placeholder="Tất cả kích cỡ"
-                search-placeholder="Tìm kích cỡ..."
-                style="width: auto; min-width: 160px"
+              <SearchableSelect v-model="locKichCo" :options="kichCoLocOptions" value-key="value" label-key="label"
+                placeholder="Tất cả kích cỡ" search-placeholder="Tìm kích cỡ..." style="width: auto; min-width: 160px"
                 @change="(v) => { locKichCo = v ?? '' }" />
             </div>
 
@@ -1252,12 +1276,8 @@ onBeforeUnmount(() => {
                     <td class="td-stt text-center">{{ i + 1 }}</td>
                     <td class="td-img text-center">
                       <div class="prod-thumb-wrap">
-                        <img
-                          :src="getLineImage(line)"
-                          :alt="line.tenSanPham || 'Ảnh sản phẩm'"
-                          class="prod-thumb-img"
-                          @error="onLineImgError(line, $event)"
-                        />
+                        <img :src="getLineImage(line)" :alt="line.tenSanPham || 'Ảnh sản phẩm'" class="prod-thumb-img"
+                          @error="onLineImgError(line, $event)" />
                         <span v-if="getLineDiscountBadge(line)" class="prod-img-discount-badge">
                           {{ getLineDiscountBadge(line) }}
                         </span>
@@ -1282,10 +1302,8 @@ onBeforeUnmount(() => {
                     <td class="num">
                       <div class="inv-total-stack">
                         <span class="strong inv-total-now">{{ formatVnd(getLineUnitPrice(line)) }}</span>
-                        <span
-                          v-if="getLineOriginalUnit(line) > getLineUnitPrice(line) && getLineUnitPrice(line) > 0"
-                          class="inv-total-was"
-                        >
+                        <span v-if="getLineOriginalUnit(line) > getLineUnitPrice(line) && getLineUnitPrice(line) > 0"
+                          class="inv-total-was">
                           {{ formatVnd(getLineOriginalUnit(line)) }}
                         </span>
                       </div>
@@ -1293,10 +1311,7 @@ onBeforeUnmount(() => {
                     <td class="num">
                       <div class="inv-total-stack">
                         <span class="strong inv-total-now">{{ formatVnd(line.thanhTien) }}</span>
-                        <span
-                          v-if="getLineOriginalTotal(line) > Number(line.thanhTien || 0)"
-                          class="inv-total-was"
-                        >
+                        <span v-if="getLineOriginalTotal(line) > Number(line.thanhTien || 0)" class="inv-total-was">
                           {{ formatVnd(getLineOriginalTotal(line)) }}
                         </span>
                       </div>
@@ -1312,7 +1327,8 @@ onBeforeUnmount(() => {
           <section class="card totals-card">
             <div class="card-head">
               <span class="card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                  stroke-linejoin="round">
                   <rect x="4" y="3" width="16" height="18" rx="2" />
                   <path d="M8 8h8M8 12h8M8 16h4" />
                 </svg>
@@ -1349,7 +1365,8 @@ onBeforeUnmount(() => {
           <section class="card pay-card">
             <div class="card-head">
               <span class="card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                  stroke-linejoin="round">
                   <rect x="3" y="6" width="18" height="12" rx="2" />
                   <path d="M3 10h18" />
                 </svg>
@@ -1374,21 +1391,18 @@ onBeforeUnmount(() => {
 
           <div class="side-actions">
             <button class="btn btn-primary" type="button" @click="inHoaDon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                stroke-linejoin="round">
                 <path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
                 <rect x="6" y="14" width="12" height="7" />
               </svg>
               In hóa đơn
             </button>
-            <button
-              v-if="coTheHuy && !isTerminal"
-              class="btn btn-outline btn-huy-don"
-              type="button"
+            <button v-if="coTheHuy && !isTerminal" class="btn btn-outline btn-huy-don" type="button"
               :disabled="updatingStatus || isCheDoXem"
-              :title="isCheDoXem ? 'Chưa mở ca làm việc (đang ở chế độ xem)' : 'Hủy đơn'"
-              @click="huyDon"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              :title="isCheDoXem ? 'Chưa mở ca làm việc (đang ở chế độ xem)' : 'Hủy đơn'" @click="huyDon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10" />
                 <path d="M15 9l-6 6M9 9l6 6" />
               </svg>
@@ -1408,7 +1422,8 @@ onBeforeUnmount(() => {
             <span v-if="data" class="history-code">{{ data.maHoaDon }}</span>
           </h3>
           <button class="history-close" type="button" aria-label="Đóng" @click="dongLichSu">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
@@ -1436,11 +1451,19 @@ onBeforeUnmount(() => {
                 </p>
                 <div class="history-meta">
                   <span class="history-time">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="history-meta-icon"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                      stroke-linejoin="round" class="history-meta-icon">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
                     <time>{{ formatDateTime(row.thoiGian) }}</time>
                   </span>
                   <span class="history-actor">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="history-meta-icon"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                      stroke-linejoin="round" class="history-meta-icon">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
                     <span>Người thao tác: <strong>{{ row.nguoiThaoTac || 'Hệ thống' }}</strong></span>
                   </span>
                 </div>
@@ -1562,6 +1585,7 @@ onBeforeUnmount(() => {
   .banner-grid {
     grid-template-columns: 1fr;
   }
+
   .banner-col.has-divider {
     border-left: none;
     padding-left: 0;
@@ -1691,11 +1715,30 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.inv-pill-green { background: #f0fdf4; color: #15803d; }
-.inv-pill-red { background: #fef2f2; color: #dc2626; }
-.inv-pill-amber { background: #fffbeb; color: #b45309; }
-.inv-pill-teal { background: #f0fdfa; color: #0f766e; }
-.inv-pill-gray { background: #f1f5f9; color: #64748b; }
+.inv-pill-green {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.inv-pill-red {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.inv-pill-amber {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.inv-pill-teal {
+  background: #f0fdfa;
+  color: #0f766e;
+}
+
+.inv-pill-gray {
+  background: #f1f5f9;
+  color: #64748b;
+}
 
 .status-history-link {
   appearance: none;
@@ -2153,6 +2196,56 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
+.status-completed-banner {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status-completed-banner svg {
+  color: #16a34a;
+  flex-shrink: 0;
+}
+
+.status-completed-time {
+  font-weight: 400;
+  color: #15803d;
+  font-size: 12px;
+}
+
+.status-failed-banner {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #fef2f2;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status-failed-banner svg {
+  color: #dc2626;
+  flex-shrink: 0;
+}
+
+.status-failed-time {
+  font-weight: 400;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
 .status-updated {
   margin-top: 10px;
   font-size: 11.5px;
@@ -2369,7 +2462,7 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
-.status-menu-wrap > .btn {
+.status-menu-wrap>.btn {
   width: 100%;
   justify-content: space-between;
 }
@@ -2875,17 +2968,18 @@ onBeforeUnmount(() => {
   color: #1d4ed8 !important;
   border-color: #bfdbfe !important;
 }
+
 .banner-pill-type.inv-type-pos-delivery {
   background: #fffbeb !important;
   color: #b45309 !important;
   border-color: #fde68a !important;
 }
+
 .banner-pill-type.inv-type-online {
   background: #f0fdf4 !important;
   color: #15803d !important;
   border-color: #bbf7d0 !important;
 }
-
 </style>
 
 <style>
@@ -3032,7 +3126,7 @@ onBeforeUnmount(() => {
     text-transform: uppercase;
   }
 
-  .receipt-customer p + p {
+  .receipt-customer p+p {
     margin-top: 2px;
   }
 
@@ -3132,17 +3226,17 @@ onBeforeUnmount(() => {
   }
 
   .receipt-signatures small,
-  .receipt-footer > small {
+  .receipt-footer>small {
     color: #666;
     font-weight: 400;
   }
 
-  .receipt-footer > strong,
-  .receipt-footer > small {
+  .receipt-footer>strong,
+  .receipt-footer>small {
     display: block;
   }
 
-  .receipt-footer > strong {
+  .receipt-footer>strong {
     margin-bottom: 3px;
     font-size: 10pt;
   }
