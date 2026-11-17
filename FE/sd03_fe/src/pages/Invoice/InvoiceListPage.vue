@@ -11,6 +11,7 @@ import {
   initialsOf,
   payStatusOf,
 } from '@/utils/format'
+import { loaiDonMeta } from '@/constants/invoiceStatus'
 import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
 
 const router = useRouter()
@@ -24,6 +25,7 @@ const tabs = [
   { key: 'DA_GIAO_HANG', label: 'Đã giao hàng' },
   { key: 'DA_HOAN_THANH', label: 'Đã hoàn thành' },
   { key: 'DA_HUY', label: 'Đã hủy' },
+  { key: 'CHO_HOAN_TIEN', label: 'Chờ hoàn tiền' },
   { key: 'DA_HOAN_TIEN', label: 'Đã hoàn tiền' },
   { key: 'GIAO_HANG_THAT_BAI', label: 'Giao hàng thất bại' },
 ]
@@ -45,9 +47,11 @@ const fDenNgay = ref('')
 const fLoaiDon = ref('')
 
 const loaiDonOptions = [
-  { id: '', ten: 'Tất cả' },
-  { id: 'Tại quầy', ten: 'Tại quầy' },
-  { id: 'Online', ten: 'Online' },
+  { id: '', ten: 'Tất cả loại đơn' },
+  { id: 'ONLINE', ten: 'Hóa đơn online' },
+  { id: 'TAI_QUAY_TAT_CA', ten: 'Hóa đơn tại quầy' },
+  { id: 'TAI_QUAY', ten: 'Tại quầy (Nhận ngay)' },
+  { id: 'TAI_QUAY_GIAO_HANG', ten: 'Tại quầy (Giao hàng)' },
 ]
 
 const trangThaiOptions = computed(() => tabs.map((t) => ({ id: t.key, ten: t.label })))
@@ -57,6 +61,8 @@ const todayLocal = () => {
   const p = (x) => String(x).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
+
+const maxDate = computed(() => todayLocal())
 
 fTuNgay.value = todayLocal()
 fDenNgay.value = todayLocal()
@@ -76,6 +82,8 @@ const buildParams = () => {
   const tu = parseDate(fTuNgay.value)
   const den = parseDate(fDenNgay.value)
   if (tu === undefined || den === undefined) return null
+  const today = todayLocal()
+  if ((tu && tu > today) || (den && den > today)) return null
   if (tu) params.tuNgay = tu
   if (den) params.denNgay = den
   if (fLoaiDon.value) params.loaiDon = fLoaiDon.value
@@ -115,7 +123,48 @@ const load = async () => {
   }
 }
 
+const setDateRange = (preset) => {
+  const d = new Date()
+  const p = (x) => String(x).padStart(2, '0')
+  const fmt = (dt) => `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`
+  
+  if (preset === 'TODAY') {
+    fTuNgay.value = fmt(d)
+    fDenNgay.value = fmt(d)
+  } else if (preset === '7DAYS') {
+    const past = new Date()
+    past.setDate(past.getDate() - 7)
+    fTuNgay.value = fmt(past)
+    fDenNgay.value = fmt(d)
+  } else if (preset === '30DAYS') {
+    const past = new Date()
+    past.setDate(past.getDate() - 30)
+    fTuNgay.value = fmt(past)
+    fDenNgay.value = fmt(d)
+  } else {
+    fTuNgay.value = ''
+    fDenNgay.value = ''
+  }
+  applyFilter()
+}
+
 const applyFilter = () => {
+  const today = todayLocal()
+  let hasFuture = false
+  if (fTuNgay.value && fTuNgay.value > today) {
+    fTuNgay.value = today
+    hasFuture = true
+  }
+  if (fDenNgay.value && fDenNgay.value > today) {
+    fDenNgay.value = today
+    hasFuture = true
+  }
+  if (hasFuture) {
+    notifyWarning('Ngày không hợp lệ', 'Không thể chọn ngày trong tương lai')
+  }
+  if (fTuNgay.value && fDenNgay.value && fTuNgay.value > fDenNgay.value) {
+    fDenNgay.value = fTuNgay.value
+  }
   page.value = 0
   load()
 }
@@ -206,19 +255,19 @@ const statusPill = (value) => {
   if (['Đã xác nhận'].includes(value)) return 'inv-pill-sky'
   if (['Chờ giao hàng'].includes(value)) return 'inv-pill-blue'
   if (['Đang giao hàng'].includes(value)) return 'inv-pill-teal'
-  if (['Đã hủy', 'Đã hoàn tiền', 'Giao hàng thất bại'].includes(value)) return 'inv-pill-red'
+  if (['Đã hủy', 'Đã hoàn tiền', 'Chờ hoàn tiền', 'Giao hàng thất bại'].includes(value)) return 'inv-pill-red'
   if (['Chờ xác nhận'].includes(value)) return 'inv-pill-amber'
   return 'inv-pill-gray'
 }
 
-const payPill = (value) => {
-  const s = payStatusOf(value)
+const payPill = (row) => {
+  const s = payStatusOf(row)
   if (s === 'Đã thanh toán') return 'inv-pill-green'
   if (s === 'Đã hoàn tiền') return 'inv-pill-red'
   return 'inv-pill-gray'
 }
 
-const payLabel = (value) => payStatusOf(value)
+const payLabel = (row) => payStatusOf(row)
 
 const fmtNgayTao = (iso) => {
   if (!iso) return '—'
@@ -292,7 +341,7 @@ onMounted(load)
                 v-model="fMa"
                 type="text"
                 class="form-control"
-                placeholder="Nhập mã hóa đơn (vd: HD000013)"
+                placeholder="Tìm mã hóa đơn, tên khách hàng hoặc SĐT..."
                 @keyup.enter="applyFilter"
               />
               <button v-if="fMa" class="clear-search-btn" type="button" @click="fMa = ''; applyFilter()">×</button>
@@ -327,7 +376,27 @@ onMounted(load)
 
           <div class="filter-col">
             <label class="filter-lbl">Từ ngày</label>
-            <input v-model="fTuNgay" type="date" class="form-control" @change="applyFilter" />
+            <input
+              v-model="fTuNgay"
+              type="date"
+              class="form-control"
+              :max="maxDate"
+              @change="applyFilter"
+              @keyup.enter="applyFilter"
+            />
+          </div>
+
+          <div class="filter-col">
+            <label class="filter-lbl">Đến ngày</label>
+            <input
+              v-model="fDenNgay"
+              type="date"
+              class="form-control"
+              :min="fTuNgay || undefined"
+              :max="maxDate"
+              @change="applyFilter"
+              @keyup.enter="applyFilter"
+            />
           </div>
 
           <div class="filter-actions">
@@ -414,14 +483,33 @@ onMounted(load)
                   </div>
                 </td>
                 <td class="attr-plain-text">{{ row.tenNhanVien || '—' }}</td>
-                <td class="attr-plain-text">{{ row.loaiDon }}</td>
+                <td>
+                  <span class="inv-type-pill" :class="loaiDonMeta(row).badgeClass" :title="loaiDonMeta(row).label">
+                    <svg v-if="loaiDonMeta(row).icon === 'store'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                      <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <svg v-else-if="loaiDonMeta(row).icon === 'truck'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="1" y="3" width="15" height="13"></rect>
+                      <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+                      <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                      <circle cx="18.5" cy="18.5" r="2.5"></circle>
+                    </svg>
+                    <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="2" y1="12" x2="22" y2="12"></line>
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                    </svg>
+                    <span>{{ loaiDonMeta(row).label }}</span>
+                  </span>
+                </td>
                 <td class="text-end price-plain-text">{{ tongTienText(row.tongTien) }}</td>
                 <td class="date-plain-text">{{ fmtNgayTao(row.ngayTao) }}</td>
                 <td class="text-center">
                   <span class="inv-pill" :class="statusPill(row.trangThai)">{{ row.trangThai }}</span>
                 </td>
                 <td class="text-center">
-                  <span class="inv-pill" :class="payPill(row.trangThai)">{{ payLabel(row.trangThai) }}</span>
+                  <span class="inv-pill" :class="payPill(row)">{{ payLabel(row) }}</span>
                 </td>
                 <td class="text-center">
                   <div class="action-btns">
@@ -444,7 +532,7 @@ onMounted(load)
         </table>
       </div>
 
-      <div class="table-card-foot">
+      <div v-if="totalPages > 1" class="table-card-foot">
         <PaginationBar
           :page="page"
           :total-pages="totalPages"
@@ -462,4 +550,61 @@ onMounted(load)
   </div>
 </template>
 
-<style scoped src="@/assets/styles/InvoiceListPage.css"></style>
+<style scoped src="@/assets/styles/InvoiceListPage.css">
+.date-preset-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+}
+.preset-chip {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.preset-chip:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+.preset-chip.is-active {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+
+
+.inv-type-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  letter-spacing: 0.1px;
+}
+.inv-type-pill.inv-type-pos {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.inv-type-pill.inv-type-pos-delivery {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+.inv-type-pill.inv-type-online {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+</style>

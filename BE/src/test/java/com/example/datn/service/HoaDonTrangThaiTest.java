@@ -335,7 +335,7 @@ class HoaDonTrangThaiTest {
 
         HoaDonDTO dto = service.get(HD_ID);
 
-        assertThat(dto.getTrangThaiTiepTheo()).containsExactly("Đã hoàn thành");
+        assertThat(dto.getTrangThaiTiepTheo()).containsExactly("Đã hoàn thành", "Đã hủy");
     }
 
     @Test
@@ -365,7 +365,7 @@ class HoaDonTrangThaiTest {
 
         HoaDonDTO dto = service.get(HD_ID);
 
-        assertThat(dto.getTrangThaiTiepTheo()).containsExactly("Đã hoàn thành");
+        assertThat(dto.getTrangThaiTiepTheo()).containsExactly("Đã hoàn thành", "Đã hủy");
     }
 
     @Test

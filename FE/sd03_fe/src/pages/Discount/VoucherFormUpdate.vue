@@ -215,7 +215,7 @@ const loadProducts = async () => {
       icon: "error",
       title: "Không tải được danh sách sản phẩm",
       text: e.response?.data?.message || "Không kết nối được máy chủ",
-      confirmButtonColor: "#cc0000",
+      confirmButtonColor: "#dc2626",
     });
   } finally {
     loadingProducts.value = false;
@@ -235,7 +235,7 @@ const loadDetail = async () => {
     Swal.fire({
       icon: "error",
       title: "Không tìm thấy đợt giảm giá",
-      confirmButtonColor: "#cc0000",
+      confirmButtonColor: "#dc2626",
     });
     router.push(LIST_PATH);
     return;
@@ -270,7 +270,7 @@ const loadDetail = async () => {
       icon: "error",
       title: "Không tải được thông tin đợt giảm giá",
       text: e.response?.data?.message || "Không kết nối được máy chủ",
-      confirmButtonColor: "#cc0000",
+      confirmButtonColor: "#dc2626",
     });
     router.push(LIST_PATH);
   } finally {
@@ -421,6 +421,13 @@ const submit = async () => {
   saving.value = true;
   try {
     await axios.put(baseAPI + `admin/dot-giam-gia/update/${form.id}`, data);
+    try {
+      localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()));
+      localStorage.setItem('polyshoes_discount_updated', String(Date.now()));
+      window.dispatchEvent(new CustomEvent('polyshoes:discount-changed'));
+    } catch {
+      // Đồng bộ liên tab không khả dụng trong một số môi trường trình duyệt.
+    }
 
     await Swal.fire({
       icon: "success",
@@ -434,7 +441,7 @@ const submit = async () => {
       icon: "error",
       title: "Cập nhật thất bại",
       text: e.response?.data?.message || "Không kết nối được máy chủ",
-      confirmButtonColor: "#cc0000",
+      confirmButtonColor: "#dc2626",
     });
   } finally {
     saving.value = false;
@@ -894,11 +901,11 @@ const submit = async () => {
 }
 
 .dg-screen {
-  --red: #cc0000;
-  --red-soft: #fdecec;
-  --line: #e5e7eb;
-  --ink: #111827;
-  --muted: #6b7280;
+  --red: #dc2626;
+  --red-soft: #fef2f2;
+  --line: #e2e8f0;
+  --ink: #0f172a;
+  --muted: #64748b;
   padding: 0.5rem 0.75rem 2rem;
   color: var(--ink);
 }

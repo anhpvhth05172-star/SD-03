@@ -18,7 +18,10 @@ public class CaLamViecDto {
 
     private Long id;
     private String maCa;
+    private Long idCaLich;
+    private String tenCaLich;
     private Long idNhanVien;
+    private String maNhanVien;
     private String tenNhanVien;
     private String tenQuy;
     private LocalDateTime thoiGianMo;
@@ -32,8 +35,10 @@ public class CaLamViecDto {
     private BigDecimal tienHoanMat;
     private BigDecimal tienDuKien;
     private BigDecimal tienThucTe;
+    private BigDecimal tienChi;
     private BigDecimal chenhLech;
     private String lyDoLech;
     private String ghiChuMo;
     private List<LichSuCaDto> lichSu;
+    private String tenNguoiNhan;
 }

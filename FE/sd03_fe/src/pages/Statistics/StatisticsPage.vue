@@ -1,30 +1,25 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import PaginationBar from '@/components/PaginationBar.vue'
-import SearchableSelect from '@/components/SearchableSelect.vue'
-import { listEmployees } from '@/api/employee'
-import { API_BASE } from '@/api/http'
+import { useRouter } from 'vue-router'
+import http, { API_BASE } from '@/api/http'
 import { formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
-import { notifySuccess } from '@/utils/notify'
-import { nhanVienMau } from '@/pages/Schedule/scheduleData'
-import BarLineChart from '@/components/charts/BarLineChart.vue'
-import PieChart from '@/components/charts/PieChart.vue'
+import { notifySuccess, notifyError } from '@/utils/notify'
 import {
-  MAU_THUONG_HIEU,
-  SAN_PHAM_MAU,
-  layTangTruongLabel,
-  khoaNgay,
-  khoangNhanh,
-  taoBangNgay,
-  tinhBangThuongHieu,
-  tinhChuKy,
-  tinhChuoiBanHang,
-  tinhKhoang,
-  tinhNhanVien,
-  tinhSanPham,
-  tinhTrangThaiDon,
-} from './statisticsData'
+  fetchTongQuan,
+  fetchTrangThaiDon,
+  fetchSanPhamTheoNgay,
+  fetchThuongHieuThongKe,
+  fetchSanPhamBang,
+  fetchDonHangChiTiet,
+  fetchSanPhamDaBan,
+  fetchEmailMacDinh,
+  guiMailTongKet,
+  fetchSoSanh
+} from '@/api/statistics'
+import BarLineChart from '@/components/charts/BarLineChart.vue'
+
+const router = useRouter()
 
 const pad2 = (x) => String(x).padStart(2, '0')
 const toInputDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
@@ -39,1760 +34,3246 @@ const hienThiNgay = (s) => {
   if (!d) return '—'
   return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`
 }
-const gioHienTai = (d = new Date()) =>
-  `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
+const formatDateTime = (isoStr) => {
+  if (!isoStr) return '—'
+  const d = new Date(isoStr)
+  if (isNaN(d.getTime())) return isoStr
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
+}
 
 const dauThang = () => {
   const n = new Date()
   return new Date(n.getFullYear(), n.getMonth(), 1)
 }
 
-/* ---------------------------------- Trạng thái bộ lọc ---------------------------------- */
-const tuNgay = ref(toInputDate(dauThang()))
+/* ---------------------------------- Trạng thái bộ lọc chính ---------------------------------- */
+const tuNgay = ref(toInputDate(new Date()))
 const denNgay = ref(toInputDate(new Date()))
-const quickActive = ref('')
-const kieuTongQuan = ref('ngay')
+const quickActive = ref('homNay')
+const kieuThongKe = ref('ngay')
 const thuongHieuChon = ref('')
-const timThuongHieu = ref('')
-
+const timSanPham = ref('')
 const thuongHieus = ref([])
-const nhanViens = ref([])
-const sanPhams = ref([])
-const bang = ref(new Map())
-const capNhatLuc = ref(gioHienTai())
 
-const chartMode = ref('cot')
-const thMode = ref('tron')
-const thTheo = ref('doanhThu')
+const dangTai = ref(false)
+const tongQuanData = ref({
+  doanhThu: 0,
+  tienMat: 0,
+  tienChuyenKhoan: 0,
+  soDon: 0,
+  aov: 0,
+  sanPhamBan: 0,
+  khachMoi: 0,
+  doanhThuDuKien: 0
+})
 
-const kwNv = ref('')
-const sortNv = ref('doanhThuCao')
-const pageNv = ref(0)
-const sizeNv = ref(5)
+/* ---------------------------------- Thẻ KPI & Khung chi tiết động ---------------------------------- */
+const activeKpi = ref(null)
+const subTabOrder = ref('ALL') // 'ALL' | 'TAI_QUAY' | 'ONLINE' hoặc 'TIEN_MAT' | 'CHUYEN_KHOAN'
+const kwDonHang = ref('')
+const filterTrangThaiDon = ref('')
+const filterThanhToanDon = ref('')
+const sortDonHang = ref('moiNhat')
+const pageDon = ref(0)
+const sizeDon = ref(5)
 
-const kwSp = ref('')
-const tonKhoSp = ref('')
-const sortSp = ref('banChay')
-const pageSp = ref(0)
-const sizeSp = ref(5)
+const donHangList = ref([])
+const sanPhamDaBanList = ref([])
+const dangTaiChiTiet = ref(false)
 
+const toggleKpi = (key) => {
+  if (activeKpi.value === key) {
+    activeKpi.value = null
+  } else {
+    activeKpi.value = key
+    subTabOrder.value = 'ALL'
+    pageDon.value = 0
+    kwDonHang.value = ''
+    filterTrangThaiDon.value = ''
+    filterThanhToanDon.value = ''
+    taiChiTietKpi()
+  }
+}
+
+const taiChiTietKpi = async () => {
+  if (!activeKpi.value) return
+  dangTaiChiTiet.value = true
+  try {
+    if (activeKpi.value === 'SAN_PHAM_DA_BAN') {
+      const res = await fetchSanPhamDaBan(tuNgay.value, denNgay.value, thuongHieuChon.value || null, timSanPham.value || null)
+      sanPhamDaBanList.value = res || []
+    } else {
+      let kpiType = 'ALL_VALID'
+      if (activeKpi.value === 'DOANH_THU_THUC_TE') kpiType = 'DOANH_THU_THUC_TE'
+      else if (activeKpi.value === 'DOANH_THU_DU_KIEN') kpiType = 'DOANH_THU_DU_KIEN'
+      else if (activeKpi.value === 'TIEN_MAT_CHUYEN_KHOAN') kpiType = 'ALL_VALID'
+      else if (activeKpi.value === 'TONG_DON_HANG') kpiType = 'ALL_VALID'
+
+      const params = {
+        tu: tuNgay.value,
+        den: denNgay.value,
+        kpiType,
+        thuongHieu: thuongHieuChon.value || null
+      }
+      const res = await fetchDonHangChiTiet(params)
+      donHangList.value = res || []
+    }
+  } catch (e) {
+    console.error('Lỗi tải chi tiết KPI:', e)
+  } finally {
+    dangTaiChiTiet.value = false
+  }
+}
+
+/* Bộ lọc client cho danh sách đơn hàng chi tiết */
+const donHangLoc = computed(() => {
+  let list = [...donHangList.value]
+
+  // Lọc theo sub-tab
+  if (activeKpi.value === 'TIEN_MAT_CHUYEN_KHOAN') {
+    if (subTabOrder.value === 'TIEN_MAT') {
+      list = list.filter((d) => d.hinhThucThanhToan === 'Tiền mặt')
+    } else if (subTabOrder.value === 'CHUYEN_KHOAN') {
+      list = list.filter((d) => d.hinhThucThanhToan === 'Chuyển khoản')
+    }
+  } else {
+    if (subTabOrder.value === 'TAI_QUAY') {
+      list = list.filter((d) => String(d.loaiDon || '').toUpperCase().includes('TAI_QUAY') || String(d.loaiDon || '').includes('Tại quầy'))
+    } else if (subTabOrder.value === 'ONLINE') {
+      list = list.filter((d) => String(d.loaiDon || '').toUpperCase().includes('ONLINE'))
+    }
+  }
+
+  // Lọc từ khóa
+  const kw = kwDonHang.value.trim().toLowerCase()
+  if (kw) {
+    list = list.filter(
+      (d) =>
+        String(d.maHoaDon || '').toLowerCase().includes(kw) ||
+        String(d.tenKhachHang || '').toLowerCase().includes(kw) ||
+        String(d.soDienThoaiKhachHang || '').toLowerCase().includes(kw) ||
+        String(d.tenNhanVien || '').toLowerCase().includes(kw)
+    )
+  }
+
+  // Lọc trạng thái
+  if (filterTrangThaiDon.value) {
+    list = list.filter((d) => d.trangThai === filterTrangThaiDon.value)
+  }
+
+  // Lọc thanh toán
+  if (filterThanhToanDon.value) {
+    list = list.filter((d) => d.trangThaiThanhToan === filterThanhToanDon.value)
+  }
+
+  // Sắp xếp
+  if (sortDonHang.value === 'cuNhat') {
+    list.sort((a, b) => new Date(a.ngayTao) - new Date(b.ngayTao))
+  } else if (sortDonHang.value === 'tienCao') {
+    list.sort((a, b) => (Number(b.thanhTien) || 0) - (Number(a.thanhTien) || 0))
+  } else if (sortDonHang.value === 'tienThap') {
+    list.sort((a, b) => (Number(a.thanhTien) || 0) - (Number(b.thanhTien) || 0))
+  } else {
+    list.sort((a, b) => new Date(b.ngayTao) - new Date(a.ngayTao))
+  }
+
+  return list
+})
+
+const countDonTaiQuay = computed(() =>
+  donHangList.value.filter((d) => String(d.loaiDon || '').toUpperCase().includes('TAI_QUAY') || String(d.loaiDon || '').includes('Tại quầy')).length
+)
+const countDonOnline = computed(() =>
+  donHangList.value.filter((d) => String(d.loaiDon || '').toUpperCase().includes('ONLINE')).length
+)
+const countDonTienMat = computed(() =>
+  donHangList.value.filter((d) => d.hinhThucThanhToan === 'Tiền mặt').length
+)
+const countDonChuyenKhoan = computed(() =>
+  donHangList.value.filter((d) => d.hinhThucThanhToan === 'Chuyển khoản').length
+)
+
+const tongTrangDon = computed(() => Math.max(1, Math.ceil(donHangLoc.value.length / sizeDon.value)))
+const donHangTrang = computed(() => {
+  const start = pageDon.value * sizeDon.value
+  return donHangLoc.value.slice(start, start + sizeDon.value)
+})
+
+const sanPhamDaBanLoc = computed(() => {
+  const kw = kwDonHang.value.trim().toLowerCase()
+  let list = [...sanPhamDaBanList.value]
+  if (kw) {
+    list = list.filter((item) =>
+      String(item.maSanPham || '').toLowerCase().includes(kw) ||
+      String(item.tenSanPham || '').toLowerCase().includes(kw) ||
+      String(item.maHoaDon || '').toLowerCase().includes(kw)
+    )
+  }
+  return list
+})
+const tongTrangSpBan = computed(() => Math.max(1, Math.ceil(sanPhamDaBanLoc.value.length / sizeDon.value)))
+const sanPhamDaBanTrang = computed(() => {
+  const start = pageDon.value * sizeDon.value
+  return sanPhamDaBanLoc.value.slice(start, start + sizeDon.value)
+})
+
+/* Thuật toán phân trang thông minh với dấu ba chấm (...) chống tràn nút khi nhiều trang */
+const tinhDanhSachTrang = (totalPages, currentPage) => {
+  const tp = Number(totalPages) || 1
+  const cur = (Number(currentPage) || 0) + 1
+  if (tp <= 7) return Array.from({ length: tp }, (_, i) => i + 1)
+  const set = new Set([1, tp])
+  for (let i = Math.max(1, cur - 1); i <= Math.min(tp, cur + 1); i++) {
+    set.add(i)
+  }
+  if (cur <= 3) {
+    set.add(2)
+    set.add(3)
+  }
+  if (cur >= tp - 2) {
+    set.add(tp - 1)
+    set.add(tp - 2)
+  }
+  const sorted = [...set].sort((a, b) => a - b)
+  const out = []
+  let prev = null
+  for (const p of sorted) {
+    if (prev !== null && p - prev > 1) out.push('...')
+    out.push(p)
+    prev = p
+  }
+  return out
+}
+
+const tongTrangKpiHienTai = computed(() => (activeKpi.value === 'SAN_PHAM_DA_BAN' ? tongTrangSpBan.value : tongTrangDon.value))
+const danhSachTrangDon = computed(() => tinhDanhSachTrang(tongTrangKpiHienTai.value, pageDon.value))
+
+const xemChiTietDon = (id) => {
+  if (id) router.push(`/hoa-don/${id}`)
+}
+
+/* ---------------------------------- Phần giữa: Biểu đồ sản phẩm bán theo ngày (thực tế từ HĐ) ---------------------------------- */
+const spTheoNgayList = ref([])
+const chartField = ref('soLuongBan') // 'soLuongBan' | 'doanhThu'
+
+const chartDays = computed(() => {
+  const list = spTheoNgayList.value || []
+  if (quickActive.value !== 'tatCa') return list
+  const firstIdx = list.findIndex(
+    (item) => (item.soDon || 0) > 0 || (item.soLuongBan || 0) > 0 || (item.doanhThu || 0) > 0
+  )
+  return firstIdx >= 0 ? list.slice(firstIdx) : list
+})
+const chartLabels = computed(() => chartDays.value.map((item) => item.nhanNgay || item.ngay))
+const chartValues = computed(() => chartDays.value.map((item) => item[chartField.value] || 0))
+const chartTooltips = computed(() =>
+  chartDays.value.map((item) => ({
+    title: `Ngày ${item.nhanNgay || item.ngay}`,
+    lines: [
+      `Số lượng bán: ${item.soLuongBan || 0} sản phẩm`,
+      `Doanh thu: ${formatVnd(item.doanhThu || 0)}`,
+    ],
+  }))
+)
+const tongSanPhamBanNgay = computed(() =>
+  spTheoNgayList.value.reduce((acc, cur) => acc + (cur.soLuongBan || 0), 0)
+)
+const tongDoanhThuNgay = computed(() =>
+  spTheoNgayList.value.reduce((acc, cur) => acc + (cur.doanhThu || 0), 0)
+)
+
+/* ---------------------------------- Phần dưới: 2 Biểu đồ tròn Doughnut ---------------------------------- */
+const thuongHieuData = ref({ tongDoanhThu: 0, tongSoLuong: 0, danhSach: [] })
+const trangThaiDonData = ref([])
+
+// Biểu đồ Thương hiệu
+const brandSlices = computed(() => {
+  const list = thuongHieuData.value.danhSach || []
+  if (!list.length) return []
+  return list.map((item) => ({
+    label: item.ten,
+    value: item.doanhThu,
+    color: item.mau || '#926c45'
+  }))
+})
+
+// Biểu đồ Trạng thái đơn gom 3 nhóm (Đã hủy, Hoàn thành, Đang xử lý)
+const orderStatusSummary = computed(() => {
+  let daHuy = 0
+  let hoanThanh = 0
+  let dangXuLy = 0
+
+  for (const item of trangThaiDonData.value) {
+    const ten = String(item.ten || '').toLowerCase()
+    const sl = Number(item.soLuong) || 0
+    if (ten.includes('hủy') || ten.includes('hoàn tiền')) {
+      daHuy += sl
+    } else if (ten.includes('hoàn thành') || ten.includes('đã giao hàng')) {
+      hoanThanh += sl
+    } else {
+      dangXuLy += sl
+    }
+  }
+
+  const tong = daHuy + hoanThanh + dangXuLy
+  return {
+    tong,
+    daHuy,
+    hoanThanh,
+    dangXuLy,
+    daHuyPct: tong > 0 ? Math.round((daHuy / tong) * 100) : 0,
+    hoanThanhPct: tong > 0 ? Math.round((hoanThanh / tong) * 100) : 0,
+    dangXuLyPct: tong > 0 ? Math.round((dangXuLy / tong) * 100) : 0
+  }
+})
+
+const orderStatusSlices = computed(() => {
+  const s = orderStatusSummary.value
+  const arr = []
+  if (s.dangXuLy > 0) arr.push({ label: 'Đang xử lý', value: s.dangXuLy, color: '#f59e0b' })
+  if (s.hoanThanh > 0) arr.push({ label: 'Hoàn thành', value: s.hoanThanh, color: '#16a34a' })
+  if (s.daHuy > 0) arr.push({ label: 'Đã hủy', value: s.daHuy, color: '#dc2626' })
+  return arr
+})
+
+/* Helper tính cung Doughnut SVG */
+const taoCungDonut = (slices, totalVal, R = 68, C = 85) => {
+  if (!totalVal || !slices.length) return []
+  let start = -Math.PI / 2
+  return slices.map((s) => {
+    const sweep = (s.value / totalVal) * Math.PI * 2
+    const end = start + sweep
+    const large = sweep > Math.PI ? 1 : 0
+    const p1 = { x: C + R * Math.cos(start), y: C + R * Math.sin(start) }
+    const p2 = { x: C + R * Math.cos(end), y: C + R * Math.sin(end) }
+    const path =
+      sweep >= Math.PI * 2 - 0.0001
+        ? `M ${C} ${C - R} A ${R} ${R} 0 1 1 ${C - 0.01} ${C - R} Z`
+        : `M ${C} ${C} L ${p1.x} ${p1.y} A ${R} ${R} 0 ${large} 1 ${p2.x} ${p2.y} Z`
+    start = end
+    return { path, color: s.color, label: s.label, value: s.value }
+  })
+}
+
+/* ---------------------------------- Phần dưới: Bảng Thống kê sản phẩm ---------------------------------- */
+const sanPhamBangList = ref([])
+const kwBangSp = ref('')
+const sortBangSp = ref('banChay')
+const pageBangSp = ref(0)
+const sizeBangSp = ref(10)
+
+const sanPhamBangLoc = computed(() => {
+  let list = [...sanPhamBangList.value]
+  const kw = kwBangSp.value.trim().toLowerCase()
+  if (kw) {
+    list = list.filter(
+      (item) =>
+        String(item.maSanPham || '').toLowerCase().includes(kw) ||
+        String(item.tenSanPham || '').toLowerCase().includes(kw) ||
+        String(item.tenThuongHieu || '').toLowerCase().includes(kw)
+    )
+  }
+
+  if (sortBangSp.value === 'doanhThu') {
+    list.sort((a, b) => (b.doanhThu || 0) - (a.doanhThu || 0))
+  } else if (sortBangSp.value === 'tonKhoNhieu') {
+    list.sort((a, b) => (b.tonKho || 0) - (a.tonKho || 0))
+  } else if (sortBangSp.value === 'tonKhoIt') {
+    list.sort((a, b) => (a.tonKho || 0) - (b.tonKho || 0))
+  } else {
+    // Mặc định: bán chạy nhất
+    list.sort((a, b) => (b.daBan || 0) - (a.daBan || 0))
+  }
+  return list
+})
+
+const tongTrangBangSp = computed(() => Math.max(1, Math.ceil(sanPhamBangLoc.value.length / sizeBangSp.value)))
+const danhSachTrangBangSp = computed(() => tinhDanhSachTrang(tongTrangBangSp.value, pageBangSp.value))
+const sanPhamBangTrang = computed(() => {
+  const start = pageBangSp.value * sizeBangSp.value
+  return sanPhamBangLoc.value.slice(start, start + sizeBangSp.value)
+})
+
+/* ---------------------------------- Nạp dữ liệu đồng bộ ---------------------------------- */
+const napDuLieu = async () => {
+  if (!tuNgay.value || !denNgay.value) return
+  dangTai.value = true
+  try {
+    const th = thuongHieuChon.value || null
+    const [tq, tt, spNgay, thTk, spB] = await Promise.all([
+      fetchTongQuan(tuNgay.value, denNgay.value, th),
+      fetchTrangThaiDon(tuNgay.value, denNgay.value, th),
+      fetchSanPhamTheoNgay(tuNgay.value, denNgay.value, th),
+      fetchThuongHieuThongKe(tuNgay.value, denNgay.value),
+      fetchSanPhamBang(tuNgay.value, denNgay.value, th, timSanPham.value || null)
+    ])
+
+    tongQuanData.value = tq || {
+      doanhThu: 0,
+      tienMat: 0,
+      tienChuyenKhoan: 0,
+      soDon: 0,
+      aov: 0,
+      sanPhamBan: 0,
+      khachMoi: 0,
+      doanhThuDuKien: 0
+    }
+    trangThaiDonData.value = tt || []
+    spTheoNgayList.value = spNgay || []
+    if (quickActive.value === 'tatCa' && chartDays.value.length > 0 && chartDays.value[0]?.ngay && tuNgay.value !== chartDays.value[0].ngay) {
+      skipNextWatch = true
+      tuNgay.value = chartDays.value[0].ngay
+    }
+    thuongHieuData.value = thTk || { tongDoanhThu: 0, tongSoLuong: 0, danhSach: [] }
+    sanPhamBangList.value = spB || []
+
+    // Đồng thời nạp chi tiết thẻ KPI đang mở
+    if (activeKpi.value) {
+      await taiChiTietKpi()
+    }
+  } catch (e) {
+    console.error('Lỗi nạp thống kê:', e)
+    notifyError('Không tải được dữ liệu thống kê')
+  } finally {
+    dangTai.value = false
+  }
+}
+
+/* ---------------------------------- Quick time filter ---------------------------------- */
 const QUICK = [
+  { key: 'tatCa', label: 'Tất cả' },
   { key: 'homNay', label: 'Hôm nay' },
   { key: '7ngay', label: '7 ngày qua' },
   { key: 'thangNay', label: 'Tháng này' },
   { key: 'thangTruoc', label: 'Tháng trước' },
-  { key: 'namNay', label: 'Năm nay' },
+  { key: 'namNay', label: 'Năm nay' }
 ]
 
-const CHON_NHANH = (key) => {
-  const k = khoangNhanh(key)
-  tuNgay.value = toInputDate(k.tu)
-  denNgay.value = toInputDate(k.den)
+const chonNhanh = (key) => {
   quickActive.value = key
-}
-
-const onDateChange = () => {
-  quickActive.value = ''
-  const tu = docInputDate(tuNgay.value)
-  const den = docInputDate(denNgay.value)
-  if (tu && den && tu > den) {
-    denNgay.value = tuNgay.value
+  const nay = new Date()
+  if (key === 'tatCa') {
+    tuNgay.value = '2024-01-01'
+    denNgay.value = toInputDate(nay)
+  } else if (key === 'homNay') {
+    tuNgay.value = toInputDate(nay)
+    denNgay.value = toInputDate(nay)
+  } else if (key === '7ngay') {
+    const d7 = new Date()
+    d7.setDate(d7.getDate() - 6)
+    tuNgay.value = toInputDate(d7)
+    denNgay.value = toInputDate(nay)
+  } else if (key === 'thangNay') {
+    tuNgay.value = toInputDate(new Date(nay.getFullYear(), nay.getMonth(), 1))
+    denNgay.value = toInputDate(nay)
+  } else if (key === 'thangTruoc') {
+    tuNgay.value = toInputDate(new Date(nay.getFullYear(), nay.getMonth() - 1, 1))
+    denNgay.value = toInputDate(new Date(nay.getFullYear(), nay.getMonth(), 0))
+  } else if (key === 'namNay') {
+    tuNgay.value = toInputDate(new Date(nay.getFullYear(), 0, 1))
+    denNgay.value = toInputDate(nay)
   }
 }
-
-watch([tuNgay, denNgay], () => {
-  if (!docInputDate(tuNgay.value) || !docInputDate(denNgay.value)) return
-  const tu = docInputDate(tuNgay.value)
-  const den = docInputDate(denNgay.value)
-  if (tu && den && tu > den) denNgay.value = tuNgay.value
-})
 
 const datLaiBoLoc = () => {
-  tuNgay.value = toInputDate(dauThang())
-  denNgay.value = toInputDate(new Date())
-  quickActive.value = ''
-  kieuTongQuan.value = 'ngay'
+  quickActive.value = 'homNay'
+  const nay = new Date()
+  tuNgay.value = toInputDate(nay)
+  denNgay.value = toInputDate(nay)
   thuongHieuChon.value = ''
-  timThuongHieu.value = ''
-  kwNv.value = ''
-  sortNv.value = 'doanhThuCao'
-  pageNv.value = 0
-  kwSp.value = ''
-  tonKhoSp.value = ''
-  sortSp.value = 'banChay'
-  pageSp.value = 0
-  notifySuccess('Đã đặt lại bộ lọc', 'Trở về mặc định đầu tháng')
+  timSanPham.value = ''
+  kieuThongKe.value = 'ngay'
+  notifySuccess('Đã đặt lại bộ lọc', 'Dữ liệu đã được nạp lại cho ngày hôm nay')
 }
 
-/* ---------------------------------- Dữ liệu ---------------------------------- */
-const tuDate = computed(() => docInputDate(tuNgay.value) || new Date())
-const denDate = computed(() => docInputDate(denNgay.value) || new Date())
-
-const sanPhamHienTai = computed(() =>
-  sanPhams.value.length ? sanPhams.value : SAN_PHAM_MAU
-)
-const nhanVienHienTai = computed(() =>
-  nhanViens.value.length ? nhanViens.value : nhanVienMau
-)
-
-const dongSanPhamAll = computed(() =>
-  tinhSanPham(sanPhamHienTai.value, tuDate.value, denDate.value)
-)
-const bangTH = computed(() => tinhBangThuongHieu(dongSanPhamAll.value))
-
-const tyLeChon = computed(() => {
-  if (!thuongHieuChon.value) return 1
-  const tl = bangTH.value.tyLe[thuongHieuChon.value]
-  return tl === undefined ? 0 : tl
+let skipNextWatch = false
+watch([tuNgay, denNgay, thuongHieuChon], () => {
+  if (skipNextWatch) {
+    skipNextWatch = false
+    return
+  }
+  napDuLieu()
 })
 
-const khoang = computed(() =>
-  tinhKhoang(bang.value, tuDate.value, denDate.value, tyLeChon.value)
-)
+/* ---------------------------------- Gửi mail tổng kết & So sánh ---------------------------------- */
+const showEmailModal = ref(false)
+const emailLoai = ref('THANG')
+const emailThang = ref(new Date().getMonth() + 1)
+const emailNam = ref(new Date().getFullYear())
+const emailNhan = ref('')
+const emailDangGui = ref(false)
+const emailErr = ref('')
+const soSanhMode = ref(false)
 
-const chuoiBanHang = computed(() =>
-  tinhChuoiBanHang(bang.value, tuDate.value, denDate.value, kieuTongQuan.value, tyLeChon.value)
-)
-const chartLabels = computed(() => chuoiBanHang.value.map((x) => x.nhan))
-const chartValues = computed(() => chuoiBanHang.value.map((x) => x.giaTri))
-
-const the = computed(() => (thTheo.value === 'soDon' ? 'soDon' : 'doanhThu'))
-
-const slicesThuongHieu = computed(() => {
-  const rows = [...bangTH.value.top]
-  if (bangTH.value.khac.doanhThu > 0 || bangTH.value.khac.soDon > 0) rows.push(bangTH.value.khac)
-  return rows
-    .map((r) => ({
-      label: r.ten,
-      value: r[the.value],
-      color: r.mau,
-    }))
-    .filter((s) => s.value > 0)
+const cacNamChon = computed(() => {
+  const hienTai = new Date().getFullYear()
+  const ds = []
+  for (let y = 2020; y <= hienTai; y++) ds.push(y)
+  return ds
 })
 
-const giaTriTH = (r) => (the.value === 'soDon' ? `${new Intl.NumberFormat('vi-VN').format(r.soDon)} đơn` : formatVnd(r.doanhThu))
-
-const danhSachTH = computed(() => {
-  const rows = [...bangTH.value.top]
-  rows.push(bangTH.value.khac)
-  return rows
-})
-
-const chaoMauNgauNhien = (seed) => {
-  const x = Math.sin(seed * 12.9898) * 43758.5453
-  return x - Math.floor(x)
+const chuyenCheDoSoSanh = () => {
+  soSanhMode.value = !soSanhMode.value
+  if (soSanhMode.value) taiSoSanh()
 }
 
-const seriesTH = computed(() =>
-  bangTH.value.top.map((r, bi) => {
-    const tl = bangTH.value.tong > 0 ? r.doanhThu / bangTH.value.tong : 0
-    return {
-      label: r.ten,
-      color: r.mau,
-      values: chuoiBanHang.value.map((c, i) =>
-        Math.round(c.giaTri * tl * (0.6 + chaoMauNgauNhien((i + 3) * (bi + 2)) * 0.8))
-      ),
+/* ---------------------------------- So sánh & tăng trưởng ---------------------------------- */
+const ssCheDo = ref('thang')
+const ssNam = ref(new Date().getFullYear())
+const ssThang1 = ref('')
+const ssThang2 = ref('')
+const ssTu1 = ref('')
+const ssDen1 = ref('')
+const ssTu2 = ref('')
+const ssDen2 = ref('')
+const ssKeyword = ref('')
+const ssData = ref(null)
+const ssDangTai = ref(false)
+const ssErr = ref('')
+
+const tinhKhoangThang = (thangStr) => {
+  if (!thangStr) return { tu: '', den: '' }
+  const parts = String(thangStr).split('-')
+  if (parts.length < 2) return { tu: '', den: '' }
+  const y = parseInt(parts[0], 10)
+  const m = parseInt(parts[1], 10)
+  if (isNaN(y) || isNaN(m)) return { tu: '', den: '' }
+  const lastDay = new Date(y, m, 0).getDate()
+  const pad = (n) => String(n).padStart(2, '0')
+  return {
+    tu: `${y}-${pad(m)}-01`,
+    den: `${y}-${pad(m)}-${pad(lastDay)}`,
+  }
+}
+
+watch([ssThang1, ssThang2], () => {
+  const k1 = tinhKhoangThang(ssThang1.value)
+  ssTu1.value = k1.tu
+  ssDen1.value = k1.den
+
+  const k2 = tinhKhoangThang(ssThang2.value)
+  ssTu2.value = k2.tu
+  ssDen2.value = k2.den
+})
+
+const SS_CHE_DO = [
+  { key: 'thang', label: 'Theo Tháng (12 tháng)' },
+  { key: 'quy', label: 'Theo Quý (4 quý)' },
+  { key: 'nam', label: 'Theo Năm (Đối chiếu nhiều năm)' },
+  { key: '2ky', label: 'Tùy chọn 2 kỳ' },
+]
+
+const ssDu4Ngay = computed(() =>
+  Boolean(ssThang1.value && ssThang2.value)
+)
+
+const ssCoTheTai = computed(() => ssCheDo.value !== '2ky' || ssDu4Ngay.value)
+
+const taiSoSanh = async () => {
+  if (!ssCoTheTai.value) return
+  ssDangTai.value = true
+  ssErr.value = ''
+  try {
+    const params = { cheDo: ssCheDo.value }
+    if (ssCheDo.value !== '2ky') params.nam = ssNam.value
+    if (ssCheDo.value === '2ky') {
+      params.tu1 = ssTu1.value
+      params.den1 = ssDen1.value
+      params.tu2 = ssTu2.value
+      params.den2 = ssDen2.value
     }
-  })
-)
-
-const chuKy = computed(() => tinhChuKy(bang.value))
-const trangThai = computed(() => tinhTrangThaiDon(bang.value, tuDate.value, denDate.value, tyLeChon.value))
-const slicesTrangThai = computed(() =>
-  trangThai.value.map((x) => ({ label: x.ten, value: x.soLuong, color: x.mau }))
-)
-
-const mauTrangThai = (ten) => {
-  const map = {
-    'Chờ xác nhận': '#f43f5e',
-    'Đã xác nhận': '#f59e0b',
-    'Chờ giao hàng': '#eab308',
-    'Đang giao hàng': '#14b8a6',
-    'Đã giao hàng': '#3b82f6',
-    'Đã hoàn thành': '#22c55e',
-    'Đã hủy': '#ef4444',
-    'Đã hoàn tiền': '#8b5cf6',
+    if (thuongHieuChon.value) params.thuongHieu = thuongHieuChon.value
+    const kw = ssKeyword.value.trim()
+    if (kw) params.keyword = kw
+    ssData.value = await fetchSoSanh(params)
+  } catch (e) {
+    ssData.value = null
+    ssErr.value = e?.response?.data?.message || e?.message || 'Không tải được dữ liệu so sánh'
+    notifyError('Không tải được dữ liệu so sánh', ssErr.value)
+  } finally {
+    ssDangTai.value = false
   }
-  return map[ten] || '#94a3b8'
 }
 
-/* ------------------------------- Bảng doanh thu nhân viên ------------------------------- */
-const nhanVienDayDu = computed(() => tinhNhanVien(nhanVienHienTai.value, khoang.value))
+const datLaiSoSanh = () => {
+  ssCheDo.value = 'thang'
+  ssNam.value = new Date().getFullYear()
+  ssThang1.value = ''
+  ssThang2.value = ''
+  ssTu1.value = ''
+  ssDen1.value = ''
+  ssTu2.value = ''
+  ssDen2.value = ''
+  ssKeyword.value = ''
+}
 
-const nhanVienLoc = computed(() => {
-  const kw = kwNv.value.trim().toLowerCase()
-  let rows = nhanVienDayDu.value
-  if (kw) {
-    rows = rows.filter(
-      (r) =>
-        String(r.maNhanVien).toLowerCase().includes(kw) ||
-        String(r.ten).toLowerCase().includes(kw)
-    )
+let ssTimer = null
+watch([ssCheDo, ssNam, thuongHieuChon], () => {
+  if (soSanhMode.value) taiSoSanh()
+})
+watch(ssKeyword, () => {
+  if (!soSanhMode.value) return
+  clearTimeout(ssTimer)
+  ssTimer = setTimeout(() => taiSoSanh(), 400)
+})
+watch([ssTu1, ssDen1, ssTu2, ssDen2], () => {
+  if (!soSanhMode.value || ssCheDo.value !== '2ky') return
+  clearTimeout(ssTimer)
+  ssTimer = setTimeout(() => taiSoSanh(), 400)
+})
+
+const ssKy = computed(() => ssData.value?.ky || [])
+const ssTop = computed(() => ssData.value?.topSanPham || [])
+const ssTenKy = computed(() => ssKy.value.map((k) => k.tenKy))
+
+const ssTong = computed(() => {
+  let dt = 0
+  let tm = 0
+  let ck = 0
+  let don = 0
+  for (const k of ssKy.value) {
+    dt += k.doanhThu || 0
+    tm += k.tienMat || 0
+    ck += k.tienChuyenKhoan || 0
+    don += k.soDon || 0
   }
-  const sorted = [...rows]
-  if (sortNv.value === 'doanhThuThap') sorted.sort((a, b) => a.doanhThu - b.doanhThu)
-  else if (sortNv.value === 'donNhieu') sorted.sort((a, b) => b.don - a.don)
-  else sorted.sort((a, b) => b.doanhThu - a.doanhThu)
-  return sorted
-})
-
-const tongTrangNv = computed(() => Math.max(1, Math.ceil(nhanVienLoc.value.length / sizeNv.value)))
-const dongNv = computed(() => {
-  const start = pageNv.value * sizeNv.value
-  return nhanVienLoc.value.slice(start, start + sizeNv.value)
-})
-watch(nhanVienLoc, () => {
-  if (pageNv.value >= tongTrangNv.value) pageNv.value = 0
-})
-
-/* ---------------------------------- Bảng tổng quan sản phẩm ---------------------------------- */
-const sanPhamLoc = computed(() => {
-  const kw = kwSp.value.trim().toLowerCase()
-  let rows = dongSanPhamAll.value
-  if (thuongHieuChon.value) {
-    rows = rows.filter((r) => r.tenThuongHieu === thuongHieuChon.value)
-  }
-  if (kw) {
-    rows = rows.filter(
-      (r) =>
-        String(r.maSanPham).toLowerCase().includes(kw) ||
-        String(r.tenSanPham).toLowerCase().includes(kw) ||
-        String(r.tenThuongHieu).toLowerCase().includes(kw)
-    )
-  }
-  if (tonKhoSp.value === 'het') rows = rows.filter((r) => r.tonKho === 0)
-  else if (tonKhoSp.value === 'sapHet') rows = rows.filter((r) => r.tonKho > 0 && r.tonKho <= 50)
-  else if (tonKhoSp.value === 'con') rows = rows.filter((r) => r.tonKho > 50)
-
-  const sorted = [...rows]
-  if (sortSp.value === 'doanhThu') sorted.sort((a, b) => b.doanhThu - a.doanhThu)
-  else if (sortSp.value === 'tonKho') sorted.sort((a, b) => b.tonKho - a.tonKho)
-  else sorted.sort((a, b) => b.daBan - a.daBan)
-  return sorted
-})
-
-const tongTrangSp = computed(() => Math.max(1, Math.ceil(sanPhamLoc.value.length / sizeSp.value)))
-const dongSp = computed(() => {
-  const start = pageSp.value * sizeSp.value
-  return sanPhamLoc.value.slice(start, start + sizeSp.value)
-})
-watch(sanPhamLoc, () => {
-  if (pageSp.value >= tongTrangSp.value) pageSp.value = 0
-})
-
-const khoMauTon = (ton) => (ton === 0 ? 'is-empty' : ton <= 50 ? 'is-low' : 'is-ok')
-const initialsOf = (name) => {
-  if (!name) return 'NV'
-  const parts = String(name).trim().split(/\s+/)
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
-const mauAvarta = (id) => {
-  const colors = ['#cc0000', '#f59e0b', '#8b5cf6', '#14b8a6', '#3b82f6', '#22c55e', '#ec4899', '#6366f1']
-  return colors[Math.abs(Number(id) || 0) % colors.length]
-}
-
-/* ---------------------------------- Phân trang ---------------------------------- */
-const datTrangNv = (p) => {
-  if (p < 0 || p >= tongTrangNv.value || p === pageNv.value) return
-  pageNv.value = p
-}
-const datTrangSp = (p) => {
-  if (p < 0 || p >= tongTrangSp.value || p === pageSp.value) return
-  pageSp.value = p
-}
-
-/* ---------------------------------- Xuất Excel ---------------------------------- */
-const xuatChuKy = async () => {
-  const rows = chuKy.value.map((r, i) => [
-    i + 1,
-    r.nhan,
-    r.doanhThu,
-    r.soDon,
-    r.aov,
-    layTangTruongLabel(r.tangTruong),
-  ])
-  await exportExcel(
-    'tong-quan-chu-ky-thoi-gian.xlsx',
-    ['STT', 'Thời gian', 'Doanh thu', 'Số đơn', 'AOV (Trung bình/đơn)', 'Tăng trưởng'],
-    rows,
-    { sheetName: 'Chu kỳ thời gian' }
-  )
-  notifySuccess('Đã xuất Excel', 'Tệp Excel (.xlsx) đã được tải xuống')
-}
-
-const xuatNhanVien = async () => {
-  const rows = nhanVienLoc.value.map((r, i) => [
-    i + 1,
-    r.maNhanVien,
-    r.ten,
-    r.vaiTro,
-    r.don,
-    r.spBan,
-    r.doanhThu,
-  ])
-  await exportExcel(
-    'tong-quan-doanh-thu-nhan-vien.xlsx',
-    ['STT', 'Mã nhân viên', 'Nhân viên', 'Vai trò', 'Đơn hàng', 'Sản phẩm bán', 'Doanh thu'],
-    rows,
-    { sheetName: 'Doanh thu nhân viên' }
-  )
-  notifySuccess('Đã xuất Excel', 'Tệp Excel (.xlsx) đã được tải xuống')
-}
-
-const xuatSanPham = async () => {
-  const rows = sanPhamLoc.value.map((r, i) => [
-    i + 1,
-    r.maSanPham,
-    r.tenSanPham,
-    r.tenThuongHieu,
-    r.daBan,
-    r.soTra,
-    r.doanhThu,
-    r.tonKho,
-  ])
-  await exportExcel(
-    'tong-quan-san-pham.xlsx',
-    ['STT', 'Mã sản phẩm', 'Tên sản phẩm', 'Thương hiệu', 'Đã bán', 'Số lượng trả', 'Doanh thu', 'Tồn kho'],
-    rows,
-    { sheetName: 'Sản phẩm' }
-  )
-  notifySuccess('Đã xuất Excel', 'Tệp Excel (.xlsx) đã được tải xuống')
-}
-
-const capNhatDoanhThu = () => {
-  capNhatLuc.value = gioHienTai()
-  notifySuccess('Đã cập nhật doanh thu', 'Dữ liệu minh họa đã được tính lại')
-}
-
-/* ---------------------------------- Nạp dữ liệu ---------------------------------- */
-const locThuongHieu = computed(() => {
-  const kw = timThuongHieu.value.trim().toLowerCase()
-  if (!kw) return thuongHieus.value
-  return thuongHieus.value.filter((t) => String(t).toLowerCase().includes(kw))
-})
-
-watch(locThuongHieu, (list) => {
-  if (thuongHieuChon.value && !list.includes(thuongHieuChon.value)) {
-    thuongHieuChon.value = ''
+  const ttBq =
+    ssKy.value.length > 0
+      ? Math.round(ssKy.value.reduce((s, k) => s + (k.tangTruong || 0), 0) / ssKy.value.length)
+      : 0
+  return {
+    tongDt: dt,
+    tongTm: tm,
+    tongCk: ck,
+    tongDon: don,
+    aovTrungBinh: don > 0 ? Math.round(dt / don) : 0,
+    tangTruongBinhQuan: ttBq,
   }
 })
 
-const thuongHieuOptions = computed(() => [
-  { value: '', label: 'Tất cả thương hiệu' },
-  ...locThuongHieu.value.map((t) => ({ value: t, label: t }))
+const ssBarSeries = computed(() => [
+  { label: 'Tiền mặt', color: '#16a34a', values: ssKy.value.map((k) => k.tienMat || 0) },
+  { label: 'Chuyển khoản', color: '#3b82f6', values: ssKy.value.map((k) => k.tienChuyenKhoan || 0) },
 ])
 
-const onThuongHieuChange = (val) => {
-  thuongHieuChon.value = val ?? ''
+const ssLineSeries = computed(() => [
+  { label: 'Tốc độ tăng trưởng (%)', color: '#dc2626', values: ssKy.value.map((k) => k.tangTruong || 0) },
+])
+
+const ssTopCotKy = computed(() => ssTenKy.value)
+
+const layTangTruongLabel = (tt) => {
+  if (tt === null || tt === undefined || Number.isNaN(Number(tt))) return '—'
+  const n = Number(tt)
+  return (n > 0 ? '+' : '') + n.toFixed(1) + '%'
 }
 
-const onTonKhoSpChange = (val) => {
-  tonKhoSp.value = val ?? ''
-  pageSp.value = 0
+const xuatSoSanh = async () => {
+  if (!ssKy.value.length) {
+    notifyError('Không có dữ liệu để xuất')
+    return
+  }
+  const rows = ssKy.value.map((k, i) => [
+    i + 1,
+    k.tenKy,
+    k.doanhThu || 0,
+    k.tienMat || 0,
+    k.tienChuyenKhoan || 0,
+    k.soDon || 0,
+    k.aov || 0,
+    k.sanPhamBan || 0,
+    k.chenhLech || 0,
+    k.tangTruong || 0,
+  ])
+  await exportExcel(
+    'so-sanh-tang-truong-doanh-thu.xlsx',
+    [
+      'STT',
+      'Kỳ so sánh',
+      'Tổng doanh thu',
+      'Tiền mặt',
+      'Chuyển khoản',
+      'Số đơn',
+      'AOV',
+      'Đã bán',
+      'Chênh lệch',
+      'Tăng trưởng (%)',
+    ],
+    rows,
+    { sheetName: 'So sánh doanh thu' }
+  )
+  notifySuccess('Đã xuất Excel', 'Tệp Excel (.xlsx) đã được tải xuống')
+}
+
+const moGuiMail = () => {
+  emailErr.value = ''
+  showEmailModal.value = true
+  if (!emailNhan.value) {
+    fetchEmailMacDinh()
+      .then((r) => {
+        if (!emailNhan.value) emailNhan.value = r?.email || ''
+      })
+      .catch(() => {})
+  }
+}
+
+const guiBaoCao = async () => {
+  emailErr.value = ''
+  const email = (emailNhan.value || '').trim()
+  if (!email.includes('@')) {
+    emailErr.value = 'Email người nhận không hợp lệ'
+    return
+  }
+  emailDangGui.value = true
+  try {
+    const payload = { loai: emailLoai.value, nam: emailNam.value, emailNhan: email }
+    if (emailLoai.value === 'THANG') payload.thang = emailThang.value
+    const res = await guiMailTongKet(payload)
+    if (res?.thanhCong) {
+      notifySuccess('Đã gửi báo cáo', `Báo cáo đã được gửi tới ${res.emailNhan}`)
+      showEmailModal.value = false
+    } else {
+      notifyError('Gửi báo cáo thất bại', res?.lyDo || 'Không thể gửi email')
+    }
+  } catch (e) {
+    notifyError('Gửi báo cáo thất bại', e?.message || 'Lỗi kết nối')
+  } finally {
+    emailDangGui.value = false
+  }
 }
 
 onMounted(async () => {
-  bang.value = taoBangNgay()
-  capNhatLuc.value = gioHienTai()
-
+  napDuLieu()
   try {
-    const d = await listEmployees({ page: 0, size: 500 })
-    nhanViens.value = d.content || []
-  } catch {
-    nhanViens.value = []
-  }
-
-  try {
-    const res = await fetch(`${API_BASE}/attributes/all-filter-options`)
-    if (res.ok) {
-      const data = await res.json()
-      thuongHieus.value = (data.thuongHieu || []).map((t) => t.ten || t).filter(Boolean)
+    const cachedBrands = sessionStorage.getItem('stats_brands_cache')
+    if (cachedBrands) {
+      thuongHieus.value = JSON.parse(cachedBrands)
+    } else {
+      const res = await http.get('/v1/attributes/all-filter-options')
+      if (res && res.data) {
+        const list = (res.data.thuongHieu || []).map((t) => t.ten || t).filter(Boolean)
+        thuongHieus.value = list
+        try {
+          sessionStorage.setItem('stats_brands_cache', JSON.stringify(list))
+        } catch {}
+      }
     }
   } catch {
-    /* fallback phía dưới */
-  }
-  if (!thuongHieus.value.length) {
-    thuongHieus.value = MAU_THUONG_HIEU.map((t) => t.ten)
-  }
-
-  try {
-    const res = await fetch(`${API_BASE}/san-pham?page=0&size=500`)
-    if (res.ok) {
-      const data = await res.json()
-      sanPhams.value = data.content || []
+    if (!thuongHieus.value.length) {
+      thuongHieus.value = ['Local Brand', 'FF Shirt', 'Nike', 'Adidas']
     }
-  } catch {
-    sanPhams.value = []
   }
 })
 </script>
 
 <template>
   <div class="statistics-page-container">
-    <!-- CARD 1: BỘ LỌC TỔNG QUAN -->
-    <div class="filter-card">
-      <div class="card-title-row space-between">
-        <div class="title-with-icon">
-          <div class="icon-circle icon-filter">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+    <!-- PAGE HEADER -->
+    <div class="page-header">
+      <div class="page-header-text">
+        <template v-if="soSanhMode">
+          <button type="button" class="btn-back" @click="chuyenCheDoSoSanh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
             </svg>
+            <span>Quay lại Thống kê</span>
+          </button>
+          <div>
+            <h1 class="page-title">So sánh &amp; Tăng trưởng doanh thu</h1>
+            <p class="page-subtitle">Đối chiếu doanh thu, đo lường tốc độ tăng trưởng và theo dõi biến động sức mua sản phẩm</p>
           </div>
-          <span class="card-title-text">Bộ lọc tổng quan</span>
-        </div>
+        </template>
+        <template v-else>
+          <h1 class="page-title">Thống kê doanh thu</h1>
+          <p class="page-subtitle">Tổng hợp kinh doanh, phân tích sản phẩm và theo dõi tăng trưởng bán hàng</p>
+        </template>
+      </div>
+      <div class="page-header-actions">
+        <button v-if="!soSanhMode" type="button" class="btn-compare-mode" @click="chuyenCheDoSoSanh">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+            <polyline points="17 6 23 6 23 12"></polyline>
+          </svg>
+          <span>So sánh doanh thu</span>
+        </button>
+        <button v-if="soSanhMode" type="button" class="btn-action-outline" @click="xuatSoSanh">
+          <i class="bi bi-file-earmark-excel me-1"></i>
+          Xuất Excel so sánh
+        </button>
+        <button type="button" class="btn-mail-outline" @click="moGuiMail">
+          <i class="bi bi-envelope"></i>
+          Gửi mail tổng kết
+        </button>
+      </div>
+    </div>
 
-        <div class="quick-range-group">
+    <!-- NỘI DUNG THỐNG KÊ MẶC ĐỊNH -->
+    <template v-if="!soSanhMode">
+
+    <!-- 1. BỘ LỌC THỐNG KÊ (ẢNH 1 - PHẦN TRÊN) -->
+    <div class="filter-card">
+      <div class="filter-header-row">
+        <div class="filter-title">
+          <i class="bi bi-funnel"></i>
+          <span>Bộ lọc thống kê</span>
+        </div>
+        <div class="quick-pills-group">
           <button
             v-for="q in QUICK"
             :key="q.key"
             type="button"
-            class="quick-range-btn"
+            class="quick-pill-btn"
             :class="{ 'is-active': quickActive === q.key }"
-            @click="CHON_NHANH(q.key)"
+            @click="chonNhanh(q.key)"
           >
             {{ q.label }}
           </button>
         </div>
       </div>
 
-      <div class="filter-grid">
-        <div class="field-block">
-          <label class="field-label">Từ ngày</label>
-          <input v-model="tuNgay" type="date" class="input-date" @change="onDateChange" />
+      <div class="filter-inputs-grid">
+        <div class="filter-input-col">
+          <label class="filter-label">TỪ NGÀY</label>
+          <div class="input-with-icon">
+            <input type="date" v-model="tuNgay" class="form-control" />
+          </div>
         </div>
-        <div class="field-block">
-          <label class="field-label">Đến ngày</label>
-          <input v-model="denNgay" type="date" class="input-date" @change="onDateChange" />
+
+        <div class="filter-input-col">
+          <label class="filter-label">ĐẾN NGÀY</label>
+          <div class="input-with-icon">
+            <input type="date" v-model="denNgay" class="form-control" />
+          </div>
         </div>
-        <div class="field-block">
-          <label class="field-label">Tổng quan</label>
-          <SearchableSelect
-            v-model="kieuTongQuan"
-            :options="[
-              { value: 'ngay', label: 'Theo ngày' },
-              { value: 'tuan', label: 'Theo tuần' },
-              { value: 'thang', label: 'Theo tháng' }
-            ]"
-            label-key="label"
-            value-key="value"
-            :allow-clear="false"
-            placeholder="Theo ngày"
-          />
+
+        <div class="filter-input-col">
+          <label class="filter-label">THỐNG KÊ</label>
+          <select v-model="kieuThongKe" class="form-select">
+            <option value="ngay">Theo ngày</option>
+            <option value="tuan">Theo tuần</option>
+            <option value="thang">Theo tháng</option>
+            <option value="nam">Theo năm</option>
+          </select>
         </div>
-        <div class="field-block">
-          <label class="field-label">Thương hiệu</label>
-          <SearchableSelect
-            v-model="thuongHieuChon"
-            :options="thuongHieuOptions"
-            label-key="label"
-            value-key="value"
-            placeholder="Tất cả thương hiệu"
-            search-placeholder="Tìm thương hiệu..."
-            @change="onThuongHieuChange"
-          />
+
+        <div class="filter-input-col">
+          <label class="filter-label">THƯƠNG HIỆU</label>
+          <select v-model="thuongHieuChon" class="form-select">
+            <option value="">Tất cả thương hiệu</option>
+            <option v-for="t in thuongHieus" :key="t" :value="t">{{ t }}</option>
+          </select>
         </div>
-        <div class="field-block">
-          <label class="field-label">Tìm theo thương hiệu</label>
+
+        <div class="filter-input-col flex-grow">
+          <label class="filter-label">TÌM SẢN PHẨM</label>
           <div class="search-input-wrap">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input v-model="timThuongHieu" type="text" class="input-search" placeholder="Nhập tên thương hiệu..." />
-          </div>
-        </div>
-        <div class="field-block field-reset">
-          <label class="field-label">&nbsp;</label>
-          <button class="btn-action-outline" type="button" @click="datLaiBoLoc">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-            </svg>
-            Reset
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- THANH THÔNG TIN DỮ LIỆU -->
-    <div class="info-strip">
-      <div class="info-left">
-        <span class="info-dot"></span>
-        <span class="info-text">
-          Đang hiển thị dữ liệu tổng quan từ ngày <strong>{{ hienThiNgay(tuNgay) }}</strong> đến ngày
-          <strong>{{ hienThiNgay(denNgay) }}</strong>
-        </span>
-        <span class="mock-badge" title="API thống kê chưa được kết nối — số liệu được sinh minh họa phía frontend">
-          Dữ liệu minh họa · chưa kết nối API
-        </span>
-      </div>
-      <div class="info-right">
-        <span class="info-meta">Cập nhật lúc {{ capNhatLuc }} · Tự động lúc 22:00</span>
-        <button class="btn-action-outline btn-refresh" type="button" @click="capNhatDoanhThu">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-          </svg>
-          Cập nhật doanh thu
-        </button>
-      </div>
-    </div>
-
-    <!-- 3 THẺ SỐ LIỆU LỚN -->
-    <div class="stat-grid stat-grid-3">
-      <div class="stat-card">
-        <div class="stat-icon is-emerald">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-            <polyline points="17 6 23 6 23 12"></polyline>
-          </svg>
-        </div>
-        <div class="stat-value">{{ formatVnd(khoang.doanhThu) }}</div>
-        <div class="stat-label">Tổng doanh thu</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon is-green">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="6" width="20" height="12" rx="2"></rect>
-            <circle cx="12" cy="12" r="2"></circle>
-            <path d="M6 12h.01M18 12h.01"></path>
-          </svg>
-        </div>
-        <div class="stat-value">{{ formatVnd(khoang.tienMat) }}</div>
-        <div class="stat-label">Tổng tiền mặt</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon is-blue">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-            <line x1="2" y1="10" x2="22" y2="10"></line>
-          </svg>
-        </div>
-        <div class="stat-value">{{ formatVnd(khoang.tienChuyenKhoan) }}</div>
-        <div class="stat-label">Tổng tiền chuyển khoản</div>
-      </div>
-    </div>
-
-    <!-- 4 THẺ SỐ LIỆU NHỎ -->
-    <div class="stat-grid stat-grid-4">
-      <div class="stat-card">
-        <div class="stat-icon is-cyan">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="9" cy="21" r="1"></circle>
-            <circle cx="20" cy="21" r="1"></circle>
-            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-          </svg>
-        </div>
-        <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.soDon) }}</div>
-        <div class="stat-label">Tổng đơn hàng</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon is-indigo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-            <line x1="16" y1="13" x2="8" y2="13"></line>
-            <line x1="16" y1="17" x2="8" y2="17"></line>
-          </svg>
-        </div>
-        <div class="stat-value">{{ formatVnd(khoang.aov) }}</div>
-        <div class="stat-label">Giá trị trung bình đơn (AOV)</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon is-amber">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-            <line x1="12" y1="22.08" x2="12" y2="12"></line>
-          </svg>
-        </div>
-        <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.sanPhamBan) }}</div>
-        <div class="stat-label">Sản phẩm đã bán</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon is-rose">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-            <circle cx="8.5" cy="7" r="4"></circle>
-            <line x1="20" y1="8" x2="20" y2="14"></line>
-            <line x1="23" y1="11" x2="17" y2="11"></line>
-          </svg>
-        </div>
-        <div class="stat-value">{{ new Intl.NumberFormat('vi-VN').format(khoang.khachMoi) }}</div>
-        <div class="stat-label">Khách mới</div>
-      </div>
-    </div>
-
-    <!-- HÀNG BIỂU ĐỒ -->
-    <div class="charts-grid">
-      <div class="filter-card chart-card">
-        <div class="card-title-row space-between">
-          <div class="title-with-icon">
-            <div class="icon-circle icon-chart">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="20" x2="18" y2="10"></line>
-                <line x1="12" y1="20" x2="12" y2="4"></line>
-                <line x1="6" y1="20" x2="6" y2="14"></line>
-              </svg>
-            </div>
-            <span class="card-title-text">Sản phẩm bán được theo ngày</span>
-          </div>
-          <div class="seg-toggle">
-            <button type="button" class="seg-btn" :class="{ 'is-active': chartMode === 'cot' }" @click="chartMode = 'cot'">Cột</button>
-            <button type="button" class="seg-btn" :class="{ 'is-active': chartMode === 'duong' }" @click="chartMode = 'duong'">Đường</button>
-          </div>
-        </div>
-        <BarLineChart :labels="chartLabels" :values="chartValues" :mode="chartMode" color="#d92d20" :height="270" />
-      </div>
-
-      <div class="filter-card chart-card">
-        <div class="card-title-row space-between">
-          <div class="title-with-icon">
-            <div class="icon-circle icon-brand">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="M12 2a10 10 0 0 1 10 10h-10z"></path>
-              </svg>
-            </div>
-            <span class="card-title-text">Thương hiệu</span>
-          </div>
-          <div class="brand-controls">
-            <div class="seg-toggle">
-              <button type="button" class="seg-btn" :class="{ 'is-active': thMode === 'tron' }" @click="thMode = 'tron'">Tròn</button>
-              <button type="button" class="seg-btn" :class="{ 'is-active': thMode === 'duong' }" @click="thMode = 'duong'">Đường</button>
-            </div>
-            <SearchableSelect
-              v-model="thTheo"
-              :options="[
-                { value: 'doanhThu', label: 'Theo doanh thu' },
-                { value: 'soDon', label: 'Theo số đơn' }
-              ]"
-              label-key="label"
-              value-key="value"
-              :allow-clear="false"
-              placeholder="Theo doanh thu"
+            <i class="bi bi-search search-icon"></i>
+            <input
+              type="text"
+              v-model="timSanPham"
+              placeholder="Mã hoặc tên sản phẩm..."
+              class="form-control ps-4"
+              @keyup.enter="napDuLieu"
             />
           </div>
         </div>
 
-        <template v-if="thMode === 'tron'">
-          <PieChart :slices="slicesThuongHieu" :size="200" />
-          <div class="brand-list">
-            <div v-for="r in danhSachTH" :key="r.ten" class="brand-row">
-              <span class="brand-dot" :style="{ background: r.mau }"></span>
-              <span class="brand-name">{{ r.ten }}</span>
-              <span class="brand-value">{{ giaTriTH(r) }}</span>
-            </div>
-          </div>
-        </template>
-        <template v-else>
-          <BarLineChart :labels="chartLabels" :series="seriesTH" mode="duong" :height="300" />
-        </template>
-      </div>
-    </div>
-
-    <!-- HÀNG: CHU KỲ + TRẠNG THÁI ĐƠN -->
-    <div class="charts-grid">
-      <div class="filter-card chart-card">
-        <div class="card-title-row space-between">
-          <div class="title-with-icon">
-            <div class="icon-circle icon-cycle">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2"></rect>
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
-              </svg>
-            </div>
-            <span class="card-title-text">Tổng quan theo chu kỳ thời gian</span>
-          </div>
-          <button class="btn-action-outline" type="button" @click="xuatChuKy">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-            </svg>
-            Xuất Excel
+        <div class="filter-actions-col">
+          <label class="filter-label">&nbsp;</label>
+          <button type="button" class="btn-reset" @click="datLaiBoLoc">
+            <i class="bi bi-arrow-clockwise"></i>
+            Đặt lại
           </button>
         </div>
+      </div>
 
-        <div class="table-container">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Thời gian</th>
-                <th class="text-right">Doanh thu</th>
-                <th class="text-center">Số đơn</th>
-                <th class="text-right">AOV (Trung bình/đơn)</th>
-                <th class="text-center">Tăng trưởng</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in chuKy" :key="r.nhan" class="row-alt">
-                <td class="cell-strong">{{ r.nhan }}</td>
-                <td class="text-right">{{ formatVnd(r.doanhThu) }}</td>
-                <td class="text-center">{{ new Intl.NumberFormat('vi-VN').format(r.soDon) }}</td>
-                <td class="text-right">{{ formatVnd(r.aov) }}</td>
-                <td class="text-center">
-                  <span class="growth-pill" :class="r.tangTruong >= 0 ? 'is-up' : 'is-down'">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                      <template v-if="r.tangTruong >= 0">
-                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                        <polyline points="17 6 23 6 23 12"></polyline>
-                      </template>
-                      <template v-else>
-                        <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline>
-                        <polyline points="17 18 23 18 23 12"></polyline>
-                      </template>
-                    </svg>
-                    {{ layTangTruongLabel(r.tangTruong) }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      <div class="filter-status-banner">
+        <span class="status-dot">●</span>
+        <span>Đang hiển thị dữ liệu từ ngày <strong>{{ hienThiNgay(tuNgay) }}</strong> đến ngày <strong>{{ hienThiNgay(denNgay) }}</strong></span>
+      </div>
+    </div>
+
+    <!-- 2. HÀNG 6 THẺ KPI -->
+    <div class="kpi-grid kpi-grid-6">
+      <!-- Card 1: Doanh thu dự kiến -->
+      <div class="kpi-card kpi-amber is-static">
+        <div class="kpi-top">
+          <div class="kpi-icon icon-amber">
+            <i class="bi bi-clock-history"></i>
+          </div>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value text-amber">{{ formatVnd(tongQuanData.doanhThuDuKien) }}</div>
+          <div class="kpi-title">Doanh thu dự kiến</div>
         </div>
       </div>
 
-      <div class="filter-card chart-card">
-        <div class="card-title-row">
-          <div class="icon-circle icon-status">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-            </svg>
+      <!-- Card 2: Doanh thu thực tế -->
+      <div class="kpi-card kpi-green is-static">
+        <div class="kpi-top">
+          <div class="kpi-icon icon-green">
+            <i class="bi bi-graph-up-arrow"></i>
           </div>
-          <span class="card-title-text">Cơ cấu trạng thái đơn hàng</span>
         </div>
+        <div class="kpi-body">
+          <div class="kpi-value text-green">{{ formatVnd(tongQuanData.doanhThu) }}</div>
+          <div class="kpi-title">Doanh thu thực tế</div>
+        </div>
+      </div>
 
-        <PieChart :slices="slicesTrangThai" :size="195" />
-        <div class="status-legend">
-          <div v-for="s in slicesTrangThai" :key="s.label" class="status-row">
-            <span class="brand-dot" :style="{ background: mauTrangThai(s.label) }"></span>
-            <span class="status-name">{{ s.label }}</span>
-            <span class="status-count">{{ new Intl.NumberFormat('vi-VN').format(s.value) }}</span>
+      <!-- Card 3: Tiền mặt -->
+      <div class="kpi-card kpi-blue is-static">
+        <div class="kpi-top">
+          <div class="kpi-icon icon-blue">
+            <i class="bi bi-cash"></i>
           </div>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value text-blue">{{ formatVnd(tongQuanData.tienMat) }}</div>
+          <div class="kpi-title">Tiền mặt</div>
+        </div>
+      </div>
+
+      <!-- Card 4: Chuyển khoản -->
+      <div class="kpi-card kpi-blue is-static">
+        <div class="kpi-top">
+          <div class="kpi-icon icon-blue">
+            <i class="bi bi-credit-card"></i>
+          </div>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value text-blue">{{ formatVnd(tongQuanData.tienChuyenKhoan) }}</div>
+          <div class="kpi-title">Chuyển khoản</div>
+        </div>
+      </div>
+
+      <!-- Card 5: Tổng đơn hàng -->
+      <div class="kpi-card kpi-purple is-static">
+        <div class="kpi-top">
+          <div class="kpi-icon icon-purple">
+            <i class="bi bi-cart3"></i>
+          </div>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value text-purple">{{ tongQuanData.soDon }}</div>
+          <div class="kpi-title">Tổng đơn hàng</div>
+        </div>
+      </div>
+
+      <!-- Card 6: Sản phẩm đã bán -->
+      <div
+        class="kpi-card kpi-orange"
+        :class="{ 'is-active': activeKpi === 'SAN_PHAM_DA_BAN' }"
+        @click="toggleKpi('SAN_PHAM_DA_BAN')"
+      >
+        <div class="kpi-top">
+          <div class="kpi-icon icon-orange">
+            <i class="bi bi-box-seam"></i>
+          </div>
+          <button type="button" class="kpi-toggle-btn">
+            <i class="bi" :class="activeKpi === 'SAN_PHAM_DA_BAN' ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+          </button>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value text-orange">{{ tongQuanData.sanPhamBan }}</div>
+          <div class="kpi-title">Sản phẩm đã bán</div>
         </div>
       </div>
     </div>
 
-    <!-- TỔNG QUAN DOANH THU NHÂN VIÊN -->
-    <div class="table-card">
-      <div class="card-title-row space-between">
-        <div class="title-with-icon">
-          <div class="icon-circle icon-users">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
-          </div>
-          <span class="card-title-text">Tổng quan doanh thu nhân viên</span>
-          <span class="count-pill">{{ nhanVienLoc.length }} nhân viên</span>
+    <!-- 3. KHUNG CHI TIẾT ĐỘNG KHI CLICK VÀO TỪNG THẺ KPI (ẢNH 1 - DƯỚI 5 CARD) -->
+    <div v-if="activeKpi" class="kpi-detail-card">
+      <div class="detail-header-row">
+        <div class="detail-title-group">
+          <i v-if="activeKpi === 'SAN_PHAM_DA_BAN'" class="bi bi-box-seam text-orange fs-5"></i>
+          <i v-else class="bi bi-cart-check text-purple fs-5"></i>
+          <h3 class="detail-heading">
+            <template v-if="activeKpi === 'TONG_DON_HANG'">Danh sách tất cả đơn hàng</template>
+            <template v-else-if="activeKpi === 'DOANH_THU_THUC_TE'">Chi tiết doanh thu thực tế</template>
+            <template v-else-if="activeKpi === 'DOANH_THU_DU_KIEN'">Chi tiết doanh thu dự kiến</template>
+            <template v-else-if="activeKpi === 'TIEN_MAT_CHUYEN_KHOAN'">Chi tiết tiền mặt &amp; chuyển khoản</template>
+            <template v-else-if="activeKpi === 'SAN_PHAM_DA_BAN'">Chi tiết sản phẩm đã bán</template>
+          </h3>
+          <span class="detail-count-badge">
+            <template v-if="activeKpi === 'SAN_PHAM_DA_BAN'">
+              Đã bán ({{ sanPhamDaBanLoc.length }}/{{ sanPhamDaBanList.length }} sản phẩm)
+            </template>
+            <template v-else>
+              Toàn bộ đơn hàng ({{ donHangLoc.length }}/{{ donHangList.length }} đơn)
+            </template>
+          </span>
         </div>
-        <button class="btn-action-outline" type="button" @click="xuatNhanVien">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-          </svg>
-          Xuất Excel
+
+        <div class="detail-tabs-group">
+          <!-- Sub-tabs cho đơn hàng -->
+          <template v-if="activeKpi === 'TIEN_MAT_CHUYEN_KHOAN'">
+            <button
+              type="button"
+              class="sub-tab-btn"
+              :class="{ 'is-active': subTabOrder === 'ALL' }"
+              @click="subTabOrder = 'ALL'"
+            >
+              <i class="bi bi-grid"></i> Tất cả <span class="tab-badge">{{ donHangList.length }}</span>
+            </button>
+            <button
+              type="button"
+              class="sub-tab-btn"
+              :class="{ 'is-active': subTabOrder === 'TIEN_MAT' }"
+              @click="subTabOrder = 'TIEN_MAT'"
+            >
+              <i class="bi bi-cash"></i> Tiền mặt {{ countDonTienMat }}
+            </button>
+            <button
+              type="button"
+              class="sub-tab-btn"
+              :class="{ 'is-active': subTabOrder === 'CHUYEN_KHOAN' }"
+              @click="subTabOrder = 'CHUYEN_KHOAN'"
+            >
+              <i class="bi bi-credit-card"></i> Chuyển khoản {{ countDonChuyenKhoan }}
+            </button>
+          </template>
+
+          <template v-else-if="activeKpi !== 'SAN_PHAM_DA_BAN'">
+            <button
+              type="button"
+              class="sub-tab-btn"
+              :class="{ 'is-active': subTabOrder === 'ALL' }"
+              @click="subTabOrder = 'ALL'"
+            >
+              <i class="bi bi-grid"></i> Tất cả <span class="tab-badge">{{ donHangList.length }}</span>
+            </button>
+            <button
+              type="button"
+              class="sub-tab-btn"
+              :class="{ 'is-active': subTabOrder === 'TAI_QUAY' }"
+              @click="subTabOrder = 'TAI_QUAY'"
+            >
+              <i class="bi bi-shop"></i> Tại quầy {{ countDonTaiQuay }}
+            </button>
+            <button
+              type="button"
+              class="sub-tab-btn"
+              :class="{ 'is-active': subTabOrder === 'ONLINE' }"
+              @click="subTabOrder = 'ONLINE'"
+            >
+              <i class="bi bi-globe"></i> Online {{ countDonOnline }}
+            </button>
+          </template>
+
+          <button type="button" class="btn-collapse" @click="activeKpi = null">
+            ✕ Thu gọn
+          </button>
+        </div>
+      </div>
+
+      <!-- Toolbar tìm kiếm & lọc trong bảng chi tiết -->
+      <div class="detail-filter-bar">
+        <div class="search-wrap">
+          <i class="bi bi-search search-icon"></i>
+          <input
+            type="text"
+            v-model="kwDonHang"
+            :placeholder="activeKpi === 'SAN_PHAM_DA_BAN' ? 'Tìm mã, tên sản phẩm, mã đơn...' : 'Tìm mã đơn, khách hàng, SĐT...'"
+            class="form-control"
+          />
+        </div>
+
+        <template v-if="activeKpi !== 'SAN_PHAM_DA_BAN'">
+          <select v-model="filterTrangThaiDon" class="form-select select-filter">
+            <option value="">Tất cả trạng thái</option>
+            <option value="Chờ xác nhận">Chờ xác nhận</option>
+            <option value="Đã xác nhận">Đã xác nhận</option>
+            <option value="Chờ giao hàng">Chờ giao hàng</option>
+            <option value="Đang giao hàng">Đang giao hàng</option>
+            <option value="Đã giao hàng">Đã giao hàng</option>
+            <option value="Đã hoàn thành">Đã hoàn thành</option>
+            <option value="Đã hủy">Đã hủy</option>
+          </select>
+
+          <select v-model="filterThanhToanDon" class="form-select select-filter">
+            <option value="">Tất cả thanh toán</option>
+            <option value="Đã thanh toán">Đã thanh toán</option>
+            <option value="Chưa thanh toán">Chưa thanh toán</option>
+          </select>
+
+          <select v-model="sortDonHang" class="form-select select-sort">
+            <option value="moiNhat">Mới nhất</option>
+            <option value="cuNhat">Cũ nhất</option>
+            <option value="tienCao">Thành tiền cao nhất</option>
+            <option value="tienThap">Thành tiền thấp nhất</option>
+          </select>
+        </template>
+
+        <button
+          type="button"
+          class="btn-reset-detail"
+          @click="kwDonHang = ''; filterTrangThaiDon = ''; filterThanhToanDon = ''; sortDonHang = 'moiNhat'"
+        >
+          <i class="bi bi-arrow-clockwise"></i> Đặt lại
         </button>
       </div>
 
-      <div class="filter-controls-row">
-        <div class="field-block grow">
-          <label class="field-label">Tìm nhân viên</label>
-          <div class="search-input-wrap">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input v-model="kwNv" type="text" class="input-search" placeholder="Mã hoặc tên nhân viên" @input="pageNv = 0" />
-          </div>
-        </div>
-        <div class="field-block">
-          <label class="field-label">Sắp xếp</label>
-          <SearchableSelect
-            v-model="sortNv"
-            :options="[
-              { value: 'doanhThuCao', label: 'Doanh thu cao nhất' },
-              { value: 'doanhThuThap', label: 'Doanh thu thấp nhất' },
-              { value: 'donNhieu', label: 'Đơn hàng nhiều nhất' }
-            ]"
-            label-key="label"
-            value-key="value"
-            :allow-clear="false"
-            placeholder="Doanh thu cao nhất"
-          />
-        </div>
-        <div class="field-block field-reset">
-          <label class="field-label">&nbsp;</label>
-          <button class="btn-action-outline" type="button" @click="kwNv = ''; sortNv = 'doanhThuCao'; pageNv = 0">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-            </svg>
-            Reset
-          </button>
-        </div>
-      </div>
-
-      <div class="table-container">
-        <table class="data-table">
+      <!-- Bảng chi tiết hóa đơn (Nếu chọn Card 1, 2, 3, 4) -->
+      <div v-if="activeKpi !== 'SAN_PHAM_DA_BAN'" class="table-responsive mt-3">
+        <table class="table custom-detail-table align-middle">
           <thead>
             <tr>
-              <th style="width: 50px">STT</th>
-              <th style="width: 120px">Mã nhân viên</th>
-              <th>Nhân viên</th>
-              <th class="text-center" style="width: 110px">Đơn hàng</th>
-              <th class="text-center" style="width: 130px">Sản phẩm bán</th>
-              <th class="text-right" style="width: 150px">Doanh thu</th>
+              <th style="width: 50px;">STT</th>
+              <th>MÃ ĐƠN HÀNG</th>
+              <th>THỜI GIAN TẠO</th>
+              <th>KHÁCH HÀNG</th>
+              <th>NHÂN VIÊN</th>
+              <th>LOẠI ĐƠN</th>
+              <th>HÌNH THỨC TT</th>
+              <th>TRẠNG THÁI</th>
+              <th>THANH TOÁN</th>
+              <th class="text-end">THÀNH TIỀN</th>
+              <th class="text-center" style="width: 90px; white-space: nowrap;">THAO TÁC</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-if="nhanVienLoc.length === 0">
-              <td colspan="6" class="text-center empty-row">Không tìm thấy nhân viên nào</td>
-            </tr>
-            <tr v-for="(r, i) in dongNv" :key="r.id ?? r.maNhanVien" class="row-alt">
-              <td class="cell-stt">{{ pageNv * sizeNv + i + 1 }}</td>
-              <td class="cell-code"><span class="code-chip">{{ r.maNhanVien }}</span></td>
-              <td>
-                <div class="entity-cell">
-                  <span class="avatar-dot" :style="{ background: mauAvarta(r.id) }">{{ initialsOf(r.ten) }}</span>
-                  <div class="entity-meta">
-                    <span class="entity-name">{{ r.ten }}</span>
-                    <span class="entity-sub">{{ r.vaiTro || 'Nhân viên bán hàng' }}</span>
-                  </div>
-                </div>
+            <tr v-if="dangTaiChiTiet">
+              <td colspan="11" class="text-center py-4 text-muted">
+                <span class="spinner-border spinner-border-sm me-2"></span> Đang tải danh sách đơn hàng...
               </td>
-              <td class="text-center">{{ new Intl.NumberFormat('vi-VN').format(r.don) }}</td>
-              <td class="text-center">{{ new Intl.NumberFormat('vi-VN').format(r.spBan) }}</td>
-              <td class="text-right cell-money">{{ formatVnd(r.doanhThu) }}</td>
             </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <PaginationBar
-        :page="pageNv"
-        :total-pages="tongTrangNv"
-        :total-elements="nhanVienLoc.length"
-        :page-size="sizeNv"
-        :from="dongNv.length ? pageNv * sizeNv + 1 : 0"
-        :to="pageNv * sizeNv + dongNv.length"
-        :sizes="[5, 10, 20]"
-        label="nhân viên"
-        @change="datTrangNv"
-        @size-change="(s) => { sizeNv = s; pageNv = 0 }"
-      />
-    </div>
-
-    <!-- TỔNG QUAN SẢN PHẨM -->
-    <div class="table-card">
-      <div class="card-title-row space-between">
-        <div class="title-with-icon">
-          <div class="icon-circle icon-product">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-              <line x1="12" y1="22.08" x2="12" y2="12"></line>
-            </svg>
-          </div>
-          <span class="card-title-text">Tổng quan sản phẩm</span>
-          <span class="count-pill">{{ sanPhamLoc.length }} sản phẩm</span>
-        </div>
-        <button class="btn-action-outline" type="button" @click="xuatSanPham">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-          </svg>
-          Xuất Excel
-        </button>
-      </div>
-
-      <div class="filter-controls-row">
-        <div class="field-block grow">
-          <label class="field-label">Lọc trong bảng</label>
-          <div class="search-input-wrap">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input v-model="kwSp" type="text" class="input-search" placeholder="Mã, tên hoặc thương hiệu" @input="pageSp = 0" />
-          </div>
-        </div>
-        <div class="field-block">
-          <label class="field-label">Tồn kho</label>
-          <SearchableSelect
-            v-model="tonKhoSp"
-            :options="[
-              { value: '', label: 'Tất cả tồn kho' },
-              { value: 'con', label: 'Còn hàng' },
-              { value: 'sapHet', label: 'Sắp hết hàng' },
-              { value: 'het', label: 'Hết hàng' }
-            ]"
-            label-key="label"
-            value-key="value"
-            placeholder="Tất cả tồn kho"
-            search-placeholder="Tìm trạng thái tồn..."
-            @change="onTonKhoSpChange"
-          />
-        </div>
-        <div class="field-block">
-          <label class="field-label">Sắp xếp</label>
-          <SearchableSelect
-            v-model="sortSp"
-            :options="[
-              { value: 'banChay', label: 'Bán chạy nhất' },
-              { value: 'doanhThu', label: 'Doanh thu cao nhất' },
-              { value: 'tonKho', label: 'Tồn kho cao nhất' }
-            ]"
-            label-key="label"
-            value-key="value"
-            :allow-clear="false"
-            placeholder="Bán chạy nhất"
-            @change="pageSp = 0"
-          />
-        </div>
-        <div class="field-block field-reset">
-          <label class="field-label">&nbsp;</label>
-          <button class="btn-action-outline" type="button" @click="kwSp = ''; tonKhoSp = ''; sortSp = 'banChay'; pageSp = 0">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-            </svg>
-            Reset
-          </button>
-        </div>
-      </div>
-
-      <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th style="width: 50px">STT</th>
-              <th style="width: 110px">Mã sản phẩm</th>
-              <th>Tên sản phẩm</th>
-              <th style="width: 140px">Thương hiệu</th>
-              <th class="text-center" style="width: 90px">Đã bán</th>
-              <th class="text-center" style="width: 110px">Số lượng trả</th>
-              <th class="text-right" style="width: 140px">Doanh thu</th>
-              <th class="text-center" style="width: 95px">Tồn kho</th>
+            <tr v-else-if="!donHangTrang.length">
+              <td colspan="11" class="text-center py-4 text-muted">Không tìm thấy đơn hàng nào phù hợp</td>
             </tr>
-          </thead>
-          <tbody>
-            <tr v-if="sanPhamLoc.length === 0">
-              <td colspan="8" class="text-center empty-row">Không tìm thấy sản phẩm nào</td>
-            </tr>
-            <tr v-for="(r, i) in dongSp" :key="r.maSanPham" class="row-alt">
-              <td class="cell-stt">{{ pageSp * sizeSp + i + 1 }}</td>
-              <td class="cell-code">{{ r.maSanPham }}</td>
+            <tr v-for="(row, idx) in donHangTrang" :key="row.id || idx">
+              <td>{{ pageDon * sizeDon + idx + 1 }}</td>
               <td>
-                <div class="entity-cell">
-                  <span class="avatar-square">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                    </svg>
-                  </span>
-                  <div class="entity-meta">
-                    <span class="entity-name">{{ r.tenSanPham }}</span>
-                    <span class="entity-sub">Tổng dữ liệu</span>
-                  </div>
-                </div>
+                <span class="order-code-link" @click="xemChiTietDon(row.id)">{{ row.maHoaDon }}</span>
               </td>
-              <td><span class="brand-chip">{{ r.tenThuongHieu }}</span></td>
-              <td class="text-center">{{ new Intl.NumberFormat('vi-VN').format(r.daBan) }}</td>
-              <td class="text-center" :class="{ 'is-return': r.soTra > 0 }">{{ new Intl.NumberFormat('vi-VN').format(r.soTra) }}</td>
-              <td class="text-right cell-money">{{ formatVnd(r.doanhThu) }}</td>
+              <td>{{ formatDateTime(row.ngayTao) }}</td>
+              <td>
+                <div class="fw-medium">{{ row.tenKhachHang || 'Khách lẻ' }}</div>
+                <div class="text-muted small">{{ row.soDienThoaiKhachHang || '' }}</div>
+              </td>
+              <td>
+                <span class="staff-badge">{{ row.tenNhanVien || 'Khách hàng online' }}</span>
+              </td>
+              <td>
+                <span
+                  class="badge-loai-don"
+                  :class="String(row.loaiDon || '').toUpperCase().includes('ONLINE') ? 'badge-online' : 'badge-pos'"
+                >
+                  <i :class="String(row.loaiDon || '').toUpperCase().includes('ONLINE') ? 'bi bi-globe' : 'bi bi-shop'"></i>
+                  {{ String(row.loaiDon || '').toUpperCase().includes('ONLINE') ? 'Online' : 'Tại quầy' }}
+                </span>
+              </td>
+              <td>{{ row.hinhThucThanhToan || 'Chuyển khoản' }}</td>
+              <td>
+                <span
+                  class="badge-order-status"
+                  :class="{
+                    'status-pending': row.trangThai === 'Chờ xác nhận' || row.trangThai === 'Chờ thanh toán',
+                    'status-confirmed': row.trangThai === 'Đã xác nhận' || row.trangThai === 'Chờ giao hàng' || row.trangThai === 'Đang giao hàng',
+                    'status-completed': row.trangThai === 'Đã hoàn thành' || row.trangThai === 'Đã giao hàng',
+                    'status-cancelled': row.trangThai === 'Đã hủy' || row.trangThai === 'Đã hoàn tiền'
+                  }"
+                >
+                  {{ row.trangThai }}
+                </span>
+              </td>
+              <td>
+                <span
+                  class="badge-payment-status"
+                  :class="row.trangThaiThanhToan === 'Đã thanh toán' ? 'pay-paid' : 'pay-unpaid'"
+                >
+                  {{ row.trangThaiThanhToan }}
+                </span>
+              </td>
+              <td class="text-end fw-bold text-dark">{{ formatVnd(row.thanhTien) }}</td>
               <td class="text-center">
-                <span class="stock-badge" :class="khoMauTon(r.tonKho)">{{ new Intl.NumberFormat('vi-VN').format(r.tonKho) }}</span>
+                <button
+                  type="button"
+                  class="btn-view-action"
+                  title="Xem chi tiết hóa đơn"
+                  @click="xemChiTietDon(row.id)"
+                >
+                  <i class="bi bi-eye"></i>
+                </button>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <PaginationBar
-        :page="pageSp"
-        :total-pages="tongTrangSp"
-        :total-elements="sanPhamLoc.length"
-        :page-size="sizeSp"
-        :from="dongSp.length ? pageSp * sizeSp + 1 : 0"
-        :to="pageSp * sizeSp + dongSp.length"
-        :sizes="[5, 10, 20]"
-        label="sản phẩm"
-        @change="datTrangSp"
-        @size-change="(s) => { sizeSp = s; pageSp = 0 }"
-      />
+      <!-- Bảng chi tiết sản phẩm đã bán (Nếu chọn Card 5: Sản phẩm đã bán) -->
+      <div v-else class="table-responsive mt-3">
+        <table class="table custom-detail-table align-middle">
+          <thead>
+            <tr>
+              <th style="width: 50px;">STT</th>
+              <th>MÃ SẢN PHẨM</th>
+              <th>TÊN SẢN PHẨM &amp; BIẾN THỂ</th>
+              <th>THƯƠNG HIỆU</th>
+              <th>MÃ HÓA ĐƠN</th>
+              <th>THỜI GIAN</th>
+              <th class="text-center">SỐ LƯỢNG</th>
+              <th class="text-end">ĐƠN GIÁ</th>
+              <th class="text-end">THÀNH TIỀN</th>
+              <th class="text-center" style="width: 90px; white-space: nowrap;">THAO TÁC</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="dangTaiChiTiet">
+              <td colspan="10" class="text-center py-4 text-muted">
+                <span class="spinner-border spinner-border-sm me-2"></span> Đang tải danh sách sản phẩm đã bán...
+              </td>
+            </tr>
+            <tr v-else-if="!sanPhamDaBanTrang.length">
+              <td colspan="10" class="text-center py-4 text-muted">Chưa có sản phẩm nào được bán trong khoảng thời gian này</td>
+            </tr>
+            <tr v-for="(item, idx) in sanPhamDaBanTrang" :key="idx">
+              <td>{{ pageDon * sizeDon + idx + 1 }}</td>
+              <td><span class="sku-badge">{{ item.maSanPham }}</span></td>
+              <td>
+                <div class="fw-bold">{{ item.tenSanPham }}</div>
+                <div class="text-muted small">{{ item.bienThe }}</div>
+              </td>
+              <td>{{ item.tenThuongHieu }}</td>
+              <td>
+                <span class="order-code-link" @click="xemChiTietDon(item.idHoaDon)">{{ item.maHoaDon }}</span>
+              </td>
+              <td>{{ formatDateTime(item.ngayTao) }}</td>
+              <td class="text-center fw-bold text-success">{{ item.soLuong }}</td>
+              <td class="text-end">{{ formatVnd(item.donGia) }}</td>
+              <td class="text-end fw-bold text-dark">{{ formatVnd(item.thanhTien) }}</td>
+              <td class="text-center">
+                <button
+                  type="button"
+                  class="btn-view-action"
+                  title="Xem hóa đơn"
+                  @click="xemChiTietDon(item.idHoaDon)"
+                >
+                  <i class="bi bi-eye"></i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Phân trang danh sách chi tiết -->
+      <div class="detail-pagination-row">
+        <div class="pagination-info">
+          Hiển thị
+          <template v-if="activeKpi === 'SAN_PHAM_DA_BAN'">
+            {{ sanPhamDaBanLoc.length > 0 ? pageDon * sizeDon + 1 : 0 }} -
+            {{ Math.min((pageDon + 1) * sizeDon, sanPhamDaBanLoc.length) }} trong tổng số
+            {{ sanPhamDaBanLoc.length }} bản ghi
+          </template>
+          <template v-else>
+            {{ donHangLoc.length > 0 ? pageDon * sizeDon + 1 : 0 }} -
+            {{ Math.min((pageDon + 1) * sizeDon, donHangLoc.length) }} trong tổng số
+            {{ donHangLoc.length }} đơn hàng
+          </template>
+        </div>
+
+        <div class="pagination-pages">
+          <button
+            type="button"
+            class="page-nav-btn"
+            :disabled="pageDon === 0"
+            @click="pageDon--"
+            title="Trang trước"
+          >
+            ‹
+          </button>
+          <template v-for="(p, idx) in danhSachTrangDon" :key="'p-kpi-' + idx">
+            <span v-if="p === '...'" class="page-ellipsis">…</span>
+            <button
+              v-else
+              type="button"
+              class="page-num-btn"
+              :class="{ 'is-active': pageDon === p - 1 }"
+              @click="pageDon = p - 1"
+            >
+              {{ p }}
+            </button>
+          </template>
+          <button
+            type="button"
+            class="page-nav-btn"
+            :disabled="pageDon >= tongTrangKpiHienTai - 1"
+            @click="pageDon++"
+            title="Trang sau"
+          >
+            ›
+          </button>
+        </div>
+
+        <div class="pagination-size-select">
+          <select v-model="sizeDon" class="form-select form-select-sm" @change="pageDon = 0">
+            <option :value="5">Hiển thị 5 bản ghi / trang</option>
+            <option :value="10">Hiển thị 10 bản ghi / trang</option>
+            <option :value="20">Hiển thị 20 bản ghi / trang</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. PHẦN GIỮA: BIỂU ĐỒ SẢN PHẨM BÁN ĐƯỢC THEO NGÀY (DỮ LIỆU THỰC TẾ HÓA ĐƠN DB) -->
+    <div class="chart-section-card mt-4">
+      <div class="chart-header-row">
+        <div>
+          <h3 class="chart-title">
+            <i class="bi bi-bar-chart-line text-primary"></i>
+            Sản phẩm bán được theo ngày
+          </h3>
+          <p class="chart-subtitle">
+            Dữ liệu tổng hợp trực tiếp từ hóa đơn thực tế trong hệ thống PolyShoes
+          </p>
+        </div>
+        <div class="chart-actions-group">
+          <span class="badge bg-light text-primary border me-2">
+            Tổng bán: <strong>{{ tongSanPhamBanNgay }}</strong> sản phẩm
+          </span>
+          <span class="badge bg-light text-success border me-3">
+            Doanh thu: <strong>{{ formatVnd(tongDoanhThuNgay) }}</strong>
+          </span>
+          <div class="btn-group btn-group-sm">
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              :class="{ 'active': chartField === 'soLuongBan' }"
+              @click="chartField = 'soLuongBan'"
+            >
+              Số lượng bán
+            </button>
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              :class="{ 'active': chartField === 'doanhThu' }"
+              @click="chartField = 'doanhThu'"
+            >
+              Doanh thu
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-body-wrap">
+        <div v-if="!chartLabels.length" class="text-center py-5 text-muted">
+          Không có dữ liệu trong khoảng thời gian đã chọn
+        </div>
+        <BarLineChart
+          v-else
+          :labels="chartLabels"
+          :values="chartValues"
+          :tooltips="chartTooltips"
+          :color="chartField === 'soLuongBan' ? '#8b5cf6' : '#16a34a'"
+          :currency="chartField === 'doanhThu'"
+          :height="260"
+          mode="cot"
+        />
+      </div>
+    </div>
+
+    <!-- 5. PHẦN DƯỚI (ẢNH 2): 2 BIỂU ĐỒ DOUGHNUT (THƯƠNG HIỆU & TRẠNG THÁI ĐƠN HÀNG) -->
+    <div class="charts-two-col-grid mt-4">
+      <!-- Biểu đồ 1: Thương hiệu -->
+      <div class="donut-card">
+        <div class="donut-card-header">
+          <div class="donut-title">
+            <i class="bi bi-circle"></i>
+            <span>Thương hiệu</span>
+          </div>
+          <span class="badge-tag">Theo doanh thu</span>
+        </div>
+
+        <div class="donut-content-wrap">
+          <div class="donut-svg-container">
+            <svg viewBox="0 0 170 170" class="donut-svg">
+              <path
+                v-for="(arc, i) in taoCungDonut(brandSlices, thuongHieuData.tongDoanhThu)"
+                :key="i"
+                :d="arc.path"
+                :fill="arc.color"
+              >
+                <title>{{ arc.label }}: {{ formatVnd(arc.value) }}</title>
+              </path>
+              <circle cx="85" cy="85" r="50" fill="#ffffff" />
+              <text x="85" y="78" text-anchor="middle" class="donut-center-label">Tổng</text>
+              <text x="85" y="98" text-anchor="middle" class="donut-center-value">
+                {{ formatVnd(thuongHieuData.tongDoanhThu) }}
+              </text>
+            </svg>
+          </div>
+
+          <div class="donut-legend-list">
+            <div
+              v-for="item in thuongHieuData.danhSach"
+              :key="item.ten"
+              class="legend-item-row"
+            >
+              <div class="legend-label-col">
+                <span class="legend-color-dot" :style="{ backgroundColor: item.mau || '#926c45' }"></span>
+                <span class="legend-text">{{ item.ten }}</span>
+              </div>
+              <div class="legend-pct-col">{{ item.tyLe }}%</div>
+            </div>
+            <div v-if="!thuongHieuData.danhSach.length" class="text-muted small text-center py-2">
+              Không có dữ liệu thương hiệu
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Biểu đồ 2: Trạng thái đơn hàng -->
+      <div class="donut-card">
+        <div class="donut-card-header">
+          <div class="donut-title">
+            <i class="bi bi-file-earmark-text"></i>
+            <span>Trạng thái đơn hàng</span>
+          </div>
+          <span class="badge-tag">Tổng {{ orderStatusSummary.tong }} đơn</span>
+        </div>
+
+        <div class="donut-content-wrap">
+          <div class="donut-svg-container">
+            <svg viewBox="0 0 170 170" class="donut-svg">
+              <path
+                v-for="(arc, i) in taoCungDonut(orderStatusSlices, orderStatusSummary.tong)"
+                :key="i"
+                :d="arc.path"
+                :fill="arc.color"
+              >
+                <title>{{ arc.label }}: {{ arc.value }} đơn</title>
+              </path>
+              <circle cx="85" cy="85" r="50" fill="#ffffff" />
+              <text x="85" y="78" text-anchor="middle" class="donut-center-label">Đơn hàng</text>
+              <text x="85" y="100" text-anchor="middle" class="donut-center-num">
+                {{ orderStatusSummary.tong }}
+              </text>
+            </svg>
+          </div>
+
+          <div class="donut-legend-horizontal">
+            <div class="legend-badge red">
+              <span class="dot bg-danger"></span>
+              Đã hủy ({{ orderStatusSummary.daHuy }})
+            </div>
+            <div class="legend-badge green">
+              <span class="dot bg-success"></span>
+              Hoàn thành ({{ orderStatusSummary.hoanThanh }})
+            </div>
+            <div class="legend-badge amber">
+              <span class="dot bg-warning"></span>
+              Đang xử lý ({{ orderStatusSummary.dangXuLy }})
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. PHẦN DƯỚI (ẢNH 2): BẢNG THỐNG KÊ SẢN PHẨM -->
+    <div class="product-stats-card mt-4">
+      <div class="card-header-bar">
+        <div class="title-with-icon">
+          <i class="bi bi-box fs-5"></i>
+          <span>Thống kê sản phẩm</span>
+        </div>
+
+        <div class="header-tools">
+          <div class="search-wrap">
+            <i class="bi bi-search search-icon"></i>
+            <input
+              type="text"
+              v-model="kwBangSp"
+              placeholder="Tìm trong bảng..."
+              class="form-control form-control-sm"
+            />
+          </div>
+
+          <select v-model="sortBangSp" class="form-select form-select-sm select-sort">
+            <option value="banChay">Bán chạy nhất</option>
+            <option value="doanhThu">Doanh thu cao nhất</option>
+            <option value="tonKhoNhieu">Tồn kho nhiều nhất</option>
+            <option value="tonKhoIt">Tồn kho ít nhất</option>
+          </select>
+
+          <button
+            type="button"
+            class="btn-reset-table"
+            @click="kwBangSp = ''; sortBangSp = 'banChay'; pageBangSp = 0"
+          >
+            <i class="bi bi-arrow-clockwise"></i> Đặt lại
+          </button>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table custom-product-table align-middle">
+          <thead>
+            <tr>
+              <th style="width: 50px;">STT</th>
+              <th>MÃ SẢN PHẨM</th>
+              <th>TÊN SẢN PHẨM</th>
+              <th>THƯƠNG HIỆU</th>
+              <th class="text-center">ĐÃ BÁN</th>
+              <th class="text-center">SỐ LƯỢNG TRẢ</th>
+              <th class="text-end">DOANH THU</th>
+              <th class="text-center">TỒN KHO</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="!sanPhamBangTrang.length">
+              <td colspan="8" class="text-center py-4 text-muted">Không tìm thấy sản phẩm nào</td>
+            </tr>
+            <tr v-for="(sp, idx) in sanPhamBangTrang" :key="sp.idSanPham || idx">
+              <td>{{ pageBangSp * sizeBangSp + idx + 1 }}</td>
+              <td><span class="sku-badge">{{ sp.maSanPham }}</span></td>
+              <td>
+                <div class="product-cell-wrap">
+                  <div class="product-thumb">
+                    <img v-if="sp.hinhAnh" :src="sp.hinhAnh" :alt="sp.tenSanPham" />
+                    <div v-else class="thumb-placeholder"><i class="bi bi-box"></i></div>
+                  </div>
+                  <div class="product-info-col">
+                    <div class="fw-bold product-name-text">{{ sp.tenSanPham }}</div>
+                    <div class="text-muted small">{{ sp.bienThe || 'Tiêu chuẩn' }}</div>
+                  </div>
+                </div>
+              </td>
+              <td>{{ sp.tenThuongHieu || '—' }}</td>
+              <td class="text-center fw-bold">{{ sp.daBan || 0 }}</td>
+              <td class="text-center text-danger">{{ sp.soLuongTra || 0 }}</td>
+              <td class="text-end fw-bold text-dark">{{ formatVnd(sp.doanhThu) }}</td>
+              <td class="text-center">
+                <span :class="sp.tonKho > 0 ? 'text-success fw-bold' : 'text-danger fw-bold'">
+                  {{ sp.tonKho }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-pagination-footer">
+        <div class="pagination-info">
+          Hiển thị
+          {{ sanPhamBangLoc.length > 0 ? pageBangSp * sizeBangSp + 1 : 0 }} -
+          {{ Math.min((pageBangSp + 1) * sizeBangSp, sanPhamBangLoc.length) }} /
+          {{ sanPhamBangLoc.length }} bản ghi
+        </div>
+
+        <div class="pagination-pages">
+          <button
+            type="button"
+            class="page-nav-btn"
+            :disabled="pageBangSp === 0"
+            @click="pageBangSp--"
+            title="Trang trước"
+          >
+            ‹
+          </button>
+          <template v-for="(p, idx) in danhSachTrangBangSp" :key="'p-bsp-' + idx">
+            <span v-if="p === '...'" class="page-ellipsis">…</span>
+            <button
+              v-else
+              type="button"
+              class="page-num-btn"
+              :class="{ 'is-active': pageBangSp === p - 1 }"
+              @click="pageBangSp = p - 1"
+            >
+              {{ p }}
+            </button>
+          </template>
+          <button
+            type="button"
+            class="page-nav-btn"
+            :disabled="pageBangSp >= tongTrangBangSp - 1"
+            @click="pageBangSp++"
+            title="Trang sau"
+          >
+            ›
+          </button>
+        </div>
+
+        <div class="pagination-size-select">
+          <select v-model="sizeBangSp" class="form-select form-select-sm" @change="pageBangSp = 0">
+            <option :value="10">Hiển thị 10 bản ghi / trang</option>
+            <option :value="20">Hiển thị 20 bản ghi / trang</option>
+            <option :value="50">Hiển thị 50 bản ghi / trang</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    </template>
+
+    <!-- CHẾ ĐỘ SO SÁNH DOANH THU & TĂNG TRƯỞNG -->
+    <template v-else>
+      <!-- BỘ LỌC CHẾ ĐỘ ĐỐI CHIẾU -->
+      <div class="filter-card">
+        <div class="filter-header-row mb-3">
+          <div class="filter-title">
+            <i class="bi bi-bar-chart-steps"></i>
+            <span>Chế độ đối chiếu doanh thu</span>
+          </div>
+          <div class="quick-pills-group">
+            <button
+              v-for="c in SS_CHE_DO"
+              :key="c.key"
+              type="button"
+              class="quick-pill-btn"
+              :class="{ 'is-active': ssCheDo === c.key }"
+              @click="ssCheDo = c.key"
+            >
+              {{ c.label }}
+            </button>
+          </div>
+        </div>
+
+        <div class="filter-inputs-grid">
+          <div class="filter-input-col" v-if="ssCheDo !== '2ky'">
+            <label class="filter-label">NĂM SO SÁNH</label>
+            <select v-model="ssNam" class="form-select">
+              <option v-for="y in cacNamChon" :key="y" :value="y">{{ y }}</option>
+            </select>
+          </div>
+
+          <template v-if="ssCheDo === '2ky'">
+            <div class="filter-input-col">
+              <label class="filter-label">KỲ 1: CHỌN THÁNG</label>
+              <input type="month" v-model="ssThang1" class="form-control" />
+            </div>
+            <div class="filter-input-col">
+              <label class="filter-label">KỲ 2: CHỌN THÁNG</label>
+              <input type="month" v-model="ssThang2" class="form-control" />
+            </div>
+          </template>
+
+          <div class="filter-input-col">
+            <label class="filter-label">THƯƠNG HIỆU</label>
+            <select v-model="thuongHieuChon" class="form-select">
+              <option value="">Tất cả thương hiệu</option>
+              <option v-for="th in thuongHieus" :key="th" :value="th">{{ th }}</option>
+            </select>
+          </div>
+
+          <div class="filter-input-col flex-grow">
+            <label class="filter-label">TÌM SẢN PHẨM</label>
+            <div class="search-input-wrap">
+              <i class="bi bi-search search-icon"></i>
+              <input
+                v-model="ssKeyword"
+                type="text"
+                class="form-control ps-4"
+                placeholder="Tìm theo tên / mã sản phẩm..."
+                @keyup.enter="taiSoSanh"
+              />
+            </div>
+          </div>
+
+          <div class="filter-actions-col">
+            <label class="filter-label">&nbsp;</label>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn-filter-apply" @click="taiSoSanh" title="Áp dụng lọc dữ liệu so sánh">
+                <i class="bi bi-funnel-fill"></i>
+                <span>Lọc dữ liệu</span>
+              </button>
+              <button type="button" class="btn-reset" @click="datLaiSoSanh" title="Đặt lại bộ lọc so sánh">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span>Đặt lại</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="ssDangTai" class="ss-loading text-center p-4 bg-white rounded-3 border my-3">
+        <span class="spinner-border spinner-border-sm me-2 text-primary"></span>
+        <span>Đang tải dữ liệu so sánh...</span>
+      </div>
+
+      <div v-else-if="ssErr" class="ss-error alert alert-danger my-3">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <span>{{ ssErr }}</span>
+        <button class="ss-retry-btn ms-3" type="button" @click="taiSoSanh">
+          <i class="bi bi-arrow-clockwise"></i> Thử lại
+        </button>
+      </div>
+
+      <div v-else-if="!ssKy.length" class="ss-empty text-center p-4 bg-white rounded-3 border my-3 text-muted">
+        Không có dữ liệu đối chiếu trong khoảng này
+      </div>
+
+      <template v-if="!ssDangTai && !ssErr && ssKy.length">
+        <!-- 4 THẺ KPI TỔNG HỢP CÁC KỲ -->
+        <div class="kpi-grid mb-3">
+          <div class="kpi-card kpi-green">
+            <div class="kpi-top">
+              <div class="kpi-icon icon-green"><i class="bi bi-graph-up-arrow"></i></div>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value text-green">{{ formatVnd(ssTong.tongDt) }}</div>
+              <div class="kpi-title">Tổng doanh thu các kỳ</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-blue">
+            <div class="kpi-top">
+              <div class="kpi-icon icon-blue"><i class="bi bi-cart3"></i></div>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value text-blue">{{ new Intl.NumberFormat('vi-VN').format(ssTong.tongDon) }}</div>
+              <div class="kpi-title">Tổng đơn hàng</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-amber">
+            <div class="kpi-top">
+              <div class="kpi-icon icon-amber"><i class="bi bi-receipt"></i></div>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value text-amber">{{ formatVnd(ssTong.aovTrungBinh) }}</div>
+              <div class="kpi-title">AOV trung bình (Doanh thu/đơn)</div>
+            </div>
+          </div>
+          <div class="kpi-card" :class="ssTong.tangTruongBinhQuan >= 0 ? 'kpi-green' : 'kpi-rose'">
+            <div class="kpi-top">
+              <div class="kpi-icon" :class="ssTong.tangTruongBinhQuan >= 0 ? 'icon-green' : 'icon-red'"><i class="bi bi-percent"></i></div>
+            </div>
+            <div class="kpi-body">
+              <div class="kpi-value" :class="ssTong.tangTruongBinhQuan >= 0 ? 'text-green' : 'text-danger'">{{ layTangTruongLabel(ssTong.tangTruongBinhQuan) }}</div>
+              <div class="kpi-title">Tăng trưởng trung bình</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BIỂU ĐỒ DOANH THU & TỐC ĐỘ TĂNG TRƯỞNG -->
+        <div class="content-card mb-3 p-3 bg-white rounded-3 border">
+          <div class="card-header-bar mb-3">
+            <div class="card-title-left d-flex align-items-center">
+              <i class="bi bi-bar-chart-line text-primary me-2"></i>
+              <span class="card-heading fw-bold">Doanh thu &amp; Tốc độ tăng trưởng qua các kỳ</span>
+            </div>
+          </div>
+          <BarLineChart
+            :labels="ssTenKy"
+            :bar-series="ssBarSeries"
+            :line-series="ssLineSeries"
+            :currency="true"
+            line-format="percent"
+            :show-line-labels="true"
+            :height="320"
+          />
+        </div>
+
+        <!-- BẢNG ĐỐI CHIẾU CHI TIẾT CÁC KỲ -->
+        <div class="content-card mb-3 p-3 bg-white rounded-3 border">
+          <div class="card-header-bar mb-3">
+            <div class="card-title-left d-flex align-items-center">
+              <i class="bi bi-table text-primary me-2"></i>
+              <span class="card-heading fw-bold">Đối chiếu doanh thu chi tiết các kỳ</span>
+              <span class="badge bg-light text-dark ms-2 border">Đơn vị: VNĐ</span>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table custom-detail-table align-middle">
+              <thead>
+                <tr>
+                  <th>KỲ SO SÁNH</th>
+                  <th>KHOẢNG THỜI GIAN</th>
+                  <th class="text-end">TỔNG DOANH THU</th>
+                  <th class="text-end">TIỀN MẶT</th>
+                  <th class="text-end">CHUYỂN KHOẢN</th>
+                  <th class="text-end">SỐ ĐƠN</th>
+                  <th class="text-end">AOV</th>
+                  <th class="text-end">ĐÃ BÁN</th>
+                  <th class="text-end">CHÊNH LỆCH</th>
+                  <th class="text-end">TĂNG TRƯỞNG</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="k in ssKy" :key="k.maKy">
+                  <td class="fw-bold">
+                    {{ k.tenKy }}
+                    <span v-if="k.laCaoNhat" class="badge bg-warning text-dark ms-1">Cao nhất</span>
+                  </td>
+                  <td>{{ hienThiNgay(k.tu) }} — {{ hienThiNgay(k.den) }}</td>
+                  <td class="text-end fw-bold text-dark">{{ formatVnd(k.doanhThu) }}</td>
+                  <td class="text-end">{{ formatVnd(k.tienMat) }}</td>
+                  <td class="text-end">{{ formatVnd(k.tienChuyenKhoan) }}</td>
+                  <td class="text-end">{{ new Intl.NumberFormat('vi-VN').format(k.soDon) }}</td>
+                  <td class="text-end">{{ formatVnd(k.aov) }}</td>
+                  <td class="text-end">{{ new Intl.NumberFormat('vi-VN').format(k.sanPhamBan) }}</td>
+                  <td class="text-end" :class="k.chenhLech > 0 ? 'text-success' : k.chenhLech < 0 ? 'text-danger' : ''">
+                    {{ k.chenhLech > 0 ? '+' : '' }}{{ formatVnd(k.chenhLech) }}
+                  </td>
+                  <td class="text-end">
+                    <span class="fw-bold" :class="k.tangTruong > 0 ? 'text-success' : k.tangTruong < 0 ? 'text-danger' : ''">
+                      {{ layTangTruongLabel(k.tangTruong) }}
+                    </span>
+                  </td>
+                </tr>
+                <tr class="table-light fw-bold border-top">
+                  <td colspan="2">TỔNG CỘNG</td>
+                  <td class="text-end text-success">{{ formatVnd(ssTong.tongDt) }}</td>
+                  <td class="text-end">{{ formatVnd(ssTong.tongTm) }}</td>
+                  <td class="text-end">{{ formatVnd(ssTong.tongCk) }}</td>
+                  <td class="text-end">{{ new Intl.NumberFormat('vi-VN').format(ssTong.tongDon) }}</td>
+                  <td class="text-end">{{ formatVnd(ssTong.aovTrungBinh) }}</td>
+                  <td class="text-end">{{ new Intl.NumberFormat('vi-VN').format(ssKy.reduce((s, k) => s + (k.sanPhamBan || 0), 0)) }}</td>
+                  <td></td>
+                  <td class="text-end">
+                    <span class="badge bg-success">Tăng trưởng TB: {{ layTangTruongLabel(ssTong.tangTruongBinhQuan) }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TOP SẢN PHẨM BÁN CHẠY QUA CÁC KỲ -->
+        <div class="content-card p-3 bg-white rounded-3 border">
+          <div class="card-header-bar mb-3">
+            <div class="card-title-left d-flex align-items-center">
+              <i class="bi bi-trophy text-warning me-2"></i>
+              <span class="card-heading fw-bold">Top sản phẩm bán chạy &amp; Đối chiếu sức mua qua các kỳ</span>
+              <span class="badge bg-light text-dark ms-2 border">Top 10 mặt hàng</span>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table custom-detail-table align-middle">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">STT</th>
+                  <th>MÃ SP</th>
+                  <th>TÊN SẢN PHẨM</th>
+                  <th>THƯƠNG HIỆU</th>
+                  <th class="text-end">TỔNG BÁN</th>
+                  <th class="text-end">TỔNG DOANH THU</th>
+                  <th v-for="ten in ssTopCotKy" :key="ten" class="text-end">{{ ten.toUpperCase() }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(t, i) in ssTop" :key="t.maSanPham">
+                  <td>{{ i + 1 }}</td>
+                  <td><span class="sku-badge">{{ t.maSanPham }}</span></td>
+                  <td>{{ t.tenSanPham }}</td>
+                  <td>{{ t.tenThuongHieu || '—' }}</td>
+                  <td class="text-end fw-bold">{{ new Intl.NumberFormat('vi-VN').format(t.tongBan) }}</td>
+                  <td class="text-end fw-bold text-success">{{ formatVnd(t.tongDoanhThu) }}</td>
+                  <td v-for="(v, j) in t.banTheoKy" :key="j" class="text-end">
+                    {{ new Intl.NumberFormat('vi-VN').format(v || 0) }}
+                  </td>
+                </tr>
+                <tr v-if="!ssTop.length">
+                  <td :colspan="6 + ssTopCotKy.length" class="text-center text-muted py-4">Không có sản phẩm nào bán chạy trong khoảng này</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+    </template>
+
+    <!-- MODAL GỬI MAIL TỔNG KẾT -->
+    <div v-if="showEmailModal" class="modal-backdrop-custom">
+      <div class="modal-dialog-custom">
+        <div class="modal-header-custom">
+          <h5><i class="bi bi-envelope me-2"></i>Gửi báo cáo tổng kết doanh thu</h5>
+          <button type="button" class="btn-close" @click="showEmailModal = false"></button>
+        </div>
+        <div class="modal-body-custom">
+          <div class="mb-3">
+            <label class="form-label">Kỳ báo cáo</label>
+            <div class="d-flex gap-3">
+              <label class="form-check-label">
+                <input type="radio" v-model="emailLoai" value="THANG" /> Theo Tháng
+              </label>
+              <label class="form-check-label">
+                <input type="radio" v-model="emailLoai" value="NAM" /> Theo Năm
+              </label>
+            </div>
+          </div>
+
+          <div v-if="emailLoai === 'THANG'" class="mb-3">
+            <label class="form-label">Chọn tháng</label>
+            <select v-model="emailThang" class="form-select">
+              <option v-for="m in 12" :key="m" :value="m">Tháng {{ m }}</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Chọn năm</label>
+            <input type="number" v-model="emailNam" class="form-control" />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Email nhận báo cáo</label>
+            <input type="email" v-model="emailNhan" class="form-control" placeholder="admin@polyshoes.vn" />
+            <div v-if="emailErr" class="text-danger small mt-1">{{ emailErr }}</div>
+          </div>
+        </div>
+        <div class="modal-footer-custom">
+          <button type="button" class="btn btn-secondary" @click="showEmailModal = false">Hủy</button>
+          <button type="button" class="btn btn-primary" :disabled="emailDangGui" @click="guiBaoCao">
+            <span v-if="emailDangGui" class="spinner-border spinner-border-sm me-2"></span>
+            Gửi báo cáo
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
 .statistics-page-container {
-  padding: 16px 20px 40px;
+  padding: 24px;
   background-color: #f8fafc;
   min-height: 100vh;
+  font-family: var(--font-family, 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, sans-serif);
+  color: #334155;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* -------------------------------------------------------------
+   PAGE HEADER
+------------------------------------------------------------- */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.025em;
+  font-family: var(--font-display, inherit);
+  line-height: 1.3;
+}
+.page-subtitle {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 4px 0 0 0;
+  font-weight: 450;
+  line-height: 1.4;
+}
+.page-header-text {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  font-family: inherit;
 }
-
-.filter-card,
-.table-card {
-  background: #ffffff;
-  border-radius: 14px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
-  padding: 20px 24px;
-  border: 1px solid #f1f5f9;
-}
-
-.card-title-row {
+.page-header-actions {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 18px;
-}
-
-.card-title-row.space-between {
-  justify-content: space-between;
-}
-
-.title-with-icon {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.icon-circle {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.icon-circle svg {
-  width: 16px;
-  height: 16px;
-}
-
-.icon-filter {
-  background: #f1f5f9;
-  color: #475569;
-}
-
-.icon-chart,
-.icon-cycle {
-  background: #ffe4e6;
-  color: #f43f5e;
-}
-
-.icon-brand,
-.icon-status {
-  background: #fff1f2;
-  color: #e11d48;
-}
-
-.icon-users {
-  background: #ecfdf5;
-  color: #10b981;
-}
-
-.icon-product {
-  background: #fffbeb;
-  color: #f59e0b;
-}
-
-.card-title-text {
-  font-size: 15px;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.count-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  border-radius: 20px;
-  background: #f1f5f9;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 600;
-  margin-left: 4px;
-}
-
-/* Nút khoảng thời gian nhanh */
-.quick-range-group {
-  display: flex;
-  gap: 8px;
   flex-wrap: wrap;
 }
 
-.quick-range-btn {
-  height: 34px;
-  padding: 0 14px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  color: #475569;
+.btn-compare-mode {
+  height: 38px;
+  padding: 0 16px;
+  border: 1.5px solid #6366f1;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #4f46e5;
   font-size: 13px;
   font-weight: 600;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.18s ease;
-}
-
-.quick-range-btn:hover {
-  border-color: #fecdd3;
-  color: #e11d48;
-}
-
-.quick-range-btn.is-active {
-  background: #fff1f2;
-  border-color: #f43f5e;
-  color: #e11d48;
-}
-
-/* Ô lọc */
-.filter-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 14px;
-  align-items: end;
-}
-
-.field-block {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.field-block.grow {
-  flex: 1;
-  min-width: 260px;
-}
-
-.field-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
-}
-
-.input-date {
-  height: 42px;
-  padding: 0 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 9px;
-  font-size: 13.5px;
-  color: #1e293b;
-  background: #ffffff;
-  outline: none;
-  transition: all 0.2s ease;
-  font-family: inherit;
-  width: 100%;
-}
-
-.input-date:focus {
-  border-color: #f43f5e;
-  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
-}
-
-.search-input-wrap {
-  position: relative;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  width: 100%;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(79, 70, 229, 0.1);
+  font-family: inherit;
 }
-
-.search-icon {
-  position: absolute;
-  left: 14px;
-  width: 16px;
-  height: 16px;
-  color: #94a3b8;
-  pointer-events: none;
+.btn-compare-mode:hover {
+  background: #4f46e5;
+  color: #ffffff;
+  border-color: #4f46e5;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
 }
-
-.input-search {
-  width: 100%;
-  height: 42px;
-  padding: 0 16px 0 42px;
-  border: 1px solid #e2e8f0;
-  border-radius: 9px;
-  font-size: 13.5px;
-  color: #1e293b;
-  background: #ffffff;
-  outline: none;
-  transition: all 0.2s ease;
-}
-
-.input-search:focus {
-  border-color: #f43f5e;
-  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.1);
-}
-
-.input-search::placeholder {
-  color: #94a3b8;
-}
-
-.field-reset {
-  align-self: end;
+.btn-compare-mode:active {
+  transform: translateY(0);
 }
 
 .btn-action-outline {
-  height: 42px;
+  height: 38px;
   padding: 0 16px;
-  border: 1px solid #ffe4e6;
+  border: 1.5px solid #10b981;
   border-radius: 8px;
-  background: #ffffff;
-  color: #f43f5e;
+  background: #ecfdf5;
+  color: #059669;
   font-size: 13px;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: 7px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(16, 185, 129, 0.1);
   font-family: inherit;
 }
-
-.btn-action-outline svg {
-  width: 14px;
-  height: 14px;
-}
-
 .btn-action-outline:hover {
-  background: #fff1f2;
-  border-color: #fecdd3;
-  color: #e11d48;
+  background: #10b981;
+  color: #ffffff;
+  border-color: #10b981;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+}
+.btn-action-outline:active {
+  transform: translateY(0);
 }
 
-/* Thanh thông tin */
-.info-strip {
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
   background: #ffffff;
-  border: 1px solid #f1f5f9;
-  border-radius: 14px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  padding: 14px 20px;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  margin-bottom: 10px;
+  width: fit-content;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.btn-back:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+  transform: translateX(-2px);
+}
+.btn-back:active {
+  transform: translateX(0);
+}
+
+.btn-mail-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  font-family: inherit;
+}
+.btn-mail-outline:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+  transform: translateY(-1px);
+}
+
+/* -------------------------------------------------------------
+   1. BỘ LỌC THỐNG KÊ (FILTER CARD)
+------------------------------------------------------------- */
+.filter-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  margin-bottom: 20px;
+  border: 1px solid #e2e8f0;
+}
+.filter-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.filter-title {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 8px;
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 15.5px;
+  font-family: var(--font-display, inherit);
+  letter-spacing: -0.015em;
+}
+.filter-title i {
+  font-size: 17px;
+  color: #6366f1;
 }
 
-.info-left {
+.quick-pills-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.quick-pill-btn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  font-family: inherit;
+}
+.quick-pill-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+  transform: translateY(-1px);
+}
+.quick-pill-btn.is-active {
+  background: #4f46e5;
+  color: #ffffff;
+  border-color: #4f46e5;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+}
+
+.filter-inputs-grid {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.filter-input-col {
+  min-width: 150px;
+}
+.flex-grow {
+  flex-grow: 1;
+}
+.filter-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.filter-inputs-grid .form-control,
+.filter-inputs-grid .form-select {
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  color: #0f172a;
+  background-color: #ffffff;
+  box-shadow: none;
+  font-family: inherit;
+}
+.filter-inputs-grid .form-control:focus,
+.filter-inputs-grid .form-select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.search-input-wrap {
+  position: relative;
+}
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.btn-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  white-space: nowrap;
+  font-family: inherit;
+}
+.btn-reset:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+  transform: translateY(-1px);
+}
+.btn-reset:active {
+  transform: translateY(0);
+}
+
+.btn-filter-apply {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  background: #4f46e5;
+  border: 1px solid #4f46e5;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.2);
+  white-space: nowrap;
+  font-family: inherit;
+}
+.btn-filter-apply:hover {
+  background: #4338ca;
+  border-color: #4338ca;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.32);
+}
+.btn-filter-apply:active {
+  transform: translateY(0);
+}
+
+.ss-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #ffffff;
+  border: 1.5px solid #ef4444;
+  border-radius: 8px;
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.12);
+  font-family: inherit;
+}
+.ss-retry-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.25);
+}
+
+.filter-status-banner {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #e2e8f0;
+  font-size: 13px;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 450;
+}
+.status-dot {
+  color: #3b82f6;
+  font-size: 14px;
+}
+
+/* -------------------------------------------------------------
+   2. HÀNG 5 THẺ KPI (KPI CARDS GRID)
+------------------------------------------------------------- */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.kpi-grid.kpi-grid-6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.kpi-card.is-static {
+  cursor: default;
+}
+.kpi-card.is-static:hover {
+  transform: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+.kpi-card {
+  position: relative;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 18px 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 142px;
+}
+.kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+.kpi-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.kpi-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: transform 0.2s ease;
+}
+.kpi-card:hover .kpi-icon {
+  transform: scale(1.05);
+}
+.icon-green { background: #ecfdf5; color: #059669; border: 1px solid #d1fae5; }
+.icon-amber { background: #fffbeb; color: #d97706; border: 1px solid #fef3c7; }
+.icon-blue { background: #f0f9ff; color: #0284c7; border: 1px solid #e0f2fe; }
+.icon-purple { background: #faf5ff; color: #7c3aed; border: 1px solid #f3e8ff; }
+.icon-orange { background: #fff7ed; color: #ea580c; border: 1px solid #ffedd5; }
+.icon-red { background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; }
+
+.kpi-toggle-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+.kpi-card:hover .kpi-toggle-btn {
+  border-color: #cbd5e1;
+  color: #334155;
+  background: #ffffff;
+}
+
+/* Active styles per card type with sleek top border accent */
+.kpi-card.is-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 12px 12px 0 0;
+}
+.kpi-green.is-active {
+  border-color: #10b981;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.12);
+}
+.kpi-green.is-active::before { background: #10b981; }
+.kpi-green.is-active .kpi-toggle-btn {
+  background: #10b981;
+  color: #ffffff;
+  border-color: #10b981;
+}
+
+.kpi-amber.is-active {
+  border-color: #f59e0b;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.12);
+}
+.kpi-amber.is-active::before { background: #f59e0b; }
+.kpi-amber.is-active .kpi-toggle-btn {
+  background: #f59e0b;
+  color: #ffffff;
+  border-color: #f59e0b;
+}
+
+.kpi-blue.is-active {
+  border-color: #0ea5e9;
+  box-shadow: 0 4px 16px rgba(14, 165, 233, 0.12);
+}
+.kpi-blue.is-active::before { background: #0ea5e9; }
+.kpi-blue.is-active .kpi-toggle-btn {
+  background: #0ea5e9;
+  color: #ffffff;
+  border-color: #0ea5e9;
+}
+
+.kpi-purple.is-active {
+  border-color: #8b5cf6;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.12);
+}
+.kpi-purple.is-active::before { background: #8b5cf6; }
+.kpi-purple.is-active .kpi-toggle-btn {
+  background: #8b5cf6;
+  color: #ffffff;
+  border-color: #8b5cf6;
+}
+
+.kpi-orange.is-active {
+  border-color: #f97316;
+  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.12);
+}
+.kpi-orange.is-active::before { background: #f97316; }
+.kpi-orange.is-active .kpi-toggle-btn {
+  background: #f97316;
+  color: #ffffff;
+  border-color: #f97316;
+}
+
+.kpi-rose.is-active {
+  border-color: #ef4444;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.12);
+}
+.kpi-rose.is-active::before { background: #ef4444; }
+.kpi-rose.is-active .kpi-toggle-btn {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+}
+
+.kpi-value {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  color: #0f172a;
+  font-family: var(--font-display, inherit);
+}
+.text-green { color: #059669; }
+.text-amber { color: #d97706; }
+.text-blue { color: #0284c7; }
+.text-purple { color: #7c3aed; }
+.text-orange { color: #ea580c; }
+
+.kpi-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.kpi-split {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.kpi-dual-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.kpi-dual-row .label {
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 450;
+}
+.kpi-dual-row .val {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* -------------------------------------------------------------
+   3. KHUNG CHI TIẾT ĐỘNG (KPI DETAIL CARD)
+------------------------------------------------------------- */
+.kpi-detail-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px 22px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+  margin-bottom: 24px;
+  animation: fadeIn 0.22s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.detail-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  gap: 12px;
+}
+.detail-title-group {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
-
-.info-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #3b82f6;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14);
-  flex-shrink: 0;
-}
-
-.info-text {
-  font-size: 13.5px;
-  color: #334155;
-}
-
-.info-text strong {
+.detail-heading {
+  font-size: 15.5px;
+  font-weight: 700;
   color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.015em;
+  font-family: var(--font-display, inherit);
 }
-
-.mock-badge {
-  display: inline-flex;
-  align-items: center;
+.detail-count-badge {
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 500;
   padding: 3px 10px;
   border-radius: 20px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  color: #b45309;
-  font-size: 11.5px;
-  font-weight: 700;
+  border: 1px solid #e2e8f0;
 }
 
-.info-right {
+.detail-tabs-group {
   display: flex;
   align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.info-meta {
-  font-size: 12.5px;
-  color: #94a3b8;
-}
-
-.btn-refresh {
-  height: 36px;
-}
-
-/* Thẻ số liệu */
-.stat-grid {
-  display: grid;
-  gap: 18px;
-}
-
-.stat-grid-3 {
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-}
-
-.stat-grid-4 {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.stat-card {
-  background: #ffffff;
-  border: 1px solid #f1f5f9;
-  border-radius: 14px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  padding: 22px 24px 20px;
-  display: flex;
-  flex-direction: column;
   gap: 8px;
 }
-
-.stat-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 8px;
-}
-
-.stat-icon svg {
-  width: 19px;
-  height: 19px;
-}
-
-.stat-icon.is-emerald {
-  background: #ecfdf5;
-  color: #10b981;
-}
-
-.stat-icon.is-green {
-  background: #f0fdf4;
-  color: #22c55e;
-}
-
-.stat-icon.is-blue {
-  background: #eff6ff;
-  color: #3b82f6;
-}
-
-.stat-icon.is-cyan {
-  background: #ecfeff;
-  color: #06b6d4;
-}
-
-.stat-icon.is-indigo {
-  background: #eef2ff;
-  color: #6366f1;
-}
-
-.stat-icon.is-amber {
-  background: #fffbeb;
-  color: #f59e0b;
-}
-
-.stat-icon.is-rose {
-  background: #fff1f2;
-  color: #f43f5e;
-}
-
-.stat-value {
-  font-size: 27px;
-  font-weight: 800;
-  color: #0f172a;
-  letter-spacing: -0.5px;
-  line-height: 1.15;
-}
-
-.stat-label {
-  font-size: 13.5px;
-  color: #64748b;
-  font-weight: 500;
-}
-
-/* Biểu đồ */
-.charts-grid {
-  display: grid;
-  grid-template-columns: 1.55fr 1fr;
-  gap: 20px;
-  align-items: start;
-}
-
-.chart-card {
-  min-width: 0;
-}
-
-.seg-toggle {
+.sub-tab-btn {
   display: inline-flex;
-  background: #f1f5f9;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
   border-radius: 8px;
-  padding: 3px;
-  gap: 2px;
-}
-
-.seg-btn {
-  border: none;
-  background: transparent;
-  padding: 6px 14px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
   font-size: 12.5px;
-  font-weight: 600;
-  color: #64748b;
-  border-radius: 6px;
+  font-weight: 500;
+  color: #475569;
   cursor: pointer;
   transition: all 0.15s ease;
   font-family: inherit;
 }
-
-.seg-btn.is-active {
-  background: #ffffff;
-  color: #0f172a;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.brand-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.brand-list {
-  margin-top: 14px;
-  display: flex;
-  flex-direction: column;
-}
-
-.brand-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 4px;
-  border-bottom: 1px solid #f8fafc;
-  font-size: 13.5px;
-}
-
-.brand-row:last-child {
-  border-bottom: none;
-}
-
-.brand-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.brand-name {
-  flex: 1;
-  color: #334155;
-  font-weight: 500;
-}
-
-.brand-value {
-  color: #0f172a;
-  font-weight: 700;
-}
-
-.status-legend {
-  margin-top: 14px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px 14px;
-}
-
-.status-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 2px;
-  font-size: 13px;
-}
-
-.status-name {
-  flex: 1;
-  color: #475569;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.status-count {
-  font-weight: 700;
-  color: #0f172a;
-}
-
-/* Bảng */
-.filter-controls-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
-.table-container {
-  overflow-x: auto;
-  width: 100%;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
-}
-
-.data-table th {
-  padding: 13px 12px;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: #334155;
-  border-bottom: 1px solid #f1f5f9;
-  background: #ffffff;
-  white-space: nowrap;
-}
-
-.data-table td {
-  padding: 13px 12px;
-  font-size: 13.5px;
-  color: #334155;
-  border-bottom: 1px solid #f8fafc;
-  vertical-align: middle;
-}
-
-.data-table tbody tr:hover {
-  background-color: #fafbfc;
-}
-
-.row-alt:nth-child(even) {
-  background: #fafbfc;
-}
-
-.row-alt:nth-child(even):hover {
-  background: #f5f7fa;
-}
-
-.text-right {
-  text-align: right;
-}
-
-.text-center {
-  text-align: center;
-}
-
-.cell-stt {
-  color: #475569;
-  font-weight: 500;
-}
-
-.cell-strong {
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.cell-code {
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.cell-money {
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.empty-row {
-  color: #94a3b8;
-  padding: 28px 12px !important;
-}
-
-.code-chip {
-  display: inline-flex;
-  padding: 3px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
+.sub-tab-btn:hover {
   background: #f8fafc;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #334155;
+  color: #0f172a;
+  border-color: #cbd5e1;
 }
-
-.entity-cell {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.avatar-dot {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
+.sub-tab-btn.is-active {
+  background: #0f172a;
   color: #ffffff;
-  font-size: 11.5px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  text-transform: uppercase;
-}
-
-.avatar-square {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: #f1f5f9;
-  color: #64748b;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.avatar-square svg {
-  width: 17px;
-  height: 17px;
-}
-
-.entity-meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.entity-name {
+  border-color: #0f172a;
   font-weight: 600;
+}
+.tab-badge {
+  background: #334155;
+  color: #ffffff;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+.sub-tab-btn.is-active .tab-badge {
+  background: #ffffff;
   color: #0f172a;
-  font-size: 13.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.entity-sub {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.brand-chip {
-  display: inline-flex;
-  padding: 3px 10px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  border-radius: 20px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #334155;
-}
-
-.stock-badge {
-  display: inline-flex;
-  min-width: 44px;
-  justify-content: center;
-  padding: 3px 10px;
-  border-radius: 20px;
-  font-size: 12.5px;
   font-weight: 700;
 }
 
-.stock-badge.is-ok {
-  background: #ecfdf5;
-  color: #10b981;
-  border: 1px solid #d1fae5;
+.btn-collapse {
+  height: 34px;
+  padding: 0 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: inherit;
 }
-
-.stock-badge.is-low {
-  background: #fffbeb;
-  color: #d97706;
-  border: 1px solid #fde68a;
-}
-
-.stock-badge.is-empty {
-  background: #fef2f2;
+.btn-collapse:hover {
+  background: #fee2e2;
   color: #dc2626;
-  border: 1px solid #fecaca;
+  border-color: #fecaca;
 }
 
-.is-return {
-  color: #dc2626;
-  font-weight: 600;
+/* Detail Filter Bar */
+.detail-filter-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
-
-/* Tăng trưởng */
-.growth-pill {
+.detail-filter-bar .search-wrap {
+  position: relative;
+  min-width: 260px;
+  flex: 1 1 260px;
+}
+.detail-filter-bar .search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 14px;
+  pointer-events: none;
+  z-index: 2;
+}
+.detail-filter-bar .search-wrap .form-control {
+  height: 38px;
+  padding-left: 36px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  background: #ffffff;
+  box-shadow: none;
+  color: #0f172a;
+  font-family: inherit;
+}
+.detail-filter-bar .search-wrap .form-control:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+.detail-filter-bar .select-filter,
+.detail-filter-bar .select-sort {
+  height: 38px;
+  width: auto;
+  min-width: 160px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  color: #0f172a;
+  background-color: #ffffff;
+  padding: 0 32px 0 12px;
+  box-shadow: none;
+  font-family: inherit;
+}
+.detail-filter-bar .select-filter:focus,
+.detail-filter-bar .select-sort:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+.btn-reset-detail {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 11px;
-  border-radius: 20px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 8px;
   font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.btn-reset-detail:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+/* -------------------------------------------------------------
+   ĐỒNG BỘ CẢ 2 BẢNG THỐNG KÊ (DETAIL TABLE & PRODUCT TABLE)
+------------------------------------------------------------- */
+.custom-detail-table,
+.custom-product-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  margin-bottom: 0;
+  width: 100%;
+}
+.custom-detail-table th,
+.custom-product-table th {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 11px 12px !important;
+  border-top: 1px solid #e2e8f0 !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  white-space: nowrap;
+  font-family: var(--font-family, inherit);
+}
+.custom-detail-table td,
+.custom-product-table td {
+  font-size: 13px;
+  padding: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+  color: #334155;
+  font-family: var(--font-family, inherit);
+}
+.custom-detail-table tbody tr:hover td,
+.custom-product-table tbody tr:hover td {
+  background-color: #f8fafc;
+}
+
+.order-code-link {
+  font-weight: 600;
+  color: #2563eb;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.15s ease;
+  font-size: 13px;
+}
+.order-code-link:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+.staff-badge {
+  color: #334155;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.sku-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #1e293b;
+  font-size: 11.5px;
   font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
-.growth-pill svg {
-  width: 13px;
-  height: 13px;
+/* Badges phân loại */
+.badge-loai-don {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-online { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+.badge-pos { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+
+.badge-order-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.status-pending { background: #fffbeb; color: #b45309; border: 1px solid #fef3c7; }
+.status-confirmed { background: #eff6ff; color: #1d4ed8; border: 1px solid #dbeafe; }
+.status-completed { background: #ecfdf5; color: #047857; border: 1px solid #d1fae5; }
+.status-cancelled { background: #fef2f2; color: #b91c1c; border: 1px solid #fee2e2; }
+
+.badge-payment-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pay-paid { background: #ecfdf5; color: #047857; border: 1px solid #d1fae5; }
+.pay-unpaid { background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; }
+
+.btn-view-action {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 14px;
+}
+.btn-view-action:hover {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
 }
 
-.growth-pill.is-up {
-  background: #ecfdf5;
-  color: #10b981;
+/* -------------------------------------------------------------
+   ĐỒNG BỘ PHÂN TRANG (PAGINATION BARS)
+------------------------------------------------------------- */
+.detail-pagination-row,
+.table-pagination-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  font-size: 12.5px;
+  color: #64748b;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.pagination-info {
+  font-size: 12.5px;
+  color: #64748b;
+  font-weight: 500;
+}
+.pagination-pages {
+  display: flex;
+  gap: 4px;
+}
+.page-nav-btn, .page-num-btn {
+  min-width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.page-nav-btn:hover:not(:disabled),
+.page-num-btn:hover:not(.is-active) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+.page-num-btn.is-active {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+  font-weight: 600;
+}
+.page-ellipsis {
+  min-width: 26px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
+}
+.pagination-size-select select {
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-size: 12.5px;
+  color: #475569;
+  padding: 0 28px 0 10px;
+  background-color: #ffffff;
+  font-family: inherit;
 }
 
-.growth-pill.is-down {
-  background: #fef2f2;
-  color: #ef4444;
+/* -------------------------------------------------------------
+   4. PHẦN BIỂU ĐỒ BÁN HÀNG THEO NGÀY
+------------------------------------------------------------- */
+.chart-section-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.chart-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.chart-title {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: -0.015em;
+  font-family: var(--font-display, inherit);
+}
+.chart-title i {
+  font-size: 17px;
+}
+.chart-subtitle {
+  font-size: 13px;
+  color: #64748b;
+  margin: 3px 0 0 0;
+  font-weight: 450;
 }
 
-@media (max-width: 1199px) {
-  .charts-grid {
+/* -------------------------------------------------------------
+   5. HAI BIỂU ĐỒ TRÒN (THƯƠNG HIỆU & TRẠNG THÁI)
+------------------------------------------------------------- */
+.charts-two-col-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.donut-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.donut-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.donut-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.015em;
+  font-family: var(--font-display, inherit);
+}
+.donut-title i {
+  font-size: 17px;
+}
+.badge-tag {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+}
+.donut-content-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.donut-svg-container {
+  width: 170px;
+  height: 170px;
+  margin-bottom: 16px;
+}
+.donut-svg {
+  width: 100%;
+  height: 100%;
+}
+.donut-center-label {
+  font-size: 11px;
+  fill: #64748b;
+  font-weight: 500;
+  font-family: var(--font-family, inherit);
+}
+.donut-center-value {
+  font-size: 12px;
+  fill: #0f172a;
+  font-weight: 700;
+  font-family: var(--font-display, inherit);
+}
+.donut-center-num {
+  font-size: 18px;
+  fill: #0f172a;
+  font-weight: 700;
+  font-family: var(--font-display, inherit);
+}
+
+.donut-legend-list {
+  width: 100%;
+}
+.legend-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 12.5px;
+  border-bottom: 1px dashed #f1f5f9;
+}
+.legend-label-col {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  font-weight: 500;
+}
+.legend-color-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.legend-pct-col {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.donut-legend-horizontal {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-size: 12px;
+  margin-top: 8px;
+}
+.legend-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #475569;
+  font-weight: 500;
+}
+.legend-badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+/* -------------------------------------------------------------
+   6. BẢNG THỐNG KÊ SẢN PHẨM (DƯỚI CÙNG)
+------------------------------------------------------------- */
+.product-stats-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.card-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.card-header-bar .title-with-icon,
+.card-title-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.015em;
+  font-family: var(--font-display, inherit);
+}
+.card-heading {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.015em;
+  font-family: var(--font-display, inherit);
+}
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.header-tools .search-wrap {
+  position: relative;
+  min-width: 200px;
+}
+.header-tools .search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 13px;
+  pointer-events: none;
+}
+.header-tools .search-wrap .form-control {
+  height: 34px;
+  padding-left: 32px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 12.5px;
+  color: #0f172a;
+  background-color: #ffffff;
+}
+.header-tools .search-wrap .form-control:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+.header-tools .select-sort {
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 12.5px;
+  color: #0f172a;
+  background-color: #ffffff;
+  padding: 0 28px 0 10px;
+}
+.btn-reset-table {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.btn-reset-table:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.product-cell-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.product-thumb {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid #e2e8f0;
+}
+.product-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.thumb-placeholder {
+  color: #94a3b8;
+  font-size: 18px;
+}
+.product-name-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.35;
+}
+
+/* -------------------------------------------------------------
+   7. CHẾ ĐỘ SO SÁNH (COMPARISON MODE)
+------------------------------------------------------------- */
+.content-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  margin-bottom: 20px;
+}
+.ss-loading,
+.ss-empty {
+  font-size: 13px;
+  font-weight: 450;
+}
+.ss-error {
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+/* -------------------------------------------------------------
+   MODAL
+------------------------------------------------------------- */
+.modal-backdrop-custom {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+}
+.modal-dialog-custom {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 480px;
+  overflow: hidden;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+.modal-header-custom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.modal-header-custom h5 {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+.modal-body-custom {
+  padding: 20px;
+  font-size: 13px;
+}
+.modal-footer-custom {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+/* -------------------------------------------------------------
+   RESPONSIVE
+------------------------------------------------------------- */
+@media (max-width: 1200px) {
+  .kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .charts-two-col-grid {
     grid-template-columns: 1fr;
   }
-
-  .stat-value {
-    font-size: 23px;
-  }
 }
-
-@media (max-width: 767px) {
-  .statistics-page-container {
-    padding: 14px 12px 32px;
+@media (max-width: 768px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
   }
-
-  .filter-card,
-  .table-card {
-    padding: 16px 14px;
-  }
-
-  .card-title-row {
-    flex-wrap: wrap;
-  }
-
-  .quick-range-group {
-    width: 100%;
-  }
-
-  .filter-controls-row {
+  .filter-inputs-grid {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .field-block.grow {
-    min-width: 0;
   }
 }
 </style>

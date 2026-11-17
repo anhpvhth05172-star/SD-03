@@ -8,6 +8,7 @@ import com.example.datn.exception.ResourceNotFoundException;
 import com.example.datn.repository.KichCoRepository;
 import com.example.datn.service.KichCoService;
 import java.util.List;
+import java.math.BigDecimal;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,19 +37,20 @@ public class KichCoServiceImpl implements KichCoService {
         return toResponse(item);
     }
 
-    private void validateKichCoName(String name) {
+    private String validateKichCoName(String name) {
         if (name == null || name.trim().isEmpty()) {
             throw new IllegalArgumentException("Kích cỡ không được để trống!");
         }
         String trimmed = name.trim().replace(",", ".");
         if (!trimmed.matches("^\\d+(\\.\\d+)?$")) {
-            throw new IllegalArgumentException("Kích cỡ giày phải là số (ví dụ: 38, 39, 40, 40.5, 41), không được nhập chữ!");
+            throw new IllegalArgumentException("Kích cỡ giày phải là số dương (có thể dùng phần thập phân).");
         }
         try {
-            double val = Double.parseDouble(trimmed);
-            if (val < 10 || val > 60) {
-                throw new IllegalArgumentException("Kích cỡ giày phải là số hợp lệ từ 10 đến 60!");
+            BigDecimal val = new BigDecimal(trimmed);
+            if (val.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("Kích cỡ phải lớn hơn 0.");
             }
+            return val.stripTrailingZeros().toPlainString();
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("Kích cỡ giày không hợp lệ!");
         }
@@ -57,8 +59,7 @@ public class KichCoServiceImpl implements KichCoService {
     @Override
     @Transactional
     public AttributeResponse create(AttributeRequest request) {
-        String name = request.getTen().trim();
-        validateKichCoName(name);
+        String name = validateKichCoName(request.getTen());
 
         if (kichCoRepository.existsByTenKichCoIgnoreCase(name)) {
             throw new DuplicateRecordException("Tên Kích cỡ '" + name + "' đã tồn tại trong hệ thống!");
@@ -80,8 +81,7 @@ public class KichCoServiceImpl implements KichCoService {
     @Transactional
     public AttributeResponse update(Long id, AttributeRequest request) {
         KichCo entity = findById(id);
-        String name = request.getTen().trim();
-        validateKichCoName(name);
+        String name = validateKichCoName(request.getTen());
 
         if (kichCoRepository.existsByTenKichCoIgnoreCaseAndIdNot(name, id)) {
             throw new DuplicateRecordException("Tên Kích cỡ '" + name + "' đã tồn tại ở bản ghi khác!");

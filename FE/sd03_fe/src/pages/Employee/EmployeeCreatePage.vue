@@ -13,7 +13,7 @@ import {
   updateEmployee,
 } from '@/api/employee'
 import { setFlash } from '@/utils/flash'
-import { datVaiTro, layNguoiDung, vaiTroHienTai } from '@/utils/session'
+import { datVaiTro, layNguoiDung } from '@/utils/session'
 import { notifyConfirm, notifyError, notifySuccess, notifyWarning } from '@/utils/notify'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import {
@@ -208,7 +208,9 @@ const playBeep = () => {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18)
     osc.start()
     osc.stop(ctx.currentTime + 0.18)
-  } catch { }
+  } catch {
+    // Âm báo mã QR là tùy chọn trên trình duyệt không hỗ trợ Web Audio.
+  }
 }
 
 const apDungDiaChiCccd = (diaChiRaw) => {
@@ -368,7 +370,9 @@ const stopCamera = async () => {
           try {
             track.stop()
             track.enabled = false
-          } catch {}
+          } catch {
+            // Bỏ qua track đã được trình duyệt giải phóng trong lúc đóng camera.
+          }
         })
         v.srcObject = null
       }
@@ -376,7 +380,9 @@ const stopCamera = async () => {
         v.pause()
         v.removeAttribute('src')
         v.load()
-      } catch {}
+      } catch {
+        // Bỏ qua lỗi dọn video nếu phần tử đã bị tháo khỏi DOM.
+      }
     })
   } catch (err) {
     console.warn('Lỗi giải phóng media tracks:', err)
@@ -397,7 +403,9 @@ const stopCamera = async () => {
 
     try {
       html5QrCode.clear()
-    } catch {}
+    } catch {
+      // Scanner có thể đã tự dọn tài nguyên khi camera đóng.
+    }
     html5QrCode = null
   }
 
@@ -568,7 +576,23 @@ const submit = async () => {
     const payload = buildPayload()
     let msg = ''
     if (isEdit) {
-      await updateEmployee(route.params.id, payload)
+      const capNhat = await updateEmployee(route.params.id, payload)
+      try {
+        localStorage.setItem('polyshoes_last_updated_staff', JSON.stringify({ ...capNhat, _ts: Date.now() }))
+        const rawUser = localStorage.getItem('polyshoes_user')
+        if (rawUser) {
+          const parsedUser = JSON.parse(rawUser)
+          if (Number(parsedUser?.idNhanVien) === Number(capNhat?.id) || parsedUser?.tenTaiKhoan === capNhat?.tenTaiKhoan) {
+            if (capNhat?.maVaiTro) {
+              datVaiTro(capNhat.maVaiTro)
+              parsedUser.vaiTro = capNhat.maVaiTro
+              localStorage.setItem('polyshoes_user', JSON.stringify(parsedUser))
+            }
+          }
+        }
+      } catch {
+        // Cập nhật cache cục bộ chỉ giúp các tab khác phản ánh thay đổi sớm hơn.
+      }
       msg = `Đã cập nhật thông tin nhân viên "${form.value.tenTaiKhoan}" thành công!`
       setFlash(msg)
     } else {
@@ -591,7 +615,7 @@ const submit = async () => {
       notifySuccess(msg)
     }
     setTimeout(() => {
-      router.push('/nhan-vien')
+      router.push('/quan-ly-nhan-vien')
     }, 600)
   } catch (e) {
     errorMsg.value = e.message
@@ -613,7 +637,8 @@ const napDiaGioi = async (tenTinh, tenPhuong) => {
     if (tenPhuong && !phuongXas.value.some((p) => p.ten === tenPhuong)) {
       phuongXas.value = [{ code: 'khac', ten: tenPhuong }, ...phuongXas.value]
     }
-  } catch {
+  } catch (error) {
+    console.warn('Không tải được danh sách tỉnh/phường:', error)
   } finally {
     if (myToken === yeuCauHienTai) diaGioiLoading.value = false
   }
@@ -674,7 +699,7 @@ onMounted(async () => {
 <template>
   <div class="employee-create-page">
     <div class="top-nav-bar">
-      <button class="btn-back" type="button" title="Quay lại danh sách" @click="router.push('/nhan-vien')">
+      <button class="btn-back" type="button" title="Quay lại danh sách" @click="router.push('/quan-ly-nhan-vien')">
         <i class="bi bi-arrow-left"></i>
       </button>
     </div>
@@ -855,7 +880,7 @@ onMounted(async () => {
               <span>{{ saving ? 'Đang lưu...' : isEdit ? 'Cập nhật nhân viên' : 'Tạo nhân viên' }}</span>
             </button>
 
-            <button class="btn-cancel-action" type="button" @click="router.push('/nhan-vien')">
+            <button class="btn-cancel-action" type="button" @click="router.push('/quan-ly-nhan-vien')">
               Hủy
             </button>
           </div>

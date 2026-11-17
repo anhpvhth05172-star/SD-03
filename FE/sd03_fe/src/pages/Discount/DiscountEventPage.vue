@@ -64,7 +64,7 @@ const applyFilter = () => {
       icon: "warning",
       title: "Khoảng ngày không hợp lệ",
       text: "'Từ ngày' không được lớn hơn 'Đến ngày'",
-      confirmButtonColor: "#cc0000",
+      confirmButtonColor: "#dc2626",
     });
     return;
   }
@@ -132,7 +132,7 @@ const toggleStatus = async (item) => {
       : `Bạn muốn ngừng đợt "${item.tenDotGiamGia}"?`,
     icon: "question",
     showCancelButton: true,
-    confirmButtonColor: "#cc0000",
+    confirmButtonColor: "#dc2626",
     cancelButtonColor: "#6b7280",
     confirmButtonText: newStatus ? "Bật" : "Tắt",
     cancelButtonText: "Hủy",
@@ -147,6 +147,13 @@ const toggleStatus = async (item) => {
       apiDiscountEvent + `admin/dot-giam-gia/change-status/${item.id}`,
       { trangThai: newStatus },
     );
+    try {
+      localStorage.setItem('polyshoes_pos_sync_signal', String(Date.now()));
+      localStorage.setItem('polyshoes_discount_updated', String(Date.now()));
+      window.dispatchEvent(new CustomEvent('polyshoes:discount-changed'));
+    } catch {
+      // Đồng bộ liên tab không khả dụng trong một số môi trường trình duyệt.
+    }
 
     // Lấy trạng thái thật từ back-end
     if (typeof res.data?.trangThai === "boolean") {
@@ -169,7 +176,7 @@ const toggleStatus = async (item) => {
       icon: "error",
       title: "Thất bại",
       text: error.response?.data?.message || "Không thể đổi trạng thái",
-      confirmButtonColor: "#cc0000",
+      confirmButtonColor: "#dc2626",
     });
   } finally {
     togglingId.value = null;
@@ -391,17 +398,20 @@ onMounted(() => getData(0));
         </table>
       </div>
 
-      <PaginationBar
-        :page="page"
-        :total-pages="totalPages"
-        :total-elements="totalElements"
-        :page-size="pageSize"
-        :from="listEvent.length ? page * pageSize + 1 : 0"
-        :to="page * pageSize + listEvent.length"
-        label="đợt giảm giá"
-        @change="goToPage"
-        @size-change="onSizeChange"
-      />
+      <div v-if="totalPages > 1" class="table-card-foot">
+        <PaginationBar
+          :page="page"
+          :total-pages="totalPages"
+          :total-elements="totalElements"
+          :page-size="pageSize"
+          :sizes="[5, 10, 20, 50]"
+          :from="listEvent.length ? page * pageSize + 1 : 0"
+          :to="page * pageSize + listEvent.length"
+          label="đợt giảm giá"
+          @change="goToPage"
+          @size-change="onSizeChange"
+        />
+      </div>
     </section>
   </div>
 </template>

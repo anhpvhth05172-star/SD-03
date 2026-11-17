@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { getUser } from './auth'
 
 const khoaVaiTro = 'vaiTroHienTai'
 const khoaNguoiDung = 'nguoiDungHienTai'
@@ -21,7 +22,11 @@ const ghi = (key, value) => {
 
 export const vaiTroHienTai = ref((doc(khoaVaiTro) || '').toUpperCase())
 
-export const laAdmin = () => vaiTroHienTai.value === 'ADMIN'
+export const laAdmin = () => {
+  const vt = String(getUser()?.vaiTro || '').trim().toUpperCase()
+  const vSession = String(vaiTroHienTai.value || doc(khoaVaiTro) || '').trim().toUpperCase()
+  return vt === 'ADMIN' || vt === 'ROLE_ADMIN' || vSession === 'ADMIN' || vSession === 'ROLE_ADMIN'
+}
 
 export const datVaiTro = (vaiTro) => {
   const v = String(vaiTro || '').toUpperCase()
@@ -33,3 +38,20 @@ export const tenVaiTro = () => (laAdmin() ? 'Admin' : 'Nhân viên')
 
 export const datNguoiDung = (ten) => ghi(khoaNguoiDung, ten || '')
 export const layNguoiDung = () => doc(khoaNguoiDung) || 'admin'
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === khoaVaiTro) {
+      vaiTroHienTai.value = String(e.newValue || '').toUpperCase()
+    } else if (e.key === 'polyshoes_user' && e.newValue) {
+      try {
+        const parsed = JSON.parse(e.newValue)
+        if (parsed?.vaiTro) {
+          vaiTroHienTai.value = String(parsed.vaiTro).toUpperCase()
+        }
+      } catch {
+        // ignore parse error
+      }
+    }
+  })
+}

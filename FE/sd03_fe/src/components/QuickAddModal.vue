@@ -12,7 +12,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'add'])
 
 const itemName = ref('')
-const itemCode = ref('#d92d20')
+const itemCode = ref('#dc2626')
 const itemDescription = ref('')
 const modalError = ref('')
 
@@ -68,7 +68,7 @@ const placeholderName = computed(() => currentConfig.value.placeholder)
 
 const handleClose = () => {
   itemName.value = ''
-  itemCode.value = '#d92d20'
+  itemCode.value = '#dc2626'
   itemDescription.value = ''
   modalError.value = ''
   emit('close')
@@ -86,7 +86,7 @@ const handleSave = () => {
     return
   }
   if (props.type === 'color' && !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(itemCode.value.trim())) {
-    modalError.value = 'Mã màu phải đúng định dạng HEX, ví dụ #d92d20.'
+    modalError.value = 'Mã màu phải đúng định dạng HEX, ví dụ #dc2626.'
     return
   }
 

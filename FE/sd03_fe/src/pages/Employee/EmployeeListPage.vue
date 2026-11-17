@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+  deleteEmployee,
   getEmployee,
   getEmployeeFormData,
   importEmployeesConfirm,
@@ -16,7 +17,7 @@ import { exportExcel, fetchAllPages } from '@/utils/export'
 import { takeFlashWithMeta } from '@/utils/flash'
 import { avatarColor, formatDate, formatDateTime, initialsOf } from '@/utils/format'
 import { getAvatarSrc, onAvatarError } from '@/utils/avatar'
-import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyError, notifyConfirm, notifyDeleteConfirm } from '@/utils/notify'
 import { API_BASE } from '@/api/http'
 
 const router = useRouter()
@@ -520,13 +521,35 @@ const toggleStatus = async (row) => {
 
   const moi = !row.trangThai
   try {
-    await updateEmployeeStatus(row.id, moi ? 'true' : 'false')
+    const capNhat = await updateEmployeeStatus(row.id, moi ? 'true' : 'false')
+    try {
+      localStorage.setItem('polyshoes_last_updated_staff', JSON.stringify({ ...(capNhat || row), trangThai: moi, _ts: Date.now() }))
+    } catch {
+      // Cập nhật cache liên tab là tùy chọn; trạng thái máy chủ đã được lưu.
+    }
     row.trangThai = moi
     row.trangThaiLabel = moi ? 'Đang hoạt động' : 'Đã khóa'
     notifySuccess(`Đã ${actionText} tài khoản "${row.tenTaiKhoan}" thành công!`)
     await load()
   } catch (e) {
     notifyError('Thao tác thất bại', e.message)
+  }
+}
+
+const removeEmployee = async (row) => {
+  const ok = await notifyDeleteConfirm(row.tenTaiKhoan || row.maNhanVien)
+  if (!ok) return
+  try {
+    await deleteEmployee(row.id)
+    try {
+      localStorage.setItem('polyshoes_last_updated_staff', JSON.stringify({ ...row, trangThai: false, _ts: Date.now() }))
+    } catch {
+      // Cập nhật cache liên tab là tùy chọn; thao tác xóa máy chủ đã hoàn tất.
+    }
+    notifySuccess(`Đã xóa nhân viên "${row.tenTaiKhoan}" thành công!`)
+    await load()
+  } catch (e) {
+    notifyError('Không thể xóa nhân viên', e.message)
   }
 }
 
@@ -655,7 +678,7 @@ onMounted(async () => {
         </button>
 
         <!-- Nút Thêm nhân viên -->
-        <button class="btn-action-primary" type="button" @click="router.push('/nhan-vien/them')">
+        <button class="btn-action-primary" type="button" @click="router.push('/quan-ly-nhan-vien/them')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -785,7 +808,7 @@ onMounted(async () => {
       </div>
 
       <!-- Phân trang Footer -->
-      <div v-if="totalElements > 0" class="table-card-foot">
+      <div v-if="totalPages > 1" class="table-card-foot">
         <PaginationBar
           :page="page"
           :total-pages="totalPages"
@@ -876,7 +899,7 @@ onMounted(async () => {
 
         <!-- Cụm nút hành động -->
         <div class="profile-modal-actions">
-          <button class="btn-profile-edit" type="button" @click="router.push(`/nhan-vien/${detailData.id}/sua`)">
+          <button class="btn-profile-edit" type="button" @click="router.push(`/quan-ly-nhan-vien/${detailData.id}/sua`)">
             <i class="bi bi-pencil-square"></i>
             <span>Chỉnh sửa thông tin</span>
           </button>
@@ -1605,7 +1628,7 @@ onMounted(async () => {
 .profile-avatar-initials {
   width: 100%;
   height: 100%;
-  background: #cc0000;
+  background: #dc2626;
   color: #ffffff;
   font-size: 26px;
   font-weight: 700;
@@ -1632,7 +1655,7 @@ onMounted(async () => {
 .badge-code {
   font-size: 11.5px;
   font-weight: 700;
-  color: #cc0000;
+  color: #dc2626;
   background: #fef2f2;
   padding: 2px 8px;
   border-radius: 6px;

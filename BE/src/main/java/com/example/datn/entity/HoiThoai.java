@@ -38,6 +38,7 @@ public class HoiThoai {
     public static final String LOAI_AI = "AI";
     public static final String TRANG_THAI_DANG_MO = "DANG_MO";
     public static final String TRANG_THAI_DONG = "DONG";
+    public static final String TRANG_THAI_CHO_TIEP_NHAN = "CHO_TIEP_NHAN";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

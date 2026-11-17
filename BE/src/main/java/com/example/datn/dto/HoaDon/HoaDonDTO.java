@@ -19,6 +19,7 @@ public class HoaDonDTO {
     private Long id;
     private String maHoaDon;
     private String loaiDon;
+    private String maLoaiDon;
     private BigDecimal phiVanChuyen;
     private BigDecimal tongTien;
     private BigDecimal tienSauGiamGia;
@@ -35,6 +36,7 @@ public class HoaDonDTO {
 
     private Long idKhachHang;
     private Long idNhanVien;
+    private String maNhanVien;
     private String tenNhanVien;
     private Long idPhuongThucThanhToan;
     private String tenPhuongThucThanhToan;
@@ -53,4 +55,5 @@ public class HoaDonDTO {
     private String toWardCode;
 
     private List<ChiTietHoaDonDTO> chiTiet;
+    private List<LichSuHoaDonDTO> lichSu;
 }

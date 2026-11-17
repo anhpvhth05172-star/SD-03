@@ -7,6 +7,7 @@ import { getCustomer } from '@/api/customer'
 import { formatDateTime, formatVnd, payStatusOf } from '@/utils/format'
 import {
   TRANG_THAI_ONLINE,
+  TRANG_THAI_POS_GIAO_HANG,
   TRANG_THAI_POS,
   TRANG_THAI_GIAO_THAT_BAI,
   TRANG_THAI_KET_THUC,
@@ -15,11 +16,19 @@ import {
   nhanBuoc,
   pillClass,
   trangThaiTiepTheoOf,
+  coGiaoHang,
+  loaiDonMeta,
 } from '@/constants/invoiceStatus'
-import { updateInvoiceStatus } from '@/api/invoice'
-import { notifyError, notifyConfirm, notifySuccess } from '@/utils/notify'
+import { updateInvoiceStatus, resendInvoiceEmail } from '@/api/invoice'
+import { getUser } from '@/utils/auth'
+import { notifyError, notifyConfirm, notifySuccess, notifyWarning } from '@/utils/notify'
 import { taoVaTaiPdf } from '@/utils/pdf'
 import SearchableSelect from '@/components/SearchableSelect.vue'
+import { getDangMo } from '@/api/giaoCa'
+import { laAdmin } from '@/utils/session'
+
+const activeShift = ref(null)
+const isCheDoXem = computed(() => !laAdmin() && !activeShift.value?.id)
 
 const route = useRoute()
 const router = useRouter()
@@ -48,6 +57,7 @@ const TRANG_THAI_CODE = {
   'Đã giao hàng': 'DA_GIAO_HANG',
   'Đã hoàn thành': 'DA_HOAN_THANH',
   'Đã hủy': 'DA_HUY',
+  'Chờ hoàn tiền': 'CHO_HOAN_TIEN',
   'Đã hoàn tiền': 'DA_HOAN_TIEN',
   'Giao hàng thất bại': 'GIAO_HANG_THAT_BAI',
 }
@@ -86,8 +96,17 @@ const genQr = async () => {
 const stepsList = computed(() => {
   if (!data.value) return TRANG_THAI_ONLINE
   if (data.value.trangThai === 'Giao hàng thất bại') return TRANG_THAI_GIAO_THAT_BAI
-  return laPos(data.value) ? TRANG_THAI_POS : TRANG_THAI_ONLINE
+  const meta = loaiDonMeta(data.value)
+  if (meta.code === 'TAI_QUAY_GIAO_HANG') {
+    if (data.value.trangThai === 'Chờ xác nhận') {
+      return TRANG_THAI_ONLINE
+    }
+    return TRANG_THAI_POS_GIAO_HANG
+  }
+  return coGiaoHang(data.value) ? TRANG_THAI_ONLINE : TRANG_THAI_POS
 })
+
+const loaiDonInfo = computed(() => loaiDonMeta(data.value))
 
 const trangThaiTruocKetThuc = computed(() => {
   const ls = lichSuKetThuc.value
@@ -118,6 +137,7 @@ const visibleSteps = computed(() => {
 })
 
 const isTerminal = computed(() => !!data.value && isTerminalOf(data.value))
+const isDaHoanThanh = computed(() => data.value?.trangThai === 'Đã hoàn thành' || data.value?.maTrangThai === 'DA_HOAN_THANH')
 
 const tiepTheoList = computed(() => trangThaiTiepTheoOf(data.value))
 
@@ -125,9 +145,10 @@ const tiepTheoMenuList = computed(() => tiepTheoList.value.filter((tt) => tt !==
 
 const laChoXacNhan = computed(() => data.value?.maTrangThai === 'CHO_XAC_NHAN')
 
-const coTheHuy = computed(
-  () => laChoXacNhan.value && tiepTheoList.value.includes('Đã hủy'),
-)
+const coTheHuy = computed(() => {
+  const code = data.value?.maTrangThai || TRANG_THAI_CODE[data.value?.trangThai]
+  return code === 'CHO_XAC_NHAN' && tiepTheoList.value.includes('Đã hủy')
+})
 
 const laTrangThaiHienTai = (ten) => data.value?.trangThai === ten
 
@@ -140,9 +161,109 @@ const laDaQua = (ten) => {
   return cur > -1 && i > -1 && i < cur
 }
 
+const thoiGianBuoc = (s) => {
+  const code = TRANG_THAI_CODE[s] || s
+  const list = data.value?.lichSu || lichSuKetThuc.value || []
+  const rec = list.find((h) => {
+    const c = h.maTrangThaiSau || h.trangThaiSau || h.trangThai
+    return c === code || c === s
+  })
+  return rec?.thoiGian ? formatDateTime(rec.thoiGian) : null
+}
+
+const buocTiepTheoChinh = computed(() => {
+  if (!data.value || isTerminal.value) return null
+  const steps = visibleSteps.value
+  const curIdx = steps.indexOf(data.value.trangThai)
+  if (curIdx !== -1) {
+    const nextStep = steps[curIdx + 1]
+    if (nextStep && tiepTheoList.value.includes(nextStep)) {
+      return nextStep
+    }
+  }
+  return tiepTheoList.value.find((tt) => tt !== 'Đã hủy' && tt !== 'Chờ hoàn tiền' && tt !== 'Giao hàng thất bại')
+    || tiepTheoList.value.find((tt) => tt !== 'Đã hủy')
+    || tiepTheoList.value[0]
+    || null
+})
+
+const cacBuocPhu = computed(() => {
+  if (!data.value || isTerminal.value) return []
+  const main = buocTiepTheoChinh.value
+  return tiepTheoList.value.filter((tt) => {
+    if (tt === main) return false
+    if (tt === 'Chờ hoàn tiền' || tt === 'Đã hoàn tiền') return false
+    if (tt === 'Đã hủy' && !coTheHuy.value) return false
+    return true
+  })
+})
+
+const nhanHanhDongChinh = (tenTrangThai) => {
+  switch (tenTrangThai) {
+    case 'Đã xác nhận': return 'Xác nhận đơn hàng'
+    case 'Chờ giao hàng': return 'Bàn giao cho GHN'
+    case 'Đang giao hàng': return 'Bắt đầu vận chuyển'
+    case 'Đã giao hàng': return 'Xác nhận đã giao hàng'
+    case 'Đã hoàn thành': return 'Hoàn tất đơn hàng'
+    case 'Chờ hoàn tiền': return 'Chuyển Chờ hoàn tiền'
+    case 'Đã hoàn tiền': return 'Xác nhận hoàn tiền'
+    default: return `Chuyển sang: ${tenTrangThai}`
+  }
+}
+
+const nhanNutPhu = (tenTrangThai) => {
+  switch (tenTrangThai) {
+    case 'Chờ hoàn tiền': return 'Chờ hoàn tiền'
+    case 'Đã hoàn tiền': return 'Hoàn tiền'
+    case 'Giao hàng thất bại': return 'Giao thất bại'
+    case 'Đã hủy': return 'Hủy đơn'
+    default: return tenTrangThai
+  }
+}
+
+const classNutPhu = (tenTrangThai) => {
+  if (tenTrangThai === 'Chờ hoàn tiền' || tenTrangThai === 'Đã hoàn tiền') return 'btn-status-refund'
+  if (tenTrangThai === 'Giao hàng thất bại') return 'btn-status-fail'
+  if (tenTrangThai === 'Đã hủy') return 'btn-status-cancel'
+  return 'btn-status-outline'
+}
+
+const handleStepClick = (s) => {
+  if (updatingStatus.value) return
+  if (laTrangThaiTiepTheo(s)) {
+    chuyenTrangThai(s)
+  } else if (laTrangThaiHienTai(s)) {
+    notifyWarning('Thông báo', `Đơn hàng đang ở trạng thái "${s}".`)
+  } else if (laDaQua(s)) {
+    notifyWarning('Thông báo', `Trạng thái "${s}" đã hoàn tất trong tiến trình đơn hàng.`)
+  } else {
+    const nextList = tiepTheoMenuList.value
+    if (nextList.length) {
+      notifyWarning('Chưa thể chuyển bước này', `Không thể nhảy cóc trạng thái. Vui lòng chuyển sang bước tiếp theo: "${nextList[0]}".`)
+    } else {
+      notifyWarning('Không thể chuyển', 'Đơn hàng không thể chuyển sang trạng thái này.')
+    }
+  }
+}
+
+const layTenNguoiThaoTac = () => {
+  const u = getUser()
+  if (!u) return ''
+  const ten = u.tenTaiKhoan || u.tenKhachHang || ''
+  const role = u.vaiTro || (u.loaiTaiKhoan === 'NHAN_VIEN' ? 'Nhân viên' : '')
+  return role ? `${ten} (${role})` : ten
+}
+
 const chuyenTrangThai = async (ten) => {
   if (!data.value || updatingStatus.value) return
-  if (!laTrangThaiTiepTheo(ten)) return
+  if (ten === 'Đã hủy' && isCheDoXem.value) {
+    notifyWarning('Đang ở chế độ xem', 'Bạn chưa mở ca làm việc. Không thể xóa hoặc hủy hóa đơn!')
+    return
+  }
+  if (!laTrangThaiTiepTheo(ten)) {
+    notifyWarning('Chưa thể chuyển', `Không thể chuyển sang trạng thái "${ten}" từ "${data.value.trangThai}".`)
+    return
+  }
   const code = TRANG_THAI_CODE[ten]
   if (!code) return
   showStatusMenu.value = false
@@ -151,23 +272,25 @@ const chuyenTrangThai = async (ten) => {
   const hienTai = data.value.trangThai || '—'
   const ma = data.value.maHoaDon || `#${data.value.id}`
   const ok = await notifyConfirm(
-    'Cập nhật trạng thái',
-    `Hóa đơn ${ma}\nTrạng thái hiện tại: ${hienTai}\nTrạng thái đích: ${ten}`,
+    'Xác nhận chuyển trạng thái',
+    `Bạn có chắc chắn muốn chuyển trạng thái hóa đơn "${ma}"?\n\n• Trạng thái hiện tại: "${hienTai}"\n• Trạng thái chuyển sang: "${ten}"\n\nThao tác này sẽ cập nhật tiến trình đơn hàng trên hệ thống.`,
     'Xác nhận chuyển',
-    'Hủy',
+    'Hủy bỏ',
   )
   if (!ok) return
   updatingStatus.value = true
   try {
-    const ketQua = await updateInvoiceStatus(data.value.id, code)
+    const ketQua = await updateInvoiceStatus(data.value.id, code, '', layTenNguoiThaoTac())
     if (code === 'GIAO_HANG_THAT_BAI' && ketQua?.maTrangThai === 'DA_HUY') {
       notifySuccess('Giao hàng thất bại lần 3 — đơn hàng đã tự động hủy', `${hienTai} → Đã hủy`)
     } else {
       notifySuccess('Đã cập nhật trạng thái', `${hienTai} → ${ten}`)
     }
-    await load()
-    if (trangThaiTruoc === 'CHO_XAC_NHAN' && code === 'DA_XAC_NHAN') {
-      await taiPdfHienTai()
+    await load(true)
+    if (code === 'DA_XAC_NHAN' || ten === 'Đã xác nhận') {
+      setTimeout(() => {
+        inHoaDon()
+      }, 400)
     }
   } catch (e) {
     notifyError('Cập nhật thất bại', e.message || 'Không thể chuyển trạng thái')
@@ -183,19 +306,23 @@ const toggleStatusMenu = () => {
 
 const huyDon = async () => {
   if (!data.value || updatingStatus.value || !coTheHuy.value) return
+  if (isCheDoXem.value) {
+    notifyWarning('Đang ở chế độ xem', 'Bạn chưa mở ca làm việc. Không thể xóa hoặc hủy hóa đơn!')
+    return
+  }
   const ma = data.value.maHoaDon || `#${data.value.id}`
   const ok = await notifyConfirm(
-    'Xác nhận hủy đơn?',
-    `Hóa đơn ${ma}\nHủy khi ở trạng thái Chờ xác nhận. Sau khi hủy, đơn không thể tiếp tục xử lý.`,
-    'Xác nhận hủy',
-    'Giữ đơn',
+    'Xác nhận hủy đơn',
+    `Hóa đơn ${ma}\nSau khi hoàn tiền, hệ thống sẽ hủy hóa đơn, hoàn trả số lượng sản phẩm vào kho và không tính doanh thu hóa đơn này.`,
+    'Hoàn tiền',
+    'Hủy',
   )
   if (!ok) return
   updatingStatus.value = true
   try {
-    await updateInvoiceStatus(data.value.id, 'DA_HUY')
-    notifySuccess('Đã hủy đơn', `Hóa đơn ${ma} → Đã hủy`)
-    await load()
+    await updateInvoiceStatus(data.value.id, 'DA_HUY', 'Hủy đơn và hoàn tiền từ trang chi tiết', layTenNguoiThaoTac())
+    notifySuccess('Đã hủy đơn & hoàn tiền', `Hóa đơn ${ma} → Đã hủy`)
+    await load(true)
   } catch (e) {
     notifyError('Hủy đơn thất bại', e.message || 'Không thể hủy đơn')
   } finally {
@@ -326,43 +453,272 @@ const chiTietLoc = computed(() => {
   return list
 })
 
-const load = async () => {
+const API_V1 = '/api/v1'
+const DEFAULT_SHOE_IMG = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=160&auto=format&fit=crop&q=80'
+const variantInfoMap = ref({})
+
+const COLOR_HEX_FALLBACK = {
+  'đen': '#111827',
+  'trắng': '#f8fafc',
+  'đỏ': '#ef4444',
+  'xanh': '#2563eb',
+  'xanh dương': '#2563eb',
+  'xanh navy': '#1e3a8a',
+  'xanh lá': '#16a34a',
+  'vàng': '#eab308',
+  'xám': '#64748b',
+  'ghi': '#64748b',
+  'nâu': '#78350f',
+  'hồng': '#ec4899',
+  'tím': '#9333ea',
+  'cam': '#f97316',
+  'kem': '#fef3c7',
+  'be': '#e7e5e4',
+}
+
+const getLineVariant = (line) => {
+  if (!line) return null
+  if (line.idSanPhamChiTiet && variantInfoMap.value[line.idSanPhamChiTiet]) {
+    return variantInfoMap.value[line.idSanPhamChiTiet]
+  }
+  if (line.maSanPhamChiTiet && variantInfoMap.value[line.maSanPhamChiTiet]) {
+    return variantInfoMap.value[line.maSanPhamChiTiet]
+  }
+  return null
+}
+
+const getLineImage = (line) => {
+  if (!line) return DEFAULT_SHOE_IMG
+  if (line._imgBroken) return DEFAULT_SHOE_IMG
+  const v = getLineVariant(line)
+  const rawImg = line.hinhAnh || line.img || v?.img || ''
+  if (rawImg && String(rawImg).trim()) {
+    return String(rawImg).trim()
+  }
+  return DEFAULT_SHOE_IMG
+}
+
+const onLineImgError = (line, event) => {
+  if (line) line._imgBroken = true
+  if (event?.target && event.target.src !== DEFAULT_SHOE_IMG) {
+    event.target.src = DEFAULT_SHOE_IMG
+  }
+}
+
+const getLineColorHex = (line) => {
+  const v = getLineVariant(line)
+  if (v?.colorHex && String(v.colorHex).startsWith('#')) return v.colorHex
+  if (line?.maMau && String(line.maMau).startsWith('#')) return line.maMau
+  const name = String(line?.tenMau || '').trim().toLowerCase()
+  return COLOR_HEX_FALLBACK[name] || '#64748b'
+}
+
+const getLineOriginalUnit = (line) => {
+  if (!line) return 0
+  const v = getLineVariant(line)
+  return Number(line.giaGoc || v?.price || v?.giaBan || 0)
+}
+
+const getLineUnitPrice = (line) => {
+  if (!line) return 0
+  if (line.donGia !== undefined && line.donGia !== null) {
+    return Number(line.donGia)
+  }
+  const qty = Number(line.soLuong || 1)
+  return qty > 0 ? Number(line.thanhTien || 0) / qty : 0
+}
+
+const getLineOriginalTotal = (line) => {
+  if (!line) return 0
+  const origUnit = getLineOriginalUnit(line)
+  const qty = Number(line.soLuong || 1)
+  return origUnit * qty
+}
+
+const sendingEmail = ref(false)
+
+const customerEmail = computed(() => {
+  return khInfo.value?.email || data.value?.emailKhachHang || ''
+})
+
+const handleResendEmail = async () => {
+  const email = customerEmail.value?.trim()
+  if (!email) {
+    notifyWarning('Thiếu email', 'Khách hàng chưa có địa chỉ email để gửi thông tin đơn hàng.')
+    return
+  }
+  const ma = data.value?.maHoaDon || `#${data.value?.id}`
+  const ok = await notifyConfirm(
+    'Xác nhận gửi lại email',
+    `Gửi lại thông tin chi tiết đơn hàng "${ma}" tới địa chỉ email "${email}"?`,
+    'Gửi email',
+    'Hủy bỏ'
+  )
+  if (!ok) return
+  sendingEmail.value = true
+  try {
+    await resendInvoiceEmail(data.value.id, email)
+    notifySuccess('Gửi email thành công!', `Đã gửi lại thông tin đơn hàng tới ${email}`)
+  } catch (err) {
+    console.error('Error resending email:', err)
+    notifyError('Gửi email thất bại', err.message || 'Không thể gửi email đến khách hàng.')
+  } finally {
+    sendingEmail.value = false
+  }
+}
+
+const toTenLoaiDon = (loai) => {
+  if (!loai) return 'Tại quầy'
+  if (loai === 'TAI_QUAY' || loai === 'Tại quầy') return 'Tại quầy'
+  if (loai === 'ONLINE' || loai === 'Online') return 'Online'
+  return loai
+}
+
+const hinhThucNhanText = computed(() => {
+  if (
+    data.value?.diaChiNhanHang?.trim() ||
+    Number(data.value?.phiVanChuyen) > 0 ||
+    data.value?.loaiDon === 'Online' ||
+    data.value?.loaiDon === 'ONLINE'
+  ) {
+    return 'Giao hàng tận nơi'
+  }
+  return 'Nhận tại quầy'
+})
+
+const getLineDiscountBadge = (line) => {
+  if (!line) return null
+  const v = getLineVariant(line)
+  const origUnit = Number(line.giaGoc || v?.price || v?.giaBan || 0)
+  const soldUnit = Number(line.donGia || 0)
+
+  // 1. Ưu tiên % giảm giữa giá gốc biến thể và đơn giá bán trong hóa đơn
+  if (origUnit > soldUnit && soldUnit > 0) {
+    const pct = Math.round(((origUnit - soldUnit) / origUnit) * 100)
+    if (pct > 0) return `-${pct}%`
+  }
+
+  // 2. Nếu biến thể có % giảm từ đợt khuyến mãi
+  if (line.phanTramGiam && Number(line.phanTramGiam) > 0) {
+    return `-${Math.round(Number(line.phanTramGiam))}%`
+  }
+  if (v?.phanTramGiam && Number(v.phanTramGiam) > 0) {
+    return `-${Math.round(Number(v.phanTramGiam))}%`
+  }
+  if (v?.discount && v.discount !== '-') {
+    const dStr = String(v.discount).trim()
+    return dStr.startsWith('-') ? dStr : `-${dStr}`
+  }
+
+  // 3. Nếu hóa đơn có áp dụng giảm giá theo % hoặc số tiền giảm trên tổng đơn
+  if (data.value?.loaiGiamGia === 'PERCENT' && Number(data.value?.giaTriGiam) > 0) {
+    return `-${Math.round(Number(data.value.giaTriGiam))}%`
+  }
+  if (Number(data.value?.tienGiam) > 0 && tienHang.value > 0) {
+    const invPct = Math.round((Number(data.value.tienGiam) / tienHang.value) * 100)
+    if (invPct > 0) return `-${invPct}%`
+  }
+
+  return null
+}
+
+const enrichInvoiceLinesWithVariantData = async (lines) => {
+  if (!Array.isArray(lines) || lines.length === 0) return
+  const map = { ...variantInfoMap.value }
+
+  await Promise.allSettled(
+    lines.map(async (line) => {
+      try {
+        let variant = null
+        if (line.idSanPhamChiTiet) {
+          const res = await fetch(`${API_V1}/san-pham-chi-tiet/${line.idSanPhamChiTiet}`)
+          if (res.ok) {
+            variant = await res.json()
+          }
+        }
+        if (!variant && line.maSanPhamChiTiet) {
+          const res = await fetch(`${API_V1}/san-pham-chi-tiet?search=${encodeURIComponent(line.maSanPhamChiTiet)}&size=5`)
+          if (res.ok) {
+            const pageData = await res.json()
+            if (Array.isArray(pageData?.content) && pageData.content.length > 0) {
+              variant = pageData.content.find(p => p.maCtsp === line.maSanPhamChiTiet) || pageData.content[0]
+            }
+          }
+        }
+
+        if (variant && !variant.img && variant.idSanPham) {
+          try {
+            const sibRes = await fetch(`${API_V1}/san-pham-chi-tiet/by-san-pham/${variant.idSanPham}`)
+            if (sibRes.ok) {
+              const siblings = await sibRes.json()
+              if (Array.isArray(siblings)) {
+                const withImg = siblings.find(s => s.img && String(s.img).trim())
+                if (withImg) variant.img = withImg.img
+              }
+            }
+          } catch {
+            // Ảnh biến thể là dữ liệu bổ sung; vẫn hiển thị dòng hóa đơn hiện có.
+          }
+        }
+
+        if (variant) {
+          if (line.idSanPhamChiTiet) map[line.idSanPhamChiTiet] = variant
+          if (line.maSanPhamChiTiet) map[line.maSanPhamChiTiet] = variant
+        }
+      } catch {
+        // Tiếp tục dựng hóa đơn nếu một biến thể không tải được dữ liệu bổ sung.
+      }
+    })
+  )
+
+  variantInfoMap.value = map
+}
+
+const load = async (silent = false) => {
   const id = route.params.id
   if (!/^\d+$/.test(String(id))) {
     error.value = `ID hóa đơn không hợp lệ: ${id}`
     loading.value = false
     return
   }
-  loading.value = true
-  error.value = ''
-  data.value = null
-  khInfo.value = null
-  qrDataUrl.value = ''
-  qrReady.value = false
+  if (!silent) {
+    loading.value = true
+    error.value = ''
+    data.value = null
+    khInfo.value = null
+    qrDataUrl.value = ''
+    qrReady.value = false
+  }
   try {
-    data.value = await getInvoice(id)
+    const freshInvoice = await getInvoice(id)
+    data.value = freshInvoice
+    loading.value = false
+
+    // Tải các thông tin làm giàu dữ liệu bất đồng bộ (không chặn hiển thị ban đầu)
+    enrichInvoiceLinesWithVariantData(freshInvoice?.chiTiet || [])
+    if (freshInvoice?.idKhachHang && (!silent || !khInfo.value)) {
+      getCustomer(freshInvoice.idKhachHang)
+        .then((res) => { khInfo.value = res })
+        .catch(() => { khInfo.value = null })
+    }
+    lichSuKetThuc.value = freshInvoice?.lichSu || []
+    if (!lichSuKetThuc.value.length) {
+      getInvoiceHistory(freshInvoice.id)
+        .then((res) => { lichSuKetThuc.value = res || [] })
+        .catch(() => { lichSuKetThuc.value = [] })
+    }
+    if (!silent) {
+      genQr()
+    }
   } catch (e) {
-    error.value = e.message || 'Không tải được chi tiết hóa đơn'
+    if (!silent) {
+      error.value = e.message || 'Không tải được chi tiết hóa đơn'
+    } else {
+      notifyError('Lỗi cập nhật', e.message || 'Không thể đồng bộ dữ liệu mới')
+    }
     loading.value = false
     return
   }
-  if (data.value?.idKhachHang) {
-    try {
-      khInfo.value = await getCustomer(data.value.idKhachHang)
-    } catch {
-      khInfo.value = null
-    }
-  }
-  lichSuKetThuc.value = []
-  if (TRANG_THAI_KET_THUC.includes(data.value?.trangThai)) {
-    try {
-      lichSuKetThuc.value = await getInvoiceHistory(data.value.id)
-    } catch {
-      lichSuKetThuc.value = []
-    }
-  }
-  await genQr()
-  loading.value = false
 }
 
 const inHoaDon = async () => {
@@ -397,10 +753,16 @@ const taiPdfHienTai = async () => {
 }
 
 watch(() => route.params.id, load)
-onMounted(() => {
-  load()
+onMounted(async () => {
+  getDangMo().then((res) => { activeShift.value = res }).catch(() => {})
+  await load()
   document.addEventListener('click', onDocClick, true)
   document.addEventListener('keydown', onEscape)
+  if (route.query.autoPrint === 'true') {
+    setTimeout(() => {
+      inHoaDon()
+    }, 400)
+  }
 })
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocClick, true)
@@ -410,13 +772,79 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="inv-detail">
-    <nav class="inv-crumb" aria-label="Breadcrumb">
-      <router-link class="crumb-link" to="/hoa-don">Trang chủ</router-link>
-      <span class="crumb-sep">/</span>
-      <router-link class="crumb-link" to="/hoa-don">Quản lý hóa đơn</router-link>
-      <span class="crumb-sep">/</span>
-      <span class="crumb-current">Chi tiết hóa đơn</span>
-    </nav>
+    <div class="inv-top-bar">
+      <nav class="inv-crumb" aria-label="Breadcrumb">
+        <router-link class="crumb-link" to="/hoa-don">Hóa đơn</router-link>
+        <span class="crumb-sep">/</span>
+        <span class="crumb-current">Chi tiết hóa đơn</span>
+      </nav>
+      <div class="inv-top-actions">
+        <button class="btn-top-nav" type="button" @click="router.push('/ban-hang')">
+          ← Quay lại bán hàng tại quầy
+        </button>
+        <button class="btn-top-nav" type="button" @click="router.push('/hoa-don')">
+          ← Danh sách hóa đơn
+        </button>
+      </div>
+    </div>
+
+    <!-- Header Thông tin tổng quan đơn hàng -->
+    <div v-if="data" class="inv-header-banner-card">
+      <div class="banner-grid">
+        <!-- Cột 1 -->
+        <div class="banner-col">
+          <div class="banner-row">
+            <span class="banner-lbl">Mã Đơn Hàng:</span>
+            <span class="banner-val val-code">{{ data.maHoaDon }}</span>
+          </div>
+          <div class="banner-row">
+            <span class="banner-lbl">Cập Nhật Gần Nhất:</span>
+            <span class="banner-val">{{ formatDateTime(data.ngayCapNhat || data.ngayTao) }}</span>
+          </div>
+        </div>
+
+        <!-- Cột 2 -->
+        <div class="banner-col has-divider">
+          <div class="banner-row">
+            <span class="banner-lbl">Ngày Tạo:</span>
+            <span class="banner-val">{{ formatDateTime(data.ngayTao) }}</span>
+          </div>
+          <div class="banner-row">
+            <span class="banner-lbl">Loại đơn:</span>
+            <span class="banner-pill-type" :class="loaiDonInfo.badgeClass">
+              <svg v-if="loaiDonInfo.icon === 'store'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+              </svg>
+              <svg v-else-if="loaiDonInfo.icon === 'truck'" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="1" y="3" width="15" height="13"></rect>
+                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+                <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                <circle cx="18.5" cy="18.5" r="2.5"></circle>
+              </svg>
+              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="2" y1="12" x2="22" y2="12"></line>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+              </svg>
+              <span>{{ loaiDonInfo.label }}</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Cột 3 -->
+        <div class="banner-col">
+          <div class="banner-row">
+            <span class="banner-lbl">Tạo bởi:</span>
+            <span class="banner-val val-creator">{{ data.maNhanVien || data.tenNhanVien || 'NV001' }}</span>
+          </div>
+          <div class="banner-row">
+            <span class="banner-lbl">Hình thức nhận:</span>
+            <span class="banner-val">{{ hinhThucNhanText }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <section v-if="loading" class="state-card">
       <div class="state-box">Đang tải dữ liệu...</div>
@@ -557,8 +985,14 @@ onBeforeUnmount(() => {
                       s === 'Đã hủy' ||
                       s === 'Đã hoàn tiền',
                     'is-next': laTrangThaiTiepTheo(s) && !laDaQua(s),
+                    'is-clickable': laTrangThaiTiepTheo(s) && !laDaQua(s),
                   }"
-                  :title="laTrangThaiHienTai(s) ? 'Trạng thái hiện tại' : (laDaQua(s) ? 'Đã hoàn thành' : undefined)"
+                  :title="
+                    laTrangThaiTiepTheo(s)
+                      ? `Bấm để xác nhận chuyển sang: ${nhanBuoc(s)}`
+                      : (laTrangThaiHienTai(s) ? 'Trạng thái hiện tại' : (laDaQua(s) ? 'Đã hoàn thành' : nhanBuoc(s)))
+                  "
+                  @click="handleStepClick(s)"
                 >
                   <span class="stepper-node">
                     <svg
@@ -604,14 +1038,80 @@ onBeforeUnmount(() => {
                   <span class="stepper-label">{{ nhanBuoc(s) }}</span>
                   <span v-if="i === 0" class="stepper-time">{{ formatDateTime(data.ngayTao) }}</span>
                   <span v-else-if="laTrangThaiHienTai(s) && i > 0" class="stepper-time">
-                    {{ formatDateTime(data.ngayCapNhat) }}
+                    {{ thoiGianBuoc(s) || formatDateTime(data.ngayCapNhat) }}
                   </span>
-                  <span v-else-if="laDaQua(s)" class="stepper-time stepper-done">✓ Hoàn thành</span>
+                  <span v-else-if="laDaQua(s)" class="stepper-time stepper-done">
+                    {{ thoiGianBuoc(s) || '✓ Hoàn thành' }}
+                  </span>
                   <span v-else class="stepper-time">&nbsp;</span>
                 </div>
               </div>
 
-              <p v-if="data.ngayCapNhat" class="status-updated">
+              <!-- Thanh button thao tác thay đổi trạng thái đơn hàng -->
+              <div v-if="!isTerminal && tiepTheoList.length" class="status-action-bar">
+                <div class="status-action-info">
+                  <span v-if="data.ngayCapNhat" class="status-updated">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    Cập nhật lần cuối: {{ formatDateTime(data.ngayCapNhat) }}
+                    <template v-if="chot(data.nguoiCapNhat)"> • {{ data.nguoiCapNhat }}</template>
+                  </span>
+                </div>
+
+                <div class="status-action-btns">
+                  <!-- Nút chuyển bước tiếp theo chính (Action chính nổi bật) -->
+                  <button
+                    v-if="buocTiepTheoChinh"
+                    class="btn-status-action btn-status-primary"
+                    type="button"
+                    :disabled="updatingStatus || isCheDoXem"
+                    :title="isCheDoXem ? 'Chưa mở ca làm việc (chế độ xem)' : `Chuyển đơn hàng sang: ${buocTiepTheoChinh}`"
+                    @click="chuyenTrangThai(buocTiepTheoChinh)"
+                  >
+                    <span v-if="updatingStatus" class="btn-spinner"></span>
+                    <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                    <span>{{ nhanHanhDongChinh(buocTiepTheoChinh) }}</span>
+                  </button>
+
+                  <!-- Các nút chuyển trạng thái phụ (Chờ hoàn tiền, Giao thất bại, Hủy) -->
+                  <button
+                    v-for="phu in cacBuocPhu"
+                    :key="phu"
+                    class="btn-status-action"
+                    :class="classNutPhu(phu)"
+                    type="button"
+                    :disabled="updatingStatus || isCheDoXem"
+                    :title="isCheDoXem ? 'Chưa mở ca làm việc (chế độ xem)' : `Chuyển sang: ${phu}`"
+                    @click="phu === 'Đã hủy' ? huyDon() : chuyenTrangThai(phu)"
+                  >
+                    <svg v-if="phu === 'Chờ hoàn tiền' || phu === 'Đã hoàn tiền'" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                      <path d="M3 3v5h5" />
+                    </svg>
+                    <svg v-else-if="phu === 'Giao hàng thất bại'" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <svg v-else-if="phu === 'Đã hủy'" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="15" y1="9" x2="9" y2="15" />
+                      <line x1="9" y1="9" x2="15" y2="15" />
+                    </svg>
+                    <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                    <span>{{ nhanNutPhu(phu) }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Nếu là đơn kết thúc (Đã hoàn thành / Đã hủy / Đã hoàn tiền) -->
+              <p v-else-if="data.ngayCapNhat" class="status-updated">
                 Cập nhật lần cuối: {{ formatDateTime(data.ngayCapNhat) }}
                 <template v-if="chot(data.nguoiCapNhat)"> • {{ data.nguoiCapNhat }}</template>
               </p>
@@ -643,7 +1143,23 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="kv-row">
                   <span class="kv-label">Email</span>
-                  <span class="kv-value">{{ khInfo?.email || '—' }}</span>
+                  <div class="kv-value-with-btn">
+                    <span class="kv-value kv-email-text">{{ customerEmail || '—' }}</span>
+                    <button
+                      v-if="customerEmail && customerEmail !== '—'"
+                      class="btn-resend-email"
+                      type="button"
+                      :disabled="sendingEmail"
+                      @click="handleResendEmail"
+                      title="Gửi lại thông tin đơn hàng tới email khách hàng"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                        <polyline points="22,6 12,13 2,6"></polyline>
+                      </svg>
+                      <span>{{ sendingEmail ? 'Đang gửi...' : 'Gửi lại email' }}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>
@@ -723,12 +1239,12 @@ onBeforeUnmount(() => {
               <table class="prod-table">
                 <thead>
                   <tr>
-                    <th class="th-stt">STT</th>
-                    <th class="th-img">Ảnh</th>
+                    <th class="th-stt text-center">STT</th>
+                    <th class="th-img text-center">Ảnh</th>
                     <th>Tên sản phẩm</th>
-                    <th>Màu sắc</th>
-                    <th>Kích cỡ</th>
-                    <th class="num">Số lượng</th>
+                    <th class="text-center">Màu sắc</th>
+                    <th class="text-center">Kích cỡ</th>
+                    <th class="text-center">Số lượng</th>
                     <th class="num">Đơn giá</th>
                     <th class="num">Thành tiền</th>
                   </tr>
@@ -738,25 +1254,58 @@ onBeforeUnmount(() => {
                     <td colspan="8" class="empty">Không có dòng sản phẩm nào</td>
                   </tr>
                   <tr v-for="(line, i) in chiTietLoc" :key="line.id || i">
-                    <td class="td-stt">{{ i + 1 }}</td>
-                    <td class="td-img">
-                      <div class="ph-img">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                          <rect x="3" y="4" width="18" height="16" rx="2" />
-                          <circle cx="9" cy="10" r="2" />
-                          <path d="M3 17l5-4 4 3 3-2 6 5" />
-                        </svg>
+                    <td class="td-stt text-center">{{ i + 1 }}</td>
+                    <td class="td-img text-center">
+                      <div class="prod-thumb-wrap">
+                        <img
+                          :src="getLineImage(line)"
+                          :alt="line.tenSanPham || 'Ảnh sản phẩm'"
+                          class="prod-thumb-img"
+                          @error="onLineImgError(line, $event)"
+                        />
+                        <span v-if="getLineDiscountBadge(line)" class="prod-img-discount-badge">
+                          {{ getLineDiscountBadge(line) }}
+                        </span>
                       </div>
                     </td>
                     <td>
                       <div class="p-name">{{ line.tenSanPham || '—' }}</div>
                       <div class="p-sku">{{ line.maSanPhamChiTiet || '—' }}</div>
                     </td>
-                    <td>{{ line.tenMau || '—' }}</td>
-                    <td>{{ line.tenKichCo || '—' }}</td>
-                    <td class="num">{{ line.soLuong }}</td>
-                    <td class="num">{{ formatVnd(line.donGia) }}</td>
-                    <td class="num strong">{{ formatVnd(line.thanhTien) }}</td>
+                    <td class="text-center">
+                      <div class="inv-color-cell">
+                        <span class="inv-color-dot" :style="{ backgroundColor: getLineColorHex(line) }"></span>
+                        <span>{{ line.tenMau || '—' }}</span>
+                      </div>
+                    </td>
+                    <td class="text-center">
+                      <span class="inv-size-pill">{{ line.tenKichCo || '—' }}</span>
+                    </td>
+                    <td class="text-center">
+                      <span class="inv-qty-badge">{{ line.soLuong }}</span>
+                    </td>
+                    <td class="num">
+                      <div class="inv-total-stack">
+                        <span class="strong inv-total-now">{{ formatVnd(getLineUnitPrice(line)) }}</span>
+                        <span
+                          v-if="getLineOriginalUnit(line) > getLineUnitPrice(line) && getLineUnitPrice(line) > 0"
+                          class="inv-total-was"
+                        >
+                          {{ formatVnd(getLineOriginalUnit(line)) }}
+                        </span>
+                      </div>
+                    </td>
+                    <td class="num">
+                      <div class="inv-total-stack">
+                        <span class="strong inv-total-now">{{ formatVnd(line.thanhTien) }}</span>
+                        <span
+                          v-if="getLineOriginalTotal(line) > Number(line.thanhTien || 0)"
+                          class="inv-total-was"
+                        >
+                          {{ formatVnd(getLineOriginalTotal(line)) }}
+                        </span>
+                      </div>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -817,8 +1366,8 @@ onBeforeUnmount(() => {
                 <span class="pay-label">Phương thức thanh toán</span>
                 <strong>{{ data.tenPhuongThucThanhToan || '—' }}</strong>
               </div>
-              <span class="inv-pill" :class="pillClass(payStatusOf(data.trangThai))">
-                {{ payStatusOf(data.trangThai) }}
+              <span class="inv-pill" :class="pillClass(payStatusOf(data))">
+                {{ payStatusOf(data) }}
               </span>
             </div>
             <div class="pay-amount-row">
@@ -836,34 +1385,12 @@ onBeforeUnmount(() => {
               </svg>
               In hóa đơn
             </button>
-            <div v-if="!isTerminal && tiepTheoMenuList.length" ref="statusMenuRef" class="status-menu-wrap">
-              <button class="btn btn-outline" type="button" :disabled="updatingStatus" @click="toggleStatusMenu">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M5 12h14M12 5l7 7-7 7" />
-                </svg>
-                {{ updatingStatus ? 'Đang xử lý...' : 'Chuyển trạng thái' }}
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
-              </button>
-              <div v-if="showStatusMenu" class="status-menu" role="menu">
-                <button
-                  v-for="tt in tiepTheoMenuList"
-                  :key="tt"
-                  class="status-menu-item"
-                  type="button"
-                  role="menuitem"
-                  @click="chonMenu(tt)"
-                >
-                  {{ tt }}
-                </button>
-              </div>
-            </div>
             <button
-              v-if="coTheHuy"
+              v-if="coTheHuy && !isTerminal"
               class="btn btn-outline btn-huy-don"
               type="button"
-              :disabled="updatingStatus"
+              :disabled="updatingStatus || isCheDoXem"
+              :title="isCheDoXem ? 'Chưa mở ca làm việc (đang ở chế độ xem)' : 'Hủy đơn'"
               @click="huyDon"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -872,9 +1399,7 @@ onBeforeUnmount(() => {
               </svg>
               {{ updatingStatus ? 'Đang xử lý...' : 'Hủy đơn' }}
             </button>
-            <button class="btn btn-outline" type="button" @click="router.push('/hoa-don')">
-              Quay lại danh sách
-            </button>
+
           </div>
         </div>
       </div>
@@ -914,9 +1439,16 @@ onBeforeUnmount(() => {
                   <span class="history-arrow">→</span>
                   <strong>{{ row.trangThaiSau }}</strong>
                 </p>
-                <p class="history-meta">
-                  <time>{{ formatDateTime(row.thoiGian) }}</time>
-                </p>
+                <div class="history-meta">
+                  <span class="history-time">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="history-meta-icon"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <time>{{ formatDateTime(row.thoiGian) }}</time>
+                  </span>
+                  <span class="history-actor">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="history-meta-icon"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span>Người thao tác: <strong>{{ row.nguoiThaoTac || 'Hệ thống' }}</strong></span>
+                  </span>
+                </div>
                 <p v-if="row.ghiChu" class="history-note">{{ row.ghiChu }}</p>
               </div>
             </li>
@@ -928,6 +1460,119 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.inv-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.inv-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-top-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-top-nav:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.inv-header-banner-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px 24px;
+  margin-bottom: 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.banner-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1.15fr;
+  gap: 20px;
+  align-items: center;
+}
+
+.banner-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.banner-col.has-divider {
+  border-left: 1px solid #e2e8f0;
+  padding-left: 20px;
+}
+
+.banner-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.banner-lbl {
+  color: #64748b;
+  min-width: 135px;
+  font-weight: 500;
+}
+
+.banner-val {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.banner-val.val-code {
+  color: #1e3a8a;
+  font-weight: 700;
+}
+
+.banner-val.val-creator {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.banner-pill-type {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .banner-grid {
+    grid-template-columns: 1fr;
+  }
+  .banner-col.has-divider {
+    border-left: none;
+    padding-left: 0;
+  }
+}
+
 .inv-crumb {
   display: flex;
   align-items: center;
@@ -1108,28 +1753,29 @@ onBeforeUnmount(() => {
   cursor: default;
 }
 
-button.stepper-step {
+.stepper-step {
   cursor: default;
 }
 
-button.stepper-step.is-next {
+.stepper-step.is-clickable,
+.stepper-step.is-next {
   cursor: pointer;
 }
 
-button.stepper-step.is-next:hover:not(:disabled) .stepper-node {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
-  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.15);
-  transform: scale(1.08);
+.stepper-step.is-clickable:hover .stepper-node,
+.stepper-step.is-next:hover .stepper-node {
+  background: #fef2f2 !important;
+  border-color: #dc2626 !important;
+  color: #dc2626 !important;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.18) !important;
+  transform: scale(1.1) !important;
+  transition: all 0.2s ease;
 }
 
-button.stepper-step.is-next:hover:not(:disabled) .stepper-label {
-  color: #475569;
-}
-
-button.stepper-step.is-next:disabled {
-  cursor: wait;
-  opacity: 0.6;
+.stepper-step.is-clickable:hover .stepper-label,
+.stepper-step.is-next:hover .stepper-label {
+  color: #dc2626 !important;
+  font-weight: 700 !important;
 }
 
 .stepper-step::before {
@@ -1324,6 +1970,130 @@ button.stepper-step.is-next:disabled {
   height: 16px;
 }
 
+/* ===== Action Bar thay đổi trạng thái đơn hàng ===== */
+.status-action-bar {
+  margin-top: 18px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.status-action-info {
+  display: flex;
+  align-items: center;
+}
+
+.status-action-info .status-updated {
+  margin-top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.status-action-btns {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn-status-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.btn-status-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn-status-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Nút chính chuyển tiếp (Xác nhận, Giao GHN, Vận chuyển, v.v.) */
+.btn-status-primary {
+  background: linear-gradient(135deg, #d02a2a 0%, #b31f1f 100%);
+  color: #fff;
+  border-color: #b31f1f;
+  box-shadow: 0 3px 10px rgba(208, 42, 42, 0.28);
+}
+
+.btn-status-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #be2222 0%, #9a1818 100%);
+  box-shadow: 0 5px 14px rgba(208, 42, 42, 0.38);
+}
+
+/* Nút hoàn tiền */
+.btn-status-refund {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.btn-status-refund:hover:not(:disabled) {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+/* Nút giao thất bại */
+.btn-status-fail {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.btn-status-fail:hover:not(:disabled) {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+/* Nút hủy đơn */
+.btn-status-cancel {
+  background: #f8fafc;
+  color: #64748b;
+  border-color: #cbd5e1;
+}
+
+.btn-status-cancel:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #334155;
+  border-color: #94a3b8;
+}
+
+.btn-status-outline {
+  background: #fff;
+  color: #334155;
+  border-color: #e2e8f0;
+}
+
+.btn-status-outline:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
 .btn-outline {
   display: inline-flex;
   align-items: center;
@@ -1344,6 +2114,32 @@ button.stepper-step.is-next:disabled {
   background: #f8fafc;
   border-color: #cbd5e1;
   color: #1e293b;
+}
+
+.btn-sua-don {
+  border-color: #fde047;
+  color: #ca8a04;
+}
+
+.btn-sua-don:hover {
+  background: #fefce8;
+  border-color: #eab308;
+  color: #a16207;
+}
+
+.btn-edit-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.btn-edit-order:hover {
+  background: #dbeafe;
+  border-color: #60a5fa;
+  color: #1e40af;
 }
 
 .btn-huy-don {
@@ -1415,6 +2211,46 @@ button.stepper-step.is-next:disabled {
   display: flex;
   flex-direction: column;
   gap: 11px;
+}
+
+.kv-value-with-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.kv-email-text {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.btn-resend-email {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(29, 78, 216, 0.05);
+}
+
+.btn-resend-email:hover:not(:disabled) {
+  background: #dbeafe;
+  border-color: #60a5fa;
+  color: #1e40af;
+  box-shadow: 0 2px 5px rgba(29, 78, 216, 0.15);
+}
+
+.btn-resend-email:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .kv-row {
@@ -1733,9 +2569,32 @@ button.stepper-step.is-next:disabled {
 }
 
 .history-meta {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: 11.5px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.history-time,
+.history-actor {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.history-meta-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
   color: #94a3b8;
+}
+
+.history-actor strong {
+  color: #1e293b;
+  font-weight: 600;
 }
 
 .history-note {
@@ -1788,11 +2647,12 @@ button.stepper-step.is-next:disabled {
 }
 
 .th-img {
-  width: 52px;
+  width: 68px;
+  text-align: center !important;
 }
 
 .th-stt {
-  width: 40px;
+  width: 48px;
   text-align: center !important;
 }
 
@@ -1800,27 +2660,113 @@ button.stepper-step.is-next:disabled {
   text-align: center !important;
   color: #94a3b8;
   font-size: 12px;
+  font-weight: 600;
 }
 
 .td-img {
-  width: 52px;
+  width: 68px;
+  text-align: center !important;
 }
 
-.ph-img {
-  width: 42px;
-  height: 42px;
-  border-radius: 8px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  color: #94a3b8;
-  display: flex;
+.prod-table .text-center {
+  text-align: center !important;
+}
+
+.prod-thumb-wrap {
+  position: relative;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
 }
 
-.ph-img svg {
-  width: 20px;
-  height: 20px;
+.prod-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 9px;
+  display: block;
+}
+
+.prod-img-discount-badge {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 5px;
+  border-radius: 5px;
+  line-height: 1.15;
+  box-shadow: 0 2px 5px rgba(220, 38, 38, 0.35);
+  border: 1.5px solid #ffffff;
+  pointer-events: none;
+  z-index: 2;
+  white-space: nowrap;
+}
+
+.inv-color-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-weight: 500;
+  color: #334155;
+}
+
+.inv-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  flex-shrink: 0;
+}
+
+.inv-size-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.inv-qty-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.inv-total-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.inv-total-now {
+  color: #0f172a;
+  font-size: 13.5px;
+}
+
+.inv-total-was {
+  font-size: 11.5px;
+  color: #94a3b8;
+  text-decoration: line-through;
+  font-weight: 500;
 }
 
 .p-name {
@@ -1928,6 +2874,23 @@ button.stepper-step.is-next:disabled {
     display: none;
   }
 }
+
+.banner-pill-type.inv-type-pos {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border-color: #bfdbfe !important;
+}
+.banner-pill-type.inv-type-pos-delivery {
+  background: #fffbeb !important;
+  color: #b45309 !important;
+  border-color: #fde68a !important;
+}
+.banner-pill-type.inv-type-online {
+  background: #f0fdf4 !important;
+  color: #15803d !important;
+  border-color: #bbf7d0 !important;
+}
+
 </style>
 
 <style>

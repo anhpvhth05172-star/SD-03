@@ -1,0 +1,7 @@
+-- Bổ sung tiền chi trong ca; không tự chạy script này trên cơ sở dữ liệu.
+IF COL_LENGTH('dbo.ca_lam_viec', 'tien_chi') IS NULL
+BEGIN
+    ALTER TABLE dbo.ca_lam_viec
+        ADD tien_chi DECIMAL(18, 2) NOT NULL
+            CONSTRAINT DF_ca_lam_viec_tien_chi DEFAULT (0);
+END
