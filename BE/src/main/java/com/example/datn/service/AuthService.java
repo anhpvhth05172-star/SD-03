@@ -430,13 +430,21 @@ public class AuthService {
     }
 
     private String taoMaKhachHang() {
-        for (int i = 0; i < 100; i++) {
-            String ma = "KH" + String.format("%07d", ThreadLocalRandom.current().nextInt(10_000_000));
-            if (!khachHangRepository.existsByMaKhachHang(ma)) {
-                return ma;
+        long max = 0;
+        for (String existing : khachHangRepository.findMaKhachHangBatDauBangKH()) {
+            if (existing != null && existing.matches("^KH\\d{1,6}$")) {
+                long num = Long.parseLong(existing.substring(2));
+                if (num > max) {
+                    max = num;
+                }
             }
         }
-        return "KH" + (System.currentTimeMillis() % 100_000_000);
+        long next = max + 1;
+        String ma = String.format("KH%06d", next);
+        while (khachHangRepository.existsByMaKhachHang(ma)) {
+            ma = String.format("KH%06d", ++next);
+        }
+        return ma;
     }
 
     private static boolean isBlank(String s) {

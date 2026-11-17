@@ -1,4 +1,5 @@
 import { reactive, computed, watch } from "vue";
+import http from "../api/http";
 import { getUser } from "../utils/auth";
 import {
   themVaoGioHangApi,
@@ -88,7 +89,7 @@ const mapServerItem = (item) => ({
   brand: item.maCtsp || "",
   color: item.mauSac || "",
   size: item.kichCo || "",
-  price: Number(item.donGia != null && item.donGia > 0 ? item.donGia : (item.giaHienTai || 0)),
+  price: Number(item.giaHienTai != null && item.giaHienTai > 0 ? item.giaHienTai : (item.donGia || 0)),
   giaHienTai: Number(item.giaHienTai || 0),
   donGia: Number(item.donGia || 0),
   img: item.hinhAnh || null,
@@ -98,10 +99,38 @@ const mapServerItem = (item) => ({
   canhBao: item.canhBao || null,
 });
 
-let isMergingCart = false;
+let activeFetchPromise = null;
+
+// Làm mới giá sản phẩm hiện tại cho giỏ hàng khách vãng lai (chỉ gọi ở màn Giỏ hàng)
+export async function refreshGuestCartPrices() {
+  const user = getUser();
+  if (user && user.idKhachHang) return;
+  const variantIds = [...new Set(
+    cart.items
+      .map((i) => Number(i.idSanPhamChiTiet || i.variantId))
+      .filter((id) => Number.isFinite(id) && id > 0)
+  )];
+  if (variantIds.length === 0) return;
+  await Promise.allSettled(
+    variantIds.map(async (variantId) => {
+      const res = await http.get(`/v1/san-pham-chi-tiet/${variantId}`);
+      const data = res?.data;
+      const livePrice = Number(data?.giaSauGiam ?? data?.price ?? 0);
+      if (!(livePrice > 0)) return;
+      cart.items.forEach((item) => {
+        const itemVid = Number(item.idSanPhamChiTiet || item.variantId);
+        if (itemVid === variantId) {
+          item.price = livePrice;
+          item.giaHienTai = livePrice;
+        }
+      });
+    })
+  );
+  localStorage.setItem("ps_cart", JSON.stringify(cart.items));
+}
 
 // Lấy giỏ hàng từ BE khi đã đăng nhập
-export async function fetchCart() {
+export async function fetchCart({ silent = false } = {}) {
   const user = getUser();
   if (!user || !user.idKhachHang) {
     // Giỏ của khách vãng lai: đảm bảo không giữ lại các item thuộc tài khoản cũ (có idGioHangChiTiet)
@@ -115,100 +144,83 @@ export async function fetchCart() {
     return cart.items;
   }
 
-  cart.loading = true;
-  cart.error = null;
-  try {
-    // Giữ nguyên giỏ hàng: Gộp các món khách đã nhặt khi chưa đăng nhập lên server
-    if (!isMergingCart) {
-      isMergingCart = true;
-      try {
-        const localSaved = (() => {
+  if (activeFetchPromise) {
+    return activeFetchPromise;
+  }
+
+  activeFetchPromise = (async () => {
+    if (!silent) {
+      cart.loading = true;
+    }
+    cart.error = null;
+    try {
+      // Thu thập các món khách nhặt khi chưa đăng nhập và dọn ngay khỏi local trước khi gọi API để tránh gộp trùng
+      const localSaved = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("ps_cart")) || [];
+        } catch {
+          return [];
+        }
+      })();
+      const sourceList = Array.isArray(cart.items) && cart.items.length > 0 ? cart.items : localSaved;
+      const guestItems = sourceList.filter(
+        (i) => !i.idGioHangChiTiet && (i.idSanPhamChiTiet || i.variantId)
+      );
+
+      if (guestItems.length > 0) {
+        const remaining = (Array.isArray(cart.items) ? cart.items : []).filter((i) => i.idGioHangChiTiet);
+        cart.items.splice(0, cart.items.length, ...remaining);
+        localStorage.setItem("ps_cart", JSON.stringify(remaining));
+      }
+
+      let res;
+      if (guestItems.length > 0) {
+        try {
+          await xoaTatCaGioHangApi(user.idKhachHang);
+        } catch (clearErr) {
+          console.warn("Không thể làm sạch giỏ server trước khi đồng bộ:", clearErr);
+        }
+
+        for (const gItem of guestItems) {
+          const vId = Number(gItem.idSanPhamChiTiet || gItem.variantId);
+          if (!vId) continue;
           try {
-            return JSON.parse(localStorage.getItem("ps_cart")) || [];
-          } catch {
-            return [];
-          }
-        })();
-        const sourceList = Array.isArray(cart.items) && cart.items.length > 0 ? cart.items : localSaved;
-        const guestItems = sourceList.filter(
-          (i) => !i.idGioHangChiTiet && (i.idSanPhamChiTiet || i.variantId)
-        );
-        if (guestItems.length > 0) {
-          for (const gItem of guestItems) {
-            try {
-              await themVaoGioHangApi({
-                idKhachHang: user.idKhachHang,
-                idSanPhamChiTiet: gItem.idSanPhamChiTiet || gItem.variantId,
-                soLuong: Number(gItem.qty || 1),
-              });
-            } catch (mergeErr) {
-              console.warn("Không thể gộp item khách vãng lai vào giỏ server:", gItem, mergeErr);
-            }
+            await themVaoGioHangApi({
+              idKhachHang: user.idKhachHang,
+              idSanPhamChiTiet: vId,
+              soLuong: Number(gItem.qty || 1),
+            });
+          } catch (mergeErr) {
+            console.warn("Không thể đồng bộ item khách vãng lai vào giỏ server:", gItem, mergeErr);
           }
         }
-      } finally {
-        isMergingCart = false;
       }
-    }
+      res = await layGioHangApi(user.idKhachHang);
 
-    const res = await layGioHangApi(user.idKhachHang);
-    cart.serverCart = res;
-    if (res && Array.isArray(res.items)) {
-      cart.items = res.items.map(mapServerItem);
-    } else {
-      cart.items = [];
+      cart.serverCart = res;
+      if (res && Array.isArray(res.items)) {
+        cart.items = res.items.map(mapServerItem);
+      } else {
+        cart.items = [];
+      }
+      return cart.items;
+    } catch (err) {
+      cart.error = err.message || "Không thể tải giỏ hàng";
+      return cart.items;
+    } finally {
+      cart.loading = false;
+      activeFetchPromise = null;
     }
-    return cart.items;
-  } catch (err) {
-    cart.error = err.message || "Không thể tải giỏ hàng";
-    return cart.items;
-  } finally {
-    cart.loading = false;
-  }
+  })();
+
+  return activeFetchPromise;
 }
 
 // Đồng bộ giỏ hàng từ máy khách lên tài khoản sau khi đăng nhập để không mất sản phẩm
 export async function dongBoGioHangSauDangNhap() {
   const user = getUser();
   if (!user || !user.idKhachHang) return;
-
-  let localItems = [];
-  try {
-    localItems = JSON.parse(localStorage.getItem("ps_cart")) || [];
-  } catch {
-    localItems = [];
-  }
-  if (!Array.isArray(localItems) || localItems.length === 0) {
-    await fetchCart();
-    return;
-  }
-
-  try {
-    const serverCart = await layGioHangApi(user.idKhachHang);
-    const serverItems = Array.isArray(serverCart?.items) ? serverCart.items : [];
-    const serverVariantIds = new Set(serverItems.map((i) => Number(i.idSanPhamChiTiet)));
-
-    for (const item of localItems) {
-      const vId = Number(item.idSanPhamChiTiet || item.variantId);
-      if (!vId) continue;
-      if (!serverVariantIds.has(vId)) {
-        try {
-          await themVaoGioHangApi({
-            idKhachHang: user.idKhachHang,
-            idSanPhamChiTiet: vId,
-            soLuong: Number(item.qty) || 1,
-          });
-          serverVariantIds.add(vId);
-        } catch (e) {
-          console.warn("Không thể đồng bộ sản phẩm vào giỏ server:", vId, e);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("Lỗi đồng bộ giỏ hàng sau đăng nhập:", err);
-  } finally {
-    await fetchCart();
-  }
+  await fetchCart();
 }
 
 // Thêm sản phẩm vào giỏ hàng (kết nối BE)

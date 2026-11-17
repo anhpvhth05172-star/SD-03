@@ -336,9 +336,9 @@ public class GioHangService {
                 canhBao = "Giá đã thay đổi so với lúc bạn thêm vào giỏ";
             }
 
-            BigDecimal giaBanDong = (d.getDonGia() != null && d.getDonGia() > 0)
-                    ? BigDecimal.valueOf(d.getDonGia())
-                    : giaHienTai;
+            BigDecimal giaBanDong = giaHienTai.compareTo(BigDecimal.ZERO) > 0
+                    ? giaHienTai
+                    : (d.getDonGia() != null ? BigDecimal.valueOf(d.getDonGia()) : BigDecimal.ZERO);
             BigDecimal thanhTien = giaBanDong.multiply(BigDecimal.valueOf(soLuong));
             if (conHang) {
                 tongTien = tongTien.add(thanhTien);

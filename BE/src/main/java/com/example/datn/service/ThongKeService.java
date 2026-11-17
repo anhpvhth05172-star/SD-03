@@ -65,14 +65,14 @@ public class ThongKeService {
     }
 
     private static final Set<String> TRANG_THAI_HUY_HOAN_TIEN = Set.of("DA_HUY", "DA_HOAN_TIEN");
-    private static final Set<String> MA_HINH_THUC_TIEN_MAT = Set.of("TM", "CASH");
+    private static final Set<String> MA_HINH_THUC_TIEN_MAT = Set.of("TM", "CASH", "COD", "TIEN_MAT");
 
     private static boolean laHuyHoanTien(String trangThai) {
         return trangThai != null && TRANG_THAI_HUY_HOAN_TIEN.contains(trangThai);
     }
 
     private static boolean laTienMat(String maHinhThuc) {
-        return maHinhThuc != null && MA_HINH_THUC_TIEN_MAT.contains(maHinhThuc);
+        return maHinhThuc != null && MA_HINH_THUC_TIEN_MAT.contains(maHinhThuc.trim().toUpperCase());
     }
 
     private static long giaTriTien(BigDecimal tien) {
@@ -131,7 +131,8 @@ public class ThongKeService {
         }
         if ("ONLINE".equalsIgnoreCase(loaiDon)) {
             boolean laTienMatCod = laTienMat(maHinhThuc);
-            if (!laTienMatCod && !"CHO_THANH_TOAN".equals(tt)) {
+            boolean chuaXacNhan = "CHO_THANH_TOAN".equals(tt) || "CHO_XAC_NHAN".equals(tt) || "GIAO_HANG_THAT_BAI".equals(tt);
+            if (!laTienMatCod && !chuaXacNhan) {
                 return true;
             }
         }
@@ -167,7 +168,7 @@ public class ThongKeService {
         long tienChuyenKhoan = Math.max(0, doanhThu - tienMat);
 
         long doanhThuDuKien = hoaDons.stream()
-            .filter(h -> idHopLe.contains(h.id()) && !idDaThanhToan.contains(h.id()))
+            .filter(h -> idHopLe.contains(h.id()))
             .mapToLong(h -> giaTriTien(h.tienSauGiamGia()))
             .sum();
 
@@ -220,7 +221,6 @@ public class ThongKeService {
             .sum();
 
         long doanhThuDuKien = dongThuongHieu.stream()
-            .filter(c -> !idDaThanhToan.contains(c.idHoaDon()))
             .mapToLong(c -> giaTriTien(c.thanhTien()))
             .sum();
 

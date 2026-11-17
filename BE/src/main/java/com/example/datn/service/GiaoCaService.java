@@ -58,6 +58,9 @@ public class GiaoCaService {
 
     @Transactional
     public CaLamViecDto moCa(com.example.datn.dto.MoCaRequest request) {
+        if (laAdmin()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tài khoản Admin không thực hiện mở ca làm việc");
+        }
         Long idNhanVien = idNhanVienHienTai();
         Long tienDauCa = request != null ? request.getTienDauCa() : null;
         String ghiChu = request != null ? request.getGhiChu() : null;

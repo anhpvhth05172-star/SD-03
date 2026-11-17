@@ -34,7 +34,11 @@ public class ThongKeDoanhThuController {
         var ketThucKhongBaoGom = den.plusDays(1).atTime(LocalTime.MIDNIGHT);
         return new DoanhThuDTO(
             hoaDonRepository.tongDoanhThuTheoTrangThai(List.of("DA_GIAO_HANG", "DA_HOAN_THANH"), batDau, ketThucKhongBaoGom),
-            hoaDonRepository.tongDoanhThuTheoTrangThai(List.of("DA_XAC_NHAN"), batDau, ketThucKhongBaoGom)
+            hoaDonRepository.tongDoanhThuTheoTrangThai(
+                List.of("CHO_THANH_TOAN", "CHO_XAC_NHAN", "DA_XAC_NHAN", "CHO_GIAO_HANG", "DANG_GIAO_HANG", "GIAO_HANG_THAT_BAI", "DA_GIAO_HANG", "DA_HOAN_THANH"),
+                batDau,
+                ketThucKhongBaoGom
+            )
         );
     }
 }

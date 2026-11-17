@@ -37,6 +37,9 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
 
     boolean existsByMaHoaDon(String maHoaDon);
 
+    @Query("SELECT h.maHoaDon FROM HoaDon h WHERE h.maHoaDon LIKE 'HD%'")
+    List<String> findMaHoaDonBatDauBangHD();
+
     Optional<HoaDon> findByMaHoaDon(String maHoaDon);
 
     @Query("""

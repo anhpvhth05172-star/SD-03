@@ -1747,7 +1747,7 @@ input:checked + .toggle-slider:before {
 }
 
 .saved-addr-label svg {
-  color: #2563eb;
+  color: #dc2626;
   flex-shrink: 0;
 }
 
@@ -1780,21 +1780,21 @@ input:checked + .toggle-slider:before {
 }
 
 .saved-addr-pill:hover {
-  border-color: #2563eb;
-  background: #eff6ff;
-  color: #1d4ed8;
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .saved-addr-pill.active {
-  border-color: #2563eb;
-  background: #eff6ff;
-  color: #1e40af;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.12);
 }
 
 .pill-default-tag {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: #dc2626;
+  color: #ffffff;
   font-size: 10.5px;
   font-weight: 700;
   padding: 2px 6px;
@@ -1803,8 +1803,8 @@ input:checked + .toggle-slider:before {
 }
 
 .pill-active-tag {
-  background: #e0f2fe;
-  color: #0284c7;
+  background: #fee2e2;
+  color: #dc2626;
   font-size: 10.5px;
   font-weight: 700;
   padding: 2px 6px;
@@ -1814,8 +1814,8 @@ input:checked + .toggle-slider:before {
 
 /* Kiểu hiển thị 1 địa chỉ mặc định + nút đổi */
 .pos-del-saved-addresses-bar.single-default-mode {
-  background: #f0f7ff;
-  border: 1px solid #bfdbfe;
+  background: #fff5f5;
+  border: 1px solid #fecaca;
   padding: 10px 14px;
   gap: 9px;
 }
@@ -1839,9 +1839,9 @@ input:checked + .toggle-slider:before {
   gap: 5px;
   padding: 4px 10px;
   border-radius: 7px;
-  border: 1px solid #93c5fd;
+  border: 1px solid #fca5a5;
   background: #ffffff;
-  color: #1d4ed8;
+  color: #dc2626;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -1849,8 +1849,8 @@ input:checked + .toggle-slider:before {
 }
 
 .btn-change-addr-trigger:hover {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: #dc2626;
+  border-color: #dc2626;
   color: #ffffff;
 }
 
@@ -1865,16 +1865,16 @@ input:checked + .toggle-slider:before {
   gap: 12px;
   padding: 8px 12px;
   background: #ffffff;
-  border: 1.5px solid #93c5fd;
+  border: 1.5px solid #fca5a5;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .saved-addr-single-box:hover {
-  border-color: #2563eb;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
-  background: #f8faff;
+  border-color: #dc2626;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.12);
+  background: #fffafa;
 }
 
 .single-box-left {
@@ -1901,7 +1901,7 @@ input:checked + .toggle-slider:before {
 .change-link-text {
   font-size: 11.5px;
   font-weight: 700;
-  color: #2563eb;
+  color: #dc2626;
 }
 
 /* Modal Popup chọn địa chỉ khách hàng */
@@ -1940,14 +1940,14 @@ input:checked + .toggle-slider:before {
 }
 
 .select-addr-card:hover {
-  border-color: #3b82f6;
-  background: #f8fafc;
+  border-color: #f87171;
+  background: #fffafa;
 }
 
 .select-addr-card.active {
-  border-color: #2563eb;
-  background: #eff6ff;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+  border-color: #dc2626;
+  background: #fef2f2;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.12);
 }
 
 .select-addr-radio-col {
@@ -1966,14 +1966,14 @@ input:checked + .toggle-slider:before {
 }
 
 .custom-radio-circle.checked {
-  border-color: #2563eb;
+  border-color: #dc2626;
 }
 
 .custom-radio-circle .inner-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #2563eb;
+  background: #dc2626;
 }
 
 .select-addr-info-col {
@@ -2018,13 +2018,13 @@ input:checked + .toggle-slider:before {
 }
 
 .btn-pick-addr:hover {
-  border-color: #2563eb;
-  color: #2563eb;
+  border-color: #dc2626;
+  color: #dc2626;
 }
 
 .btn-pick-addr.is-active {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: #dc2626;
+  border-color: #dc2626;
   color: #ffffff;
 }
 
@@ -2040,9 +2040,9 @@ input:checked + .toggle-slider:before {
   gap: 6px;
   padding: 6px 14px;
   border-radius: 7px;
-  border: 1px dashed #2563eb;
-  background: #eff6ff;
-  color: #1d4ed8;
+  border: 1px dashed #dc2626;
+  background: #fef2f2;
+  color: #dc2626;
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
@@ -2050,8 +2050,9 @@ input:checked + .toggle-slider:before {
 }
 
 .btn-open-quick-add:hover {
-  background: #dbeafe;
-  border-color: #1d4ed8;
+  background: #fee2e2;
+  border-color: #b91c1c;
+  color: #b91c1c;
 }
 
 .pill-addr-text {
@@ -2067,9 +2068,9 @@ input:checked + .toggle-slider:before {
   gap: 5px;
   padding: 5px 12px;
   border-radius: 8px;
-  border: 1px dashed #0284c7;
-  background: #f0f9ff;
-  color: #0284c7;
+  border: 1px solid #dc2626;
+  background: #dc2626;
+  color: #ffffff;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -2077,9 +2078,9 @@ input:checked + .toggle-slider:before {
 }
 
 .saved-addr-add-btn:hover {
-  background: #e0f2fe;
-  border-color: #0369a1;
-  color: #0369a1;
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #ffffff;
 }
 
 .pos-del-saved-addresses-bar.empty-addr-bar {
@@ -2138,9 +2139,9 @@ input:checked + .toggle-slider:before {
 }
 
 .save-profile-badge.badge-new {
-  background: #dbeafe;
-  color: #1d4ed8;
-  border: 1px solid #93c5fd;
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
 }
 
 .save-profile-badge.badge-saved {
@@ -2178,8 +2179,8 @@ input:checked + .toggle-slider:before {
   gap: 6px;
   padding: 7px 13px;
   border-radius: 8px;
-  border: 1px solid #2563eb;
-  background: #2563eb;
+  border: 1px solid #dc2626;
+  background: #dc2626;
   color: #ffffff;
   font-size: 12px;
   font-weight: 700;
@@ -2189,10 +2190,10 @@ input:checked + .toggle-slider:before {
 }
 
 .btn-save-addr-profile:hover:not(:disabled) {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
+  background: #b91c1c;
+  border-color: #b91c1c;
   transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.22);
+  box-shadow: 0 4px 10px rgba(220, 38, 38, 0.22);
 }
 
 .btn-save-addr-profile:disabled {

@@ -244,7 +244,7 @@ const handleLogout = () => {
               <!-- Chưa đăng nhập -->
               <RouterLink
                 v-else
-                to="/khach-hang"
+                :to="{ path: '/khach-hang', query: { redirect: route.fullPath } }"
                 class="btn client-admin-pill d-none d-sm-inline-flex align-items-center gap-1"
                 title="Đăng nhập"
               >
@@ -313,7 +313,7 @@ const handleLogout = () => {
 
                 <template v-else>
                   <RouterLink
-                    to="/khach-hang"
+                    :to="{ path: '/khach-hang', query: { redirect: route.fullPath } }"
                     class="client-dropdown-item text-primary"
                     @click="closeDropdowns"
                   >

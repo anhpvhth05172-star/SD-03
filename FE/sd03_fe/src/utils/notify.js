@@ -252,6 +252,11 @@ export const notifyToast = (title, text = '', type = 'warning', timer = 2500) =>
 }
 
 /**
+ * Hiển thị thông báo Toast thông tin góc trên bên phải
+ */
+export const notifyToastInfo = (title, text = '', timer = 3500) => notifyToast(title, text, 'info', timer)
+
+/**
  * Thông báo tồn kho không đủ / hết hàng ở góc trên bên phải
  */
 export const notifyStockWarning = (title = 'Hết hàng', text = '') => {
@@ -317,6 +322,7 @@ export default {
   warning: notifyWarning,
   toastWarning: notifyToastWarning,
   toast: notifyToast,
+  toastInfo: notifyToastInfo,
   stockWarning: notifyStockWarning,
   confirm: notifyConfirm,
   deleteConfirm: notifyDeleteConfirm,

@@ -1,9 +1,9 @@
 <script setup>
-import { reactive, ref, computed, watch, onMounted } from "vue";
+import { reactive, ref, computed, watch, onMounted, nextTick } from "vue";
 import * as store from "../store";
 import { createInvoice } from "@/api/invoice";
 import { listVouchers, suDungCuaToi } from "@/api/voucher";
-import { getProvinces, getWards, getServices, tinhPhi } from "@/api/shipping";
+import { getProvinces, getWards, getServices, tinhPhi, getFreeshipConfig } from "@/api/shipping";
 import { notifyConfirm, notifySuccess, notifyWarning, notifyError } from "@/utils/notify";
 import { getUser, isKhachHangDangNhap } from "@/utils/auth";
 
@@ -74,6 +74,9 @@ onMounted(async () => {
   const [, shippingResult] = await Promise.allSettled([
     fetchCustomer().then((result) => { customer.value = result; }),
     loadProvinces(),
+    getFreeshipConfig().then((cfg) => {
+      if (cfg?.freeShipThreshold != null) freeShipThreshold.value = Number(cfg.freeShipThreshold);
+    }).catch(() => {}),
   ]);
   if (shippingResult.status === "rejected") shippingError.value = "Không tải được danh sách tỉnh/thành phố.";
   await loadVouchers();
@@ -277,6 +280,20 @@ const orderId = ref("");
 /* ---------- Tự điền khi đã đăng nhập ---------- */
 const selectedAddr = ref("new");
 const isAddressModalOpen = ref(false);
+const isEditingAddressInModal = ref(false);
+const addrModalSaving = ref(false);
+const addrModalError = ref("");
+const addrModalWards = ref([]);
+const addrModalForm = reactive({
+  id: null,
+  name: "",
+  phone: "",
+  provinceId: "",
+  wardId: "",
+  street: "",
+  isDefault: true,
+});
+
 const currentSelectedSavedAddr = computed(() => {
   if (selectedAddr.value === "new") return null;
   return savedAddresses.value.find((a) => a.id === selectedAddr.value) || savedAddresses.value[0] || null;
@@ -284,7 +301,193 @@ const currentSelectedSavedAddr = computed(() => {
 
 function selectAddrAndClose(id) {
   chooseAddress(id);
+  isEditingAddressInModal.value = false;
   isAddressModalOpen.value = false;
+}
+
+function openSelectAddressListModal() {
+  isEditingAddressInModal.value = false;
+  addrModalError.value = "";
+  isAddressModalOpen.value = true;
+}
+
+async function loadAddrModalWards(provId, targetWardName = "") {
+  addrModalWards.value = [];
+  addrModalForm.wardId = "";
+  if (!provId) return;
+  try {
+    const provObj = provinces.value.find((p) => String(p.id) === String(provId));
+    const list = await getWards(Number(provId), provObj?.name || "");
+    addrModalWards.value = Array.isArray(list) ? list : [];
+    const target = normalizePlace(targetWardName);
+    if (target) {
+      let match = addrModalWards.value.find(
+        (w) =>
+          normalizePlace(w.name) === target ||
+          normalizePlace(w.name).startsWith(`${target} `) ||
+          cleanPlaceName(w.name) === cleanPlaceName(targetWardName),
+      );
+      if (!match) {
+        match = { id: targetWardName, name: targetWardName };
+        addrModalWards.value.unshift(match);
+      }
+      addrModalForm.wardId = String(match.id);
+    }
+  } catch {
+    if (targetWardName) {
+      const fallback = { id: targetWardName, name: targetWardName };
+      addrModalWards.value = [fallback];
+      addrModalForm.wardId = String(fallback.id);
+    }
+  }
+}
+
+async function onAddrModalProvinceChange() {
+  await loadAddrModalWards(addrModalForm.provinceId, "");
+}
+
+async function openEditAddressModal(addr = null) {
+  if (!provinces.value.length) {
+    try {
+      await loadProvinces();
+    } catch {
+      /* ignore */
+    }
+  }
+  const target = addr || currentSelectedSavedAddr.value || savedAddresses.value[0] || null;
+  const base = currentUser.value ? userInfo(currentUser.value) : { name: "", phone: "" };
+  addrModalError.value = "";
+  addrModalForm.id = target?.id || null;
+  addrModalForm.name = target?.name || f.name || base.name || "";
+  addrModalForm.phone = target?.phone || f.phone || base.phone || "";
+  addrModalForm.street = target?.street || f.address || "";
+  addrModalForm.isDefault = target ? !!target.isDefault : true;
+
+  const targetProv = cleanPlaceName(target?.province);
+  const matchedProv = targetProv
+    ? provinces.value.find(
+        (p) => cleanPlaceName(p.name) === targetProv || normalizePlace(p.name).includes(targetProv),
+      )
+    : provinces.value.find((p) => String(p.id) === String(provinceId.value));
+  addrModalForm.provinceId = matchedProv ? String(matchedProv.id) : "";
+
+  isEditingAddressInModal.value = true;
+  isAddressModalOpen.value = true;
+
+  if (addrModalForm.provinceId) {
+    await loadAddrModalWards(addrModalForm.provinceId, target?.ward || selectedWard.value?.name || "");
+  } else {
+    addrModalWards.value = [];
+    addrModalForm.wardId = "";
+  }
+}
+
+async function openAddAddressModal() {
+  if (!provinces.value.length) {
+    try {
+      await loadProvinces();
+    } catch {
+      /* ignore */
+    }
+  }
+  const base = currentUser.value ? userInfo(currentUser.value) : { name: "", phone: "" };
+  addrModalError.value = "";
+  addrModalForm.id = null;
+  addrModalForm.name = f.name || base.name || "";
+  addrModalForm.phone = f.phone || base.phone || "";
+  addrModalForm.provinceId = "";
+  addrModalForm.wardId = "";
+  addrModalForm.street = "";
+  addrModalForm.isDefault = !savedAddresses.value.length;
+  addrModalWards.value = [];
+  isEditingAddressInModal.value = true;
+  isAddressModalOpen.value = true;
+}
+
+async function saveAddrModalForm() {
+  addrModalError.value = "";
+  const cleanName = addrModalForm.name.trim();
+  const cleanPhone = addrModalForm.phone.trim();
+  const cleanStreet = addrModalForm.street.trim();
+
+  if (!cleanName) {
+    addrModalError.value = "Vui lòng nhập họ và tên người nhận.";
+    return;
+  }
+  if (!/^0\d{9}$/.test(cleanPhone)) {
+    addrModalError.value = "Số điện thoại phải gồm 10 chữ số, bắt đầu bằng số 0.";
+    return;
+  }
+  if (!addrModalForm.provinceId) {
+    addrModalError.value = "Vui lòng chọn Tỉnh / Thành phố.";
+    return;
+  }
+  if (!addrModalForm.wardId) {
+    addrModalError.value = "Vui lòng chọn Phường / Xã.";
+    return;
+  }
+  if (!cleanStreet) {
+    addrModalError.value = "Vui lòng nhập địa chỉ cụ thể (số nhà, tên đường...).";
+    return;
+  }
+
+  const provObj = provinces.value.find((p) => String(p.id) === String(addrModalForm.provinceId));
+  const wardObj = addrModalWards.value.find((w) => String(w.id) === String(addrModalForm.wardId));
+
+  addrModalSaving.value = true;
+  try {
+    const res = await fetch("/api/auth/thong-tin", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({
+        idDiaChi: addrModalForm.id,
+        tenDiaChi: cleanName,
+        tenKhachHang: cleanName,
+        soDienThoai: cleanPhone,
+        tinhThanhPho: provObj?.name || "",
+        phuong: wardObj?.name || "",
+        diaChiCuThe: cleanStreet,
+        macDinh: !!addrModalForm.isDefault,
+      }),
+    });
+    if (!res.ok) {
+      let errJson = {};
+      try {
+        errJson = await res.json();
+      } catch {
+        /* ignore non-JSON error body */
+      }
+      throw new Error(errJson.message || `Không thể lưu địa chỉ (mã lỗi ${res.status}).`);
+    }
+    const updatedProfile = await res.json();
+    const editedId = addrModalForm.id;
+    customer.value = { ...customer.value, ...updatedProfile, id: updatedProfile.id ?? customer.value?.id };
+
+    await nextTick();
+    let targetId = editedId;
+    if (!targetId) {
+      const matched = savedAddresses.value.find(
+        (a) =>
+          a.street.trim() === cleanStreet &&
+          (!provObj?.name || normalizePlace(a.province) === normalizePlace(provObj.name)),
+      );
+      targetId = matched?.id || savedAddresses.value[0]?.id || "new";
+    }
+    if (targetId && targetId !== "new") {
+      chooseAddress(targetId);
+    }
+
+    isEditingAddressInModal.value = false;
+    isAddressModalOpen.value = false;
+    notifySuccess(
+      "Thành công",
+      editedId ? "Đã cập nhật địa chỉ nhận hàng!" : "Đã thêm địa chỉ nhận hàng mới!",
+    );
+  } catch (e) {
+    addrModalError.value = e.message || "Không thể lưu địa chỉ, vui lòng thử lại.";
+  } finally {
+    addrModalSaving.value = false;
+  }
 }
 
 function chooseAddress(id) {
@@ -314,9 +517,12 @@ function chooseAddress(id) {
 
 const selectedProvince = computed(() => provinces.value.find((p) => String(p.id) === String(provinceId.value)) || null);
 const selectedWard = computed(() => wards.value.find((w) => String(w.id) === String(wardId.value)) || null);
-const fullDeliveryAddress = computed(() =>
-  [f.address.trim(), selectedWard.value?.name, selectedProvince.value?.name].filter(Boolean).join(", "),
-);
+const fullDeliveryAddress = computed(() => {
+  if (currentSelectedSavedAddr.value?.address) {
+    return currentSelectedSavedAddr.value.address;
+  }
+  return [f.address.trim(), selectedWard.value?.name, selectedProvince.value?.name].filter(Boolean).join(", ");
+});
 
 function normalizePlace(value) {
   return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim().toLowerCase();
@@ -377,11 +583,18 @@ watch(provinceId, async (id) => {
   shippingError.value = "";
   if (!id) return;
   try {
-    wards.value = await getWards(Number(id));
+    const provObj = provinces.value.find((p) => String(p.id) === String(id));
+    wards.value = await getWards(Number(id), provObj?.name || "");
     if (savedWardToRestore.value) {
       const savedWard = savedWardToRestore.value;
-      const match = wards.value.find((w) => normalizePlace(w.name) === normalizePlace(savedWard)
-        || normalizePlace(w.name).startsWith(`${normalizePlace(savedWard)} `));
+      const savedNorm = normalizePlace(savedWard);
+      const savedClean = cleanPlaceName(savedWard);
+      const match = wards.value.find(
+        (w) =>
+          normalizePlace(w.name) === savedNorm ||
+          normalizePlace(w.name).startsWith(`${savedNorm} `) ||
+          cleanPlaceName(w.name) === savedClean,
+      );
       if (match) wardId.value = String(match.id);
       savedWardToRestore.value = "";
     }
@@ -390,11 +603,13 @@ watch(provinceId, async (id) => {
   }
 });
 
-watch([provinceId, wardId, serviceTypeId], async ([province, ward]) => {
+watch([provinceId, wardId, serviceTypeId, currentSelectedSavedAddr], async ([province, ward, , savedAddr]) => {
   const requestId = ++shippingRequestId;
-  if (!province || !ward || !selectedProvince.value || !selectedWard.value) {
-    shippingFee.value = selectedProvince.value
-      ? getEstimatedShippingFee(selectedProvince.value.name, '')
+  const provName = selectedProvince.value?.name || savedAddr?.province || "";
+  const wardName = selectedWard.value?.name || savedAddr?.ward || "";
+  if (!provName || !wardName) {
+    shippingFee.value = provName
+      ? getEstimatedShippingFee(provName, '')
       : SHIP_FEE;
     toProvinceId.value = selectedProvince.value ? (Number(selectedProvince.value.id) || 201) : null;
     toDistrictId.value = null;
@@ -406,8 +621,8 @@ watch([provinceId, wardId, serviceTypeId], async ([province, ward]) => {
   shippingError.value = "";
   try {
     const result = await tinhPhi({
-      toProvinceName: selectedProvince.value.name,
-      toWardName: selectedWard.value.name,
+      toProvinceName: provName,
+      toWardName: wardName,
       serviceTypeId: serviceTypeId.value || undefined,
       items: cart.items.map((i) => ({
         idSanPhamChiTiet: i.idSanPhamChiTiet ?? i.variantId ?? i.spctId ?? i.id,
@@ -415,10 +630,10 @@ watch([provinceId, wardId, serviceTypeId], async ([province, ward]) => {
       })),
     });
     if (requestId !== shippingRequestId) return;
-    shippingFee.value = Number(result.shippingFee || getEstimatedShippingFee(selectedProvince.value?.name, selectedWard.value?.name));
-    toProvinceId.value = Number(result.toProvinceId || selectedProvince.value.id) || 201;
+    shippingFee.value = Number(result.shippingFee || getEstimatedShippingFee(provName, wardName));
+    toProvinceId.value = Number(result.toProvinceId || selectedProvince.value?.id) || 201;
     toDistrictId.value = Number(result.toDistrictId || 0) || 1;
-    toWardCode.value = String(result.toWardCode || selectedWard.value.id || "001");
+    toWardCode.value = String(result.toWardCode || selectedWard.value?.id || "001");
     if (result.toDistrictId) {
       try {
         const services = await getServices(result.toDistrictId);
@@ -432,8 +647,8 @@ watch([provinceId, wardId, serviceTypeId], async ([province, ward]) => {
     if (requestId !== shippingRequestId) return;
     console.warn("[Checkout] Không tính được phí GHN tự động, dùng phí dự phòng:", error.message);
     shippingError.value = "";
-    shippingFee.value = getEstimatedShippingFee(selectedProvince.value?.name, selectedWard.value?.name);
-    toProvinceId.value = Number(selectedProvince.value.id) || 201;
+    shippingFee.value = getEstimatedShippingFee(provName, wardName);
+    toProvinceId.value = Number(selectedProvince.value?.id) || 201;
     toDistrictId.value = 1;
     toWardCode.value = "001";
   } finally {
@@ -472,8 +687,8 @@ const voucherMsg = reactive({ text: "", ok: false });
 const manualRemoved = ref(false); // khách chủ động gỡ mã -> không tự áp lại
 
 // Tổng trước giảm = tiền hàng + phí vận chuyển (khớp cách tính của back-end)
-const FREE_SHIP_THRESHOLD = 10000000;
-const isFreeShip = computed(() => Number(cartTotal.value || 0) >= FREE_SHIP_THRESHOLD);
+const freeShipThreshold = ref(10000000);
+const isFreeShip = computed(() => freeShipThreshold.value > 0 && Number(cartTotal.value || 0) >= freeShipThreshold.value);
 const actualShippingFee = computed(() => (isFreeShip.value ? 0 : Number(shippingFee.value || 0)));
 const orderTotal = computed(() => cartTotal.value + actualShippingFee.value);
 const voucherIsAvailable = (v) => {
@@ -807,7 +1022,7 @@ async function submit() {
   } else {
     errors.email = "";
   }
-  errors.address = f.address.trim() && provinceId.value && wardId.value
+  errors.address = currentSelectedSavedAddr.value?.address || (f.address.trim() && provinceId.value && wardId.value)
     ? ""
     : "Vui lòng nhập địa chỉ cụ thể và chọn tỉnh/thành phố, phường/xã.";
   if (errors.name || errors.phone || errors.email || errors.address) {
@@ -936,14 +1151,14 @@ const qrModalData = ref({
   amount: 0,
   qrUrl: '',
   paymentUrl: '',
-  accountNo: '0987654321',
+  accountNo: '0922010408',
   accountName: 'POLYSHOES STORE',
   bankName: 'MB Bank (Ngân hàng Quân Đội)'
 });
 const qrConfirming = ref(false);
 const autoCountdown = ref(10);
 let autoCountdownTimer = null;
-const isAutoConfirmEnabled = ref(true);
+const isAutoConfirmEnabled = ref(false);
 const copyToast = ref('');
 
 function showCopyToast(msg) {
@@ -1013,6 +1228,74 @@ const toggleAutoConfirm = () => {
   }
 };
 
+let qrPollTimer = null;
+
+const stopQrPaymentPolling = () => {
+  if (qrPollTimer) {
+    clearInterval(qrPollTimer);
+    qrPollTimer = null;
+  }
+};
+
+const finishQrOrderSuccess = async (result) => {
+  stopQrPaymentPolling();
+  stopAutoCountdown();
+  playSuccessChime();
+  isQrModalOpen.value = false;
+
+  orderId.value = qrModalData.value.orderId;
+  orderCode.value = qrModalData.value.maHoaDon;
+
+  try {
+    const orders = JSON.parse(localStorage.getItem('ps_orders') || '[]');
+    orders.unshift({
+      id: orderCode.value,
+      orderId: orderId.value,
+      info: {
+        name: f.name,
+        phone: f.phone,
+        address: fullDeliveryAddress.value,
+        note: f.note,
+        pay: f.pay,
+      },
+      items: JSON.parse(JSON.stringify(cart.items)),
+      total: qrModalData.value.amount || finalTotal.value,
+      date: new Date().toLocaleString('vi-VN'),
+    });
+    localStorage.setItem('ps_orders', JSON.stringify(orders.slice(0, 20)));
+  } catch { }
+
+  done.value = true;
+  await clearCart();
+
+  if (result?.outOfStock) {
+    notifyWarning('Sự cố tồn kho', result.message || 'Sản phẩm đã hết hàng trong kho. Đơn chuyển sang Chờ hoàn tiền!');
+  } else {
+    notifySuccess('Thanh toán thành công', 'Đơn hàng của bạn đã được thanh toán và chuyển sang Chờ xác nhận!');
+  }
+};
+
+const startQrPaymentPolling = () => {
+  stopQrPaymentPolling();
+  if (!qrModalData.value.orderId) return;
+  qrPollTimer = setInterval(async () => {
+    if (!isQrModalOpen.value || qrConfirming.value || !qrModalData.value.orderId) return;
+    try {
+      const res = await fetch(`/api/vnpay/trang-thai/${qrModalData.value.orderId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.paid) {
+        await finishQrOrderSuccess(data);
+      }
+    } catch {
+      // Bỏ qua lỗi mạng tạm thời khi polling
+    }
+  }, 2500);
+};
+
 const openQrModal = (payData) => {
   qrModalData.value = {
     orderId: payData.orderId,
@@ -1020,21 +1303,23 @@ const openQrModal = (payData) => {
     amount: payData.amount,
     qrUrl: payData.qrUrl,
     paymentUrl: payData.paymentUrl,
-    accountNo: '0987654321',
+    accountNo: '0922010408',
     accountName: 'POLYSHOES STORE',
     bankName: 'MB Bank (Ngân hàng Quân Đội)'
   };
   isQrModalOpen.value = true;
-  startAutoCountdown();
+  startQrPaymentPolling();
 };
 
 const closeQrModal = () => {
+  stopQrPaymentPolling();
   stopAutoCountdown();
   isQrModalOpen.value = false;
 };
 
 const confirmQrPayment = async () => {
   if (qrConfirming.value || !qrModalData.value.orderId) return;
+  stopQrPaymentPolling();
   stopAutoCountdown();
   qrConfirming.value = true;
 
@@ -1044,41 +1329,7 @@ const confirmQrPayment = async () => {
       headers: { 'Content-Type': 'application/json', ...authHeaders() }
     });
     const result = await res.json();
-
-    playSuccessChime();
-    isQrModalOpen.value = false;
-
-    orderId.value = qrModalData.value.orderId;
-    orderCode.value = qrModalData.value.maHoaDon;
-
-    // Lưu vào danh sách đơn gần đây để tra cứu
-    try {
-      const orders = JSON.parse(localStorage.getItem('ps_orders') || '[]');
-      orders.unshift({
-        id: orderCode.value,
-        orderId: orderId.value,
-        info: {
-          name: f.name,
-          phone: f.phone,
-          address: fullDeliveryAddress.value,
-          note: f.note,
-          pay: f.pay,
-        },
-        items: JSON.parse(JSON.stringify(cart.items)),
-        total: qrModalData.value.amount || finalTotal.value,
-        date: new Date().toLocaleString('vi-VN'),
-      });
-      localStorage.setItem('ps_orders', JSON.stringify(orders.slice(0, 20)));
-    } catch { }
-
-    done.value = true;
-    await clearCart();
-
-    if (result?.outOfStock) {
-      notifyWarning('Sự cố tồn kho', result.message || 'Sản phẩm đã hết hàng trong kho. Đơn chuyển sang Chờ hoàn tiền!');
-    } else {
-      notifySuccess('Thanh toán thành công', 'Đơn hàng của bạn đã được thanh toán và chuyển sang Chờ xác nhận!');
-    }
+    await finishQrOrderSuccess(result);
   } catch (err) {
     console.error('Lỗi xác nhận thanh toán QR:', err);
     notifyError('Lỗi xác nhận', err.message || 'Không thể xác nhận thanh toán!');
@@ -1166,7 +1417,7 @@ const confirmQrPayment = async () => {
             <span>Đã có tài khoản? Đăng nhập để tự điền thông tin và nhận mã giảm
               giá.</span>
           </div>
-          <RouterLink to="/khach-hang" class="btn btn-sm btn-dark rounded-pill px-3 fw-bold">
+          <RouterLink :to="{ path: '/khach-hang', query: { redirect: '/thanh-toan' } }" class="btn btn-sm btn-dark rounded-pill px-3 fw-bold">
             Đăng nhập
           </RouterLink>
         </div>
@@ -1179,19 +1430,26 @@ const confirmQrPayment = async () => {
 
           <!-- Địa chỉ đã lưu (Mặc định 1 địa chỉ + Popup chọn địa chỉ khác) -->
           <div v-if="isLoggedIn && savedAddresses.length" class="mb-4">
-            <div class="d-flex align-items-center justify-content-between mb-2">
+            <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
               <label class="co-label mb-0">
                 <i class="bi bi-geo-alt-fill text-primary me-1"></i>Địa chỉ nhận hàng mặc định
               </label>
-              <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-bold"
-                @click="isAddressModalOpen = true">
-                <i class="bi bi-arrow-repeat me-1"></i>Thay đổi
-              </button>
+              <div class="d-flex align-items-center gap-2">
+                <button v-if="currentSelectedSavedAddr" type="button"
+                  class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-bold"
+                  @click="openEditAddressModal(currentSelectedSavedAddr)">
+                  <i class="bi bi-pencil-square me-1"></i>Sửa địa chỉ hiện tại
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-bold"
+                  @click="openSelectAddressListModal">
+                  <i class="bi bi-arrow-repeat me-1"></i>Thay đổi
+                </button>
+              </div>
             </div>
 
             <div class="co-selected-addr-box p-3 border rounded-3 bg-light d-flex align-items-center justify-content-between cursor-pointer"
               style="cursor: pointer; transition: all 0.2s ease;"
-              @click="isAddressModalOpen = true"
+              @click="openSelectAddressListModal"
               title="Bấm để chọn địa chỉ khác">
               <div class="min-w-0 me-3">
                 <div class="fw-bold text-dark small mb-1 d-flex align-items-center gap-2">
@@ -1213,18 +1471,20 @@ const confirmQrPayment = async () => {
           </div>
 
           <div class="row g-3">
-            <div class="col-md-6">
-              <label class="co-label">Họ và tên <span class="text-danger">*</span></label>
-              <input v-model="f.name" class="form-control co-input" :readonly="lockName"
-                :class="{ 'is-invalid': errors.name, 'bg-light': lockName }" placeholder="Nhập họ tên của bạn" />
-              <div class="invalid-feedback">{{ errors.name }}</div>
-            </div>
-            <div class="col-md-6">
-              <label class="co-label">Số điện thoại <span class="text-danger">*</span></label>
-              <input v-model="f.phone" class="form-control co-input" :readonly="lockPhone"
-                :class="{ 'is-invalid': errors.phone, 'bg-light': lockPhone }" placeholder="Nhập số điện thoại" />
-              <div class="invalid-feedback">{{ errors.phone }}</div>
-            </div>
+            <template v-if="!currentSelectedSavedAddr">
+              <div class="col-md-6">
+                <label class="co-label">Họ và tên <span class="text-danger">*</span></label>
+                <input v-model="f.name" class="form-control co-input" :readonly="lockName"
+                  :class="{ 'is-invalid': errors.name, 'bg-light': lockName }" placeholder="Nhập họ tên của bạn" />
+                <div class="invalid-feedback">{{ errors.name }}</div>
+              </div>
+              <div class="col-md-6">
+                <label class="co-label">Số điện thoại <span class="text-danger">*</span></label>
+                <input v-model="f.phone" class="form-control co-input" :readonly="lockPhone"
+                  :class="{ 'is-invalid': errors.phone, 'bg-light': lockPhone }" placeholder="Nhập số điện thoại" />
+                <div class="invalid-feedback">{{ errors.phone }}</div>
+              </div>
+            </template>
             <div class="col-12">
               <label class="co-label">Email nhận thông báo đơn hàng <span class="text-danger">*</span></label>
               <input v-model="f.email" type="email" class="form-control co-input"
@@ -1232,28 +1492,30 @@ const confirmQrPayment = async () => {
                 placeholder="Nhập địa chỉ email để nhận hóa đơn (ví dụ: nguyenvan@gmail.com)" />
               <div class="invalid-feedback">{{ errors.email }}</div>
             </div>
-            <div class="col-md-6">
-              <label class="co-label">Tỉnh / Thành phố <span class="text-danger">*</span></label>
-              <select v-model="provinceId" class="form-select co-input" :disabled="!provinces.length">
-                <option value="">Chọn tỉnh / thành phố</option>
-                <option v-for="p in provinces" :key="p.id" :value="String(p.id)">{{ p.name }}</option>
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="co-label">Phường / Xã <span class="text-danger">*</span></label>
-              <select v-model="wardId" class="form-select co-input" :disabled="!provinceId || !wards.length">
-                <option value="">Chọn phường / xã</option>
-                <option v-for="w in wards" :key="w.id" :value="String(w.id)">{{ w.name }}</option>
-              </select>
-            </div>
-            <div class="col-12">
-              <label class="co-label">Địa chỉ cụ thể (số nhà, tên đường) <span class="text-danger">*</span></label>
-              <input v-model="f.address" class="form-control co-input" :readonly="lockAddress" :class="{
-                'is-invalid': errors.address,
-                'bg-light': lockAddress,
-              }" placeholder="Ví dụ: 123 Nguyễn Trãi" />
-              <div class="invalid-feedback">{{ errors.address }}</div>
-            </div>
+            <template v-if="!currentSelectedSavedAddr">
+              <div class="col-md-6">
+                <label class="co-label">Tỉnh / Thành phố <span class="text-danger">*</span></label>
+                <select v-model="provinceId" class="form-select co-input" :disabled="!provinces.length">
+                  <option value="">Chọn tỉnh / thành phố</option>
+                  <option v-for="p in provinces" :key="p.id" :value="String(p.id)">{{ p.name }}</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="co-label">Phường / Xã <span class="text-danger">*</span></label>
+                <select v-model="wardId" class="form-select co-input" :disabled="!provinceId || !wards.length">
+                  <option value="">Chọn phường / xã</option>
+                  <option v-for="w in wards" :key="w.id" :value="String(w.id)">{{ w.name }}</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <label class="co-label">Địa chỉ cụ thể (số nhà, tên đường) <span class="text-danger">*</span></label>
+                <input v-model="f.address" class="form-control co-input" :readonly="lockAddress" :class="{
+                  'is-invalid': errors.address,
+                  'bg-light': lockAddress,
+                }" placeholder="Ví dụ: 123 Nguyễn Trãi" />
+                <div class="invalid-feedback">{{ errors.address }}</div>
+              </div>
+            </template>
             <div v-if="shippingError" class="col-12 small text-danger">{{ shippingError }}</div>
             <div class="col-12">
               <label class="co-label">Ghi chú (không bắt buộc)</label>
@@ -1550,19 +1812,6 @@ const confirmQrPayment = async () => {
                   <i class="bi bi-qr-code-scan me-1 text-primary"></i>
                   <span>Quét bằng app ngân hàng hoặc ví điện tử bất kỳ</span>
                 </div>
-                <!-- Đếm ngược tự động -->
-                <div class="qr-auto-box" :class="{ disabled: !isAutoConfirmEnabled }">
-                  <div class="form-check form-switch d-inline-flex align-items-center gap-2 mb-1">
-                    <input class="form-check-input" type="checkbox" id="chkAutoConfirm" :checked="isAutoConfirmEnabled"
-                      @change="toggleAutoConfirm" />
-                    <label class="form-check-label small fw-semibold cursor-pointer" for="chkAutoConfirm">
-                      Tự động hoàn thành (mô phỏng quét xong)
-                    </label>
-                  </div>
-                  <div v-if="isAutoConfirmEnabled" class="qr-timer-text">
-                    Tự động hoàn thành sau: <strong class="text-danger fs-6">{{ autoCountdown }}s</strong>
-                  </div>
-                </div>
               </div>
 
               <!-- Cột phải: Thông tin chuyển khoản -->
@@ -1643,28 +1892,30 @@ const confirmQrPayment = async () => {
         </div>
       </div>
     </transition>
-    <!-- POPUP CHỌN ĐỊA CHỈ KHÁCH HÀNG (CHECKOUT ONLINE) -->
+    <!-- POPUP CHỌN / SỬA ĐỊA CHỈ KHÁCH HÀNG (CHECKOUT ONLINE) -->
     <div v-if="isAddressModalOpen" class="modal fade show d-block" style="background: rgba(0,0,0,0.5); z-index: 1055;"
       tabindex="-1" @click.self="isAddressModalOpen = false">
-      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 540px;">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 560px;">
         <div class="modal-content rounded-4 border-0 shadow">
           <div class="modal-header border-bottom py-3 px-4">
             <h6 class="modal-title fw-bold text-dark mb-0">
-              <i class="bi bi-geo-alt-fill text-primary me-2"></i>Chọn địa chỉ nhận hàng
+              <i class="bi bi-geo-alt-fill text-primary me-2"></i>
+              {{ isEditingAddressInModal ? (addrModalForm.id ? 'Sửa địa chỉ hiện tại' : 'Thêm địa chỉ nhận hàng mới') : 'Chọn địa chỉ nhận hàng' }}
             </h6>
             <button type="button" class="btn-close" @click="isAddressModalOpen = false"></button>
           </div>
           <div class="modal-body p-3">
-            <div class="d-flex flex-column gap-2">
+            <!-- Chế độ danh sách chọn địa chỉ -->
+            <div v-if="!isEditingAddressInModal" class="d-flex flex-column gap-2">
               <div
                 v-for="a in savedAddresses"
                 :key="a.id"
-                class="p-3 rounded-3 border d-flex align-items-center justify-content-between"
-                :style="selectedAddr === a.id ? 'border-color: #2563eb !important; background: #eff6ff;' : 'cursor: pointer; background: #fff;'"
+                class="p-3 rounded-3 border d-flex align-items-center justify-content-between gap-2"
+                :style="selectedAddr === a.id ? 'border-color: #dc2626 !important; background: #fef2f2;' : 'cursor: pointer; background: #fff;'"
                 @click="selectAddrAndClose(a.id)"
               >
                 <div class="min-w-0 me-2">
-                  <div class="fw-semibold small text-dark mb-1 d-flex align-items-center gap-2">
+                  <div class="fw-semibold small text-dark mb-1 d-flex align-items-center flex-wrap gap-2">
                     <span>{{ a.name || userInfo(currentUser).name }}</span>
                     <span>·</span>
                     <span>{{ a.phone || userInfo(currentUser).phone }}</span>
@@ -1673,16 +1924,22 @@ const confirmQrPayment = async () => {
                   </div>
                   <div class="small text-muted">{{ a.address }}</div>
                 </div>
-                <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-bold"
-                  :class="selectedAddr === a.id ? 'btn-primary' : 'btn-outline-secondary'"
-                  @click.stop="selectAddrAndClose(a.id)">
-                  {{ selectedAddr === a.id ? 'Đang dùng' : 'Chọn' }}
-                </button>
+                <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                  <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-bold"
+                    @click.stop="openEditAddressModal(a)">
+                    Sửa
+                  </button>
+                  <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-bold"
+                    :class="selectedAddr === a.id ? 'btn-primary' : 'btn-outline-secondary'"
+                    @click.stop="selectAddrAndClose(a.id)">
+                    {{ selectedAddr === a.id ? 'Đang dùng' : 'Chọn' }}
+                  </button>
+                </div>
               </div>
 
               <div
                 class="p-3 rounded-3 border d-flex align-items-center justify-content-between"
-                :style="selectedAddr === 'new' ? 'border-color: #2563eb !important; background: #eff6ff;' : 'cursor: pointer; background: #fff;'"
+                :style="selectedAddr === 'new' ? 'border-color: #dc2626 !important; background: #fef2f2;' : 'cursor: pointer; background: #fff;'"
                 @click="selectAddrAndClose('new')"
               >
                 <div class="d-flex align-items-center gap-2">
@@ -1699,11 +1956,64 @@ const confirmQrPayment = async () => {
                 </button>
               </div>
             </div>
+
+            <!-- Chế độ sửa / thêm địa chỉ -->
+            <div v-else class="row g-3 px-1 py-1">
+              <div class="col-md-6">
+                <label class="co-label">Họ và tên <span class="text-danger">*</span></label>
+                <input v-model="addrModalForm.name" class="form-control co-input" placeholder="Nhập họ và tên người nhận" />
+              </div>
+              <div class="col-md-6">
+                <label class="co-label">Số điện thoại <span class="text-danger">*</span></label>
+                <input v-model="addrModalForm.phone" class="form-control co-input" maxlength="11" placeholder="Nhập số điện thoại (VD: 0987...)" />
+              </div>
+              <div class="col-md-6">
+                <label class="co-label">Tỉnh / Thành phố <span class="text-danger">*</span></label>
+                <select v-model="addrModalForm.provinceId" class="form-select co-input" @change="onAddrModalProvinceChange">
+                  <option value="">Chọn tỉnh / thành phố</option>
+                  <option v-for="p in provinces" :key="p.id" :value="String(p.id)">{{ p.name }}</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="co-label">Phường / Xã <span class="text-danger">*</span></label>
+                <select v-model="addrModalForm.wardId" class="form-select co-input" :disabled="!addrModalForm.provinceId || !addrModalWards.length">
+                  <option value="">Chọn phường / xã</option>
+                  <option v-for="w in addrModalWards" :key="w.id" :value="String(w.id)">{{ w.name }}</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <label class="co-label">Địa chỉ cụ thể (số nhà, tên đường) <span class="text-danger">*</span></label>
+                <input v-model="addrModalForm.street" class="form-control co-input" placeholder="Ví dụ: Số 123 Nguyễn Trãi" @keyup.enter="saveAddrModalForm" />
+              </div>
+              <div class="col-12">
+                <div class="form-check">
+                  <input id="chkAddrModalDefault" v-model="addrModalForm.isDefault" class="form-check-input" type="checkbox" />
+                  <label class="form-check-label small fw-semibold" for="chkAddrModalDefault">
+                    Đặt làm địa chỉ nhận hàng mặc định
+                  </label>
+                </div>
+              </div>
+              <div v-if="addrModalError" class="col-12">
+                <div class="alert alert-danger small py-2 mb-0">{{ addrModalError }}</div>
+              </div>
+            </div>
           </div>
-          <div class="modal-footer border-top py-2 px-4 justify-content-end">
-            <button type="button" class="btn btn-secondary rounded-pill px-4 btn-sm" @click="isAddressModalOpen = false">
-              Đóng
+          <div class="modal-footer border-top py-2 px-4 d-flex align-items-center justify-content-between">
+            <button v-if="!isEditingAddressInModal" type="button" class="btn btn-outline-primary rounded-pill px-3 btn-sm fw-bold" @click="openAddAddressModal">
+              <i class="bi bi-plus-circle me-1"></i>Thêm địa chỉ mới
             </button>
+            <button v-else type="button" class="btn btn-outline-secondary rounded-pill px-3 btn-sm fw-bold" :disabled="addrModalSaving" @click="isEditingAddressInModal = false">
+              <i class="bi bi-arrow-left me-1"></i>Quay lại
+            </button>
+            <div class="d-flex align-items-center gap-2 ms-auto">
+              <button v-if="isEditingAddressInModal" type="button" class="btn btn-primary rounded-pill px-4 btn-sm fw-bold" :disabled="addrModalSaving" @click="saveAddrModalForm">
+                <span v-if="addrModalSaving" class="spinner-border spinner-border-sm me-1"></span>
+                {{ addrModalSaving ? 'Đang lưu...' : 'Lưu địa chỉ' }}
+              </button>
+              <button v-else type="button" class="btn btn-secondary rounded-pill px-4 btn-sm" @click="isAddressModalOpen = false">
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       </div>

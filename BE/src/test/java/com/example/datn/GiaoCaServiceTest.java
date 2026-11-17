@@ -154,6 +154,17 @@ class GiaoCaServiceTest {
     }
 
     @Test
+    void moCa_adminBiChan() {
+        dangNhap(nv1.getId(), true);
+        assertThatThrownBy(() -> giaoCaService.moCa(500000L, null))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> {
+                ResponseStatusException rs = (ResponseStatusException) ex;
+                assertThat(rs.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+            });
+    }
+
+    @Test
     void moCa_taoMoi_va_khongChoMoLanHai() {
         CaLamViecDto ca = giaoCaService.moCa(500000L, "dau ca test");
         idCaTao.add(ca.getId());

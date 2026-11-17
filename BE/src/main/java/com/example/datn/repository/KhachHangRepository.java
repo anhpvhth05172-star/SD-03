@@ -16,6 +16,9 @@ public interface KhachHangRepository extends JpaRepository<KhachHang, Long> {
 
     boolean existsByMaKhachHang(String maKhachHang);
 
+    @Query("SELECT k.maKhachHang FROM KhachHang k WHERE k.maKhachHang LIKE 'KH%'")
+    List<String> findMaKhachHangBatDauBangKH();
+
     boolean existsByMaKhachHangAndIdNot(String maKhachHang, Long id);
 
     boolean existsByTenTaiKhoan(String tenTaiKhoan);

@@ -11,6 +11,7 @@ import {
 import { refreshSession } from '../api/http'
 import AdminLayout from '../layouts/AdminLayout.vue'
 import ClientLayout from '@/layouts/clients/ClientLayout.vue'
+import ShippingFeeSettingsPage from '@/pages/Shipping/ShippingFeeSettingsPage.vue'
 import ProductListPage from '@/pages/Product/ProductListPage.vue'
 import ProductCreatePage from '@/pages/Product/ProductCreatePage.vue'
 import ProductVariantPage from '@/pages/Product/ProductVariantPage.vue'
@@ -124,6 +125,11 @@ const routes = [
         path: '/thong-ke',
         component: StatisticsPage,
         meta: { ...metaBo, title: 'Thống kê', roles: ['ADMIN'] },
+      },
+      {
+        path: '/cai-dat-phi-ship',
+        component: ShippingFeeSettingsPage,
+        meta: { ...metaBo, title: 'Cài đặt phí ship', roles: ['ADMIN'] },
       },
       {
         path: '/lich-lam-viec',

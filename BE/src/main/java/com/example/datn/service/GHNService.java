@@ -34,22 +34,22 @@ public class GHNService {
     private static final long CACHE_TTL_MS = 5 * 60_000L;
 
     private static final String[][] DS_63_TINH = {
-        {"1", "Thành phố Hà Nội"}, {"4", "Tỉnh Cao Bằng"}, {"8", "Tỉnh Tuyên Quang"}, {"11", "Tỉnh Điện Biên"},
-        {"12", "Tỉnh Lai Châu"}, {"14", "Tỉnh Sơn La"}, {"15", "Tỉnh Lào Cai"}, {"19", "Tỉnh Thái Nguyên"},
-        {"20", "Tỉnh Lạng Sơn"}, {"22", "Tỉnh Quảng Ninh"}, {"24", "Tỉnh Bắc Ninh"}, {"25", "Tỉnh Phú Thọ"},
-        {"31", "Thành phố Hải Phòng"}, {"33", "Tỉnh Hưng Yên"}, {"37", "Tỉnh Ninh Bình"}, {"38", "Tỉnh Thanh Hóa"},
-        {"40", "Tỉnh Nghệ An"}, {"42", "Tỉnh Hà Tĩnh"}, {"44", "Tỉnh Quảng Trị"}, {"46", "Thành phố Huế"},
-        {"48", "Thành phố Đà Nẵng"}, {"51", "Tỉnh Quảng Ngãi"}, {"52", "Tỉnh Gia Lai"}, {"56", "Tỉnh Khánh Hòa"},
-        {"66", "Tỉnh Đắk Lắk"}, {"68", "Tỉnh Lâm Đồng"}, {"75", "Tỉnh Đồng Nai"}, {"79", "Thành phố Hồ Chí Minh"},
-        {"80", "Tỉnh Tây Ninh"}, {"82", "Tỉnh Đồng Tháp"}, {"86", "Tỉnh Vĩnh Long"}, {"91", "Tỉnh An Giang"},
-        {"92", "Thành phố Cần Thơ"}, {"96", "Tỉnh Cà Mau"}
-
-
-
-
-
-
-
+        {"1", "Thành phố Hà Nội"}, {"2", "Tỉnh Hà Giang"}, {"4", "Tỉnh Cao Bằng"}, {"6", "Tỉnh Bắc Kạn"},
+        {"8", "Tỉnh Tuyên Quang"}, {"10", "Tỉnh Lào Cai"}, {"11", "Tỉnh Điện Biên"}, {"12", "Tỉnh Lai Châu"},
+        {"14", "Tỉnh Sơn La"}, {"15", "Tỉnh Yên Bái"}, {"17", "Tỉnh Hoà Bình"}, {"19", "Tỉnh Thái Nguyên"},
+        {"20", "Tỉnh Lạng Sơn"}, {"22", "Tỉnh Quảng Ninh"}, {"24", "Tỉnh Bắc Giang"}, {"25", "Tỉnh Phú Thọ"},
+        {"26", "Tỉnh Vĩnh Phúc"}, {"27", "Tỉnh Bắc Ninh"}, {"30", "Tỉnh Hải Dương"}, {"31", "Thành phố Hải Phòng"},
+        {"33", "Tỉnh Hưng Yên"}, {"34", "Tỉnh Thái Bình"}, {"35", "Tỉnh Hà Nam"}, {"36", "Tỉnh Nam Định"},
+        {"37", "Tỉnh Ninh Bình"}, {"38", "Tỉnh Thanh Hóa"}, {"40", "Tỉnh Nghệ An"}, {"42", "Tỉnh Hà Tĩnh"},
+        {"44", "Tỉnh Quảng Bình"}, {"45", "Tỉnh Quảng Trị"}, {"46", "Thành phố Huế"}, {"48", "Thành phố Đà Nẵng"},
+        {"49", "Tỉnh Quảng Nam"}, {"51", "Tỉnh Quảng Ngãi"}, {"52", "Tỉnh Bình Định"}, {"54", "Tỉnh Phú Yên"},
+        {"56", "Tỉnh Khánh Hòa"}, {"58", "Tỉnh Ninh Thuận"}, {"60", "Tỉnh Bình Thuận"}, {"62", "Tỉnh Kon Tum"},
+        {"64", "Tỉnh Gia Lai"}, {"66", "Tỉnh Đắk Lắk"}, {"67", "Tỉnh Đắk Nông"}, {"68", "Tỉnh Lâm Đồng"},
+        {"70", "Tỉnh Bình Phước"}, {"72", "Tỉnh Tây Ninh"}, {"74", "Tỉnh Bình Dương"}, {"75", "Tỉnh Đồng Nai"},
+        {"77", "Tỉnh Bà Rịa - Vũng Tàu"}, {"79", "Thành phố Hồ Chí Minh"}, {"80", "Tỉnh Long An"}, {"82", "Tỉnh Tiền Giang"},
+        {"83", "Tỉnh Bến Tre"}, {"84", "Tỉnh Trà Vinh"}, {"86", "Tỉnh Vĩnh Long"}, {"87", "Tỉnh Đồng Tháp"},
+        {"89", "Tỉnh An Giang"}, {"91", "Tỉnh Kiên Giang"}, {"92", "Thành phố Cần Thơ"}, {"93", "Tỉnh Hậu Giang"},
+        {"94", "Tỉnh Sóc Trăng"}, {"95", "Tỉnh Bạc Liêu"}, {"96", "Tỉnh Cà Mau"}
     };
 
     private final GHNConfig cauHinh;
@@ -286,47 +286,29 @@ public class GHNService {
             return daCache;
         }
 
-        if (cauHinh.daCauHinh()) {
+        // Ưu tiên 63 tỉnh/thành từ OpenAPI v1 (đồng bộ mã code 1..96 với getPhuongXaMoi)
+        for (String apiPath : List.of("/api/v1/p/", "/api/v2/p/")) {
             try {
-                JsonNode root = doc(ghnApiClient.get(PATH_PROVINCE_V3));
-                kiemTraCode(root, "tỉnh/thành (mô hình 2 tầng)");
+                String json = openApiClient.get(apiPath);
+                JsonNode root = objectMapper.readTree(json);
                 List<ShippingAddressDTO> ketQua = new ArrayList<>();
-                for (JsonNode n : root.path("data")) {
-                    int id = n.path("_id").asInt(0);
-                    String ten = n.path("name").asText("");
-                    if (id > 0 && !ten.isBlank()) {
-                        ketQua.add(new ShippingAddressDTO(id, ten));
+                if (root.isArray()) {
+                    for (JsonNode n : root) {
+                        int id = n.path("code").asInt(0);
+                        String ten = n.path("name").asText("");
+                        if (id > 0 && !ten.isBlank()) {
+                            ketQua.add(new ShippingAddressDTO(id, ten));
+                        }
                     }
                 }
-                sapXepTheoTen(ketQua);
-                cacheTinhMoi = ketQua;
-                cacheTinhMoiLuc = now;
-                return ketQua;
+                if (!ketQua.isEmpty()) {
+                    sapXepTheoTen(ketQua);
+                    cacheTinhMoi = ketQua;
+                    cacheTinhMoiLuc = now;
+                    return ketQua;
+                }
             } catch (Exception ignored) {
             }
-        }
-
-        // Fallback: Tra cứu qua OpenApiClient (https://provinces.open-api.vn/api/v1/p/)
-        try {
-            String json = openApiClient.get("/api/v2/p/");
-            JsonNode root = objectMapper.readTree(json);
-            List<ShippingAddressDTO> ketQua = new ArrayList<>();
-            if (root.isArray()) {
-                for (JsonNode n : root) {
-                    int id = n.path("code").asInt(0);
-                    String ten = n.path("name").asText("");
-                    if (id > 0 && !ten.isBlank()) {
-                        ketQua.add(new ShippingAddressDTO(id, ten));
-                    }
-                }
-            }
-            if (!ketQua.isEmpty()) {
-                sapXepTheoTen(ketQua);
-                cacheTinhMoi = ketQua;
-                cacheTinhMoiLuc = now;
-                return ketQua;
-            }
-        } catch (Exception ignored) {
         }
 
         // Fallback danh sách 63 tỉnh thành Việt Nam trong bộ nhớ
@@ -348,6 +330,15 @@ public class GHNService {
         CapPhongXaMoi daCache = cachePhuongXaMoi.get(provinceId);
         if (daCache != null && now - daCache.luc() < CACHE_TTL_MS) {
             return daCache.ds();
+        }
+
+        // Ưu tiên OpenAPI v1 (63 tỉnh, kèm Quận/Huyện để tính phí nội/ngoại thành), sau đó v2
+        for (String apiPath : List.of("/api/v1/p/" + provinceId + "?depth=3", "/api/v2/p/" + provinceId + "?depth=2")) {
+            List<ShippingAddressDTO> openApiResult = docPhuongXaTuOpenApi(apiPath);
+            if (!openApiResult.isEmpty()) {
+                cachePhuongXaMoi.put(provinceId, new CapPhongXaMoi(openApiResult, now));
+                return openApiResult;
+            }
         }
 
         RuntimeException loiV3 = null;
@@ -374,13 +365,24 @@ public class GHNService {
             }
         }
 
-        // Fallback: Tra cứu phường/xã qua OpenApiClient (https://provinces.open-api.vn/api/v1/p/)
+        if (loiV3 != null && provinceId >= 1000000) {
+            throw loiV3;
+        }
+        List<ShippingAddressDTO> ketQua = List.of(
+            new ShippingAddressDTO(1, "Phường/Xã trung tâm"),
+            new ShippingAddressDTO(2, "Khu vực nội thành")
+        );
+        cachePhuongXaMoi.put(provinceId, new CapPhongXaMoi(ketQua, now));
+        return ketQua;
+    }
+
+    private List<ShippingAddressDTO> docPhuongXaTuOpenApi(String apiPath) {
         try {
-            String json = openApiClient.get("/api/v2/p/" + provinceId + "?depth=2");
+            String json = openApiClient.get(apiPath);
             JsonNode root = objectMapper.readTree(json);
             List<ShippingAddressDTO> ketQua = new ArrayList<>();
             JsonNode districts = root.path("districts");
-            if (districts.isArray() && districts.size() > 0) {
+            if (districts.isArray() && !districts.isEmpty()) {
                 for (JsonNode d : districts) {
                     String tenQuan = d.path("name").asText("");
                     JsonNode wards = d.path("wards");
@@ -405,21 +407,11 @@ public class GHNService {
             }
             if (!ketQua.isEmpty()) {
                 sapXepTheoTen(ketQua);
-                cachePhuongXaMoi.put(provinceId, new CapPhongXaMoi(ketQua, now));
-                return ketQua;
             }
+            return ketQua;
         } catch (Exception ignored) {
+            return List.of();
         }
-
-        if (loiV3 != null && provinceId >= 1000000) {
-            throw loiV3;
-        }
-        List<ShippingAddressDTO> ketQua = List.of(
-            new ShippingAddressDTO(1, "Phường/Xã trung tâm"),
-            new ShippingAddressDTO(2, "Khu vực nội thành")
-        );
-        cachePhuongXaMoi.put(provinceId, new CapPhongXaMoi(ketQua, now));
-        return ketQua;
     }
 
     public List<ShippingServiceDTO> getDichVu(Integer toDistrictId) {

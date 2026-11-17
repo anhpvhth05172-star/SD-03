@@ -16,6 +16,7 @@ import com.example.datn.dto.DotGiamGia.GiaKhuyenMai;
 import com.example.datn.dto.HoaDon.ChiTietHoaDonRequest;
 import com.example.datn.dto.HoaDon.HoaDonDTO;
 import com.example.datn.dto.HoaDon.HoaDonRequest;
+import com.example.datn.entity.ChiTietHoaDon;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.entity.NhanVien;
@@ -726,5 +727,50 @@ class HoaDonValidationTest {
 
         assertThat(dto.getTrangThai()).isEqualTo("Đã xác nhận");
         verify(lichSuHoaDonRepository).save(any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void trungBienTheTrongChiTiet_GopThanhMotDongDeKhongViPhamUnique() {
+        chuanBi(spct(true, true));
+        when(hoaDonRepository.existsById(HD_ID)).thenReturn(true);
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        ChiTietHoaDonRequest d1 = new ChiTietHoaDonRequest();
+        d1.setIdSanPhamChiTiet(SPCT_ID);
+        d1.setSoLuong(2);
+        d1.setDonGia(new BigDecimal("500000"));
+        ChiTietHoaDonRequest d2 = new ChiTietHoaDonRequest();
+        d2.setIdSanPhamChiTiet(SPCT_ID);
+        d2.setSoLuong(1);
+        d2.setDonGia(new BigDecimal("500000"));
+        req.setChiTiet(List.of(d1, d2));
+
+        service.create(req);
+
+        ArgumentCaptor<List<ChiTietHoaDon>> captor = ArgumentCaptor.forClass(List.class);
+        verify(chiTietHoaDonRepository).saveAllAndFlush(captor.capture());
+        List<ChiTietHoaDon> saved = captor.getValue();
+        assertThat(saved).hasSize(1);
+        assertThat(saved.get(0).getSoLuong()).isEqualTo(3);
+        assertThat(saved.get(0).getThanhTien()).isEqualByComparingTo("1500000");
+    }
+
+    @Test
+    void khachHangDaTonTaiCoSoTrongTen_DuocChapNhanKhiTaoHoaDon() {
+        chuanBi(spct(true, true));
+        when(hoaDonRepository.existsById(HD_ID)).thenReturn(true);
+        KhachHang kh = new KhachHang();
+        kh.setId(KH_ID);
+        kh.setTenKhachHang("pickersmoke1791617480");
+        kh.setTrangThai(true);
+        when(khachHangRepository.findById(KH_ID)).thenReturn(Optional.of(kh));
+
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        req.setIdKhachHang(KH_ID);
+        req.setTenKhachHang("pickersmoke1791617480");
+
+        HoaDonDTO dto = service.create(req);
+
+        assertThat(dto).isNotNull();
     }
 }

@@ -11,4 +11,10 @@ public class CapNhatThongTinKhachRequest {
     private String soDienThoai;
     private LocalDate ngaySinh;
     private String gioiTinh;
+    private Long idDiaChi;
+    private String tenDiaChi;
+    private String tinhThanhPho;
+    private String phuong;
+    private String diaChiCuThe;
+    private Boolean macDinh;
 }

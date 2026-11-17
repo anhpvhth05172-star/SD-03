@@ -24,8 +24,12 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +53,12 @@ public class VNPayService {
     private final LichSuHoaDonRepository lichSuHoaDonRepository;
     private final EmailService emailService;
 
+    @Value("${sepay.webhook.api-key:}")
+    private String sepayWebhookApiKey;
+
+    private static final Pattern MA_HOA_DON_PATTERN = Pattern.compile("\\b(HD[A-Za-z0-9_-]+)\\b", Pattern.CASE_INSENSITIVE);
+    private final Map<String, BigDecimal> sepayPendingMemoAmounts = new ConcurrentHashMap<>();
+
     /**
      * Bước 1: Tạo đơn CHO_THANH_TOAN và sinh URL thanh toán VNPay.
      * HoaDonRequest phải chứa trangThai = "CHO_THANH_TOAN".
@@ -68,7 +78,7 @@ public class VNPayService {
 
         String paymentUrl = buildPaymentUrl(httpRequest, hoaDon.getMaHoaDon(), soTien);
 
-        String qrUrl = String.format("https://img.vietqr.io/image/MB-0987654321-compact2.png?amount=%.0f&addInfo=%s&accountName=%s",
+        String qrUrl = String.format("https://img.vietqr.io/image/MB-0922010408-compact2.png?amount=%.0f&addInfo=%s&accountName=%s",
             soTien.doubleValue(),
             URLEncoder.encode(hoaDon.getMaHoaDon(), StandardCharsets.UTF_8),
             URLEncoder.encode("POLYSHOES STORE", StandardCharsets.UTF_8));
@@ -109,12 +119,6 @@ public class VNPayService {
         hoaDon.setGhiChu(updatedNote);
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         hoaDonRepository.save(hoaDon);
-
-        try {
-            hoaDonService.guiEmailHoaDonTuDong(hoaDon, null);
-        } catch (Exception ex) {
-            log.warn("Lỗi gửi email xác nhận đơn QR {}: {}", hoaDon.getMaHoaDon(), ex.getMessage());
-        }
 
         return VNPayCallbackResponse.builder()
             .success(true)
@@ -206,11 +210,6 @@ public class VNPayService {
                 hoaDonRepository.save(hoaDon);
 
                 log.info("VNPay thành công → đơn {} chuyển sang CHO_XAC_NHAN (GD: {})", maHoaDon, vnpTransactionNo);
-                try {
-                    hoaDonService.guiEmailHoaDonTuDong(hoaDon, null);
-                } catch (Exception ex) {
-                    log.warn("Lỗi gửi email xác nhận đơn VNPay {}: {}", maHoaDon, ex.getMessage());
-                }
             } else {
                 log.info("VNPay callback đã xử lý trước đó cho đơn {}", maHoaDon);
             }
@@ -318,5 +317,110 @@ public class VNPayService {
             case "79" -> "Nhập sai mật khẩu thanh toán quá số lần quy định.";
             default -> "Giao dịch không thành công (Mã lỗi: " + responseCode + ").";
         };
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> kiemTraTrangThaiThanhToan(Long id) {
+        HoaDon hoaDon = hoaDonRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đơn hàng #" + id));
+        boolean paid = !"CHO_THANH_TOAN".equals(hoaDon.getTrangThai()) && !"DA_HUY".equals(hoaDon.getTrangThai());
+        return Map.of(
+            "paid", paid,
+            "trangThai", hoaDon.getTrangThai() != null ? hoaDon.getTrangThai() : "",
+            "orderId", hoaDon.getId(),
+            "maHoaDon", hoaDon.getMaHoaDon() != null ? hoaDon.getMaHoaDon() : "",
+            "amount", hoaDon.getTienSauGiamGia() != null ? hoaDon.getTienSauGiamGia() : BigDecimal.ZERO
+        );
+    }
+
+    @Transactional
+    public Map<String, Object> xuLyWebhookSepay(Map<String, Object> payload, String authHeader) {
+        if (sepayWebhookApiKey != null && !sepayWebhookApiKey.isBlank()) {
+            String expected = sepayWebhookApiKey.trim();
+            String token = authHeader == null ? "" : authHeader.trim();
+            if (token.regionMatches(true, 0, "Apikey ", 0, 7)) {
+                token = token.substring(7).trim();
+            } else if (token.regionMatches(true, 0, "Bearer ", 0, 7)) {
+                token = token.substring(7).trim();
+            }
+            if (!expected.equals(token)) {
+                throw new SecurityException("API key SePay không hợp lệ");
+            }
+        }
+
+        if (payload == null) {
+            return Map.of("success", false, "message", "Payload trống");
+        }
+
+        String transferType = String.valueOf(payload.getOrDefault("transferType", "in"));
+        if (!"in".equalsIgnoreCase(transferType)) {
+            return Map.of("success", true, "ignored", true, "message", "Bỏ qua giao dịch tiền ra");
+        }
+
+        String content = String.valueOf(payload.getOrDefault("content", payload.getOrDefault("description", "")));
+        BigDecimal transferAmount = BigDecimal.ZERO;
+        Object rawAmount = payload.get("transferAmount");
+        if (rawAmount != null) {
+            try {
+                transferAmount = new BigDecimal(String.valueOf(rawAmount));
+            } catch (NumberFormatException ignored) {}
+        }
+
+        Matcher matcher = MA_HOA_DON_PATTERN.matcher(content);
+        HoaDon hoaDon = null;
+        String matchedCode = null;
+        while (matcher.find()) {
+            String code = matcher.group(1).toUpperCase();
+            if (matchedCode == null) matchedCode = code;
+            hoaDon = hoaDonRepository.findByMaHoaDon(code).orElse(null);
+            if (hoaDon != null) break;
+        }
+
+        if (hoaDon == null) {
+            if (matchedCode != null && transferAmount.compareTo(BigDecimal.ZERO) > 0) {
+                final BigDecimal amt = transferAmount;
+                sepayPendingMemoAmounts.merge(matchedCode, amt, BigDecimal::add);
+                log.info("SePay webhook (POS/chờ): ghi nhận chuyển khoản {}đ cho mã {}", transferAmount, matchedCode);
+                return Map.of("success", true, "matched", true, "pendingMemo", matchedCode, "amount", transferAmount);
+            }
+            log.info("SePay webhook: không tìm thấy mã hóa đơn trong nội dung '{}'", content);
+            return Map.of("success", true, "matched", false, "message", "Không tìm thấy đơn hàng tương ứng");
+        }
+
+        BigDecimal requiredAmount = hoaDon.getTienSauGiamGia() != null ? hoaDon.getTienSauGiamGia() : BigDecimal.ZERO;
+        if (transferAmount.compareTo(requiredAmount) < 0) {
+            log.warn("SePay webhook: số tiền chuyển {} nhỏ hơn số tiền đơn {} ({})", transferAmount, hoaDon.getMaHoaDon(), requiredAmount);
+            return Map.of("success", true, "matched", true, "paid", false, "message", "Số tiền chuyển chưa đủ");
+        }
+
+        if ("CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
+            hoaDonService.xacNhanThanhToanVNPay(hoaDon.getId());
+            hoaDon = hoaDonRepository.findById(hoaDon.getId()).orElse(hoaDon);
+            String refCode = String.valueOf(payload.getOrDefault("referenceCode", payload.getOrDefault("id", "")));
+            String sepayNote = String.format("[SePay chuyển khoản thành công | Mã GD: %s | Số tiền: %,.0fđ]", refCode, transferAmount);
+            String currentNote = hoaDon.getGhiChu() != null ? hoaDon.getGhiChu().trim() : "";
+            String updatedNote = currentNote.isEmpty() ? sepayNote : currentNote + " " + sepayNote;
+            if (updatedNote.length() > 1000) updatedNote = updatedNote.substring(0, 1000);
+            hoaDon.setGhiChu(updatedNote);
+            hoaDon.setNgayCapNhat(LocalDateTime.now());
+            hoaDonRepository.save(hoaDon);
+            log.info("SePay webhook: đã xác nhận thanh toán đơn {}", hoaDon.getMaHoaDon());
+        }
+
+        return Map.of("success", true, "matched", true, "paid", true, "maHoaDon", hoaDon.getMaHoaDon());
+    }
+
+    public Map<String, Object> kiemTraMemoSepay(String memo, BigDecimal requiredAmount, boolean consume) {
+        if (memo == null || memo.isBlank()) {
+            return Map.of("paid", false);
+        }
+        String key = memo.trim().toUpperCase();
+        BigDecimal received = sepayPendingMemoAmounts.get(key);
+        BigDecimal required = requiredAmount != null ? requiredAmount : BigDecimal.ZERO;
+        boolean paid = received != null && received.compareTo(required) >= 0;
+        if (paid && consume) {
+            sepayPendingMemoAmounts.remove(key);
+        }
+        return Map.of("paid", paid, "memo", key, "receivedAmount", received != null ? received : BigDecimal.ZERO);
     }
 }

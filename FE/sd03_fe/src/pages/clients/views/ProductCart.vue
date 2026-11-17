@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, computed, watch } from "vue";
+import { onMounted, onUnmounted, ref, computed, watch } from "vue";
 import {
   cart,
   cartTotal,
@@ -9,6 +9,7 @@ import {
   updateCartItemQty,
   clearCart,
   fetchCart,
+  refreshGuestCartPrices,
 } from "../store";
 import { getUser, isKhachHangDangNhap } from "@/utils/auth";
 import { listVouchers, suDungCuaToi } from "@/api/voucher";
@@ -324,16 +325,53 @@ const hasOutOfStock = computed(() =>
   cart.items.some((i) => i.conHang === false),
 );
 const rowId = (i) => i.idGioHangChiTiet || i.id;
-const rowKey = (i) => `${rowId(i)}-${i.size}`;
+const rowKey = (i) => `${rowId(i)}-${i.variantId || ""}-${i.size}-${i.price ?? 0}`;
 const LOW_STOCK = 5;
 
 // Ảnh lỗi -> hiện emoji thay thế
 const imgFailed = ref({});
 
 // Giỏ hàng dùng dữ liệu local với khách vãng lai, đồng bộ API khi có tài khoản.
-onMounted(() => {
-  fetchCart();
+// Tự động cập nhật giá khi khách vẫn đang ở màn Giỏ hàng; dừng ngay khi rời sang Đặt hàng.
+let priceSyncTimer = null;
+let isSyncingPrices = false;
+
+const syncCartPrices = async (silent = true) => {
+  if (isSyncingPrices || document.hidden || actionLoadingId.value != null) return;
+  isSyncingPrices = true;
+  try {
+    await fetchCart({ silent });
+    await refreshGuestCartPrices();
+  } finally {
+    isSyncingPrices = false;
+  }
+};
+
+const handleVisibilityOrFocus = () => {
+  if (!document.hidden && cart.items.length > 0) {
+    syncCartPrices(true);
+  }
+};
+
+onMounted(async () => {
+  await syncCartPrices(false);
   loadVouchers();
+  priceSyncTimer = setInterval(() => {
+    if (cart.items.length > 0) {
+      syncCartPrices(true);
+    }
+  }, 5000);
+  window.addEventListener("focus", handleVisibilityOrFocus);
+  document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+});
+
+onUnmounted(() => {
+  if (priceSyncTimer) {
+    clearInterval(priceSyncTimer);
+    priceSyncTimer = null;
+  }
+  window.removeEventListener("focus", handleVisibilityOrFocus);
+  document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
 });
 
 const handleQtyChange = async (item, delta) => {

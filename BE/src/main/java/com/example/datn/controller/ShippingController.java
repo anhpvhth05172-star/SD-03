@@ -1,17 +1,25 @@
 package com.example.datn.controller;
 
+import com.example.datn.config.QuyenGuard;
 import com.example.datn.dto.ShippingAddressDTO;
 import com.example.datn.dto.ShippingFeeRequest;
 import com.example.datn.dto.ShippingFeeResponse;
 import com.example.datn.dto.ShippingServiceDTO;
 import com.example.datn.dto.ShippingWardDTO;
+import com.example.datn.service.CauHinhPhiShipService;
 import com.example.datn.service.GHNService;
 import com.example.datn.service.GhnDiaChiMapper;
 import com.example.datn.service.GhnDiaChiMapper.KetQuaAnhXach;
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -24,9 +32,37 @@ public class ShippingController {
     private final GHNService ghnService;
     private final GhnDiaChiMapper ghnDiaChiMapper;
 
+    @Autowired(required = false)
+    private CauHinhPhiShipService cauHinhPhiShipService;
+
+    @Autowired(required = false)
+    private QuyenGuard quyenGuard;
+
     public ShippingController(GHNService ghnService, GhnDiaChiMapper ghnDiaChiMapper) {
         this.ghnService = ghnService;
         this.ghnDiaChiMapper = ghnDiaChiMapper;
+    }
+
+    @GetMapping("/freeship-config")
+    public Map<String, BigDecimal> getFreeshipConfig() {
+        BigDecimal threshold = cauHinhPhiShipService != null
+            ? cauHinhPhiShipService.getFreeshipThreshold()
+            : CauHinhPhiShipService.DEFAULT_FREESHIP_THRESHOLD;
+        return Map.of("freeShipThreshold", threshold);
+    }
+
+    @PutMapping("/freeship-config")
+    public Map<String, BigDecimal> updateFreeshipConfig(@RequestBody Map<String, BigDecimal> body) {
+        if (quyenGuard != null) {
+            quyenGuard.canAdmin();
+        }
+        BigDecimal threshold = body != null ? body.get("freeShipThreshold") : null;
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String nguoiCapNhat = auth != null && auth.getName() != null ? auth.getName() : "ADMIN";
+        BigDecimal saved = cauHinhPhiShipService != null
+            ? cauHinhPhiShipService.updateFreeshipThreshold(threshold, nguoiCapNhat)
+            : CauHinhPhiShipService.DEFAULT_FREESHIP_THRESHOLD;
+        return Map.of("freeShipThreshold", saved);
     }
 
     @GetMapping("/provinces")

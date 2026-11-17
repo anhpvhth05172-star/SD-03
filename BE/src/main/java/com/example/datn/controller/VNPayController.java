@@ -5,14 +5,17 @@ import com.example.datn.dto.VNPayCallbackResponse;
 import com.example.datn.dto.VNPayPaymentResponse;
 import com.example.datn.service.VNPayService;
 import jakarta.servlet.http.HttpServletRequest;
+import java.math.BigDecimal;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -80,5 +83,45 @@ public class VNPayController {
             return ResponseEntity.ok(Map.of("RspCode", "01", "Message", "Order not Found"));
         }
         return ResponseEntity.ok(Map.of("RspCode", "00", "Message", "Confirm Success"));
+    }
+
+    /**
+     * Kiểm tra trạng thái thanh toán của đơn hàng (FE polling để tự đóng modal QR khi SePay webhook xác nhận).
+     */
+    @PostMapping("/trang-thai/{id}")
+    public ResponseEntity<Map<String, Object>> kiemTraTrangThai(@PathVariable("id") Long id) {
+        return ResponseEntity.ok(vnPayService.kiemTraTrangThaiThanhToan(id));
+    }
+
+    /**
+     * Kiểm tra trạng thái thanh toán theo nội dung chuyển khoản (POS trước khi tạo hóa đơn).
+     */
+    @PostMapping("/sepay-check-memo")
+    public ResponseEntity<Map<String, Object>> kiemTraMemoSepay(@RequestBody Map<String, Object> body) {
+        String memo = body != null && body.get("memo") != null ? String.valueOf(body.get("memo")) : "";
+        BigDecimal amount = BigDecimal.ZERO;
+        if (body != null && body.get("amount") != null) {
+            try {
+                amount = new BigDecimal(String.valueOf(body.get("amount")));
+            } catch (NumberFormatException ignored) {}
+        }
+        boolean consume = body != null && Boolean.TRUE.equals(body.get("consume"));
+        return ResponseEntity.ok(vnPayService.kiemTraMemoSepay(memo, amount, consume));
+    }
+
+    /**
+     * Webhook nhận thông báo biến động số dư từ SePay.
+     */
+    @PostMapping("/sepay-webhook")
+    public ResponseEntity<Map<String, Object>> sepayWebhook(
+        @RequestBody(required = false) Map<String, Object> payload,
+        @RequestHeader(value = "Authorization", required = false) String authHeader
+    ) {
+        try {
+            return ResponseEntity.ok(vnPayService.xuLyWebhookSepay(payload, authHeader));
+        } catch (SecurityException ex) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("success", false, "message", ex.getMessage()));
+        }
     }
 }

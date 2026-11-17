@@ -11,7 +11,7 @@ const route = useRoute();
 const LOOKUP_ROUTE = "/tra-cuu";
 
 /* ================= CẤU HÌNH API ================= */
-const HOA_DON_API = "http://localhost:8080/api/hoa-don";
+const HOA_DON_API = "/api/hoa-don";
 
 const getToken = () => {
   const sessionToken = getSessionToken();
@@ -159,7 +159,7 @@ function decodeJwt(token) {
   }
 }
 
-const KHACH_HANG_API = "http://localhost:8080/api/khach-hang";
+const KHACH_HANG_API = "/api/khach-hang";
 
 // Thông tin đăng nhập hiện có (id có thể chưa có, chỉ có tên đăng nhập)
 function getLoginInfo() {

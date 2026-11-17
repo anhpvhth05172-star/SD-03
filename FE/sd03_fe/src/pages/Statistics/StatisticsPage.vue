@@ -68,7 +68,7 @@ const tongQuanData = ref({
 })
 
 /* ---------------------------------- Thẻ KPI & Khung chi tiết động ---------------------------------- */
-const activeKpi = ref('TONG_DON_HANG') // Mặc định mở Tổng đơn hàng giống ảnh 1
+const activeKpi = ref(null)
 const subTabOrder = ref('ALL') // 'ALL' | 'TAI_QUAY' | 'ONLINE' hoặc 'TIEN_MAT' | 'CHUYEN_KHOAN'
 const kwDonHang = ref('')
 const filterTrangThaiDon = ref('')
@@ -256,8 +256,25 @@ const xemChiTietDon = (id) => {
 const spTheoNgayList = ref([])
 const chartField = ref('soLuongBan') // 'soLuongBan' | 'doanhThu'
 
-const chartLabels = computed(() => spTheoNgayList.value.map((item) => item.nhanNgay || item.ngay))
-const chartValues = computed(() => spTheoNgayList.value.map((item) => item[chartField.value] || 0))
+const chartDays = computed(() => {
+  const list = spTheoNgayList.value || []
+  if (quickActive.value !== 'tatCa') return list
+  const firstIdx = list.findIndex(
+    (item) => (item.soDon || 0) > 0 || (item.soLuongBan || 0) > 0 || (item.doanhThu || 0) > 0
+  )
+  return firstIdx >= 0 ? list.slice(firstIdx) : list
+})
+const chartLabels = computed(() => chartDays.value.map((item) => item.nhanNgay || item.ngay))
+const chartValues = computed(() => chartDays.value.map((item) => item[chartField.value] || 0))
+const chartTooltips = computed(() =>
+  chartDays.value.map((item) => ({
+    title: `Ngày ${item.nhanNgay || item.ngay}`,
+    lines: [
+      `Số lượng bán: ${item.soLuongBan || 0} sản phẩm`,
+      `Doanh thu: ${formatVnd(item.doanhThu || 0)}`,
+    ],
+  }))
+)
 const tongSanPhamBanNgay = computed(() =>
   spTheoNgayList.value.reduce((acc, cur) => acc + (cur.soLuongBan || 0), 0)
 )
@@ -403,6 +420,10 @@ const napDuLieu = async () => {
     }
     trangThaiDonData.value = tt || []
     spTheoNgayList.value = spNgay || []
+    if (quickActive.value === 'tatCa' && chartDays.value.length > 0 && chartDays.value[0]?.ngay && tuNgay.value !== chartDays.value[0].ngay) {
+      skipNextWatch = true
+      tuNgay.value = chartDays.value[0].ngay
+    }
     thuongHieuData.value = thTk || { tongDoanhThu: 0, tongSoLuong: 0, danhSach: [] }
     sanPhamBangList.value = spB || []
 
@@ -465,7 +486,12 @@ const datLaiBoLoc = () => {
   notifySuccess('Đã đặt lại bộ lọc', 'Dữ liệu đã được nạp lại cho ngày hôm nay')
 }
 
+let skipNextWatch = false
 watch([tuNgay, denNgay, thuongHieuChon], () => {
+  if (skipNextWatch) {
+    skipNextWatch = false
+    return
+  }
   napDuLieu()
 })
 
@@ -868,41 +894,14 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 2. HÀNG 5 THẺ KPI CÓ NÚT CHI TIẾT (ẢNH 1) -->
-    <div class="kpi-grid">
-      <!-- Card 1: Doanh thu thực tế -->
-      <div
-        class="kpi-card kpi-green"
-        :class="{ 'is-active': activeKpi === 'DOANH_THU_THUC_TE' }"
-        @click="toggleKpi('DOANH_THU_THUC_TE')"
-      >
-        <div class="kpi-top">
-          <div class="kpi-icon icon-green">
-            <i class="bi bi-graph-up-arrow"></i>
-          </div>
-          <button type="button" class="kpi-toggle-btn">
-            <i class="bi" :class="activeKpi === 'DOANH_THU_THUC_TE' ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
-          </button>
-        </div>
-        <div class="kpi-body">
-          <div class="kpi-value text-green">{{ formatVnd(tongQuanData.doanhThu) }}</div>
-          <div class="kpi-title">Doanh thu thực tế</div>
-        </div>
-      </div>
-
-      <!-- Card 2: Doanh thu dự kiến -->
-      <div
-        class="kpi-card kpi-amber"
-        :class="{ 'is-active': activeKpi === 'DOANH_THU_DU_KIEN' }"
-        @click="toggleKpi('DOANH_THU_DU_KIEN')"
-      >
+    <!-- 2. HÀNG 6 THẺ KPI -->
+    <div class="kpi-grid kpi-grid-6">
+      <!-- Card 1: Doanh thu dự kiến -->
+      <div class="kpi-card kpi-amber is-static">
         <div class="kpi-top">
           <div class="kpi-icon icon-amber">
             <i class="bi bi-clock-history"></i>
           </div>
-          <button type="button" class="kpi-toggle-btn">
-            <i class="bi" :class="activeKpi === 'DOANH_THU_DU_KIEN' ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
-          </button>
         </div>
         <div class="kpi-body">
           <div class="kpi-value text-amber">{{ formatVnd(tongQuanData.doanhThuDuKien) }}</div>
@@ -910,49 +909,51 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Card 3: Tiền mặt & Chuyển khoản -->
-      <div
-        class="kpi-card kpi-blue"
-        :class="{ 'is-active': activeKpi === 'TIEN_MAT_CHUYEN_KHOAN' }"
-        @click="toggleKpi('TIEN_MAT_CHUYEN_KHOAN')"
-      >
+      <!-- Card 2: Doanh thu thực tế -->
+      <div class="kpi-card kpi-green is-static">
         <div class="kpi-top">
-          <div class="kpi-icon icon-blue">
-            <i class="bi bi-wallet2"></i>
+          <div class="kpi-icon icon-green">
+            <i class="bi bi-graph-up-arrow"></i>
           </div>
-          <button type="button" class="kpi-toggle-btn">
-            <i class="bi" :class="activeKpi === 'TIEN_MAT_CHUYEN_KHOAN' ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
-          </button>
         </div>
         <div class="kpi-body">
-          <div class="kpi-value text-blue">{{ formatVnd(Number(tongQuanData.tienMat || 0) + Number(tongQuanData.tienChuyenKhoan || 0)) }}</div>
-          <div class="kpi-title">Tiền mặt &amp; Chuyển khoản</div>
-          <div class="kpi-split">
-            <div class="kpi-dual-row">
-              <span class="label"><i class="bi bi-cash"></i> Tiền mặt</span>
-              <span class="val">{{ formatVnd(tongQuanData.tienMat) }}</span>
-            </div>
-            <div class="kpi-dual-row">
-              <span class="label"><i class="bi bi-credit-card"></i> Chuyển khoản</span>
-              <span class="val">{{ formatVnd(tongQuanData.tienChuyenKhoan) }}</span>
-            </div>
-          </div>
+          <div class="kpi-value text-green">{{ formatVnd(tongQuanData.doanhThu) }}</div>
+          <div class="kpi-title">Doanh thu thực tế</div>
         </div>
       </div>
 
-      <!-- Card 4: Tổng đơn hàng -->
-      <div
-        class="kpi-card kpi-purple"
-        :class="{ 'is-active': activeKpi === 'TONG_DON_HANG' }"
-        @click="toggleKpi('TONG_DON_HANG')"
-      >
+      <!-- Card 3: Tiền mặt -->
+      <div class="kpi-card kpi-blue is-static">
+        <div class="kpi-top">
+          <div class="kpi-icon icon-blue">
+            <i class="bi bi-cash"></i>
+          </div>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value text-blue">{{ formatVnd(tongQuanData.tienMat) }}</div>
+          <div class="kpi-title">Tiền mặt</div>
+        </div>
+      </div>
+
+      <!-- Card 4: Chuyển khoản -->
+      <div class="kpi-card kpi-blue is-static">
+        <div class="kpi-top">
+          <div class="kpi-icon icon-blue">
+            <i class="bi bi-credit-card"></i>
+          </div>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value text-blue">{{ formatVnd(tongQuanData.tienChuyenKhoan) }}</div>
+          <div class="kpi-title">Chuyển khoản</div>
+        </div>
+      </div>
+
+      <!-- Card 5: Tổng đơn hàng -->
+      <div class="kpi-card kpi-purple is-static">
         <div class="kpi-top">
           <div class="kpi-icon icon-purple">
             <i class="bi bi-cart3"></i>
           </div>
-          <button type="button" class="kpi-toggle-btn">
-            <i class="bi" :class="activeKpi === 'TONG_DON_HANG' ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
-          </button>
         </div>
         <div class="kpi-body">
           <div class="kpi-value text-purple">{{ tongQuanData.soDon }}</div>
@@ -960,7 +961,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Card 5: Sản phẩm đã bán -->
+      <!-- Card 6: Sản phẩm đã bán -->
       <div
         class="kpi-card kpi-orange"
         :class="{ 'is-active': activeKpi === 'SAN_PHAM_DA_BAN' }"
@@ -1363,6 +1364,7 @@ onMounted(async () => {
           v-else
           :labels="chartLabels"
           :values="chartValues"
+          :tooltips="chartTooltips"
           :color="chartField === 'soLuongBan' ? '#8b5cf6' : '#16a34a'"
           :currency="chartField === 'doanhThu'"
           :height="260"
@@ -2296,6 +2298,16 @@ onMounted(async () => {
   grid-template-columns: repeat(5, 1fr);
   gap: 16px;
   margin-bottom: 20px;
+}
+.kpi-grid.kpi-grid-6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.kpi-card.is-static {
+  cursor: default;
+}
+.kpi-card.is-static:hover {
+  transform: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 .kpi-card {
   position: relative;

@@ -206,28 +206,79 @@ export const timTinh = (ds, tenHayCode) => {
   return found || null
 }
 
+// Dữ liệu Phường/Xã dự phòng theo từng tỉnh (dùng khi không kết nối được provinces.open-api.vn)
+const DS_PHUONG_XA_DU_PHONG = {
+  HN: ['Phường Ba Đình', 'Phường Hoàn Kiếm', 'Phường Cửa Nam', 'Phường Hai Bà Trưng', 'Phường Đống Đa', 'Phường Văn Miếu - Quốc Tử Giám', 'Phường Cầu Giấy', 'Phường Thanh Xuân', 'Phường Tây Hồ', 'Phường Long Biên', 'Phường Bồ Đề', 'Phường Hoàng Mai', 'Phường Hà Đông', 'Phường Bắc Từ Liêm', 'Phường Nam Từ Liêm', 'Xã Gia Lâm', 'Xã Đông Anh', 'Xã Sóc Sơn', 'Xã Thanh Trì', 'Xã Hoài Đức'],
+  HCM: ['Phường Sài Gòn', 'Phường Bến Nghé', 'Phường Bến Thành', 'Phường Tân Định', 'Phường Đa Kao', 'Phường Võ Thị Sáu', 'Phường Bình Thạnh', 'Phường Gia Định', 'Phường Phú Nhuận', 'Phường Tân Bình', 'Phường Gò Vấp', 'Phường Thủ Đức', 'Phường Chợ Lớn', 'Phường Bình Tân', 'Phường Vũng Tàu', 'Phường Thủ Dầu Một', 'Phường Dĩ An', 'Xã Bình Chánh', 'Xã Củ Chi'],
+  HP: ['Phường Hồng Bàng', 'Phường Ngô Quyền', 'Phường Lê Chân', 'Phường Hải An', 'Phường Kiến An', 'Phường Đồ Sơn', 'Phường Dương Kinh', 'Phường Thủy Nguyên', 'Phường Hải Dương', 'Phường Chí Linh', 'Xã An Dương', 'Xã An Lão', 'Xã Kiến Thụy', 'Xã Tiên Lãng', 'Xã Vĩnh Bảo'],
+  DN: ['Phường Hải Châu', 'Phường Thanh Khê', 'Phường Sơn Trà', 'Phường Ngũ Hành Sơn', 'Phường Liên Chiểu', 'Phường Cẩm Lệ', 'Phường Hòa Xuân', 'Phường Tam Kỳ', 'Phường Hội An', 'Xã Hòa Vang', 'Xã Hòa Tiến', 'Xã Điện Bàn'],
+  HUE: ['Phường Phú Xuân', 'Phường Thuận Hóa', 'Phường Hương Thủy', 'Phường Hương Trà', 'Phường Phong Điền', 'Phường Vỹ Dạ', 'Phường An Cựu', 'Xã Phú Vang', 'Xã Quảng Điền', 'Xã A Lưới'],
+  CT: ['Phường Ninh Kiều', 'Phường Cái Khế', 'Phường An Hòa', 'Phường Bình Thủy', 'Phường Cái Răng', 'Phường Ô Môn', 'Phường Thốt Nốt', 'Phường Vị Thanh', 'Phường Sóc Trăng', 'Xã Phong Điền', 'Xã Vĩnh Thạnh', 'Xã Thới Lai'],
+  AG: ['Phường Long Xuyên', 'Phường Mỹ Bình', 'Phường Mỹ Xuyên', 'Phường Châu Đốc', 'Phường Châu Phú A', 'Phường Châu Phú B', 'Phường Tân Châu', 'Phường Rạch Giá', 'Phường Hà Tiên', 'Phường Phú Quốc', 'Xã An Châu', 'Xã Chợ Mới', 'Xã Thoại Sơn', 'Xã Tri Tôn', 'Xã Tịnh Biên'],
+  BN: ['Phường Kinh Bắc', 'Phường Võ Cường', 'Phường Suối Hoa', 'Phường Từ Sơn', 'Phường Quế Võ', 'Phường Thuận Thành', 'Phường Bắc Giang', 'Phường Ngô Quyền', 'Xã Yên Phong', 'Xã Tiên Du', 'Xã Gia Bình', 'Xã Lương Tài'],
+  CM: ['Phường An Xuyên', 'Phường Tân Thành', 'Phường Hòa Thành', 'Phường Bạc Liêu', 'Phường Giá Rai', 'Xã Thới Bình', 'Xã U Minh', 'Xã Trần Văn Thời', 'Xã Cái Nước', 'Xã Năm Căn', 'Xã Đất Mũi'],
+  CB: ['Phường Thục Phán', 'Phường Nùng Trí Cao', 'Phường Tân Giang', 'Xã Hòa An', 'Xã Quảng Uyên', 'Xã Trùng Khánh', 'Xã Bảo Lạc', 'Xã Nguyên Bình'],
+  DL: ['Phường Buôn Ma Thuột', 'Phường Tân An', 'Phường Tân Lợi', 'Phường Ea Tam', 'Phường Buôn Hồ', 'Phường Tuy Hòa', 'Xã Cư M\'gar', 'Xã Krông Pắc', 'Xã Ea Kar', 'Xã Sông Cầu'],
+  DB: ['Phường Điện Biên Phủ', 'Phường Mường Thanh', 'Phường Tân Thanh', 'Phường Mường Lay', 'Xã Mường Ảng', 'Xã Tuần Giáo', 'Xã Điện Biên', 'Xã Mường Chà'],
+  DNA: ['Phường Trấn Biên', 'Phường Biên Hòa', 'Phường Tam Hiệp', 'Phường Tân Phong', 'Phường Long Khánh', 'Phường Đồng Xoài', 'Xã Long Thành', 'Xã Nhơn Trạch', 'Xã Trảng Bom', 'Xã Xuân Lộc'],
+  DT: ['Phường Cao Lãnh', 'Phường Mỹ Phú', 'Phường Sa Đéc', 'Phường Hồng Ngự', 'Phường Mỹ Tho', 'Phường Gò Công', 'Xã Lai Vung', 'Xã Lấp Vò', 'Xã Tháp Mười', 'Xã Cai Lậy'],
+  GL: ['Phường Pleiku', 'Phường Diên Hồng', 'Phường Hoa Lư', 'Phường An Khê', 'Phường Ayun Pa', 'Phường Quy Nhơn', 'Phường An Nhơn', 'Xã Chư Sê', 'Xã Đak Đoa', 'Xã Hoài Nhơn'],
+  HT: ['Phường Thành Sen', 'Phường Trần Phú', 'Phường Hà Huy Tập', 'Phường Hồng Lĩnh', 'Phường Kỳ Anh', 'Xã Thạch Hà', 'Xã Cẩm Xuyên', 'Xã Can Lộc', 'Xã Hương Sơn', 'Xã Nghi Xuân'],
+  HY: ['Phường Phố Hiến', 'Phường Hiến Nam', 'Phường Hồng Châu', 'Phường Mỹ Hào', 'Phường Thái Bình', 'Phường Trần Hưng Đạo', 'Xã Văn Giang', 'Xã Khoái Châu', 'Xã Yên Mỹ', 'Xã Tiền Hải', 'Xã Hồng Vũ'],
+  KH: ['Phường Nha Trang', 'Phường Lộc Thọ', 'Phường Vĩnh Hải', 'Phường Cam Ranh', 'Phường Ninh Hòa', 'Phường Phan Rang', 'Xã Diên Khánh', 'Xã Vạn Ninh', 'Xã Cam Lâm'],
+  LC: ['Phường Tân Phong', 'Phường Đoàn Kết', 'Xã Phong Thổ', 'Xã Tam Đường', 'Xã Than Uyên', 'Xã Mường Tè', 'Xã Sìn Hồ'],
+  LS: ['Phường Tam Thanh', 'Phường Đông Kinh', 'Phường Lương Văn Tri', 'Phường Kỳ Lừa', 'Xã Cao Lộc', 'Xã Hữu Lũng', 'Xã Chi Lăng', 'Xã Lộc Bình'],
+  LCA: ['Phường Lào Cai', 'Phường Cam Đường', 'Phường Sa Pa', 'Phường Yên Bái', 'Phường Nghĩa Lộ', 'Xã Bảo Thắng', 'Xã Bắc Hà', 'Xã Văn Yên', 'Xã Trấn Yên'],
+  LD: ['Phường Xuân Hương - Đà Lạt', 'Phường Lâm Viên - Đà Lạt', 'Phường Bảo Lộc', 'Phường Gia Nghĩa', 'Phường Phan Thiết', 'Phường La Gi', 'Xã Đức Trọng', 'Xã Di Linh', 'Xã Lâm Hà'],
+  NA: ['Phường Thành Vinh', 'Phường Trường Vinh', 'Phường Cửa Lò', 'Phường Thái Hòa', 'Phường Hoàng Mai', 'Xã Diễn Châu', 'Xã Quỳnh Lưu', 'Xã Nam Đàn', 'Xã Hưng Nguyên', 'Xã Nghi Lộc'],
+  NB: ['Phường Hoa Lư', 'Phường Tam Điệp', 'Phường Nam Định', 'Phường Phủ Lý', 'Phường Duy Tiên', 'Xã Gia Viễn', 'Xã Nho Quan', 'Xã Kim Sơn', 'Xã Hải Hậu', 'Xã Ý Yên'],
+  PT: ['Phường Việt Trì', 'Phường Nông Trang', 'Phường Phú Thọ', 'Phường Vĩnh Yên', 'Phường Phúc Yên', 'Phường Hòa Bình', 'Xã Lâm Thao', 'Xã Thanh Sơn', 'Xã Tam Đảo', 'Xã Lương Sơn'],
+  QN: ['Phường Cẩm Thành', 'Phường Nghĩa Lộ', 'Phường Trương Quang Trọng', 'Phường Đức Phổ', 'Phường Kon Tum', 'Xã Bình Sơn', 'Xã Sơn Tịnh', 'Xã Tư Nghĩa', 'Xã Mộ Đức'],
+  QNI: ['Phường Hạ Long', 'Phường Hồng Gai', 'Phường Bãi Cháy', 'Phường Cẩm Phả', 'Phường Uông Bí', 'Phường Móng Cái', 'Phường Đông Triều', 'Xã Vân Đồn', 'Xã Tiên Yên'],
+  QT: ['Phường Đông Hà', 'Phường Quảng Trị', 'Phường Đồng Hới', 'Phường Ba Đồn', 'Xã Gio Linh', 'Xã Vĩnh Linh', 'Xã Cam Lộ', 'Xã Hướng Hóa', 'Xã Lệ Thủy'],
+  SL: ['Phường Tô Hiệu', 'Phường Chiềng Cơi', 'Phường Chiềng An', 'Phường Mộc Châu', 'Xã Mai Sơn', 'Xã Thuận Châu', 'Xã Phù Yên', 'Xã Yên Châu'],
+  TN: ['Phường Tân Ninh', 'Phường Ninh Sơn', 'Phường Trảng Bàng', 'Phường Hòa Thành', 'Phường Long An', 'Phường Kiến Tường', 'Xã Bến Lức', 'Xã Đức Hòa', 'Xã Gò Dầu', 'Xã Châu Thành'],
+  TNG: ['Phường Phan Đình Phùng', 'Phường Tích Lương', 'Phường Sông Công', 'Phường Phổ Yên', 'Phường Bắc Kạn', 'Xã Đại Từ', 'Xã Phú Bình', 'Xã Định Hóa', 'Xã Phú Lương'],
+  TH: ['Phường Hạc Thành', 'Phường Đông Sơn', 'Phường Sầm Sơn', 'Phường Bỉm Sơn', 'Phường Nghi Sơn', 'Xã Hoằng Hóa', 'Xã Quảng Xương', 'Xã Thọ Xuân'],
+  TQ: ['Phường Minh Xuân', 'Phường Nông Tiến', 'Phường An Tường', 'Phường Hà Giang', 'Xã Sơn Dương', 'Xã Yên Sơn', 'Xã Chiêm Hóa', 'Xã Hàm Yên', 'Xã Vị Xuyên'],
+  VL: ['Phường Long Châu', 'Phường Tân Ngãi', 'Phường Bình Minh', 'Phường Bến Tre', 'Phường Trà Vinh', 'Xã Long Hồ', 'Xã Vũng Liêm', 'Xã Tam Bình', 'Xã Trà Ôn'],
+}
+
+export const layPhuongXaDuPhong = (tinh) => {
+  if (!tinh) return []
+  let key = tinh.code && DS_PHUONG_XA_DU_PHONG[tinh.code] ? tinh.code : null
+  if (!key) {
+    const matched = timTinh(DS_34_TINH_THANH, tinh.ten || tinh.name || tinh.code)
+      || DS_34_TINH_THANH.find((t) => Array.isArray(t.subCodes) && t.subCodes.includes(Number(tinh.id ?? tinh.code)))
+    key = matched?.code || null
+  }
+  const names = key && DS_PHUONG_XA_DU_PHONG[key] ? DS_PHUONG_XA_DU_PHONG[key] : []
+  return names
+    .map((ten, idx) => ({ code: `${key || 'VN'}_${idx + 1}`, ten }))
+    .sort((a, b) => a.ten.localeCompare(b.ten, 'vi'))
+}
+
 /**
  * Tải danh sách đơn vị hành chính cấp cơ sở (Xã/Phường/Thị trấn/Thành phố trực thuộc) theo tỉnh mới.
- * Sử dụng depth=3 để lấy chi tiết các Xã, Phường, Thị trấn, Thành phố; LOẠI BỎ cấp Huyện theo yêu cầu.
+ * Sử dụng v2 (2 cấp) và v1 depth=3 trực tiếp từ trình duyệt, kèm dữ liệu dự phòng thực tế theo tỉnh.
  */
 export const layPhuongXa = async (ds, tinh) => {
   if (!tinh) return []
   if (tinh.phuongXa && tinh.phuongXa.length) return tinh.phuongXa
 
-  const cacheKey = tinh.code || tinh.ten
+  const subCodes = tinh.subCodes && tinh.subCodes.length ? tinh.subCodes : [tinh.code ?? tinh.id]
+  const cacheKey = `${tinh.code || tinh.id || tinh.ten}:${subCodes.join(',')}`
   if (cacheCon.has(cacheKey)) {
     return cacheCon.get(cacheKey)
   }
-
-  const subCodes = tinh.subCodes && tinh.subCodes.length ? tinh.subCodes : [tinh.code]
   const mapTen = new Map()
 
   const fetchSub = async (subCode) => {
     if (!(typeof subCode === 'number' || !isNaN(Number(subCode)))) return null
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 10000)
+    const timer = setTimeout(() => ctrl.abort(), 8000)
     try {
-      // Ưu tiên api v2 nếu có
+      // 1. Ưu tiên API v2 (mô hình 2 cấp trực thuộc Tỉnh -> Phường/Xã)
       try {
         const resV2 = await fetch(`https://provinces.open-api.vn/api/v2/p/${subCode}?depth=2`, { signal: ctrl.signal })
         if (resV2.ok) {
@@ -240,11 +291,25 @@ export const layPhuongXa = async (ds, tinh) => {
         // Tiếp tục sang nguồn dữ liệu địa giới dự phòng bên dưới.
       }
 
-      const res = await fetch(`https://provinces.open-api.vn/api/v1/p/${subCode}?depth=3`, { signal: ctrl.signal })
-      if (!res.ok) return null
-      return await res.json()
+      // 2. Fallback sang API v1 depth=3 và legacy /api/p/ depth=3
+      for (const url of [
+        `https://provinces.open-api.vn/api/v1/p/${subCode}?depth=3`,
+        `https://provinces.open-api.vn/api/p/${subCode}?depth=3`,
+      ]) {
+        try {
+          const res = await fetch(url, { signal: ctrl.signal })
+          if (res.ok) {
+            const data = await res.json()
+            if (data && (Array.isArray(data.districts) || Array.isArray(data.wards))) {
+              return data
+            }
+          }
+        } catch {
+          // Thử endpoint tiếp theo
+        }
+      }
+      return null
     } catch {
-      // Bo qua loi subCode rieng le (timeout/quet mang...)
       return null
     } finally {
       clearTimeout(timer)
@@ -254,16 +319,16 @@ export const layPhuongXa = async (ds, tinh) => {
   try {
     const results = await Promise.all(subCodes.map(fetchSub))
     for (const data of results) {
-      if (!data || !Array.isArray(data.districts)) continue
-      for (const d of data.districts) {
-        // 1. Them Thanh pho truc thuoc tinh hoac Thi xa (neu co)
-        if (d.name && (d.name.startsWith('Thành phố') || d.name.startsWith('Thị xã'))) {
-          if (!mapTen.has(d.name)) {
-            mapTen.set(d.name, { code: d.code, ten: d.name })
+      if (!data) continue
+      if (Array.isArray(data.wards)) {
+        for (const w of data.wards) {
+          if (w.name && !mapTen.has(w.name)) {
+            mapTen.set(w.name, { code: w.code, ten: w.name })
           }
         }
-
-        // 2. Them tat ca cac Xa, Phuong, Thi tran tu wards
+      }
+      if (!Array.isArray(data.districts)) continue
+      for (const d of data.districts) {
         if (d.wards && Array.isArray(d.wards)) {
           for (const w of d.wards) {
             if (w.name && !mapTen.has(w.name)) {
@@ -277,24 +342,22 @@ export const layPhuongXa = async (ds, tinh) => {
     console.warn('Lỗi khi tải đơn vị cấp xã/phường cho:', tinh.ten, e)
   }
 
-  // 3. Bổ sung các xã/phường mới thành lập sau sáp nhập theo các nghị quyết gần đây
+  // Bổ sung các xã/phường mới thành lập nếu từ API có dữ liệu
   const tenTinhClean = loaiBoTienTo(tinh.ten || '')
-  if (tenTinhClean.includes('hưng yên')) {
-    if (!mapTen.has('Xã Hồng Vũ')) {
-      mapTen.set('Xã Hồng Vũ', { code: 'hong_vu', ten: 'Xã Hồng Vũ' })
-    }
+  if (mapTen.size > 0 && tenTinhClean.includes('hưng yên') && !mapTen.has('Xã Hồng Vũ')) {
+    mapTen.set('Xã Hồng Vũ', { code: 'hong_vu', ten: 'Xã Hồng Vũ' })
   }
 
   const danhSachTong = Array.from(mapTen.values())
-
-  // Sắp xếp theo bảng chữ cái tiếng Việt
   danhSachTong.sort((a, b) => a.ten.localeCompare(b.ten, 'vi'))
 
-  // Chỉ cache kết quả có dữ liệu - tránh cache rỗng khi mạng lỗi khiến dropdown trống vĩnh viễn
+  // Chỉ cache kết quả thật từ API để khi có mạng trở lại sẽ tải đủ toàn bộ phường/xã
   if (danhSachTong.length > 0) {
     cacheCon.set(cacheKey, danhSachTong)
+    return danhSachTong
   }
-  return danhSachTong
+
+  return layPhuongXaDuPhong(tinh)
 }
 
 /**

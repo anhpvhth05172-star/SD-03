@@ -522,7 +522,25 @@ public class KhachHangService {
                 return ma;
             }
         }
-        return sinhMaKhachHang(tenKhachHang);
+        return sinhMaKhachHangTuanTu();
+    }
+
+    private String sinhMaKhachHangTuanTu() {
+        long max = 0;
+        for (String existing : khachHangRepository.findMaKhachHangBatDauBangKH()) {
+            if (existing != null && existing.matches("^KH\\d{1,6}$")) {
+                long num = Long.parseLong(existing.substring(2));
+                if (num > max) {
+                    max = num;
+                }
+            }
+        }
+        long next = max + 1;
+        String ma = String.format("KH%06d", next);
+        while (khachHangRepository.existsByMaKhachHang(ma)) {
+            ma = String.format("KH%06d", ++next);
+        }
+        return ma;
     }
 
     private String sinhMaKhachHang(String tenKhachHang) {

@@ -83,6 +83,12 @@ const menu = [
     ],
   },
   {
+    label: 'Cài đặt phí ship',
+    path: '/cai-dat-phi-ship',
+    iconType: 'orders',
+    adminOnly: true,
+  },
+  {
     label: 'Chat khách hàng',
     path: '/chat',
     iconType: 'chat',

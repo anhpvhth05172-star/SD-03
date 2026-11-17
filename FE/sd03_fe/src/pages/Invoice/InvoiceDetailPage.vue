@@ -190,7 +190,12 @@ const buocTiepTheoChinh = computed(() => {
 const cacBuocPhu = computed(() => {
   if (!data.value || isTerminal.value) return []
   const main = buocTiepTheoChinh.value
-  return tiepTheoList.value.filter((tt) => tt !== main)
+  return tiepTheoList.value.filter((tt) => {
+    if (tt === main) return false
+    if (tt === 'Chờ hoàn tiền' || tt === 'Đã hoàn tiền') return false
+    if (tt === 'Đã hủy' && !coTheHuy.value) return false
+    return true
+  })
 })
 
 const nhanHanhDongChinh = (tenTrangThai) => {
@@ -307,16 +312,16 @@ const huyDon = async () => {
   }
   const ma = data.value.maHoaDon || `#${data.value.id}`
   const ok = await notifyConfirm(
-    'Xác nhận hủy đơn?',
-    `Hóa đơn ${ma}\nSau khi hủy, hệ thống sẽ tự động hoàn trả lại số lượng sản phẩm vào kho hàng.`,
-    'Xác nhận hủy',
-    'Giữ đơn',
+    'Xác nhận hủy đơn',
+    `Hóa đơn ${ma}\nSau khi hoàn tiền, hệ thống sẽ hủy hóa đơn, hoàn trả số lượng sản phẩm vào kho và không tính doanh thu hóa đơn này.`,
+    'Hoàn tiền',
+    'Hủy',
   )
   if (!ok) return
   updatingStatus.value = true
   try {
-    await updateInvoiceStatus(data.value.id, 'DA_HUY', 'Hủy đơn từ trang chi tiết', layTenNguoiThaoTac())
-    notifySuccess('Đã hủy đơn', `Hóa đơn ${ma} → Đã hủy`)
+    await updateInvoiceStatus(data.value.id, 'DA_HUY', 'Hủy đơn và hoàn tiền từ trang chi tiết', layTenNguoiThaoTac())
+    notifySuccess('Đã hủy đơn & hoàn tiền', `Hóa đơn ${ma} → Đã hủy`)
     await load(true)
   } catch (e) {
     notifyError('Hủy đơn thất bại', e.message || 'Không thể hủy đơn')
@@ -448,7 +453,7 @@ const chiTietLoc = computed(() => {
   return list
 })
 
-const API_V1 = 'http://localhost:8080/api/v1'
+const API_V1 = '/api/v1'
 const DEFAULT_SHOE_IMG = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=160&auto=format&fit=crop&q=80'
 const variantInfoMap = ref({})
 
@@ -1081,7 +1086,7 @@ onBeforeUnmount(() => {
                     type="button"
                     :disabled="updatingStatus || isCheDoXem"
                     :title="isCheDoXem ? 'Chưa mở ca làm việc (chế độ xem)' : `Chuyển sang: ${phu}`"
-                    @click="chuyenTrangThai(phu)"
+                    @click="phu === 'Đã hủy' ? huyDon() : chuyenTrangThai(phu)"
                   >
                     <svg v-if="phu === 'Chờ hoàn tiền' || phu === 'Đã hoàn tiền'" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />

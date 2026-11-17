@@ -7,6 +7,7 @@ import com.example.datn.dto.Auth.DangNhapRequest;
 import com.example.datn.dto.Auth.DangXuatRequest;
 import com.example.datn.dto.Auth.RefreshRequest;
 import com.example.datn.dto.Auth.ThongTinResponse;
+import com.example.datn.dto.KhachHang.DiaChiKhachHangRequest;
 import com.example.datn.dto.KhachHang.KhachHangDTO;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.exception.DangNhapThatBaiException;
@@ -181,6 +182,24 @@ public class AuthController {
                 khachHang.setNgayCapNhat(LocalDateTime.now());
                 khachHang.setNguoiCapNhat(khachHang.getTenTaiKhoan());
                 khachHangRepository.save(khachHang);
+
+                if (req.getDiaChiCuThe() != null && !req.getDiaChiCuThe().trim().isEmpty() && khachHangService != null) {
+                    DiaChiKhachHangRequest dcReq = new DiaChiKhachHangRequest();
+                    String tenDiaChi = req.getTenDiaChi() != null && !req.getTenDiaChi().trim().isEmpty()
+                        ? req.getTenDiaChi().trim()
+                        : khachHang.getTenKhachHang();
+                    dcReq.setTenDiaChi(tenDiaChi);
+                    dcReq.setTinhThanhPho(req.getTinhThanhPho());
+                    dcReq.setPhuong(req.getPhuong());
+                    dcReq.setDiaChiCuThe(req.getDiaChiCuThe().trim());
+                    dcReq.setMacDinh(req.getMacDinh() != null ? req.getMacDinh() : Boolean.TRUE);
+                    dcReq.setTrangThai(Boolean.TRUE);
+                    if (req.getIdDiaChi() != null) {
+                        khachHangService.capNhatDiaChi(idNguoiDung, req.getIdDiaChi(), dcReq);
+                    } else {
+                        khachHangService.themDiaChi(idNguoiDung, dcReq);
+                    }
+                }
             }
         }
         return thongTin();

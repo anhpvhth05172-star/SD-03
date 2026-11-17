@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
   labels: { type: Array, default: () => [] },
@@ -14,7 +14,38 @@ const props = defineProps({
   lineSeries: { type: Array, default: null }, // [{label, color, values}] — đường thang riêng
   lineFormat: { type: String, default: 'so' }, // 'so' | 'percent'
   showLineLabels: { type: Boolean, default: false },
+  tooltips: { type: Array, default: null },
 })
+
+const wrapRef = ref(null)
+const hoveredTip = ref(null)
+const hoveredIdx = ref(-1)
+
+const updateTipPos = (e) => {
+  const el = wrapRef.value
+  if (!el || !hoveredTip.value) return
+  const rect = el.getBoundingClientRect()
+  const x = Math.max(12, Math.min(rect.width - 12, e.clientX - rect.left))
+  const y = Math.max(12, e.clientY - rect.top - 12)
+  hoveredTip.value = { ...hoveredTip.value, x, y }
+}
+
+const showTip = (e, idx, fallbackTitle, fallbackLine) => {
+  hoveredIdx.value = idx
+  const custom = Array.isArray(props.tooltips) ? props.tooltips[idx] : null
+  hoveredTip.value = {
+    title: custom?.title || fallbackTitle,
+    lines: Array.isArray(custom?.lines) && custom.lines.length ? custom.lines : [fallbackLine],
+    x: 0,
+    y: 0,
+  }
+  updateTipPos(e)
+}
+
+const hideTip = () => {
+  hoveredIdx.value = -1
+  hoveredTip.value = null
+}
 
 const W = 760
 const H = computed(() => props.height)
@@ -193,7 +224,7 @@ const isEmpty = computed(() => {
 </script>
 
 <template>
-  <div class="blc-wrap">
+  <div ref="wrapRef" class="blc-wrap">
     <div v-if="legendItems.length" class="blc-legend">
       <span v-for="(s, i) in legendItems" :key="i" class="blc-legend-item">
         <span class="blc-dot" :style="{ background: s.color }"></span>
@@ -257,20 +288,31 @@ const isEmpty = computed(() => {
         </g>
 
         <g v-else-if="['cot', 'ket-hop'].includes(mode) && !multi">
-          <rect
-            v-for="(b, i) in bars"
-            :key="'b' + i"
-            :x="b.x"
-            :y="b.y"
-            :width="b.w"
-            :height="b.h"
-            rx="4"
-            ry="4"
-            :fill="color"
-            class="blc-bar"
-          >
-            <title>{{ b.label }}: {{ fmtValue(b.v) }}</title>
-          </rect>
+          <g v-for="(b, i) in bars" :key="'b' + i">
+            <rect
+              :x="PAD.l + band * i"
+              :y="PAD.t"
+              :width="band"
+              :height="innerH"
+              fill="transparent"
+              class="blc-hit"
+              @mouseenter="showTip($event, i, b.label, fmtValue(b.v))"
+              @mousemove="updateTipPos($event)"
+              @mouseleave="hideTip"
+            />
+            <rect
+              :x="b.x"
+              :y="b.y"
+              :width="b.w"
+              :height="b.h"
+              rx="4"
+              ry="4"
+              :fill="color"
+              class="blc-bar"
+              :class="{ 'is-hovered': hoveredIdx === i }"
+              style="pointer-events: none;"
+            />
+          </g>
           <polyline
             v-if="mode === 'ket-hop' && values.length > 1"
             :points="linePoints(values)"
@@ -388,6 +430,14 @@ const isEmpty = computed(() => {
         Không có dữ liệu trong khoảng này
       </text>
     </svg>
+    <div
+      v-if="hoveredTip"
+      class="blc-tooltip"
+      :style="{ left: hoveredTip.x + 'px', top: hoveredTip.y + 'px' }"
+    >
+      <div class="blc-tooltip-title">{{ hoveredTip.title }}</div>
+      <div v-for="(line, li) in hoveredTip.lines" :key="li" class="blc-tooltip-line">{{ line }}</div>
+    </div>
   </div>
 </template>
 
@@ -444,8 +494,42 @@ const isEmpty = computed(() => {
   transition: opacity 0.15s ease;
 }
 
-.blc-bar:hover {
-  opacity: 0.82;
+.blc-bar:hover,
+.blc-bar.is-hovered {
+  opacity: 0.78;
+}
+
+.blc-hit {
+  cursor: pointer;
+}
+
+.blc-wrap {
+  position: relative;
+}
+
+.blc-tooltip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background: rgba(15, 23, 42, 0.94);
+  color: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 20;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.22);
+}
+
+.blc-tooltip-title {
+  font-weight: 700;
+  margin-bottom: 2px;
+  color: #ffffff;
+}
+
+.blc-tooltip-line {
+  color: #cbd5e1;
 }
 
 .blc-line-label {

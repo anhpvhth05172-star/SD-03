@@ -59,7 +59,7 @@ class ThongKeServiceTest {
         mockRows(
             List.of(
                 hd(1, "DA_HOAN_THANH", "1000000", "TM"),
-                hd(2, "CHO_XAC_NHAN", "2000000", "BANK"),
+                hd(2, "DA_XAC_NHAN", "2000000", "BANK"),
                 hd(3, "DA_HUY", "9000000", "TM")
             ),
             List.of(
@@ -120,15 +120,17 @@ class ThongKeServiceTest {
             List.of(
                 new HoaDonThongKeRow(1L, "DA_HOAN_THANH", new BigDecimal("1000000"), false, "TM", "TAI_QUAY"),
                 new HoaDonThongKeRow(2L, "CHO_XAC_NHAN", new BigDecimal("500000"), false, "TM", "ONLINE"),
-                new HoaDonThongKeRow(3L, "CHO_XAC_NHAN", new BigDecimal("300000"), false, "TM", "TAI_QUAY")
+                new HoaDonThongKeRow(3L, "CHO_XAC_NHAN", new BigDecimal("300000"), false, "TM", "TAI_QUAY"),
+                new HoaDonThongKeRow(4L, "CHO_XAC_NHAN", new BigDecimal("200000"), false, "BANK", "ONLINE"),
+                new HoaDonThongKeRow(5L, "DA_XAC_NHAN", new BigDecimal("100000"), false, "COD", "ONLINE")
             ),
             List.of(),
             0
         );
         TongQuanDTO r = service().tongQuan(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31), null);
         assertEquals(1_000_000L, r.doanhThu());
-        assertEquals(800_000L, r.doanhThuDuKien());
-        assertEquals(3L, r.soDon());
+        assertEquals(2_100_000L, r.doanhThuDuKien());
+        assertEquals(5L, r.soDon());
     }
 
     @Test
@@ -338,7 +340,7 @@ class ThongKeServiceTest {
         mockRows(
             List.of(
                 hd(1, "DA_HOAN_THANH", "1000000", "TM"),
-                hd(2, "CHO_XAC_NHAN", "2000000", "BANK"),
+                hd(2, "DA_XAC_NHAN", "2000000", "BANK"),
                 hd(3, "DA_HUY", "9000000", "TM")
             ),
             List.of(ct(1, "Nike", "1000000", 2)),
