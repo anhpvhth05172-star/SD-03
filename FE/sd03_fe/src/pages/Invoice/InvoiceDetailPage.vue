@@ -304,6 +304,14 @@ const toggleStatusMenu = () => {
   showStatusMenu.value = !showStatusMenu.value
 }
 
+const isCodInvoice = (inv) => {
+  if (!inv) return false
+  const pttt = String(inv.tenPhuongThucThanhToan || inv.phuongThucThanhToan?.ten || '').toUpperCase()
+  const maPttt = String(inv.maPhuongThucThanhToan || inv.phuongThucThanhToan?.ma || '').toUpperCase()
+  const idPttt = Number(inv.idPhuongThucThanhToan || inv.phuongThucThanhToan?.id || 0)
+  return pttt.includes('COD') || pttt.includes('KHI NHẬN HÀNG') || maPttt.includes('COD') || idPttt === 11 || idPttt === 1
+}
+
 const huyDon = async () => {
   if (!data.value || updatingStatus.value || !coTheHuy.value) return
   if (isCheDoXem.value) {
@@ -311,17 +319,21 @@ const huyDon = async () => {
     return
   }
   const ma = data.value.maHoaDon || `#${data.value.id}`
+  const isCod = isCodInvoice(data.value)
+  const confirmMsg = isCod
+    ? `Hóa đơn ${ma}\nHệ thống sẽ hủy hóa đơn, hoàn trả số lượng sản phẩm vào kho và không tính doanh thu hóa đơn này.`
+    : `Hóa đơn ${ma}\nSau khi hoàn tiền, hệ thống sẽ hủy hóa đơn, hoàn trả số lượng sản phẩm vào kho và không tính doanh thu hóa đơn này.`
   const ok = await notifyConfirm(
     'Xác nhận hủy đơn',
-    `Hóa đơn ${ma}\nSau khi hoàn tiền, hệ thống sẽ hủy hóa đơn, hoàn trả số lượng sản phẩm vào kho và không tính doanh thu hóa đơn này.`,
-    'Hoàn tiền',
+    confirmMsg,
+    isCod ? 'Hủy đơn' : 'Hoàn tiền',
     'Hủy',
   )
   if (!ok) return
   updatingStatus.value = true
   try {
-    await updateInvoiceStatus(data.value.id, 'DA_HUY', 'Hủy đơn và hoàn tiền từ trang chi tiết', layTenNguoiThaoTac())
-    notifySuccess('Đã hủy đơn & hoàn tiền', `Hóa đơn ${ma} → Đã hủy`)
+    await updateInvoiceStatus(data.value.id, 'DA_HUY', isCod ? 'Hủy đơn từ trang chi tiết' : 'Hủy đơn và hoàn tiền từ trang chi tiết', layTenNguoiThaoTac())
+    notifySuccess(isCod ? 'Đã hủy đơn hàng' : 'Đã hủy đơn & hoàn tiền', `Hóa đơn ${ma} → Đã hủy`)
     await load(true)
   } catch (e) {
     notifyError('Hủy đơn thất bại', e.message || 'Không thể hủy đơn')

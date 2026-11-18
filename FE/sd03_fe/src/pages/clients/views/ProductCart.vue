@@ -10,7 +10,9 @@ import {
   clearCart,
   fetchCart,
   refreshGuestCartPrices,
+  addToCart,
 } from "../store";
+import http from "@/api/http";
 import { getUser, isKhachHangDangNhap } from "@/utils/auth";
 import { listVouchers, suDungCuaToi } from "@/api/voucher";
 import { notifyConfirm } from "@/utils/notify";
@@ -382,6 +384,56 @@ const handleQtyChange = async (item, delta) => {
     setTimeout(() => (actionError.value = ""), 3000);
     return;
   }
+
+  // Khi tăng số lượng (bấm dấu +), kiểm tra xem giá sản phẩm hiện tại có thay đổi không
+  if (delta > 0) {
+    const variantId = Number(item.idSanPhamChiTiet || item.variantId || item.id);
+    let livePrice = null;
+    try {
+      const res = await http.get(`/v1/san-pham-chi-tiet/${variantId}`);
+      if (res?.data) {
+        livePrice = Number(res.data.giaSauGiam ?? res.data.giaBan ?? res.data.price ?? 0);
+      }
+    } catch (e) {
+      // Bỏ qua lỗi mạng
+    }
+
+    const curPrice = Number(item.price ?? item.donGia ?? 0);
+    if (livePrice !== null && livePrice > 0 && livePrice !== curPrice) {
+      const prodName = item.tenSanPham || item.ten || item.name || "Sản phẩm";
+      const applyNew = await notifyConfirm(
+        "Giá sản phẩm đã thay đổi!",
+        `Sản phẩm "${prodName}" đã đổi giá từ ${money(curPrice)} sang ${money(livePrice)}. Bạn muốn thêm theo giá mới (tách dòng mới) hay giữ giá cũ?`,
+        "Thay đổi giá",
+        "Hủy"
+      );
+      if (applyNew) {
+        actionLoadingId.value = rowId(item);
+        try {
+          const pObj = {
+            id: item.idSanPham || item.id,
+            name: prodName,
+            tenSanPham: prodName,
+            img: item.img || item.hinhAnh,
+            stock: item.stock,
+            price: livePrice,
+            giaBan: livePrice
+          };
+          await addToCart(pObj, variantId, item.size || item.kichCo, 1, item.color || item.mauSac);
+          await fetchCart();
+        } catch (err) {
+          actionError.value = err.message || "Không thể thêm sản phẩm với giá mới";
+          setTimeout(() => (actionError.value = ""), 3000);
+        } finally {
+          actionLoadingId.value = null;
+        }
+        return;
+      } else {
+        return;
+      }
+    }
+  }
+
   actionLoadingId.value = rowId(item);
   actionError.value = "";
   try {

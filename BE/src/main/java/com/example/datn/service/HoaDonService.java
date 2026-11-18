@@ -780,6 +780,9 @@ public class HoaDonService {
         if ("DA_HUY".equals(maMoi) && !"CHO_XAC_NHAN".equals(maHienTai) && !"DA_XAC_NHAN".equals(maHienTai)) {
             throw new IllegalArgumentException("Đơn hàng đã được xác nhận, không thể hủy đơn.");
         }
+        if (("CHO_HOAN_TIEN".equals(maMoi) || "DA_HOAN_TIEN".equals(maMoi)) && laDonCOD(hoaDon)) {
+            throw new IllegalArgumentException("Hóa đơn thanh toán khi nhận hàng (COD) không hỗ trợ hoàn tiền.");
+        }
         List<String> choPhep = chonBangChuyenTrangThai(hoaDon).getOrDefault(maHienTai, List.of());
         if (!choPhep.contains(maMoi)) {
             throw new IllegalArgumentException(
@@ -1745,11 +1748,34 @@ public class HoaDonService {
         return dto;
     }
 
+    public static boolean laDonCOD(HoaDon hoaDon) {
+        if (hoaDon == null) {
+            return false;
+        }
+        if (hoaDon.getPhuongThucThanhToan() != null) {
+            String ma = hoaDon.getPhuongThucThanhToan().getMaPhuongThuc();
+            String ten = hoaDon.getPhuongThucThanhToan().getTenPhuongThuc();
+            Long id = hoaDon.getPhuongThucThanhToan().getId();
+            if (id != null && (id == 1L || id == 11L)) {
+                return true;
+            }
+            if (ma != null && ma.toUpperCase().contains("COD")) {
+                return true;
+            }
+            if (ten != null && (ten.toUpperCase().contains("COD") || ten.toUpperCase().contains("KHI NHẬN HÀNG"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private List<String> tenTrangThaiTiepTheo(HoaDon h) {
         if (!laLoaiDonHopLe(h)) {
             return List.of();
         }
+        boolean isCod = laDonCOD(h);
         return chonBangChuyenTrangThai(h).getOrDefault(h.getTrangThai(), List.of()).stream()
+                .filter(ma -> !isCod || (!"CHO_HOAN_TIEN".equals(ma) && !"DA_HOAN_TIEN".equals(ma)))
                 .map(HoaDonService::toTenTrangThai)
                 .toList();
     }

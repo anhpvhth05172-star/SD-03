@@ -793,6 +793,21 @@ const broadcastActiveOrder = () => {
       paymentMethod: order.paymentMethod || 'TIEN_MAT',
       voucherCode: order.selectedVoucher?.maPhieuGiamGia || null,
       isDelivery: Boolean(order.isDelivery),
+      deliveryInfo: order.isDelivery && order.deliveryInfo ? {
+        recipientName: order.deliveryInfo.recipientName || order.customer?.tenKhachHang || order.customer?.ten || '',
+        recipientPhone: order.deliveryInfo.recipientPhone || order.customer?.soDienThoai || order.customer?.sdt || '',
+        recipientEmail: order.deliveryInfo.recipientEmail || order.customer?.email || '',
+        recipientAddress: order.deliveryInfo.recipientAddress || '',
+        provinceName: order.deliveryInfo.province?.name || '',
+        wardName: order.deliveryInfo.ward?.name || '',
+        fullAddress: [
+          order.deliveryInfo.recipientAddress,
+          order.deliveryInfo.ward?.name,
+          order.deliveryInfo.province?.name
+        ].filter(Boolean).join(', '),
+        shippingFee: Number(order.deliveryInfo.shippingFee || 0)
+      } : null,
+      isBankQrModalOpen: Boolean(typeof isBankQrModalOpen !== 'undefined' && isBankQrModalOpen.value),
       updatedAt: Date.now()
     }
     localStorage.setItem('polyshoes_customer_display_payload', JSON.stringify(payload))
@@ -1060,12 +1075,29 @@ const updateCartItemQty = async (item, rawNewQty, event = null) => {
         const prodName = item.name || targetProd.ten || targetProd.tenSanPham || 'Sản phẩm'
         const confirmChange = await notifyConfirm(
           'Giá sản phẩm đã thay đổi!',
-          `Sản phẩm "${prodName}" đã đổi giá từ ${formatVnd(item.price)} sang ${formatVnd(effectivePrice)}. Bạn có muốn thay đổi giá để tăng số lượng không?`,
+          `Sản phẩm "${prodName}" đã đổi giá từ ${formatVnd(item.price)} sang ${formatVnd(effectivePrice)}. Bạn muốn thêm theo giá mới (tách dòng mới) hay giữ giá cũ?`,
           'Thay đổi giá',
           'Hủy'
         )
         if (confirmChange) {
-          item.price = effectivePrice
+          const qtyToAdd = newQty - item.quantity
+          const existingSamePrice = currentOrder.value.cart.find(
+            c => Number(c.idCtsp) === Number(item.idCtsp) && Number(c.price) === Number(effectivePrice)
+          )
+          if (existingSamePrice) {
+            existingSamePrice.quantity += qtyToAdd
+          } else {
+            currentOrder.value.cart.push({
+              ...item,
+              price: effectivePrice,
+              originalPrice: Number(targetProd.price || targetProd.giaBan || effectivePrice),
+              quantity: qtyToAdd
+            })
+          }
+          if (event?.target) event.target.value = item.quantity
+          recalculateAvailableStocks()
+          savePendingOrdersToStorage()
+          return
         } else {
           if (event?.target) event.target.value = item.quantity
           return
@@ -2789,6 +2821,7 @@ const startSepayPosPolling = () => {
 }
 
 watch(isBankQrModalOpen, (isOpen) => {
+  broadcastActiveOrder()
   if (!isOpen) {
     stopAutoCheckoutCountdown()
     stopSepayPosPolling()
@@ -3642,8 +3675,8 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
               const applyBest = await notifyConfirm(
                 'Mã giảm giá đã thay đổi!',
                 `${voucherInvalidReason}. Bạn có muốn áp dụng mã giảm giá tốt nhất "${best.voucher.ma || best.voucher.ten}" (giảm ${formatVnd(best.discount)}) không?`,
-                'Áp dụng',
-                'Không dùng'
+                'Áp dụng mã tốt nhất',
+                'Không dùng mã'
               )
               if (applyBest) {
                 order.selectedVoucher = best.voucher
@@ -3672,8 +3705,8 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
               const applyBest = await notifyConfirm(
                 'Mã giảm giá đã thay đổi!',
                 `Phiếu giảm giá "${freshV.ma || vCode}" vừa thay đổi giá trị (giảm ${formatVnd(oldDiscAmt)} → ${formatVnd(newDiscAmt)}). Bạn có muốn áp dụng mã giảm giá tốt nhất "${best.voucher.ma || best.voucher.ten}" (giảm ${formatVnd(best.discount)}) không?`,
-                'Áp dụng',
-                'Không dùng'
+                'Áp dụng mã tốt nhất',
+                'Không dùng mã'
               )
               if (applyBest) {
                 order.selectedVoucher = best.voucher
@@ -3728,7 +3761,26 @@ const applyVoucher = async (voucher) => {
   if (!kiemTraQuyenBanHang('áp dụng voucher')) return
   if (!currentOrder.value) return
   if (!isVoucherEligible(voucher)) {
-    notifyWarning('Chưa đủ điều kiện', getVoucherIneligibilityReason(voucher))
+    const reason = getVoucherIneligibilityReason(voucher)
+    const bestAlt = (allVouchers.value || [])
+      .filter(v => Number(v.id) !== Number(voucher.id) && isVoucherEligible(v))
+      .map(v => ({ v, disc: calculateVoucherDiscount(v, subTotal.value) }))
+      .sort((a, b) => b.disc - a.disc)[0]
+
+    if (bestAlt && bestAlt.disc > 0) {
+      const applyBest = await notifyConfirm(
+        'Phiếu giảm giá không khả dụng!',
+        `${reason}. Hệ thống gợi ý mã giảm giá tốt nhất "${bestAlt.v.ma || bestAlt.v.maPhieuGiamGia}" (${bestAlt.v.ten || ''} - giảm ${formatVnd(bestAlt.disc)}). Bạn có muốn áp dụng không?`,
+        'Áp dụng mã tốt nhất',
+        'Không dùng mã'
+      )
+      if (applyBest) {
+        applyVoucher(bestAlt.v)
+      }
+      return
+    }
+
+    notifyWarning('Chưa đủ điều kiện', reason)
     return
   }
 
@@ -3789,6 +3841,24 @@ const handleApplyManualVoucher = async () => {
   }
 
   if (!found) {
+    const bestAlt = (allVouchers.value || [])
+      .filter(v => isVoucherEligible(v))
+      .map(v => ({ v, disc: calculateVoucherDiscount(v, subTotal.value) }))
+      .sort((a, b) => b.disc - a.disc)[0]
+
+    if (bestAlt && bestAlt.disc > 0) {
+      const applyBest = await notifyConfirm(
+        'Mã giảm giá không tìm thấy!',
+        `Không tìm thấy mã giảm giá "${code}". Hệ thống gợi ý mã giảm giá tốt nhất "${bestAlt.v.ma || bestAlt.v.maPhieuGiamGia}" (${bestAlt.v.ten || ''} - giảm ${formatVnd(bestAlt.disc)}). Bạn có muốn áp dụng không?`,
+        'Áp dụng mã tốt nhất',
+        'Không dùng mã'
+      )
+      if (applyBest) {
+        applyVoucher(bestAlt.v)
+      }
+      return
+    }
+
     notifyError('Mã không hợp lệ', `Không tìm thấy mã giảm giá "${code}" hoặc mã đã bị khóa/hết hạn!`)
     return
   }

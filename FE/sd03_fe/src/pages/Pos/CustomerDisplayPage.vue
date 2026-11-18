@@ -96,20 +96,35 @@ const loadOrderFromStorage = () => {
   }
 }
 
-const toggleFullscreen = () => {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().then(() => {
-      isFullscreen.value = true
-    }).catch(() => {})
-  } else {
-    document.exitFullscreen().then(() => {
-      isFullscreen.value = false
-    }).catch(() => {})
+const activePosPopup = ref(null)
+
+const loadPopupFromStorage = () => {
+  try {
+    const raw = localStorage.getItem('polyshoes_pos_popup_state')
+    if (raw) {
+      activePosPopup.value = JSON.parse(raw)
+    } else {
+      activePosPopup.value = null
+    }
+  } catch {
+    activePosPopup.value = null
   }
 }
 
+const deliveryInfo = computed(() => {
+  const d = currentOrderData.value?.deliveryInfo
+  const cust = currentOrderData.value?.customer
+  if (!currentOrderData.value?.isDelivery) return null
+  return {
+    recipientName: d?.recipientName || cust?.tenKhachHang || 'Khách nhận tại nhà',
+    recipientPhone: d?.recipientPhone || cust?.soDienThoai || '',
+    address: d?.fullAddress || d?.recipientAddress || '',
+    shippingFee: Number(d?.shippingFee || currentOrderData.value?.shippingFee || 0)
+  }
+})
+
 const showQrCenterModal = computed(() => {
-  return currentOrderData.value?.paymentMethod === 'CHUYEN_KHOAN' && Number(currentOrderData.value?.finalTotal || 0) > 0
+  return Boolean(currentOrderData.value?.isBankQrModalOpen) && Number(currentOrderData.value?.finalTotal || 0) > 0
 })
 
 const qrCodeUrl = computed(() => {
@@ -124,26 +139,37 @@ onMounted(() => {
   updateClock()
   clockTimer = setInterval(updateClock, 1000)
   loadOrderFromStorage()
+  loadPopupFromStorage()
 
   // Đồng bộ qua BroadcastChannel tức thì
   try {
     broadcastChannel = new BroadcastChannel('polyshoes_pos_display_channel')
     broadcastChannel.onmessage = (event) => {
       if (event.data && typeof event.data === 'object') {
-        currentOrderData.value = event.data
+        if (event.data.type === 'POS_POPUP_STATE') {
+          activePosPopup.value = event.data.popup
+        } else {
+          currentOrderData.value = event.data
+        }
       }
     }
   } catch (e) {}
 
   // Lắng nghe thay đổi storage từ tab POS
   window.addEventListener('storage', (e) => {
+    if (e.key === 'polyshoes_pos_popup_state') {
+      loadPopupFromStorage()
+    }
     if (e.key === 'polyshoes_customer_display_payload' || e.key === 'polyshoes_pos_pending_orders_v1' || e.key === 'polyshoes_pos_active_idx_v1') {
       loadOrderFromStorage()
     }
   })
 
-  // Polling nhẹ mỗi 1.5s để đảm bảo đồng bộ 100%
-  pollTimer = setInterval(loadOrderFromStorage, 1500)
+  // Polling nhẹ mỗi 1s để đảm bảo đồng bộ 100%
+  pollTimer = setInterval(() => {
+    loadOrderFromStorage()
+    loadPopupFromStorage()
+  }, 1000)
 })
 
 onUnmounted(() => {
@@ -177,9 +203,6 @@ onUnmounted(() => {
           <i class="bi bi-clock me-1"></i>
           <span>{{ currentTime }}</span>
         </div>
-        <button class="btn-fullscreen" @click="toggleFullscreen" :title="isFullscreen ? 'Thu nhỏ' : 'Toàn màn hình'">
-          <i class="bi" :class="isFullscreen ? 'bi-fullscreen-exit' : 'bi-arrows-fullscreen'"></i>
-        </button>
       </div>
     </header>
 
@@ -203,6 +226,9 @@ onUnmounted(() => {
       <div class="info-tag mode-tag" v-if="currentOrderData.isDelivery">
         <i class="bi bi-truck me-1"></i>
         <span>ĐƠN GIAO HÀNG TẬN NƠI</span>
+        <span v-if="deliveryInfo?.address" class="delivery-address-pill ms-2">
+          ({{ deliveryInfo.recipientName }} - {{ deliveryInfo.address }})
+        </span>
       </div>
     </div>
 
@@ -293,6 +319,28 @@ onUnmounted(() => {
           </div>
 
           <div class="panel-body summary-body">
+            <!-- Thông tin giao hàng khi thu ngân chọn Giao Hàng -->
+            <div class="delivery-info-box" v-if="currentOrderData.isDelivery && deliveryInfo">
+              <div class="del-box-header">
+                <i class="bi bi-geo-alt-fill text-danger me-1"></i>
+                <span class="del-box-title">ĐỊA CHỈ NHẬN HÀNG</span>
+              </div>
+              <div class="del-box-body">
+                <div class="del-line">
+                  <span class="del-lbl">Người nhận:</span>
+                  <strong class="del-val">{{ deliveryInfo.recipientName }}</strong>
+                </div>
+                <div class="del-line" v-if="deliveryInfo.recipientPhone">
+                  <span class="del-lbl">Số điện thoại:</span>
+                  <span class="del-val font-monospace">{{ deliveryInfo.recipientPhone }}</span>
+                </div>
+                <div class="del-line" v-if="deliveryInfo.address">
+                  <span class="del-lbl">Địa chỉ:</span>
+                  <span class="del-val text-break">{{ deliveryInfo.address }}</span>
+                </div>
+              </div>
+            </div>
+
             <div class="summary-line">
               <span class="lbl">Tạm tính tiền hàng:</span>
               <span class="val">{{ formatCurrency(currentOrderData.subTotal) }}</span>
@@ -372,6 +420,26 @@ onUnmounted(() => {
           <div class="qr-popup-footer">
             <i class="bi bi-shield-check text-success me-1"></i>
             <span>Hệ thống tự động xác nhận ngay khi nhận được thanh toán</span>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Popup Đồng Bộ Từ Bán Hàng Tại Quầy (Hoàn Toàn Không Có Nút Bấm) -->
+    <transition name="qr-popup-fade">
+      <div v-if="activePosPopup" class="pos-sync-popup-overlay">
+        <div class="pos-sync-popup-card">
+          <div class="pos-popup-icon-wrap" :class="'icon-' + (activePosPopup.iconType || 'info')">
+            <i v-if="activePosPopup.iconType === 'success'" class="bi bi-check-circle-fill"></i>
+            <i v-else-if="activePosPopup.iconType === 'error'" class="bi bi-x-circle-fill"></i>
+            <i v-else-if="activePosPopup.iconType === 'warning'" class="bi bi-exclamation-triangle-fill"></i>
+            <i v-else class="bi bi-info-circle-fill"></i>
+          </div>
+          <h3 class="pos-popup-title">{{ activePosPopup.title }}</h3>
+          <div class="pos-popup-desc" v-html="activePosPopup.text"></div>
+          <div class="pos-popup-sub-hint">
+            <i class="bi bi-display me-1"></i>
+            Màn hình thông tin khách hàng • Đang đồng bộ cùng quầy thu ngân
           </div>
         </div>
       </div>
@@ -884,13 +952,13 @@ onUnmounted(() => {
 }
 
 .qr-popup-img {
-  width: 330px;
-  height: 330px;
-  border-radius: 16px;
-  border: 2px solid #e2e8f0;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  width: 390px;
+  height: 390px;
+  border-radius: 18px;
+  border: 3px solid #fecaca;
+  box-shadow: 0 12px 30px rgba(220, 38, 38, 0.15);
   background: #ffffff;
-  padding: 8px;
+  padding: 10px;
 }
 
 .qr-popup-total-box {
@@ -1001,6 +1069,139 @@ onUnmounted(() => {
   font-size: 12px;
   color: #64748b;
   margin: 0;
+}
+
+.delivery-address-pill {
+  font-weight: 500;
+  font-size: 13px;
+  opacity: 0.95;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+/* Delivery Info Box */
+.delivery-info-box {
+  background: #f8fafc;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.del-box-header {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #dc2626;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  border-bottom: 1px dashed #e2e8f0;
+  padding-bottom: 6px;
+}
+
+.del-box-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.del-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.del-lbl {
+  color: #64748b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.del-val {
+  color: #1e293b;
+  text-align: right;
+  font-weight: 600;
+}
+
+/* POS Sync Popup (View-only, Zero Buttons) */
+.pos-sync-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(8px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.pos-sync-popup-card {
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 25px 60px -10px rgba(0, 0, 0, 0.4);
+  max-width: 520px;
+  width: 90%;
+  padding: 32px 28px 24px;
+  text-align: center;
+  border: 2px solid #e2e8f0;
+  animation: qrCardPop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pos-popup-icon-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+}
+
+.pos-popup-icon-wrap.icon-warning {
+  background: #fffbeb;
+  color: #f59e0b;
+}
+
+.pos-popup-icon-wrap.icon-error {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.pos-popup-icon-wrap.icon-success {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.pos-popup-icon-wrap.icon-info {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.pos-popup-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 10px;
+}
+
+.pos-popup-desc {
+  font-size: 15px;
+  color: #475569;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.pos-popup-sub-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 12px;
 }
 
 @media (max-width: 900px) {

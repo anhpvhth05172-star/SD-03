@@ -752,6 +752,22 @@ async function applyVoucher() {
     voucher.value = null;
     voucherMsg.text = r.message;
     voucherMsg.ok = false;
+    const bestOpt = bestVoucher.value;
+    if (bestOpt && bestOpt.eligible && bestOpt.discount > 0 && String(bestOpt.v.code).toUpperCase() !== code) {
+      const applyBest = await notifyConfirm(
+        "Mã giảm giá không khả dụng!",
+        `${r.message}. Bạn có muốn dùng mã giảm giá tốt nhất "${bestOpt.v.code}" (${formatVoucherValue(bestOpt.raw)} - Giảm ${money(bestOpt.discount)}) không?`,
+        "Áp dụng mã tốt nhất",
+        "Không dùng mã"
+      );
+      if (applyBest) {
+        voucher.value = bestOpt.v;
+        selectedVoucherId.value = VF.id(bestOpt.raw);
+        sessionStorage.setItem("ps_selected_voucher_code", bestOpt.v.code);
+        voucherMsg.text = `Đã áp dụng mã tốt nhất "${bestOpt.v.code}".`;
+        voucherMsg.ok = true;
+      }
+    }
     return;
   }
   manualRemoved.value = false;
@@ -1083,8 +1099,8 @@ async function verifyAndHandleVoucherBeforeCheckout() {
       const applyBest = await notifyConfirm(
         "Mã giảm giá đã thay đổi!",
         `${reason} Bạn có muốn dùng mã giảm giá tốt nhất "${bestOpt.v.code}" (${formatVoucherValue(bestOpt.raw)} - Giảm ${money(bestOpt.discount)}) không?`,
-        "Áp dụng",
-        "Không dùng",
+        "Áp dụng mã tốt nhất",
+        "Không dùng mã",
       );
       if (applyBest) {
         voucher.value = bestOpt.v;
@@ -1134,12 +1150,19 @@ async function submit() {
   errors.phone = /^0\d{9}$/.test(f.phone)
     ? ""
     : "Số điện thoại gồm 10 số, bắt đầu bằng 0.";
-  if (!f.email || !f.email.trim()) {
-    errors.email = "Vui lòng nhập địa chỉ email nhận thông báo đơn hàng.";
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) {
-    errors.email = "Địa chỉ email không đúng định dạng (VD: nguyenvan@gmail.com).";
+  if (!isLoggedIn.value) {
+    if (!f.email || !f.email.trim()) {
+      errors.email = "Vui lòng nhập địa chỉ email nhận thông báo đơn hàng.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) {
+      errors.email = "Địa chỉ email không đúng định dạng (VD: nguyenvan@gmail.com).";
+    } else {
+      errors.email = "";
+    }
   } else {
     errors.email = "";
+    if (customer.value?.email && !f.email) {
+      f.email = customer.value.email;
+    }
   }
   errors.address = currentSelectedSavedAddr.value?.address || (f.address.trim() && provinceId.value && wardId.value)
     ? ""
@@ -1209,8 +1232,8 @@ async function submit() {
           const applyBest = await notifyConfirm(
             "Mã giảm giá đã thay đổi!",
             `Mã giảm giá bạn chọn không thể áp dụng (${e.message}). Bạn có muốn dùng mã giảm giá tốt nhất "${bestOpt.v.code}" (${formatVoucherValue(bestOpt.raw)} - Giảm ${money(bestOpt.discount)}) không?`,
-            "Áp dụng",
-            "Không dùng",
+            "Áp dụng mã tốt nhất",
+            "Không dùng mã",
           );
           if (applyBest) {
             voucher.value = bestOpt.v;
@@ -1296,8 +1319,8 @@ async function submit() {
         const applyBest = await notifyConfirm(
           "Mã giảm giá đã thay đổi!",
           `Mã giảm giá bạn chọn không thể áp dụng (${rawMsg}). Bạn có muốn dùng mã giảm giá tốt nhất "${bestOpt.v.code}" (${formatVoucherValue(bestOpt.raw)} - Giảm ${money(bestOpt.discount)}) không?`,
-          "Áp dụng",
-          "Không dùng",
+          "Áp dụng mã tốt nhất",
+          "Không dùng mã",
         );
         if (applyBest) {
           voucher.value = bestOpt.v;
@@ -1689,7 +1712,7 @@ const confirmQrPayment = async () => {
           </div>
 
           <div class="row g-3">
-            <div class="col-12">
+            <div v-if="!isLoggedIn" class="col-12">
               <label class="co-label">Email nhận thông báo đơn hàng <span class="text-danger">*</span></label>
               <input v-model="f.email" type="email" class="form-control co-input"
                 :class="{ 'is-invalid': errors.email }"

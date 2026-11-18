@@ -29,6 +29,29 @@ export const cleanupSwalResidualDom = () => {
 }
 
 /**
+ * Đồng bộ trạng thái popup từ POS sang màn hình khách (Customer Display App)
+ */
+export const broadcastPopupToDisplay = (popupData) => {
+  if (typeof window === 'undefined') return
+  try {
+    const payload = popupData ? {
+      title: popupData.title || '',
+      text: popupData.text || '',
+      iconType: popupData.iconType || 'info',
+      timestamp: Date.now()
+    } : null
+    if (payload) {
+      localStorage.setItem('polyshoes_pos_popup_state', JSON.stringify(payload))
+    } else {
+      localStorage.removeItem('polyshoes_pos_popup_state')
+    }
+    const ch = new BroadcastChannel('polyshoes_pos_display_channel')
+    ch.postMessage({ type: 'POS_POPUP_STATE', popup: payload })
+    ch.close()
+  } catch {}
+}
+
+/**
  * Format string quotes into clean strong tags
  */
 const formatHighlight = (text) => {
@@ -98,6 +121,7 @@ const NO_HIDE_ANIMATION = {
  * @param {number} [timer=1400] Thời gian tự tắt (ms)
  */
 export const notifySuccess = (title, text = '', timer = 1400) => {
+  broadcastPopupToDisplay({ title, text, iconType: 'success' })
   const contentHtml = `
     ${MINIMAL_ICONS.success}
     <div class="minimal-title">${formatHighlight(title || 'Thành công')}</div>
@@ -125,6 +149,7 @@ export const notifySuccess = (title, text = '', timer = 1400) => {
       }
     },
     didClose: () => {
+      broadcastPopupToDisplay(null)
       setTimeout(cleanupSwalResidualDom, 10)
     }
   })
@@ -134,6 +159,7 @@ export const notifySuccess = (title, text = '', timer = 1400) => {
  * Hiển thị thông báo lỗi
  */
 export const notifyError = (title, text = '') => {
+  broadcastPopupToDisplay({ title, text, iconType: 'error' })
   const contentHtml = `
     ${MINIMAL_ICONS.error}
     <div class="minimal-title">${title || 'Đã có lỗi xảy ra'}</div>
@@ -155,6 +181,7 @@ export const notifyError = (title, text = '') => {
     },
     buttonsStyling: false,
     didClose: () => {
+      broadcastPopupToDisplay(null)
       setTimeout(cleanupSwalResidualDom, 10)
     }
   })
@@ -187,6 +214,7 @@ export const notifyToastWarning = (title, text = '', timer = 2500) => {
  * Hiển thị thông báo cảnh báo
  */
 export const notifyWarning = (title, text = '', timer = undefined) => {
+  broadcastPopupToDisplay({ title, text, iconType: 'warning' })
   const contentHtml = `
     ${MINIMAL_ICONS.warning}
     <div class="minimal-title">${title || 'Cảnh báo'}</div>
@@ -209,6 +237,7 @@ export const notifyWarning = (title, text = '', timer = undefined) => {
     },
     buttonsStyling: false,
     didClose: () => {
+      broadcastPopupToDisplay(null)
       setTimeout(cleanupSwalResidualDom, 10)
     }
   })
@@ -273,6 +302,7 @@ export const notifyConfirm = async (
   cancelButtonText = 'Hủy bỏ',
   iconType = 'warning'
 ) => {
+  broadcastPopupToDisplay({ title, text, iconType: iconType || 'warning' })
   const iconHtml = MINIMAL_ICONS[iconType] || MINIMAL_ICONS.warning
   const contentHtml = `
     ${iconHtml}
@@ -299,11 +329,13 @@ export const notifyConfirm = async (
       },
       buttonsStyling: false,
       didClose: () => {
+        broadcastPopupToDisplay(null)
         setTimeout(cleanupSwalResidualDom, 10)
       }
     })
     return Boolean(result && result.isConfirmed)
   } finally {
+    broadcastPopupToDisplay(null)
     setTimeout(cleanupSwalResidualDom, 20)
   }
 }
