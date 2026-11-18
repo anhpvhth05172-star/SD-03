@@ -9,8 +9,8 @@ import { getUser, isKhachHangDangNhap } from "@/utils/auth";
 
 const { cart, cartTotal, money } = store;
 
-// Phí vận chuyển đơn online cơ bản (chuẩn nội thành 22.000đ).
-const SHIP_FEE = 22000;
+// Phí vận chuyển đơn online cơ bản (chuẩn nội thành 20.000đ).
+const SHIP_FEE = 20000;
 const shippingFee = ref(SHIP_FEE);
 const provinces = ref([]);
 const wards = ref([]);
@@ -278,7 +278,8 @@ const done = ref(false);
 const orderId = ref("");
 
 /* ---------- Tự điền khi đã đăng nhập ---------- */
-const selectedAddr = ref("new");
+const selectedAddr = ref(null);
+const customAddress = ref(null);
 const isAddressModalOpen = ref(false);
 const isEditingAddressInModal = ref(false);
 const addrModalSaving = ref(false);
@@ -295,8 +296,15 @@ const addrModalForm = reactive({
 });
 
 const currentSelectedSavedAddr = computed(() => {
-  if (selectedAddr.value === "new") return null;
-  return savedAddresses.value.find((a) => a.id === selectedAddr.value) || savedAddresses.value[0] || null;
+  if (customAddress.value && selectedAddr.value === customAddress.value.id) {
+    return customAddress.value;
+  }
+  if (selectedAddr.value && selectedAddr.value !== "new") {
+    const found = savedAddresses.value.find((a) => a.id === selectedAddr.value);
+    if (found) return found;
+  }
+  if (customAddress.value) return customAddress.value;
+  return savedAddresses.value[0] || null;
 });
 
 function selectAddrAndClose(id) {
@@ -434,6 +442,26 @@ async function saveAddrModalForm() {
   const provObj = provinces.value.find((p) => String(p.id) === String(addrModalForm.provinceId));
   const wardObj = addrModalWards.value.find((w) => String(w.id) === String(addrModalForm.wardId));
 
+  // Khách vãng lai (chưa đăng nhập) -> lưu trực tiếp vào địa chỉ đang chọn
+  if (!isLoggedIn.value || !currentUser.value) {
+    const guestAddr = {
+      id: "guest_" + Date.now(),
+      name: cleanName,
+      phone: cleanPhone,
+      address: [cleanStreet, wardObj?.name, provObj?.name].filter(Boolean).join(", "),
+      street: cleanStreet,
+      ward: wardObj?.name || "",
+      province: provObj?.name || "",
+      isDefault: true,
+    };
+    customAddress.value = guestAddr;
+    chooseAddress(guestAddr.id);
+    isEditingAddressInModal.value = false;
+    isAddressModalOpen.value = false;
+    notifySuccess("Thành công", "Đã chọn địa chỉ nhận hàng!");
+    return;
+  }
+
   addrModalSaving.value = true;
   try {
     const res = await fetch("/api/auth/thong-tin", {
@@ -471,9 +499,9 @@ async function saveAddrModalForm() {
           a.street.trim() === cleanStreet &&
           (!provObj?.name || normalizePlace(a.province) === normalizePlace(provObj.name)),
       );
-      targetId = matched?.id || savedAddresses.value[0]?.id || "new";
+      targetId = matched?.id || savedAddresses.value[0]?.id;
     }
-    if (targetId && targetId !== "new") {
+    if (targetId) {
       chooseAddress(targetId);
     }
 
@@ -481,7 +509,7 @@ async function saveAddrModalForm() {
     isAddressModalOpen.value = false;
     notifySuccess(
       "Thành công",
-      editedId ? "Đã cập nhật địa chỉ nhận hàng!" : "Đã thêm địa chỉ nhận hàng mới!",
+      editedId ? "Đã cập nhật địa chỉ nhận hàng!" : "Đã thêm và chọn địa chỉ nhận hàng mới!",
     );
   } catch (e) {
     addrModalError.value = e.message || "Không thể lưu địa chỉ, vui lòng thử lại.";
@@ -492,24 +520,20 @@ async function saveAddrModalForm() {
 
 function chooseAddress(id) {
   selectedAddr.value = id;
-  const u = currentUser.value;
-  if (!u) return;
-  const base = userInfo(u);
-  if (id === "new") {
-    f.name = base.name;
-    f.phone = base.phone;
-    f.email = base.email;
-    f.address = "";
-    provinceId.value = "";
-    wardId.value = "";
-    savedAddressToRestore.value = null;
+  if (customAddress.value && id === customAddress.value.id) {
+    const a = customAddress.value;
+    f.name = a.name;
+    f.phone = a.phone;
+    f.address = a.street;
+    savedAddressToRestore.value = a;
+    restoreSavedAddressRegion();
     return;
   }
   const a = savedAddresses.value.find((x) => x.id === id);
   if (!a) return;
+  const base = currentUser.value ? userInfo(currentUser.value) : { name: "", phone: "" };
   f.name = a.name || base.name;
   f.phone = a.phone || base.phone;
-  f.email = base.email;
   f.address = a.street;
   savedAddressToRestore.value = a;
   restoreSavedAddressRegion();
@@ -535,26 +559,24 @@ function cleanPlaceName(v) {
 function getEstimatedShippingFee(provinceName, wardName) {
   const p = normalizePlace(provinceName);
   const w = normalizePlace(wardName);
+
+  // 1. Hà Nội: Nội thành 20.000đ, Ngoại thành 25.000đ
   if (p.includes('ha noi')) {
     const isInner = ['ba dinh', 'hoan kiem', 'dong da', 'hai ba trung', 'cau giay', 'thanh xuan', 'tay ho', 'bac tu liem', 'nam tu liem', 'long bien', 'bo de', 'hoang mai', 'ha dong'].some((q) => w.includes(q));
-    const isOuterFar = ['ba vi', 'son tay', 'ung hoa', 'my duc', 'chuong my', 'thuong tin', 'phu xuyen', 'quoc oai', 'thach that', 'phuc tho'].some((q) => w.includes(q));
-    if (isInner) return 22000;
-    if (isOuterFar) return 28000;
+    return isInner ? 20000 : 25000;
+  }
+
+  // 2. Miền Bắc: 25.000đ
+  if (['bac ninh', 'hung yen', 'ha nam', 'vinh phuc', 'hai phong', 'hai duong', 'quang ninh', 'nam dinh', 'ninh binh', 'thai binh', 'phu tho', 'thai nguyen', 'hoa binh', 'bac kan', 'lang son', 'tuyen quang', 'yen bai', 'lao cai', 'cao bang', 'ha giang', 'son la', 'dien bien', 'lai chau'].some((k) => p.includes(k))) {
     return 25000;
   }
-  if (['bac ninh', 'hung yen', 'ha nam', 'vinh phuc'].some((k) => p.includes(k))) return 28000;
-  if (['hai phong', 'hai duong', 'quang ninh', 'nam dinh', 'ninh binh', 'thai binh', 'phu tho', 'thai nguyen'].some((k) => p.includes(k))) return 32000;
-  if (['hoa binh', 'bac kan', 'lang son', 'tuyen quang', 'yen bai', 'lao cai', 'cao bang', 'ha giang'].some((k) => p.includes(k))) return 35000;
-  if (['son la', 'dien bien', 'lai chau'].some((k) => p.includes(k))) return 38000;
-  if (['thanh hoa', 'nghe an', 'ha tinh'].some((k) => p.includes(k))) return 35000;
-  if (p.includes('da nang')) return 36000;
-  if (['quang binh', 'quang tri', 'hue', 'thua thien', 'quang nam', 'quang ngai', 'binh dinh', 'phu yen', 'khanh hoa', 'ninh thuan', 'binh thuan'].some((k) => p.includes(k))) return 38000;
-  if (['kon tum', 'gia lai', 'dak lak', 'dak nong', 'lam dong'].some((k) => p.includes(k))) return 42000;
-  if (['ho chi minh', 'sai gon', 'tphcm'].some((k) => p.includes(k))) return 38000;
-  if (['binh duong', 'dong nai', 'ba ria', 'vung tau', 'tay ninh', 'binh phuoc'].some((k) => p.includes(k))) return 40000;
-  if (['long an', 'tien giang', 'ben tre', 'vinh long', 'tra vinh', 'can tho'].some((k) => p.includes(k))) return 45000;
-  if (['dong thap', 'an giang', 'hau giang', 'soc trang', 'bac lieu'].some((k) => p.includes(k))) return 48000;
-  if (['kien giang', 'ca mau', 'phu quoc'].some((k) => p.includes(k))) return 52000;
+
+  // 3. Miền Trung & TP. Hồ Chí Minh: 30.000đ
+  if (['thanh hoa', 'nghe an', 'ha tinh', 'da nang', 'quang binh', 'quang tri', 'hue', 'thua thien', 'quang nam', 'quang ngai', 'binh dinh', 'phu yen', 'khanh hoa', 'ninh thuan', 'binh thuan', 'ho chi minh', 'sai gon', 'tphcm'].some((k) => p.includes(k))) {
+    return 30000;
+  }
+
+  // 4. Miền Nam, Miền Tây, Tây Nguyên, Tỉnh xa: Tối đa 35.000đ
   return 35000;
 }
 
@@ -676,7 +698,9 @@ watch(
   (u) => {
     if (!u) return;
     const def = savedAddresses.value[0]; // đã sort: mặc định đứng đầu
-    chooseAddress(def ? def.id : "new");
+    if (def) {
+      chooseAddress(def.id);
+    }
   },
   { immediate: true },
 );
@@ -1009,8 +1033,103 @@ async function clearCart() {
   }
 }
 
+async function verifyAndHandleVoucherBeforeCheckout() {
+  if (!voucher.value) return true;
+
+  try {
+    await loadVouchers();
+  } catch {
+    /* ignore load err */
+  }
+
+  const currentCode = String(voucher.value.code || "").toUpperCase();
+  const freshRaw = allVouchers.value.find(
+    (v) => String(VF.code(v)).toUpperCase() === currentCode || VF.id(v) === voucher.value.id,
+  );
+
+  let isInvalidOrChanged = false;
+  let reason = "";
+
+  if (!freshRaw) {
+    isInvalidOrChanged = true;
+    reason = `Mã giảm giá "${currentCode}" không còn tồn tại trên hệ thống.`;
+  } else {
+    const err = checkVoucher(freshRaw, false);
+    if (err) {
+      isInvalidOrChanged = true;
+      reason = `Mã giảm giá "${currentCode}" không còn hợp lệ (${err}).`;
+    } else {
+      const freshV = toVoucher(freshRaw);
+      const isChanged =
+        freshV.type !== voucher.value.type ||
+        Number(freshV.value) !== Number(voucher.value.value) ||
+        Number(freshV.max) !== Number(voucher.value.max) ||
+        Number(freshV.min) !== Number(voucher.value.min);
+      if (isChanged) {
+        isInvalidOrChanged = true;
+        reason = `Mã giảm giá "${currentCode}" vừa thay đổi thông tin ưu đãi hoặc điều kiện áp dụng.`;
+      }
+    }
+  }
+
+  if (isInvalidOrChanged) {
+    const bestOpt = bestVoucher.value;
+    if (
+      bestOpt &&
+      bestOpt.eligible &&
+      bestOpt.discount > 0 &&
+      String(bestOpt.v.code).toUpperCase() !== currentCode
+    ) {
+      const applyBest = await notifyConfirm(
+        "Mã giảm giá đã thay đổi!",
+        `${reason} Bạn có muốn dùng mã giảm giá tốt nhất "${bestOpt.v.code}" (${formatVoucherValue(bestOpt.raw)} - Giảm ${money(bestOpt.discount)}) không?`,
+        "Áp dụng",
+        "Không dùng",
+      );
+      if (applyBest) {
+        voucher.value = bestOpt.v;
+        selectedVoucherId.value = VF.id(bestOpt.raw);
+        sessionStorage.setItem("ps_selected_voucher_code", bestOpt.v.code);
+        voucherMsg.text = `Đã tự động chuyển sang mã tốt nhất "${bestOpt.v.code}".`;
+        voucherMsg.ok = true;
+      } else {
+        voucher.value = null;
+        selectedVoucherId.value = "";
+        manualRemoved.value = true;
+        sessionStorage.removeItem("ps_selected_voucher_code");
+        voucherMsg.text = "Đã hủy áp dụng mã giảm giá.";
+        voucherMsg.ok = false;
+      }
+      return true;
+    } else {
+      const proceedWithout = await notifyConfirm(
+        "Mã giảm giá không khả dụng!",
+        `${reason} Bạn có muốn tiếp tục đặt hàng mà không dùng mã giảm giá không?`,
+        "Tiếp tục đặt hàng",
+        "Kiểm tra lại",
+      );
+      if (proceedWithout) {
+        voucher.value = null;
+        selectedVoucherId.value = "";
+        manualRemoved.value = true;
+        sessionStorage.removeItem("ps_selected_voucher_code");
+        voucherMsg.text = "";
+        return true;
+      }
+      return false;
+    }
+  }
+
+  return true;
+}
+
 async function submit() {
   submitError.value = "";
+  if (!currentSelectedSavedAddr.value) {
+    submitError.value = "Vui lòng thêm địa chỉ nhận hàng trước khi đặt hàng!";
+    openAddAddressModal();
+    return;
+  }
   errors.name = f.name.trim() ? "" : "Vui lòng nhập họ và tên.";
   errors.phone = /^0\d{9}$/.test(f.phone)
     ? ""
@@ -1024,7 +1143,7 @@ async function submit() {
   }
   errors.address = currentSelectedSavedAddr.value?.address || (f.address.trim() && provinceId.value && wardId.value)
     ? ""
-    : "Vui lòng nhập địa chỉ cụ thể và chọn tỉnh/thành phố, phường/xã.";
+    : "Vui lòng chọn hoặc thêm địa chỉ nhận hàng.";
   if (errors.name || errors.phone || errors.email || errors.address) {
     submitError.value = errors.name || errors.phone || errors.email || errors.address;
     return;
@@ -1033,6 +1152,10 @@ async function submit() {
     submitError.value = "Đang tính phí vận chuyển, vui lòng đợi trong giây lát.";
     return;
   }
+
+  const voucherOk = await verifyAndHandleVoucherBeforeCheckout();
+  if (!voucherOk) return;
+
   if (!toProvinceId.value) toProvinceId.value = Number(selectedProvince.value?.id) || 201;
   if (!toDistrictId.value || toDistrictId.value === 1) {
     toDistrictId.value = 1;
@@ -1077,6 +1200,46 @@ async function submit() {
       }
     } catch (e) {
       console.error("[Checkout] Lỗi VNPAY:", e);
+      const errMsg = String(e.message || "").toLowerCase();
+      if ((errMsg.includes("giảm giá") || errMsg.includes("voucher") || errMsg.includes("phiếu giảm")) && voucher.value) {
+        submitting.value = false;
+        await loadVouchers();
+        const bestOpt = bestVoucher.value;
+        if (bestOpt && bestOpt.eligible && bestOpt.discount > 0 && String(bestOpt.v.code).toUpperCase() !== String(voucher.value.code).toUpperCase()) {
+          const applyBest = await notifyConfirm(
+            "Mã giảm giá đã thay đổi!",
+            `Mã giảm giá bạn chọn không thể áp dụng (${e.message}). Bạn có muốn dùng mã giảm giá tốt nhất "${bestOpt.v.code}" (${formatVoucherValue(bestOpt.raw)} - Giảm ${money(bestOpt.discount)}) không?`,
+            "Áp dụng",
+            "Không dùng",
+          );
+          if (applyBest) {
+            voucher.value = bestOpt.v;
+            selectedVoucherId.value = VF.id(bestOpt.raw);
+            sessionStorage.setItem("ps_selected_voucher_code", bestOpt.v.code);
+            return submit();
+          } else {
+            voucher.value = null;
+            selectedVoucherId.value = "";
+            manualRemoved.value = true;
+            sessionStorage.removeItem("ps_selected_voucher_code");
+            return submit();
+          }
+        } else {
+          const proceedWithout = await notifyConfirm(
+            "Mã giảm giá không khả dụng!",
+            `Mã giảm giá bạn chọn không thể áp dụng (${e.message}). Bạn có muốn tiếp tục đặt hàng mà không dùng mã giảm giá không?`,
+            "Tiếp tục đặt hàng",
+            "Hủy",
+          );
+          if (proceedWithout) {
+            voucher.value = null;
+            selectedVoucherId.value = "";
+            manualRemoved.value = true;
+            sessionStorage.removeItem("ps_selected_voucher_code");
+            return submit();
+          }
+        }
+      }
       submitError.value =
         e.message === "Failed to fetch"
           ? "Không kết nối được máy chủ, vui lòng thử lại."
@@ -1124,6 +1287,46 @@ async function submit() {
     await clearCart();
   } catch (e) {
     console.error("[Checkout] Lỗi tạo hóa đơn:", e);
+    const rawMsg = e.response?.data?.message || e.message || "";
+    const errMsg = String(rawMsg).toLowerCase();
+    if ((errMsg.includes("giảm giá") || errMsg.includes("voucher") || errMsg.includes("phiếu giảm")) && voucher.value) {
+      await loadVouchers();
+      const bestOpt = bestVoucher.value;
+      if (bestOpt && bestOpt.eligible && bestOpt.discount > 0 && String(bestOpt.v.code).toUpperCase() !== String(voucher.value.code).toUpperCase()) {
+        const applyBest = await notifyConfirm(
+          "Mã giảm giá đã thay đổi!",
+          `Mã giảm giá bạn chọn không thể áp dụng (${rawMsg}). Bạn có muốn dùng mã giảm giá tốt nhất "${bestOpt.v.code}" (${formatVoucherValue(bestOpt.raw)} - Giảm ${money(bestOpt.discount)}) không?`,
+          "Áp dụng",
+          "Không dùng",
+        );
+        if (applyBest) {
+          voucher.value = bestOpt.v;
+          selectedVoucherId.value = VF.id(bestOpt.raw);
+          sessionStorage.setItem("ps_selected_voucher_code", bestOpt.v.code);
+          return submit();
+        } else {
+          voucher.value = null;
+          selectedVoucherId.value = "";
+          manualRemoved.value = true;
+          sessionStorage.removeItem("ps_selected_voucher_code");
+          return submit();
+        }
+      } else {
+        const proceedWithout = await notifyConfirm(
+          "Mã giảm giá không khả dụng!",
+          `Mã giảm giá bạn chọn không thể áp dụng (${rawMsg}). Bạn có muốn tiếp tục đặt hàng mà không dùng mã giảm giá không?`,
+          "Tiếp tục đặt hàng",
+          "Hủy",
+        );
+        if (proceedWithout) {
+          voucher.value = null;
+          selectedVoucherId.value = "";
+          manualRemoved.value = true;
+          sessionStorage.removeItem("ps_selected_voucher_code");
+          return submit();
+        }
+      }
+    }
     submitError.value = e.response?.data?.message
       || (e.message === "Network Error" ? "Không kết nối được máy chủ, vui lòng thử lại." : e.message);
   } finally {
@@ -1433,66 +1636,59 @@ const confirmQrPayment = async () => {
         <!-- Thông tin giao hàng -->
         <section class="co-card mb-3">
           <h5 class="co-title">
-            <span class="co-title-ico"><i class="bi bi-geo-alt-fill"></i></span>Thông tin giao hàng
+            <span class="co-title-ico"><i class="bi bi-geo-alt-fill"></i></span>Địa chỉ nhận hàng
           </h5>
 
-          <!-- Địa chỉ đã lưu (Mặc định 1 địa chỉ + Popup chọn địa chỉ khác) -->
-          <div v-if="isLoggedIn && savedAddresses.length" class="mb-4">
+          <!-- Card hiển thị địa chỉ đã chọn (phong cách PolyShoes) -->
+          <div v-if="currentSelectedSavedAddr" class="ps-address-box p-3 rounded-3 border mb-3 position-relative"
+            style="background: #ffffff; border-color: #e2e8f0; border-left: 4px solid #dc2626 !important; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
             <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-              <label class="co-label mb-0">
-                <i class="bi bi-geo-alt-fill text-primary me-1"></i>Địa chỉ nhận hàng mặc định
-              </label>
               <div class="d-flex align-items-center gap-2">
-                <button v-if="currentSelectedSavedAddr" type="button"
-                  class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-bold"
-                  @click="openEditAddressModal(currentSelectedSavedAddr)">
-                  <i class="bi bi-pencil-square me-1"></i>Sửa địa chỉ hiện tại
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-bold"
-                  @click="openSelectAddressListModal">
+                <span class="badge bg-danger text-white px-2 py-1" style="font-size: 11px;">
+                  <i class="bi bi-geo-alt-fill me-1"></i>Địa chỉ nhận hàng
+                </span>
+                <span v-if="currentSelectedSavedAddr.isDefault" class="badge bg-primary px-2 py-1" style="font-size: 11px;">Mặc định</span>
+                <span v-else-if="selectedAddr?.startsWith('guest_') || selectedAddr === 'custom'" class="badge bg-success px-2 py-1" style="font-size: 11px;">Vừa thêm</span>
+                <span v-else class="badge bg-secondary-subtle text-dark px-2 py-1" style="font-size: 11px;">Đã lưu</span>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold"
+                  style="font-size: 12px;" @click="openSelectAddressListModal">
                   <i class="bi bi-arrow-repeat me-1"></i>Thay đổi
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-1"
+                  style="font-size: 12px;" @click="openEditAddressModal(currentSelectedSavedAddr)" title="Sửa địa chỉ này">
+                  <i class="bi bi-pencil-square"></i>
                 </button>
               </div>
             </div>
 
-            <div class="co-selected-addr-box p-3 border rounded-3 bg-light d-flex align-items-center justify-content-between cursor-pointer"
-              style="cursor: pointer; transition: all 0.2s ease;"
-              @click="openSelectAddressListModal"
-              title="Bấm để chọn địa chỉ khác">
-              <div class="min-w-0 me-3">
-                <div class="fw-bold text-dark small mb-1 d-flex align-items-center gap-2">
-                  <span>{{ currentSelectedSavedAddr?.name || userInfo(currentUser).name }}</span>
-                  <span>·</span>
-                  <span>{{ currentSelectedSavedAddr?.phone || userInfo(currentUser).phone }}</span>
-                  <span v-if="currentSelectedSavedAddr?.isDefault" class="badge bg-primary">Mặc định</span>
-                  <span v-else-if="selectedAddr === 'new'" class="badge bg-secondary">Địa chỉ mới</span>
-                  <span v-else class="badge bg-info text-dark">Đã lưu</span>
-                </div>
-                <div class="text-muted small text-truncate">
-                  {{ currentSelectedSavedAddr ? currentSelectedSavedAddr.address : 'Đang sử dụng địa chỉ mới tự nhập bên dưới' }}
-                </div>
-              </div>
-              <span class="text-primary small fw-semibold flex-shrink-0">
-                Chọn địa chỉ khác <i class="bi bi-chevron-right ms-1"></i>
-              </span>
+            <div class="d-flex align-items-baseline gap-2 mb-1">
+              <span class="fw-bold text-dark fs-6">{{ currentSelectedSavedAddr.name }}</span>
+              <span class="text-muted small">|</span>
+              <span class="fw-semibold text-secondary small">{{ currentSelectedSavedAddr.phone }}</span>
+            </div>
+            <div class="text-secondary small">
+              <i class="bi bi-pin-map text-danger me-1"></i>{{ currentSelectedSavedAddr.address }}
             </div>
           </div>
 
+          <!-- Empty State khi chưa có địa chỉ (phong cách PolyShoes) -->
+          <div v-else class="ps-address-empty-card p-4 rounded-3 border text-center mb-3"
+            style="background: #fafafa; border: 2px dashed #cbd5e1 !important;">
+            <div class="mb-2">
+              <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-danger-subtle text-danger" style="width: 48px; height: 48px;">
+                <i class="bi bi-geo-alt fs-4"></i>
+              </div>
+            </div>
+            <h6 class="fw-bold text-dark mb-1">Chưa có địa chỉ nhận hàng</h6>
+            <p class="text-muted small mb-3">Vui lòng thêm địa chỉ nhận hàng để PolyShoes tính phí vận chuyển và giao giày đến bạn.</p>
+            <button type="button" class="btn btn-danger rounded-pill px-4 py-2 fw-bold shadow-sm" @click="openAddAddressModal">
+              <i class="bi bi-plus-circle me-1"></i>Thêm địa chỉ nhận hàng
+            </button>
+          </div>
+
           <div class="row g-3">
-            <template v-if="!currentSelectedSavedAddr">
-              <div class="col-md-6">
-                <label class="co-label">Họ và tên <span class="text-danger">*</span></label>
-                <input v-model="f.name" class="form-control co-input" :readonly="lockName"
-                  :class="{ 'is-invalid': errors.name, 'bg-light': lockName }" placeholder="Nhập họ tên của bạn" />
-                <div class="invalid-feedback">{{ errors.name }}</div>
-              </div>
-              <div class="col-md-6">
-                <label class="co-label">Số điện thoại <span class="text-danger">*</span></label>
-                <input v-model="f.phone" class="form-control co-input" :readonly="lockPhone"
-                  :class="{ 'is-invalid': errors.phone, 'bg-light': lockPhone }" placeholder="Nhập số điện thoại" />
-                <div class="invalid-feedback">{{ errors.phone }}</div>
-              </div>
-            </template>
             <div class="col-12">
               <label class="co-label">Email nhận thông báo đơn hàng <span class="text-danger">*</span></label>
               <input v-model="f.email" type="email" class="form-control co-input"
@@ -1500,30 +1696,6 @@ const confirmQrPayment = async () => {
                 placeholder="Nhập địa chỉ email để nhận hóa đơn (ví dụ: nguyenvan@gmail.com)" />
               <div class="invalid-feedback">{{ errors.email }}</div>
             </div>
-            <template v-if="!currentSelectedSavedAddr">
-              <div class="col-md-6">
-                <label class="co-label">Tỉnh / Thành phố <span class="text-danger">*</span></label>
-                <select v-model="provinceId" class="form-select co-input" :disabled="!provinces.length">
-                  <option value="">Chọn tỉnh / thành phố</option>
-                  <option v-for="p in provinces" :key="p.id" :value="String(p.id)">{{ p.name }}</option>
-                </select>
-              </div>
-              <div class="col-md-6">
-                <label class="co-label">Phường / Xã <span class="text-danger">*</span></label>
-                <select v-model="wardId" class="form-select co-input" :disabled="!provinceId || !wards.length">
-                  <option value="">Chọn phường / xã</option>
-                  <option v-for="w in wards" :key="w.id" :value="String(w.id)">{{ w.name }}</option>
-                </select>
-              </div>
-              <div class="col-12">
-                <label class="co-label">Địa chỉ cụ thể (số nhà, tên đường) <span class="text-danger">*</span></label>
-                <input v-model="f.address" class="form-control co-input" :readonly="lockAddress" :class="{
-                  'is-invalid': errors.address,
-                  'bg-light': lockAddress,
-                }" placeholder="Ví dụ: 123 Nguyễn Trãi" />
-                <div class="invalid-feedback">{{ errors.address }}</div>
-              </div>
-            </template>
             <div v-if="shippingError" class="col-12 small text-danger">{{ shippingError }}</div>
             <div class="col-12">
               <label class="co-label">Ghi chú (không bắt buộc)</label>
@@ -1921,7 +2093,7 @@ const confirmQrPayment = async () => {
         <div class="modal-content rounded-4 border-0 shadow">
           <div class="modal-header border-bottom py-3 px-4">
             <h6 class="modal-title fw-bold text-dark mb-0">
-              <i class="bi bi-geo-alt-fill text-primary me-2"></i>
+              <i class="bi bi-geo-alt-fill text-danger me-2"></i>
               {{ isEditingAddressInModal ? (addrModalForm.id ? 'Sửa địa chỉ hiện tại' : 'Thêm địa chỉ nhận hàng mới') : 'Chọn địa chỉ nhận hàng' }}
             </h6>
             <button type="button" class="btn-close" @click="isAddressModalOpen = false"></button>
@@ -1929,6 +2101,33 @@ const confirmQrPayment = async () => {
           <div class="modal-body p-3">
             <!-- Chế độ danh sách chọn địa chỉ -->
             <div v-if="!isEditingAddressInModal" class="d-flex flex-column gap-2">
+              <!-- Địa chỉ custom/guest vừa thêm nếu có -->
+              <div
+                v-if="customAddress && !savedAddresses.some(x => x.id === customAddress.id)"
+                class="p-3 rounded-3 border d-flex align-items-center justify-content-between gap-2"
+                :style="selectedAddr === customAddress.id ? 'border-color: #dc2626 !important; background: #fef2f2;' : 'cursor: pointer; background: #fff;'"
+                @click="selectAddrAndClose(customAddress.id)"
+              >
+                <div class="min-w-0 me-2">
+                  <div class="fw-semibold small text-dark mb-1 d-flex align-items-center flex-wrap gap-2">
+                    <span>{{ customAddress.name }}</span>
+                    <span>·</span>
+                    <span>{{ customAddress.phone }}</span>
+                    <span class="badge bg-success">Vừa thêm</span>
+                    <span v-if="selectedAddr === customAddress.id" class="badge bg-danger">Đang chọn</span>
+                  </div>
+                  <div class="small text-muted">{{ customAddress.address }}</div>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                  <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-bold"
+                    :class="selectedAddr === customAddress.id ? 'btn-danger' : 'btn-outline-secondary'"
+                    @click.stop="selectAddrAndClose(customAddress.id)">
+                    {{ selectedAddr === customAddress.id ? 'Đang chọn' : 'Chọn' }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Danh sách địa chỉ đã lưu -->
               <div
                 v-for="a in savedAddresses"
                 :key="a.id"
@@ -1942,39 +2141,39 @@ const confirmQrPayment = async () => {
                     <span>·</span>
                     <span>{{ a.phone || userInfo(currentUser).phone }}</span>
                     <span v-if="a.isDefault" class="badge bg-primary">Mặc định</span>
-                    <span v-if="selectedAddr === a.id" class="badge bg-success">Đang dùng</span>
+                    <span v-if="selectedAddr === a.id" class="badge bg-danger">Đang chọn</span>
                   </div>
                   <div class="small text-muted">{{ a.address }}</div>
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                  <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-bold"
+                  <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold"
                     @click.stop="openEditAddressModal(a)">
                     Sửa
                   </button>
                   <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-bold"
-                    :class="selectedAddr === a.id ? 'btn-primary' : 'btn-outline-secondary'"
+                    :class="selectedAddr === a.id ? 'btn-danger' : 'btn-outline-secondary'"
                     @click.stop="selectAddrAndClose(a.id)">
-                    {{ selectedAddr === a.id ? 'Đang dùng' : 'Chọn' }}
+                    {{ selectedAddr === a.id ? 'Đang chọn' : 'Chọn' }}
                   </button>
                 </div>
               </div>
 
+              <!-- Nút thêm địa chỉ mới phong cách PolyShoes -->
               <div
                 class="p-3 rounded-3 border d-flex align-items-center justify-content-between"
-                :style="selectedAddr === 'new' ? 'border-color: #dc2626 !important; background: #fef2f2;' : 'cursor: pointer; background: #fff;'"
-                @click="selectAddrAndClose('new')"
+                style="cursor: pointer; background: #fff; border-style: dashed !important; border-color: #dc2626 !important;"
+                @click="openAddAddressModal"
               >
                 <div class="d-flex align-items-center gap-2">
-                  <i class="bi bi-plus-circle text-primary fs-5"></i>
+                  <i class="bi bi-plus-circle-fill text-danger fs-5"></i>
                   <div>
-                    <div class="fw-semibold small text-dark">Nhập địa chỉ mới</div>
-                    <div class="small text-muted">Tự điền thông tin và địa chỉ giao hàng bên dưới</div>
+                    <div class="fw-semibold small text-dark">Thêm địa chỉ nhận hàng mới</div>
+                    <div class="small text-muted">Nhập thông tin người nhận và địa chỉ giao hàng</div>
                   </div>
                 </div>
-                <button type="button" class="btn btn-sm rounded-pill px-3 py-1 fw-bold"
-                  :class="selectedAddr === 'new' ? 'btn-primary' : 'btn-outline-secondary'"
-                  @click.stop="selectAddrAndClose('new')">
-                  {{ selectedAddr === 'new' ? 'Đang dùng' : 'Chọn' }}
+                <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold"
+                  @click.stop="openAddAddressModal">
+                  + Thêm mới
                 </button>
               </div>
             </div>
@@ -2007,7 +2206,7 @@ const confirmQrPayment = async () => {
                 <label class="co-label">Địa chỉ cụ thể (số nhà, tên đường) <span class="text-danger">*</span></label>
                 <input v-model="addrModalForm.street" class="form-control co-input" placeholder="Ví dụ: Số 123 Nguyễn Trãi" @keyup.enter="saveAddrModalForm" />
               </div>
-              <div class="col-12">
+              <div v-if="isLoggedIn" class="col-12">
                 <div class="form-check">
                   <input id="chkAddrModalDefault" v-model="addrModalForm.isDefault" class="form-check-input" type="checkbox" />
                   <label class="form-check-label small fw-semibold" for="chkAddrModalDefault">
@@ -2021,14 +2220,14 @@ const confirmQrPayment = async () => {
             </div>
           </div>
           <div class="modal-footer border-top py-2 px-4 d-flex align-items-center justify-content-between">
-            <button v-if="!isEditingAddressInModal" type="button" class="btn btn-outline-primary rounded-pill px-3 btn-sm fw-bold" @click="openAddAddressModal">
+            <button v-if="!isEditingAddressInModal" type="button" class="btn btn-outline-danger rounded-pill px-3 btn-sm fw-bold" @click="openAddAddressModal">
               <i class="bi bi-plus-circle me-1"></i>Thêm địa chỉ mới
             </button>
             <button v-else type="button" class="btn btn-outline-secondary rounded-pill px-3 btn-sm fw-bold" :disabled="addrModalSaving" @click="isEditingAddressInModal = false">
               <i class="bi bi-arrow-left me-1"></i>Quay lại
             </button>
             <div class="d-flex align-items-center gap-2 ms-auto">
-              <button v-if="isEditingAddressInModal" type="button" class="btn btn-primary rounded-pill px-4 btn-sm fw-bold" :disabled="addrModalSaving" @click="saveAddrModalForm">
+              <button v-if="isEditingAddressInModal" type="button" class="btn btn-danger rounded-pill px-4 btn-sm fw-bold" :disabled="addrModalSaving" @click="saveAddrModalForm">
                 <span v-if="addrModalSaving" class="spinner-border spinner-border-sm me-1"></span>
                 {{ addrModalSaving ? 'Đang lưu...' : 'Lưu địa chỉ' }}
               </button>

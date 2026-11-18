@@ -1003,7 +1003,12 @@ public class HoaDonService {
                         k.getId(), k.getTenKhachHang(), k.getSoDienThoai(), k.getTrangThai()))
                 .toList();
         List<FormDataResponse.NhanVienOption> nhanViens = nhanVienRepository.findAll().stream()
-                .map(n -> new FormDataResponse.NhanVienOption(n.getId(), n.getTenTaiKhoan()))
+                .map(n -> new FormDataResponse.NhanVienOption(
+                        n.getId(),
+                        n.getTenTaiKhoan(),
+                        n.getVaiTro() != null ? n.getVaiTro().getMaVaiTro() : "STAFF",
+                        n.getTrangThai()
+                ))
                 .toList();
         List<FormDataResponse.PhuongThucOption> phuongThucs = phuongThucThanhToanRepository.findAll().stream()
                 .map(p -> new FormDataResponse.PhuongThucOption(p.getId(), p.getTenPhuongThuc()))

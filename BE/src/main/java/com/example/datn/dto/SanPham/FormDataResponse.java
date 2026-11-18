@@ -22,7 +22,11 @@ public class FormDataResponse {
 
     public record KhachHangOption(Long id, String ten, String soDienThoai, Boolean trangThai) {}
 
-    public record NhanVienOption(Long id, String ten) {}
+    public record NhanVienOption(Long id, String ten, String maVaiTro, Boolean trangThai) {
+        public NhanVienOption(Long id, String ten) {
+            this(id, ten, null, null);
+        }
+    }
 
     public record PhuongThucOption(Long id, String ten) {}
 

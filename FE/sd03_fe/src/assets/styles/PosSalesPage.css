@@ -634,6 +634,20 @@
   transition: all 0.15s ease;
 }
 
+.btn-tool-display {
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  color: #1d4ed8;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);
+}
+
+.btn-tool-display:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1e40af;
+  transform: translateY(-1px);
+}
+
 .btn-tool-camera {
   background: #ffffff;
   border: 1.5px solid #cbd5e1;

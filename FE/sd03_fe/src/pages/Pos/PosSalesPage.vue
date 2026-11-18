@@ -21,7 +21,7 @@ const API_BASE = '/api/v1'
 const router = useRouter()
 
 const activeShift = ref(null)
-const isLoadingShift = ref(false)
+const isLoadingShift = ref(true)
 const isCheDoXem = computed(() => !laAdmin() && !activeShift.value?.id)
 
 const kiemTraQuyenBanHang = (actionName = 'thêm sản phẩm vào giỏ hàng') => {
@@ -277,6 +277,15 @@ const activePosStaff = computed(() => {
       || allEmployees.value.find(e => (e.ten || e.tenTaiKhoan) === staffUserRef.value.tenTaiKhoan)
     if (found) return found
   }
+  if (staffUserRef.value) {
+    return {
+      id: staffUserRef.value.idNhanVien,
+      ten: staffUserRef.value.tenTaiKhoan || staffUserRef.value.tenKhachHang || 'Nhân viên',
+      tenTaiKhoan: staffUserRef.value.tenTaiKhoan,
+      maVaiTro: staffUserRef.value.vaiTro || (laAdmin() ? 'ADMIN' : 'STAFF'),
+      tenVaiTro: laAdmin() ? 'Admin' : 'Nhân viên'
+    }
+  }
   return allEmployeesFull.value[0] || allEmployees.value[0] || null
 })
 
@@ -292,7 +301,7 @@ const staffRoleLabel = computed(() => {
     return String(active.maVaiTro).toUpperCase() === 'ADMIN' ? 'Admin' : 'Nhân viên'
   }
   if (active?.tenVaiTro) return active.tenVaiTro
-  return vaiTroHienTai.value === 'ADMIN' ? 'Admin' : 'Nhân viên'
+  return laAdmin() ? 'Admin' : 'Nhân viên'
 })
 
 const MAX_ORDERS = 5
@@ -512,6 +521,9 @@ const savePendingOrdersToStorage = () => {
     }))
     localStorage.setItem(POS_PENDING_STORAGE_KEY, JSON.stringify(serialized))
     localStorage.setItem(POS_ACTIVE_IDX_STORAGE_KEY, String(activeOrderIndex.value))
+    if (typeof broadcastActiveOrder === 'function') {
+      broadcastActiveOrder()
+    }
   } catch (e) {
     console.warn('Không thể lưu hóa đơn chờ vào localStorage:', e)
   }
@@ -741,6 +753,68 @@ const changeDue = computed(() => {
     return Math.max(0, totalPaid - finalTotal.value)
   }
 })
+
+const broadcastActiveOrder = () => {
+  try {
+    const order = currentOrder.value
+    if (!order) return
+    const sub = Number(subTotal.value || 0)
+    const disc = Number(discountAmount.value || 0)
+    const ship = order.isDelivery ? Number(order.deliveryInfo?.shippingFee || 0) : 0
+    const finalVal = Number(finalTotal.value || Math.max(0, sub + ship - disc))
+    const cash = Number(order.cashGiven || 0)
+    const payload = {
+      orderCode: order.code || '',
+      orderTitle: order.title || 'Hóa đơn bán hàng',
+      customer: order.customer ? {
+        tenKhachHang: order.customer.tenKhachHang || order.customer.ten,
+        soDienThoai: order.customer.soDienThoai || order.customer.sdt,
+        maKhachHang: order.customer.maKhachHang
+      } : null,
+      cart: (order.cart || []).map(item => ({
+        id: item.id || item.idCtsp,
+        name: item.name || item.tenSanPham,
+        maCtsp: item.maCtsp || item.maChiTietSanPham || item.maSp,
+        color: item.color || item.tenMau,
+        size: item.size || item.tenKichCo,
+        price: Number(item.price || 0),
+        originalPrice: Number(item.originalPrice || item.price || 0),
+        quantity: Number(item.quantity || 0),
+        total: Number(item.price || 0) * Number(item.quantity || 0),
+        image: item.image || item.hinhAnh || null
+      })),
+      subTotal: sub,
+      discountAmount: disc,
+      shippingFee: ship,
+      finalTotal: finalVal,
+      cashGiven: cash,
+      transferGiven: Number(order.transferGiven || 0),
+      changeAmount: Number(changeDue.value || 0),
+      paymentMethod: order.paymentMethod || 'TIEN_MAT',
+      voucherCode: order.selectedVoucher?.maPhieuGiamGia || null,
+      isDelivery: Boolean(order.isDelivery),
+      updatedAt: Date.now()
+    }
+    localStorage.setItem('polyshoes_customer_display_payload', JSON.stringify(payload))
+    try {
+      const channel = new BroadcastChannel('polyshoes_pos_display_channel')
+      channel.postMessage(payload)
+      channel.close()
+    } catch {}
+  } catch (err) {
+    console.warn('Lỗi đồng bộ màn hình khách:', err)
+  }
+}
+
+const openCustomerDisplay = () => {
+  broadcastActiveOrder()
+  const displayUrl = '/man-hinh-khach'
+  window.open(displayUrl, 'PolyShoesCustomerDisplay', 'width=1280,height=800,menubar=no,toolbar=no,location=no,status=no')
+}
+
+watch([currentOrder, activeOrderIndex, subTotal, discountAmount, finalTotal], () => {
+  broadcastActiveOrder()
+}, { deep: true })
 
 const getEffectivePrice = (item) => {
   if (item.giaSauGiam !== null && item.giaSauGiam !== undefined) {
@@ -975,6 +1049,29 @@ const updateCartItemQty = async (item, rawNewQty, event = null) => {
     recalculateAvailableStocks()
     savePendingOrdersToStorage()
     return
+  }
+
+  // Khi tăng số lượng (bấm dấu + hoặc nhập số lượng lớn hơn): kiểm tra thay đổi giá sản phẩm
+  if (newQty > item.quantity) {
+    const targetProd = allProducts.value.find(p => Number(p.id) === Number(item.idCtsp))
+    if (targetProd) {
+      const effectivePrice = getEffectivePrice(targetProd)
+      if (effectivePrice !== null && Number(effectivePrice) !== Number(item.price)) {
+        const prodName = item.name || targetProd.ten || targetProd.tenSanPham || 'Sản phẩm'
+        const confirmChange = await notifyConfirm(
+          'Giá sản phẩm đã thay đổi!',
+          `Sản phẩm "${prodName}" đã đổi giá từ ${formatVnd(item.price)} sang ${formatVnd(effectivePrice)}. Bạn có muốn thay đổi giá để tăng số lượng không?`,
+          'Thay đổi giá',
+          'Hủy'
+        )
+        if (confirmChange) {
+          item.price = effectivePrice
+        } else {
+          if (event?.target) event.target.value = item.quantity
+          return
+        }
+      }
+    }
   }
 
   const maxAllowedForThisOrder = getMaxAllowedForCartItem(item)
@@ -2784,26 +2881,24 @@ const onProvinceChange = async () => {
 const getEstimatedShippingFee = (provinceName, wardName) => {
   const p = normalizePlaceName(provinceName)
   const w = normalizePlaceName(wardName)
+
+  // 1. Hà Nội: Nội thành 20.000đ, Ngoại thành 25.000đ
   if (p.includes('ha noi')) {
     const isInner = ['ba dinh', 'hoan kiem', 'dong da', 'hai ba trung', 'cau giay', 'thanh xuan', 'tay ho', 'bac tu liem', 'nam tu liem', 'long bien', 'bo de', 'hoang mai', 'ha dong'].some(q => w.includes(q))
-    const isOuterFar = ['ba vi', 'son tay', 'ung hoa', 'my duc', 'chuong my', 'thuong tin', 'phu xuyen', 'quoc oai', 'thach that', 'phuc tho'].some(q => w.includes(q))
-    if (isInner) return 22000
-    if (isOuterFar) return 28000
+    return isInner ? 20000 : 25000
+  }
+
+  // 2. Miền Bắc: 25.000đ
+  if (['bac ninh', 'hung yen', 'ha nam', 'vinh phuc', 'hai phong', 'hai duong', 'quang ninh', 'nam dinh', 'ninh binh', 'thai binh', 'phu tho', 'thai nguyen', 'hoa binh', 'bac kan', 'lang son', 'tuyen quang', 'yen bai', 'lao cai', 'cao bang', 'ha giang', 'son la', 'dien bien', 'lai chau'].some(k => p.includes(k))) {
     return 25000
   }
-  if (['bac ninh', 'hung yen', 'ha nam', 'vinh phuc'].some(k => p.includes(k))) return 28000
-  if (['hai phong', 'hai duong', 'quang ninh', 'nam dinh', 'ninh binh', 'thai binh', 'phu tho', 'thai nguyen'].some(k => p.includes(k))) return 32000
-  if (['hoa binh', 'bac kan', 'lang son', 'tuyen quang', 'yen bai', 'lao cai', 'cao bang', 'ha giang'].some(k => p.includes(k))) return 35000
-  if (['son la', 'dien bien', 'lai chau'].some(k => p.includes(k))) return 38000
-  if (['thanh hoa', 'nghe an', 'ha tinh'].some(k => p.includes(k))) return 35000
-  if (p.includes('da nang')) return 36000
-  if (['quang binh', 'quang tri', 'hue', 'thua thien', 'quang nam', 'quang ngai', 'binh dinh', 'phu yen', 'khanh hoa', 'ninh thuan', 'binh thuan'].some(k => p.includes(k))) return 38000
-  if (['kon tum', 'gia lai', 'dak lak', 'dak nong', 'lam dong'].some(k => p.includes(k))) return 42000
-  if (['ho chi minh', 'sai gon', 'tphcm'].some(k => p.includes(k))) return 38000
-  if (['binh duong', 'dong nai', 'ba ria', 'vung tau', 'tay ninh', 'binh phuoc'].some(k => p.includes(k))) return 40000
-  if (['long an', 'tien giang', 'ben tre', 'vinh long', 'tra vinh', 'can tho'].some(k => p.includes(k))) return 45000
-  if (['dong thap', 'an giang', 'hau giang', 'soc trang', 'bac lieu'].some(k => p.includes(k))) return 48000
-  if (['kien giang', 'ca mau', 'phu quoc'].some(k => p.includes(k))) return 52000
+
+  // 3. Miền Trung & TP. Hồ Chí Minh: 30.000đ
+  if (['thanh hoa', 'nghe an', 'ha tinh', 'da nang', 'quang binh', 'quang tri', 'hue', 'thua thien', 'quang nam', 'quang ngai', 'binh dinh', 'phu yen', 'khanh hoa', 'ninh thuan', 'binh thuan', 'ho chi minh', 'sai gon', 'tphcm'].some(k => p.includes(k))) {
+    return 30000
+  }
+
+  // 4. Miền Nam, Miền Tây, Tây Nguyên, Tỉnh xa: Tối đa 35.000đ
   return 35000
 }
 
@@ -3319,13 +3414,13 @@ const syncEmployeeListAndCheckRole = (empList, isInitial = false) => {
 
   for (const emp of empList) {
     const empId = Number(emp.id)
-    const newRole = String(emp.maVaiTro || 'STAFF').toUpperCase()
-    const newRoleLabel = newRole === 'ADMIN' ? 'Admin' : 'Nhân viên'
     const newActive = emp.trangThai !== false
     const empName = emp.tenTaiKhoan || emp.ten || `NV#${empId}`
 
     const prev = staffSnapshotMap.get(empId)
-    const isLoggedEmp = (loggedId && empId === loggedId) || (loggedAccount && empName === loggedAccount)
+    // ĐỐI CHIẾU CHÍNH XÁC: Ưu tiên khóa chính loggedId (idNhanVien).
+    // Tuyệt đối không đối chiếu bằng tên khi đã có ID để tránh trùng tên với nhân viên khác (ví dụ: AnhPVH vs AnhPVH3)
+    const isLoggedEmp = loggedId ? (empId === loggedId) : (Boolean(loggedAccount) && empName === loggedAccount)
     const isSelectedPosEmp = selectedStaffId.value && Number(selectedStaffId.value) === empId
 
     if (!isInitial && prev) {
@@ -3348,8 +3443,15 @@ const syncEmployeeListAndCheckRole = (empList, isInitial = false) => {
           }
         }
       }
+    }
 
-      if (prev.maVaiTro && prev.maVaiTro !== newRole) {
+    // BẢO VỆ PHÂN QUYỀN: Chỉ cập nhật hoặc đối soát vai trò khi dữ liệu thực sự có trường maVaiTro
+    // Tuyệt đối không gán mặc định 'STAFF' khi maVaiTro bị thiếu (ví dụ danh sách rút gọn)
+    if (emp.maVaiTro) {
+      const newRole = String(emp.maVaiTro).toUpperCase()
+      const newRoleLabel = newRole === 'ADMIN' ? 'Admin' : 'Nhân viên'
+
+      if (!isInitial && prev && prev.maVaiTro && prev.maVaiTro !== newRole) {
         if (isLoggedEmp || !loggedId) {
           datVaiTro(newRole)
           try {
@@ -3365,41 +3467,53 @@ const syncEmployeeListAndCheckRole = (empList, isInitial = false) => {
           }
         }
       }
-    }
 
-    if (isLoggedEmp && staffUserRef.value?.vaiTro && String(staffUserRef.value.vaiTro).toUpperCase() !== newRole) {
-      datVaiTro(newRole)
-      try {
-        const rawU = localStorage.getItem('polyshoes_user')
-        if (rawU) {
-          const parsedU = JSON.parse(rawU)
-          parsedU.vaiTro = newRole
-          localStorage.setItem('polyshoes_user', JSON.stringify(parsedU))
-          staffUserRef.value = parsedU
+      if (isLoggedEmp && staffUserRef.value?.vaiTro && String(staffUserRef.value.vaiTro).toUpperCase() !== newRole) {
+        datVaiTro(newRole)
+        try {
+          const rawU = localStorage.getItem('polyshoes_user')
+          if (rawU) {
+            const parsedU = JSON.parse(rawU)
+            parsedU.vaiTro = newRole
+            localStorage.setItem('polyshoes_user', JSON.stringify(parsedU))
+            staffUserRef.value = parsedU
+          }
+          window.dispatchEvent(new Event('polyshoes-user-updated'))
+        } catch {
         }
-        window.dispatchEvent(new Event('polyshoes-user-updated'))
-      } catch {
       }
-    }
 
-    staffSnapshotMap.set(empId, {
-      maVaiTro: newRole,
-      tenVaiTro: newRoleLabel,
-      trangThai: newActive,
-      tenTaiKhoan: empName
-    })
+      staffSnapshotMap.set(empId, {
+        maVaiTro: newRole,
+        tenVaiTro: newRoleLabel,
+        trangThai: newActive,
+        tenTaiKhoan: empName
+      })
+    } else {
+      const existingSnapshot = staffSnapshotMap.get(empId)
+      staffSnapshotMap.set(empId, {
+        maVaiTro: existingSnapshot?.maVaiTro || (isLoggedEmp ? staffUserRef.value?.vaiTro : null),
+        tenVaiTro: existingSnapshot?.tenVaiTro || (isLoggedEmp ? (laAdmin() ? 'Admin' : 'Nhân viên') : null),
+        trangThai: newActive,
+        tenTaiKhoan: empName
+      })
+    }
   }
 
   allEmployeesFull.value = empList
   const activeEmps = empList.filter(e => e.trangThai !== false)
   if (activeEmps.length > 0) {
-    allEmployees.value = activeEmps.map(e => ({ id: e.id, ten: e.tenTaiKhoan || e.ten, maVaiTro: e.maVaiTro, trangThai: e.trangThai }))
+    allEmployees.value = activeEmps.map(e => ({
+      id: e.id,
+      ten: e.tenTaiKhoan || e.ten,
+      maVaiTro: e.maVaiTro || staffSnapshotMap.get(Number(e.id))?.maVaiTro,
+      trangThai: e.trangThai
+    }))
   }
 
   if (!selectedStaffId.value || !activeEmps.some(e => Number(e.id) === Number(selectedStaffId.value))) {
     const matchLogged = activeEmps.find(e =>
-      (loggedId && Number(e.id) === loggedId) ||
-      (loggedAccount && (e.tenTaiKhoan === loggedAccount || e.ten === loggedAccount))
+      loggedId ? (Number(e.id) === loggedId) : (Boolean(loggedAccount) && (e.tenTaiKhoan === loggedAccount || e.ten === loggedAccount))
     )
     selectedStaffId.value = matchLogged ? matchLogged.id : (activeEmps[0]?.id || null)
   }
@@ -3503,54 +3617,80 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
         const oldOrderSubTotal = oldSubTotalsMap.get(order.id) ?? newOrderSubTotal
         const oldDiscAmt = calculateVoucherDiscount(oldV, oldOrderSubTotal)
 
+        let voucherInvalidReason = ''
         if (!freshV || freshV.trangThai === false) {
+          voucherInvalidReason = `Phiếu giảm giá "${vCode}" đã bị khóa hoặc ngừng hoạt động`
+        } else if (alreadyUsed) {
+          voucherInvalidReason = `Phiếu giảm giá "${vCode}" khách hàng đã dùng hết lượt`
+        } else if (notAssigned) {
+          voucherInvalidReason = `Phiếu giảm giá cá nhân "${vCode}" không được cấp cho khách hàng này`
+        } else if (freshV.ngayKetThuc && new Date(freshV.ngayKetThuc) < now) {
+          voucherInvalidReason = `Phiếu giảm giá "${vCode}" đã hết hạn sử dụng (${formatDateVn(freshV.ngayKetThuc)})`
+        } else if (freshV.ngayBatDau && new Date(freshV.ngayBatDau) > now) {
+          voucherInvalidReason = `Phiếu giảm giá "${vCode}" chưa đến thời gian hiệu lực (${formatDateVn(freshV.ngayBatDau)})`
+        } else if (freshV.soLuong && freshV.soLuongDaSuDung !== undefined && Number(freshV.soLuongDaSuDung) >= Number(freshV.soLuong)) {
+          voucherInvalidReason = `Phiếu giảm giá "${vCode}" đã hết lượt sử dụng (${freshV.soLuongDaSuDung}/${freshV.soLuong})`
+        } else if (newOrderSubTotal < Number(freshV.hoaDonToiThieu || 0)) {
+          voucherInvalidReason = `Phiếu giảm giá "${vCode}" yêu cầu đơn tối thiểu ${formatVnd(freshV.hoaDonToiThieu)} (hiện tại ${formatVnd(newOrderSubTotal)})`
+        }
+
+        if (voucherInvalidReason) {
+          if (options.isBeforeCheckout) {
+            const tempOrder = { ...order, selectedVoucher: null }
+            const best = getBestVoucherForOrder(tempOrder)
+            if (best && best.voucher && Number(best.voucher.id) !== Number(oldV.id)) {
+              const applyBest = await notifyConfirm(
+                'Mã giảm giá đã thay đổi!',
+                `${voucherInvalidReason}. Bạn có muốn áp dụng mã giảm giá tốt nhất "${best.voucher.ma || best.voucher.ten}" (giảm ${formatVnd(best.discount)}) không?`,
+                'Áp dụng',
+                'Không dùng'
+              )
+              if (applyBest) {
+                order.selectedVoucher = best.voucher
+                changes.push(`Đổi voucher: Đã áp dụng mã giảm giá tốt nhất "${best.voucher.ma || best.voucher.ten}" (giảm ${formatVnd(best.discount)})`)
+                continue
+              }
+            }
+          }
           order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} đã bị khóa hoặc ngừng hoạt động và được tự động gỡ`)
+          changes.push(`Sửa voucher: ${voucherInvalidReason}${orderLabel} và được tự động gỡ`)
           continue
         }
 
-        const isCaNhan = freshV.phamVi === 'CA_NHAN' || freshV.scope === 'CA_NHAN'
-        const custId = order.customer?.id ? Number(order.customer.id) : null
-        const alreadyUsed = custId && hasCustomerUsedVoucher(freshV, custId)
-        const notAssigned = isCaNhan && (!custId || !isVoucherAssignedToCustomer(freshV, custId))
+        const newDiscAmt = calculateVoucherDiscount(freshV, newOrderSubTotal)
+        const valueEdited =
+          Number(oldV.giaTriGiam || 0) !== Number(freshV.giaTriGiam || 0) ||
+          String(oldV.loaiGiamGia || '') !== String(freshV.loaiGiamGia || '') ||
+          Number(oldV.giamToiDa || 0) !== Number(freshV.giamToiDa || 0) ||
+          Number(oldV.hoaDonToiThieu || 0) !== Number(freshV.hoaDonToiThieu || 0)
 
-        if (alreadyUsed) {
-          order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} khách hàng đã dùng hết lượt và được tự động gỡ`)
-        } else if (notAssigned) {
-          order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá cá nhân "${vCode}"${orderLabel} không được cấp cho khách hàng này và được tự động gỡ`)
-        } else if (freshV.ngayKetThuc && new Date(freshV.ngayKetThuc) < now) {
-          order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} đã hết hạn sử dụng (${formatDateVn(freshV.ngayKetThuc)}) và được tự động gỡ`)
-        } else if (freshV.ngayBatDau && new Date(freshV.ngayBatDau) > now) {
-          order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} chưa đến thời gian hiệu lực (${formatDateVn(freshV.ngayBatDau)}) và được tự động gỡ`)
-        } else if (freshV.soLuong && freshV.soLuongDaSuDung !== undefined && Number(freshV.soLuongDaSuDung) >= Number(freshV.soLuong)) {
-          order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} đã hết lượt sử dụng (${freshV.soLuongDaSuDung}/${freshV.soLuong}) và được tự động gỡ`)
-        } else if (newOrderSubTotal < Number(freshV.hoaDonToiThieu || 0)) {
-          order.selectedVoucher = null
-          changes.push(`Sửa voucher: Phiếu giảm giá "${vCode}"${orderLabel} yêu cầu đơn tối thiểu ${formatVnd(freshV.hoaDonToiThieu)} (hiện tại ${formatVnd(newOrderSubTotal)}) nên đã được tự động gỡ`)
-        } else {
-          const newDiscAmt = calculateVoucherDiscount(freshV, newOrderSubTotal)
-          const valueEdited =
-            Number(oldV.giaTriGiam || 0) !== Number(freshV.giaTriGiam || 0) ||
-            String(oldV.loaiGiamGia || '') !== String(freshV.loaiGiamGia || '') ||
-            Number(oldV.giamToiDa || 0) !== Number(freshV.giamToiDa || 0) ||
-            Number(oldV.hoaDonToiThieu || 0) !== Number(freshV.hoaDonToiThieu || 0)
-
-          if (valueEdited) {
-            order.selectedVoucher = freshV
-            changes.push(
-              `Sửa voucher: Phiếu giảm giá "${freshV.ma || vCode}"${orderLabel} vừa thay đổi giá trị giảm (Số tiền giảm: ${formatVnd(oldDiscAmt)} → ${formatVnd(newDiscAmt)})`
-            )
-          } else if (oldDiscAmt !== newDiscAmt && oldOrderSubTotal !== newOrderSubTotal) {
-            order.selectedVoucher = freshV
-            changes.push(
-              `Cập nhật voucher "${freshV.ma || vCode}"${orderLabel}: Mức giảm điều chỉnh từ ${formatVnd(oldDiscAmt)} → ${formatVnd(newDiscAmt)} theo đơn giá mới`
-            )
+        if (valueEdited) {
+          if (options.isBeforeCheckout) {
+            const tempOrder = { ...order, selectedVoucher: freshV }
+            const best = getBestVoucherForOrder(tempOrder)
+            if (best && best.voucher && Number(best.voucher.id) !== Number(freshV.id) && best.discount > newDiscAmt) {
+              const applyBest = await notifyConfirm(
+                'Mã giảm giá đã thay đổi!',
+                `Phiếu giảm giá "${freshV.ma || vCode}" vừa thay đổi giá trị (giảm ${formatVnd(oldDiscAmt)} → ${formatVnd(newDiscAmt)}). Bạn có muốn áp dụng mã giảm giá tốt nhất "${best.voucher.ma || best.voucher.ten}" (giảm ${formatVnd(best.discount)}) không?`,
+                'Áp dụng',
+                'Không dùng'
+              )
+              if (applyBest) {
+                order.selectedVoucher = best.voucher
+                changes.push(`Đổi voucher: Đã áp dụng mã giảm giá tốt nhất "${best.voucher.ma || best.voucher.ten}" (giảm ${formatVnd(best.discount)})`)
+                continue
+              }
+            }
           }
+          order.selectedVoucher = freshV
+          changes.push(
+            `Sửa voucher: Phiếu giảm giá "${freshV.ma || vCode}"${orderLabel} vừa thay đổi giá trị giảm (Số tiền giảm: ${formatVnd(oldDiscAmt)} → ${formatVnd(newDiscAmt)})`
+          )
+        } else if (oldDiscAmt !== newDiscAmt && oldOrderSubTotal !== newOrderSubTotal) {
+          order.selectedVoucher = freshV
+          changes.push(
+            `Cập nhật voucher "${freshV.ma || vCode}"${orderLabel}: Mức giảm điều chỉnh từ ${formatVnd(oldDiscAmt)} → ${formatVnd(newDiscAmt)} theo đơn giá mới`
+          )
         }
       }
     }
@@ -4663,6 +4803,12 @@ onUnmounted(() => {
               </div>
 
               <div class="cart-right-tools">
+                <button class="btn-tool-action btn-tool-display" @click="openCustomerDisplay"
+                  title="Mở màn hình hiển thị cho khách hàng (Màn hình phụ)">
+                  <i class="bi bi-display me-1"></i>
+                  <span>Màn hình khách</span>
+                </button>
+
                 <button class="btn-tool-action btn-tool-camera" @click="openQrScanner"
                   title="Quét mã sản phẩm qua Camera">
                   <span>Quét Camera</span>

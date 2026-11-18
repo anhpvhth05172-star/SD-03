@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import {
   layHoiThoaiKhach,
   guiTinKhach,
@@ -9,6 +9,7 @@ import {
   hoiAI,
   layTinAI,
 } from '@/api/chat'
+import { getSanPhamById, getBienTheBySanPham } from '@/api/product'
 import { isNhanVienDangNhap, isKhachHangDangNhap } from '@/utils/auth'
 
 const mo = ref(false)
@@ -25,6 +26,32 @@ let tuId = 0
 let tuIdAI = 0
 
 const MD_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g
+
+const productCache = ref({})
+
+const fetchProductInfo = async (id) => {
+  if (productCache.value[id] || !id) return
+  try {
+    const sp = await getSanPhamById(id)
+    let img = sp?.hinhAnhDaiDien || sp?.img || null
+    const price = sp?.giaSauGiamMin || sp?.giaBanMin || sp?.giaBan || null
+    if (!img) {
+      try {
+        const vars = await getBienTheBySanPham(id)
+        const vList = vars?.content || vars || []
+        const found = vList.find((v) => v.img)
+        if (found) img = found.img
+      } catch {}
+    }
+    productCache.value[id] = {
+      name: sp?.tenSanPham,
+      image: img,
+      priceText: price ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price) : null
+    }
+  } catch {
+    productCache.value[id] = { error: true }
+  }
+}
 
 const parseMessageSegments = (content) => {
   if (!content) return []
@@ -79,12 +106,44 @@ const getProductCards = (content) => {
     }
     if (url.startsWith('/cua-hang/') && !seenUrls.has(url)) {
       seenUrls.add(url)
+      const idMatch = url.match(/\/cua-hang\/(\d+)/)
+      const prodId = idMatch ? idMatch[1] : null
+      if (prodId && !productCache.value[prodId]) {
+        fetchProductInfo(prodId)
+      }
+      const cached = prodId ? productCache.value[prodId] : null
       cards.push({
-        name: rawName,
+        id: prodId,
+        name: cached?.name || rawName || 'Xem sản phẩm',
+        image: cached?.image || null,
+        priceText: cached?.priceText || null,
         url,
       })
     }
   }
+
+  // Bắt thêm trường hợp URL thuần /cua-hang/{id}
+  const rawUrlRegex = /(?:https?:\/\/[^\s/]+)?(\/cua-hang\/(\d+))/g
+  let rawMatch
+  while ((rawMatch = rawUrlRegex.exec(content)) !== null) {
+    const url = rawMatch[1]
+    const prodId = rawMatch[2]
+    if (!seenUrls.has(url)) {
+      seenUrls.add(url)
+      if (prodId && !productCache.value[prodId]) {
+        fetchProductInfo(prodId)
+      }
+      const cached = prodId ? productCache.value[prodId] : null
+      cards.push({
+        id: prodId,
+        name: cached?.name || 'Giày Sneaker PolyShoes',
+        image: cached?.image || null,
+        priceText: cached?.priceText || null,
+        url,
+      })
+    }
+  }
+
   return cards
 }
 
@@ -160,6 +219,16 @@ const cuonDuoi = () => {
   if (el) el.scrollTop = el.scrollHeight
 }
 
+watch(mo, async (val) => {
+  if (val && isKhachHangDangNhap()) {
+    try {
+      await taiHoiThoai()
+    } catch (e) {
+      loi.value = e.message
+    }
+  }
+})
+
 const gui = async () => {
   const text = noiDung.value.trim()
   if (!text || dangGui.value) return
@@ -167,6 +236,9 @@ const gui = async () => {
   loi.value = ''
   try {
     if (cheDo.value === 'ai') {
+      if (!hoiThoaiAI.value) {
+        hoiThoaiAI.value = await layHoiThoaiAI()
+      }
       noiDung.value = ''
       await hoiAI(text)
       if (hoiThoaiAI.value) {
@@ -288,19 +360,42 @@ onUnmounted(() => {
             </template>
           </p>
 
-          <!-- Thẻ sản phẩm gợi ý để bấm vào xem chi tiết sản phẩm ngay -->
-          <div v-if="getProductCards(t.noiDung).length > 0" class="chat-product-cards">
+          <!-- Thẻ sản phẩm gợi ý: Ảnh vuông to ở trên, nút xem chi tiết ở dưới -->
+          <div v-if="getProductCards(t.noiDung).length > 0" class="chat-product-cards-grid">
             <RouterLink
               v-for="(card, cIdx) in getProductCards(t.noiDung)"
               :key="cIdx"
               :to="card.url"
-              class="chat-product-card-item"
+              class="chat-product-vertical-card"
               @click="handleLinkClick"
             >
-              <div class="product-card-icon">👟</div>
-              <div class="product-card-text">
-                <span class="product-card-title">{{ card.name }}</span>
-                <span class="product-card-sub">Xem chi tiết sản phẩm ➔</span>
+              <!-- 1. Ảnh sản phẩm hình vuông to ở trên -->
+              <div class="product-square-img-wrap">
+                <img
+                  v-if="card.image"
+                  :src="card.image"
+                  :alt="card.name"
+                  class="product-square-img"
+                />
+                <div v-else class="product-square-fallback">
+                  <span class="fallback-icon">👟</span>
+                  <span class="fallback-badge">PolyShoes</span>
+                </div>
+              </div>
+
+              <!-- 2. Tên & Giá sản phẩm ở giữa -->
+              <div class="product-card-body">
+                <span class="product-card-name" :title="card.name">{{ card.name }}</span>
+                <span v-if="card.priceText" class="product-card-price">{{ card.priceText }}</span>
+              </div>
+
+              <!-- 3. Nút xem chi tiết ở dưới -->
+              <div class="product-card-bottom-btn">
+                <span>Xem chi tiết</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                  <polyline points="12 5 19 12 12 19"></polyline>
+                </svg>
               </div>
             </RouterLink>
           </div>
@@ -320,7 +415,7 @@ onUnmounted(() => {
 
 <style scoped>
 .chat-login-prompt { padding: 24px; text-align: center; color: #475569; }
-.chat-login-link { display: inline-block; padding: 8px 16px; border-radius: 8px; background: #2563eb; color: #fff; text-decoration: none; }
+.chat-login-link { display: inline-block; padding: 8px 16px; border-radius: 8px; background: #dc2626; color: #fff; text-decoration: none; }
 
 .chat-widget-root {
   position: fixed;
@@ -338,10 +433,10 @@ onUnmounted(() => {
   height: 56px;
   border-radius: 50%;
   border: none;
-  background: #2563eb;
+  background: #dc2626;
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 8px 24px rgba(220, 38, 38, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -389,7 +484,7 @@ onUnmounted(() => {
 }
 
 .chat-tabs .tab.active {
-  background: #2563eb;
+  background: #dc2626;
   color: #fff;
 }
 
@@ -427,18 +522,18 @@ onUnmounted(() => {
 
 .chat-bubble.me {
   align-self: flex-end;
-  background: #2563eb;
-  border-color: #2563eb;
+  background: #dc2626;
+  border-color: #dc2626;
   color: #fff;
 }
 
 .chat-bubble.ai {
-  background: #f0f9ff;
-  border-color: #bae6fd;
+  background: #fff8f8;
+  border-color: #fee2e2;
 }
 
 .chat-bubble.me .bubble-from {
-  color: #bfdbfe;
+  color: #fecaca;
 }
 
 .bubble-from {
@@ -479,7 +574,7 @@ onUnmounted(() => {
 
 .chat-input button {
   border: none;
-  background: #2563eb;
+  background: #dc2626;
   color: #fff;
   border-radius: 8px;
   padding: 0 14px;
@@ -494,7 +589,7 @@ onUnmounted(() => {
 }
 
 .chat-product-link {
-  color: #0284c7;
+  color: #dc2626;
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -506,7 +601,7 @@ onUnmounted(() => {
 }
 
 .chat-product-link:hover {
-  color: #0369a1;
+  color: #b91c1c;
 }
 
 .link-icon {
@@ -515,66 +610,145 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.chat-product-cards {
-  margin-top: 8px;
+.chat-product-cards-grid {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 4px 2px 10px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chat-product-cards-grid::-webkit-scrollbar {
+  height: 6px;
+}
+
+.chat-product-cards-grid::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 999px;
+}
+
+.chat-product-cards-grid::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.chat-product-cards-grid::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.chat-product-vertical-card {
+  flex: 0 0 210px;
+  max-width: 210px;
+  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.chat-product-card-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
   background: #ffffff;
-  border: 1px solid #bae6fd;
-  border-radius: 8px;
+  border: 1.5px solid #fee2e2;
+  border-radius: 12px;
+  overflow: hidden;
   text-decoration: none;
   color: inherit;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-.chat-product-card-item:hover {
-  background: #f0f9ff;
-  border-color: #0284c7;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(2, 132, 199, 0.15);
+.chat-product-vertical-card:hover {
+  border-color: #dc2626;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.16);
 }
 
-.product-card-icon {
-  font-size: 16px;
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  background: #e0f2fe;
-  border-radius: 6px;
+.product-square-img-wrap {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #f8fafc;
+  overflow: hidden;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.product-card-text {
+.product-square-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.chat-product-vertical-card:hover .product-square-img {
+  transform: scale(1.04);
+}
+
+.product-square-fallback {
   display: flex;
   flex-direction: column;
-  min-width: 0;
-  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #fff5f5 0%, #fee2e2 100%);
 }
 
-.product-card-title {
-  font-size: 12px;
+.fallback-icon {
+  font-size: 42px;
+}
+
+.fallback-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #dc2626;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid #fecaca;
+}
+
+.product-card-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.product-card-name {
+  font-size: 13.5px;
   font-weight: 700;
   color: #0f172a;
-  white-space: nowrap;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.product-card-sub {
-  font-size: 11px;
-  color: #0284c7;
-  font-weight: 600;
-  margin-top: 1px;
+.product-card-price {
+  font-size: 13px;
+  font-weight: 700;
+  color: #dc2626;
+}
+
+.product-card-bottom-btn {
+  margin: 0 10px 10px;
+  padding: 8px 12px;
+  background: #dc2626;
+  color: #ffffff;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.2s;
+}
+
+.chat-product-vertical-card:hover .product-card-bottom-btn {
+  background: #b91c1c;
 }
 </style>

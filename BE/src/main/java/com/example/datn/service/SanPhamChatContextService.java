@@ -83,6 +83,9 @@ public class SanPhamChatContextService {
         if (cauHoi == null || cauHoi.isBlank()) {
             return null;
         }
+        if (GeminiService.laCauHoiNhayCamHoacNgoaiLe(cauHoi)) {
+            return GeminiService.CAU_TU_CHOI_BAO_MAT;
+        }
         String keyword = cauHoi.trim().toLowerCase();
         List<SanPham> ds = sanPhamRepository.findAll(Sort.by(Sort.Direction.DESC, "id"))
             .stream()

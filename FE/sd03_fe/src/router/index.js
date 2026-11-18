@@ -52,6 +52,7 @@ import ProductCartDetail from '@/pages/clients/views/ProductCartDetail.vue'
 import About from '@/pages/clients/views/About.vue'
 import Contact from '@/pages/clients/views/Contact.vue'
 import VNPayReturn from '@/pages/clients/views/VNPayReturn.vue'
+import CustomerDisplayPage from '@/pages/Pos/CustomerDisplayPage.vue'
 
 const metaBo = { requiresAuth: true, canBo: true }
 
@@ -68,6 +69,7 @@ export const appMode =
    1. CẤU HÌNH ROUTE CHO CỔNG KHÁCH HÀNG (CLIENT - 5173)
    ========================================================================== */
 const clientRoutes = [
+  { path: '/man-hinh-khach', component: CustomerDisplayPage, meta: { title: 'Màn hình khách hàng | PolyShoes POS', public: true } },
   { path: '/dang-nhap', component: LoginPage, meta: { title: 'Đăng nhập', loginPage: true, loginMode: 'khach' } },
   { path: '/khach-hang', redirect: '/dang-nhap' },
   { path: '/login', redirect: '/dang-nhap' },
@@ -150,6 +152,7 @@ const adminChildrenRoutes = [
 ]
 
 const adminRoutes = [
+  { path: '/man-hinh-khach', component: CustomerDisplayPage, meta: { title: 'Màn hình khách hàng | PolyShoes POS', public: true } },
   { path: '/dang-nhap', component: LoginPage, meta: { title: 'Đăng nhập nhân viên', loginPage: true, loginMode: 'nhan-vien' } },
   { path: '/nhan-vien', redirect: '/dang-nhap' },
   { path: '/login', redirect: '/dang-nhap' },
@@ -178,6 +181,7 @@ const adminRoutes = [
    3. CẤU HÌNH ROUTE CHẾ ĐỘ ALL (TƯƠNG THÍCH NGƯỢC)
    ========================================================================== */
 const allRoutes = [
+  { path: '/man-hinh-khach', component: CustomerDisplayPage, meta: { title: 'Màn hình khách hàng | PolyShoes POS', public: true } },
   { path: '/khach-hang', component: LoginPage, meta: { title: 'Đăng nhập khách hàng', loginPage: true, loginMode: 'khach' } },
   { path: '/nhan-vien', component: LoginPage, meta: { title: 'Đăng nhập nhân viên', loginPage: true, loginMode: 'nhan-vien' } },
   { path: '/login', redirect: (to) => ({ path: '/khach-hang', query: to.query }) },
@@ -247,6 +251,7 @@ router.beforeEach(async (to) => {
 
   // 2. Chế độ ADMIN (Cổng 5174): Chỉ cho phép nhân viên và quản trị viên
   if (appMode === 'admin') {
+    if (to.meta.public) return true
     if (to.meta.loginPage) {
       if (isNhanVienDangNhap()) {
         const role = String(getUser()?.vaiTro || '').trim().toUpperCase()
