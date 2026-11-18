@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
+    "dev:client": "vite --mode client --host",
+    "dev:admin": "vite --mode admin --host",
     "build": "vite build",
+    "build:client": "vite build --mode client",
+    "build:admin": "vite build --mode admin",
     "preview": "vite preview",
     "lint": "eslint src",
     "verify:excel": "node scripts/verify-export.mjs",

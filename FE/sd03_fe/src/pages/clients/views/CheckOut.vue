@@ -965,7 +965,7 @@ const phuongThucFields = (kind) => ({
 // do back-end tự tính lại từ chi tiết + phiếu giảm giá nên không gửi lên.
 function buildHoaDonRequest() {
   return {
-    maHoaDon: genMaHoaDon(),
+    maHoaDon: "",
     loaiDon: "ONLINE",
     trangThai: "CHO_XAC_NHAN",
 
@@ -1296,7 +1296,15 @@ const startQrPaymentPolling = () => {
   }, 2500);
 };
 
+const isQrTest1k = ref(false);
+const toggleQrTest1k = () => {
+  isQrTest1k.value = !isQrTest1k.value;
+  const amt = isQrTest1k.value ? 1000 : (qrModalData.value.amount || finalTotal.value);
+  qrModalData.value.qrUrl = `https://img.vietqr.io/image/MB-0922010408-compact2.png?amount=${amt}&addInfo=${encodeURIComponent(qrModalData.value.maHoaDon)}&accountName=${encodeURIComponent(qrModalData.value.accountName)}`;
+};
+
 const openQrModal = (payData) => {
+  isQrTest1k.value = false;
   qrModalData.value = {
     orderId: payData.orderId,
     maHoaDon: payData.maHoaDon,
@@ -1817,8 +1825,22 @@ const confirmQrPayment = async () => {
               <!-- Cột phải: Thông tin chuyển khoản -->
               <div class="qr-info-column">
                 <div class="qr-amount-card">
-                  <span class="qr-amount-lbl">Số tiền cần thanh toán</span>
-                  <div class="qr-amount-val">{{ money(qrModalData.amount) }}</div>
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="qr-amount-lbl">Số tiền cần thanh toán</span>
+                    <button type="button" class="btn btn-xs py-0 px-2 rounded-pill border fw-bold"
+                      :class="isQrTest1k ? 'btn-warning text-dark' : 'btn-outline-primary'"
+                      style="font-size: 11px;"
+                      @click="toggleQrTest1k"
+                      :title="isQrTest1k ? 'Bấm để về số tiền thật' : 'Chuyển mã QR sang 1.000đ để test quét tiền'">
+                      {{ isQrTest1k ? '⚡ Đang QR Test 1.000đ (Bấm về tiền gốc)' : '⚡ Đổi QR sang 1.000đ test' }}
+                    </button>
+                  </div>
+                  <div class="qr-amount-val" :class="{ 'text-warning': isQrTest1k }">
+                    {{ money(isQrTest1k ? 1000 : qrModalData.amount) }}
+                    <span v-if="isQrTest1k" class="badge bg-warning-subtle text-warning-emphasis ms-2 fs-6 fw-normal">
+                      (Gốc: {{ money(qrModalData.amount) }})
+                    </span>
+                  </div>
                 </div>
 
                 <div class="qr-details-table">
@@ -1856,7 +1878,7 @@ const confirmQrPayment = async () => {
 
                 <div class="qr-notice-card">
                   <i class="bi bi-info-circle-fill text-warning me-1"></i>
-                  <span>Hệ thống sẽ tự động cập nhật đơn hàng ngay khi bạn quét mã thanh toán.</span>
+                  <span>Hệ thống sẽ tự động tắt mã QR và xác nhận đơn ngay khi bạn chuyển tiền (kể cả 1k).</span>
                 </div>
 
                 <!-- Toast sao chép -->

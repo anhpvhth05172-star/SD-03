@@ -289,17 +289,6 @@ const handleLogout = () => {
                     <i class="bi bi-bag-check text-muted"></i>
                     <span>Giỏ hàng của tôi</span>
                   </RouterLink>
-                  <template v-if="isAdmin">
-                    <div class="client-dropdown-divider"></div>
-                    <RouterLink
-                      to="/admin/san-pham"
-                      class="client-dropdown-item text-muted"
-                      @click="closeDropdowns"
-                    >
-                      <i class="bi bi-speedometer2"></i>
-                      <span>Trang quản trị (Admin)</span>
-                    </RouterLink>
-                  </template>
                   <div class="client-dropdown-divider"></div>
                   <button
                     type="button"
@@ -542,13 +531,6 @@ const handleLogout = () => {
               class="text-decoration-none footer-bottom-link-dark"
               >Chính sách bảo mật</a
             >
-            <span class="text-white-50">|</span>
-            <RouterLink
-              to="/admin/san-pham"
-              class="text-decoration-none text-danger fw-semibold"
-            >
-              Trang quản trị (Admin)
-            </RouterLink>
           </div>
         </div>
       </div>

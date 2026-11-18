@@ -1,11 +1,14 @@
 <script setup>
-import { provide, onMounted } from 'vue'
+import { provide, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import ChatWidget from './components/ChatWidget.vue'
 import { API_ORIGIN } from './api/http'
+import { appMode } from './router'
 
 const baseAPI = `${API_ORIGIN}/`
 provide('baseAPI', baseAPI)
+
+const hienChatWidget = computed(() => appMode !== 'admin')
 
 const router = useRouter()
 
@@ -35,7 +38,7 @@ router.afterEach(() => {
 
 <template>
   <router-view />
-  <ChatWidget />
+  <ChatWidget v-if="hienChatWidget" />
 </template>
 
 <style scoped></style>

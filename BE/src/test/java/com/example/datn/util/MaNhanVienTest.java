@@ -10,19 +10,20 @@ class MaNhanVienTest {
 
     @Test
     void sinhTheoQuyTacTrongYeuCau() {
-        assertEquals("Binhnt", MaNhanVien.sinh("Nguyễn Thị Bình"));
-        assertEquals("Binhnv", MaNhanVien.sinh("Nguyễn Văn Bình"));
-        assertEquals("Anhtv", MaNhanVien.sinh("Trần Văn Anh"));
-        assertEquals("Anhph", MaNhanVien.sinh("Phạm Hà Anh"));
+        assertEquals("BinhNT", MaNhanVien.sinh("Nguyễn Thị Bình"));
+        assertEquals("BinhNV", MaNhanVien.sinh("Nguyễn Văn Bình"));
+        assertEquals("AnhTV", MaNhanVien.sinh("Trần Văn Anh"));
+        assertEquals("AnhPVH", MaNhanVien.sinh("Phạm Vũ Hoàng Anh"));
+        assertEquals("AnhPH", MaNhanVien.sinh("Phạm Hà Anh"));
     }
 
     @Test
     void boDauVaChuanHoaKhoangTrang() {
-        assertEquals("Binhnt", MaNhanVien.sinh("  Nguyễn   Thị   Bình "));
-        assertEquals("Anhph", MaNhanVien.sinh("  Phạm   Hà   Anh "));
-        assertEquals("Anlh", MaNhanVien.sinh("Lý Hoàng An"));
-        assertEquals("Namvv", MaNhanVien.sinh("Võ Văn Nam"));
-        assertEquals("Annv", MaNhanVien.sinh("Nguyễn Văn An"));
+        assertEquals("BinhNT", MaNhanVien.sinh("  Nguyễn   Thị   Bình "));
+        assertEquals("AnhPVH", MaNhanVien.sinh("  Phạm   Vũ   Hoàng   Anh "));
+        assertEquals("AnLH", MaNhanVien.sinh("Lý Hoàng An"));
+        assertEquals("NamVV", MaNhanVien.sinh("Võ Văn Nam"));
+        assertEquals("AnNV", MaNhanVien.sinh("Nguyễn Văn An"));
     }
 
     @Test
@@ -33,18 +34,18 @@ class MaNhanVienTest {
     }
 
     @Test
-    void congSoHaiChuSoTu01() {
-        assertEquals("Binhnt01", MaNhanVien.congSo("Binhnt", 1));
-        assertEquals("Binhnt02", MaNhanVien.congSo("Binhnt", 2));
-        assertEquals("Binhnt09", MaNhanVien.congSo("Binhnt", 9));
-        assertEquals("Binhnt99", MaNhanVien.congSo("Binhnt", 99));
+    void congSoTrucTiepTu2() {
+        assertEquals("AnhPVH", MaNhanVien.congSo("AnhPVH", 1));
+        assertEquals("AnhPVH2", MaNhanVien.congSo("AnhPVH", 2));
+        assertEquals("AnhPVH3", MaNhanVien.congSo("AnhPVH", 3));
+        assertEquals("AnhPVH99", MaNhanVien.congSo("AnhPVH", 99));
     }
 
     @Test
     void congSoVuot99GiuyenSoChuSo() {
-        assertEquals("Binhnt100", MaNhanVien.congSo("Binhnt", 100));
-        assertEquals("Binhnt101", MaNhanVien.congSo("Binhnt", 101));
-        assertEquals("Binhnt1000", MaNhanVien.congSo("Binhnt", 1000));
+        assertEquals("BinhNT100", MaNhanVien.congSo("BinhNT", 100));
+        assertEquals("BinhNT101", MaNhanVien.congSo("BinhNT", 101));
+        assertEquals("BinhNT1000", MaNhanVien.congSo("BinhNT", 1000));
     }
 
     @Test
@@ -61,8 +62,9 @@ class MaNhanVienTest {
 
     @Test
     void congSoMacDinhKhiGocRong() {
-        assertEquals("NV01", MaNhanVien.congSo(null, 1));
-        assertEquals("NV01", MaNhanVien.congSo("  ", 1));
+        assertEquals("NV", MaNhanVien.congSo(null, 1));
+        assertEquals("NV", MaNhanVien.congSo("  ", 1));
+        assertEquals("NV2", MaNhanVien.congSo(null, 2));
         assertEquals("NV100", MaNhanVien.congSo("", 100));
     }
 
@@ -82,7 +84,7 @@ class MaNhanVienTest {
     /** Mã sinh ra phải LUÔN hợp lệ (bắt đầu bằng chữ cái) để import lại cập nhật được. */
     @Test
     void sinhTenKetThucBangSo_VanBatDauBangChuCai() {
-        assertEquals("NV1234567eo", MaNhanVien.sinh("E2E One 1234567"));
+        assertEquals("NV1234567EO", MaNhanVien.sinh("E2E One 1234567"));
         assertEquals("NV1234567", MaNhanVien.sinh("1234567"));
         assertEquals("NV123", MaNhanVien.sinh("123"));
         assertTrue(MaNhanVien.hopLe(MaNhanVien.sinh("E2E One 1234567")));

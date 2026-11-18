@@ -56,8 +56,9 @@ public class VNPayService {
     @Value("${sepay.webhook.api-key:}")
     private String sepayWebhookApiKey;
 
-    private static final Pattern MA_HOA_DON_PATTERN = Pattern.compile("\\b(HD[A-Za-z0-9_-]+)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MA_HOA_DON_PATTERN = Pattern.compile("(?i)(HD\\s*[A-Za-z0-9_-]+)");
     private final Map<String, BigDecimal> sepayPendingMemoAmounts = new ConcurrentHashMap<>();
+    private final Map<String, Long> activeListeningMemos = new ConcurrentHashMap<>();
 
     /**
      * Bước 1: Tạo đơn CHO_THANH_TOAN và sinh URL thanh toán VNPay.
@@ -319,11 +320,32 @@ public class VNPayService {
         };
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public Map<String, Object> kiemTraTrangThaiThanhToan(Long id) {
         HoaDon hoaDon = hoaDonRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đơn hàng #" + id));
         boolean paid = !"CHO_THANH_TOAN".equals(hoaDon.getTrangThai()) && !"DA_HUY".equals(hoaDon.getTrangThai());
+
+        // Nếu đơn online đang ở CHO_THANH_TOAN, kiểm tra xem có memo SePay đã được chuyển tiền (kể cả 1k)
+        if (!paid && hoaDon.getMaHoaDon() != null) {
+            String key = hoaDon.getMaHoaDon().trim().toUpperCase();
+            activeListeningMemos.put(key, System.currentTimeMillis() + 10 * 60 * 1000L);
+            BigDecimal received = sepayPendingMemoAmounts.get(key);
+            if (received != null && received.compareTo(BigDecimal.ZERO) > 0) {
+                try {
+                    hoaDonService.xacNhanThanhToanVNPay(hoaDon.getId());
+                    hoaDon = hoaDonRepository.findById(hoaDon.getId()).orElse(hoaDon);
+                    paid = true;
+                    sepayPendingMemoAmounts.remove(key);
+                    activeListeningMemos.remove(key);
+                    log.info("Polling kiemTraTrangThaiThanhToan: khớp pending memo SePay {} ({}đ) -> xác nhận thanh toán đơn #{}",
+                        key, received, id);
+                } catch (Exception e) {
+                    log.error("Lỗi xác nhận thanh toán đơn #{} từ pending memo: {}", id, e.getMessage());
+                }
+            }
+        }
+
         return Map.of(
             "paid", paid,
             "trangThai", hoaDon.getTrangThai() != null ? hoaDon.getTrangThai() : "",
@@ -370,10 +392,26 @@ public class VNPayService {
         HoaDon hoaDon = null;
         String matchedCode = null;
         while (matcher.find()) {
-            String code = matcher.group(1).toUpperCase();
+            String code = matcher.group(1).toUpperCase().replaceAll("\\s+", "");
             if (matchedCode == null) matchedCode = code;
             hoaDon = hoaDonRepository.findByMaHoaDon(code).orElse(null);
             if (hoaDon != null) break;
+        }
+
+        // Nếu chưa tìm thấy bằng regex, kiểm tra xem nội dung chuyển khoản có chứa memo đang được POS/FE lắng nghe không
+        if (matchedCode == null) {
+            String cleanContent = content.toUpperCase().replaceAll("\\s+", "");
+            long now = System.currentTimeMillis();
+            for (Map.Entry<String, Long> entry : activeListeningMemos.entrySet()) {
+                if (entry.getValue() > now) {
+                    String cleanKey = entry.getKey().replaceAll("\\s+", "");
+                    if (cleanContent.contains(cleanKey)) {
+                        matchedCode = entry.getKey();
+                        hoaDon = hoaDonRepository.findByMaHoaDon(matchedCode).orElse(null);
+                        break;
+                    }
+                }
+            }
         }
 
         if (hoaDon == null) {
@@ -387,27 +425,33 @@ public class VNPayService {
             return Map.of("success", true, "matched", false, "message", "Không tìm thấy đơn hàng tương ứng");
         }
 
-        BigDecimal requiredAmount = hoaDon.getTienSauGiamGia() != null ? hoaDon.getTienSauGiamGia() : BigDecimal.ZERO;
-        if (transferAmount.compareTo(requiredAmount) < 0) {
-            log.warn("SePay webhook: số tiền chuyển {} nhỏ hơn số tiền đơn {} ({})", transferAmount, hoaDon.getMaHoaDon(), requiredAmount);
-            return Map.of("success", true, "matched", true, "paid", false, "message", "Số tiền chuyển chưa đủ");
+        // Theo yêu cầu: Chỉ cần chuyển tiền (kể cả 1k hoặc bất kỳ số tiền nào > 0) là tự động xác nhận thanh toán thành công và tắt QR
+        if (transferAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("SePay webhook: số tiền chuyển không hợp lệ ({}) cho đơn {}", transferAmount, hoaDon.getMaHoaDon());
+            return Map.of("success", true, "matched", true, "paid", false, "message", "Số tiền chuyển không hợp lệ");
         }
 
+        BigDecimal requiredAmount = hoaDon.getTienSauGiamGia() != null ? hoaDon.getTienSauGiamGia() : BigDecimal.ZERO;
         if ("CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
             hoaDonService.xacNhanThanhToanVNPay(hoaDon.getId());
             hoaDon = hoaDonRepository.findById(hoaDon.getId()).orElse(hoaDon);
             String refCode = String.valueOf(payload.getOrDefault("referenceCode", payload.getOrDefault("id", "")));
-            String sepayNote = String.format("[SePay chuyển khoản thành công | Mã GD: %s | Số tiền: %,.0fđ]", refCode, transferAmount);
+            String sepayNote = String.format("[SePay chuyển khoản thành công | GD: %s | Đã nhận: %,.0fđ / Đơn: %,.0fđ]",
+                refCode, transferAmount, requiredAmount);
             String currentNote = hoaDon.getGhiChu() != null ? hoaDon.getGhiChu().trim() : "";
             String updatedNote = currentNote.isEmpty() ? sepayNote : currentNote + " " + sepayNote;
             if (updatedNote.length() > 1000) updatedNote = updatedNote.substring(0, 1000);
             hoaDon.setGhiChu(updatedNote);
             hoaDon.setNgayCapNhat(LocalDateTime.now());
             hoaDonRepository.save(hoaDon);
-            log.info("SePay webhook: đã xác nhận thanh toán đơn {}", hoaDon.getMaHoaDon());
+            log.info("SePay webhook: đã xác nhận thanh toán đơn {} (nhận {}đ / giá trị {}đ)",
+                hoaDon.getMaHoaDon(), transferAmount, requiredAmount);
         }
 
-        return Map.of("success", true, "matched", true, "paid", true, "maHoaDon", hoaDon.getMaHoaDon());
+        // Đồng thời lưu vào pending memo để nếu FE đang polling theo memo cũng nhận được kết quả ngay
+        sepayPendingMemoAmounts.put(hoaDon.getMaHoaDon().toUpperCase(), transferAmount);
+
+        return Map.of("success", true, "matched", true, "paid", true, "maHoaDon", hoaDon.getMaHoaDon(), "receivedAmount", transferAmount);
     }
 
     public Map<String, Object> kiemTraMemoSepay(String memo, BigDecimal requiredAmount, boolean consume) {
@@ -415,11 +459,23 @@ public class VNPayService {
             return Map.of("paid", false);
         }
         String key = memo.trim().toUpperCase();
+        activeListeningMemos.put(key, System.currentTimeMillis() + 10 * 60 * 1000L);
+
         BigDecimal received = sepayPendingMemoAmounts.get(key);
-        BigDecimal required = requiredAmount != null ? requiredAmount : BigDecimal.ZERO;
-        boolean paid = received != null && received.compareTo(required) >= 0;
+        // Chỉ cần có tiền chuyển vào (> 0, kể cả 1k hoặc bất kỳ số tiền nào) là chấp nhận thanh toán thành công
+        boolean paid = received != null && received.compareTo(BigDecimal.ZERO) > 0;
+
+        if (!paid) {
+            HoaDon hd = hoaDonRepository.findByMaHoaDon(key).orElse(null);
+            if (hd != null && !"CHO_THANH_TOAN".equals(hd.getTrangThai()) && !"DA_HUY".equals(hd.getTrangThai())) {
+                paid = true;
+                received = hd.getTienSauGiamGia();
+            }
+        }
+
         if (paid && consume) {
             sepayPendingMemoAmounts.remove(key);
+            activeListeningMemos.remove(key);
         }
         return Map.of("paid", paid, "memo", key, "receivedAmount", received != null ? received : BigDecimal.ZERO);
     }

@@ -15,8 +15,8 @@ const dauLaChuCai = (ma) => (/^[A-Za-z]/.test(ma) ? ma : `NV${ma}`)
 
 /**
  * Phần gốc (chưa cộng số) của mã sinh từ họ tên:
- * tên gọi cuối viết hoa chữ đầu + chữ cái đầu của họ và tên đệm viết thường.
- * Ví dụ: "Nguyễn Thị Bình" -> "Binhnt".
+ * tên gọi cuối viết hoa chữ đầu + chữ cái đầu của họ và tên đệm viết hoa.
+ * Ví dụ: "Phạm Vũ Hoàng Anh" -> "AnhPVH".
  */
 export const sinhMaTuTen = (ten) => {
   const goc = String(ten || '').trim().replace(/\s+/g, ' ')
@@ -27,9 +27,9 @@ export const sinhMaTuTen = (ten) => {
   if (parts.length === 1) return cat(dauLaChuCai(cuoi))
   const dau = parts
     .slice(0, -1)
-    .map((p) => boDau(p).toLowerCase())
+    .map((p) => boDau(p))
     .filter(Boolean)
-    .map((p) => p.charAt(0))
+    .map((p) => p.charAt(0).toUpperCase())
     .join('')
   return cat(dauLaChuCai(cuoi + dau))
 }
@@ -38,20 +38,21 @@ export const sinhMaTuTen = (ten) => {
 export const sinhMaNhanVien = sinhMaTuTen
 
 /**
- * Cộng số thứ tự: 01..99 (đúng 2 chữ số), từ 100 trở lên giữ nguyên số chữ số.
- * Kết quả luôn nằm trong TOI_DA ký tự.
+ * Cộng số thứ tự: từ 2 trở lên cộng trực tiếp số (2, 3, ...).
+ * Nếu số <= 1, giữ nguyên phần gốc. Kết quả luôn nằm trong TOI_DA ký tự.
  */
 export const congSo = (goc, so) => {
-  const thuTu = Math.max(Number(so) || 1, 1)
-  const hauTo = thuTu < 100 ? String(thuTu).padStart(2, '0') : String(thuTu)
+  const thuTu = Number(so) || 1
+  if (thuTu <= 1) return String(goc || '').trim() ? cat(String(goc).trim()) : 'NV'
+  const hauTo = String(thuTu)
   const toiDaGoc = Math.max(1, TOI_DA - hauTo.length)
   const gocCat = String(goc || '').trim() ? cat(String(goc).trim(), toiDaGoc) : 'NV'
   return gocCat + hauTo
 }
 
 /**
- * Mã đề xuất theo họ tên: dùng phần gốc khi chưa có mã trùng (Phạm Hà Anh -> Anhph).
- * Khi mã gốc đã tồn tại, backend tự trả về mã kế tiếp (Anhph02, Anhph03, ...).
+ * Mã đề xuất theo họ tên: dùng phần gốc khi chưa có mã trùng (Phạm Vũ Hoàng Anh -> AnhPVH).
+ * Khi mã gốc đã tồn tại, backend tự trả về mã kế tiếp (AnhPVH2, AnhPVH3, ...).
  */
 export const maDeXuat = (ten) => sinhMaTuTen(ten)
 

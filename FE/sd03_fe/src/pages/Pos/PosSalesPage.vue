@@ -303,18 +303,8 @@ const POS_STAFF_SNAPSHOT_KEY = 'polyshoes_pos_staff_snapshot_v1'
 
 const loadStaffSnapshotFromStorage = () => {
   try {
-    const raw = sessionStorage.getItem(POS_STAFF_SNAPSHOT_KEY)
-    if (!raw) return false
-    const entries = JSON.parse(raw)
-    if (Array.isArray(entries) && entries.length > 0) {
-      staffSnapshotMap.clear()
-      for (const [k, v] of entries) {
-        staffSnapshotMap.set(Number(k), v)
-      }
-      return true
-    }
+    sessionStorage.removeItem(POS_STAFF_SNAPSHOT_KEY)
   } catch {
-    // Cache session có thể bị chặn; trạng thái ca sẽ được nạp lại từ API.
   }
   return false
 }
@@ -2536,10 +2526,13 @@ const bankTransferMemo = computed(() => {
   return currentOrder.value ? currentOrder.value.code : ''
 })
 
-const generateBankTransferQr = async () => {
+const isQrTest1k = ref(false)
+
+const updateBankTransferQr = async () => {
   if (finalTotal.value <= 0 || !currentOrder.value) return
   isQrImgFailed.value = false
-  const amount = Math.round(bankTransferAmount.value)
+  const realAmount = Math.round(bankTransferAmount.value)
+  const amount = isQrTest1k.value ? 1000 : realAmount
   const memo = bankTransferMemo.value
   const bank = defaultStoreBank
 
@@ -2551,8 +2544,17 @@ const generateBankTransferQr = async () => {
   } catch (err) {
     console.error('Lỗi sinh QR code offline:', err)
   }
+}
 
+const generateBankTransferQr = async () => {
+  isQrTest1k.value = false
+  await updateBankTransferQr()
   isBankQrModalOpen.value = true
+}
+
+const toggleQrTest1k = async () => {
+  isQrTest1k.value = !isQrTest1k.value
+  await updateBankTransferQr()
 }
 
 const onQrImgError = () => {
@@ -2681,7 +2683,7 @@ const startSepayPosPolling = () => {
       const res = await http.post('/vnpay/sepay-check-memo', { memo, amount, consume: true })
       if (res?.data?.paid) {
         stopSepayPosPolling()
-        confirmBankTransferAndCheckout()
+        confirmBankPaymentReceived()
       }
     } catch {
       // Bỏ qua lỗi mạng tạm thời khi polling
@@ -3343,17 +3345,11 @@ const syncEmployeeListAndCheckRole = (empList, isInitial = false) => {
           } else if (isSelectedPosEmp) {
             const fallbackActive = empList.find(e => e.trangThai !== false && Number(e.id) !== empId)
             selectedStaffId.value = fallbackActive ? fallbackActive.id : null
-            changes.push(`Nhân viên phụ trách "${empName}" vừa bị khóa tài khoản (đã tự động chuyển sang ${fallbackActive?.tenTaiKhoan || 'nhân viên khác'})`)
-          } else {
-            changes.push(`Tài khoản nhân viên "${empName}" vừa bị khóa trên hệ thống`)
           }
-        } else {
-          changes.push(`Tài khoản nhân viên "${empName}" vừa được mở khóa hoạt động trở lại`)
         }
       }
 
       if (prev.maVaiTro && prev.maVaiTro !== newRole) {
-        const oldRoleLabel = prev.maVaiTro === 'ADMIN' ? 'Admin' : 'Nhân viên'
         if (isLoggedEmp || !loggedId) {
           datVaiTro(newRole)
           try {
@@ -3368,12 +3364,10 @@ const syncEmployeeListAndCheckRole = (empList, isInitial = false) => {
           } catch {
           }
         }
-        changes.push(`Chuyển quyền nhân viên: Tài khoản "${empName}" vừa thay đổi vai trò từ [${oldRoleLabel}] sang [${newRoleLabel}]`)
       }
     }
 
     if (isLoggedEmp && staffUserRef.value?.vaiTro && String(staffUserRef.value.vaiTro).toUpperCase() !== newRole) {
-      const oldRoleLabel = String(staffUserRef.value.vaiTro).toUpperCase() === 'ADMIN' ? 'Admin' : 'Nhân viên'
       datVaiTro(newRole)
       try {
         const rawU = localStorage.getItem('polyshoes_user')
@@ -3385,9 +3379,6 @@ const syncEmployeeListAndCheckRole = (empList, isInitial = false) => {
         }
         window.dispatchEvent(new Event('polyshoes-user-updated'))
       } catch {
-      }
-      if (!isInitial && !changes.some(c => c.includes(empName))) {
-        changes.push(`Chuyển quyền nhân viên: Tài khoản "${empName}" vừa thay đổi vai trò từ [${oldRoleLabel}] sang [${newRoleLabel}]`)
       }
     }
 
@@ -3579,8 +3570,9 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
           isBankQrModalOpen.value = false
         }
       }
-      if (!options.silentToast) {
-        notifyWarning('Dữ liệu bán hàng vừa thay đổi!', changes.join(' • '), 6500)
+      const itemChanges = changes.filter(c => !c.toLowerCase().includes('nhân viên') && !c.toLowerCase().includes('vai trò'))
+      if (!options.silentToast && itemChanges.length > 0) {
+        notifyToastWarning('Dữ liệu giỏ hàng thay đổi', itemChanges.join(' • '), 4000)
       }
     }
   } catch (err) {
@@ -3703,7 +3695,7 @@ const handleCheckout = async (options = {}) => {
   const syncRes = await validateAndSyncHardCases({ isBeforeCheckout: true, silentToast: true })
   if (syncRes.abortedByStaffLock) return
 
-  const combinedAlerts = [...new Set([...pendingSyncAlerts.value, ...syncRes.changes])]
+  const combinedAlerts = [...new Set([...pendingSyncAlerts.value, ...syncRes.changes])].filter(c => !c.toLowerCase().includes('nhân viên') && !c.toLowerCase().includes('vai trò'))
   pendingSyncAlerts.value = []
 
   if (currentOrder.value.cart.length === 0) {
@@ -6094,10 +6086,24 @@ onUnmounted(() => {
               <div class="bank-clean-info-col">
                 <!-- Số tiền thanh toán -->
                 <div class="bank-clean-amount-box">
-                  <span class="bank-clean-amount-label">Số tiền cần thanh toán</span>
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="bank-clean-amount-label">Số tiền cần thanh toán</span>
+                    <button type="button" class="btn btn-xs py-0 px-2 rounded-pill border fw-bold"
+                      :class="isQrTest1k ? 'btn-warning text-dark' : 'btn-outline-primary'"
+                      style="font-size: 11px;"
+                      @click="toggleQrTest1k"
+                      :title="isQrTest1k ? 'Bấm để về số tiền thật' : 'Chuyển mã QR sang 1.000đ để test quét tiền'">
+                      {{ isQrTest1k ? '⚡ Đang QR Test 1.000đ (Bấm về tiền gốc)' : '⚡ Đổi QR sang 1.000đ test' }}
+                    </button>
+                  </div>
                   <div class="bank-clean-amount-row">
-                    <span class="bank-clean-amount-value">{{ formatVnd(bankTransferAmount) }}</span>
-                    <button class="btn-clean-copy-amount" @click="copyToClipboard(bankTransferAmount, 'số tiền')"
+                    <span class="bank-clean-amount-value" :class="{ 'text-warning': isQrTest1k }">
+                      {{ formatVnd(isQrTest1k ? 1000 : bankTransferAmount) }}
+                    </span>
+                    <span v-if="isQrTest1k" class="badge bg-warning-subtle text-warning-emphasis ms-2" style="font-size: 11px;">
+                      (Gốc: {{ formatVnd(bankTransferAmount) }})
+                    </span>
+                    <button class="btn-clean-copy-amount ms-auto" @click="copyToClipboard(isQrTest1k ? 1000 : bankTransferAmount, 'số tiền')"
                       title="Sao chép số tiền">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="2">

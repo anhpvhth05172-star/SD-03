@@ -919,7 +919,7 @@ onBeforeUnmount(() => {
 
           <section class="receipt-totals">
             <p><span>Tiền hàng</span><strong>{{ formatVnd(tienHang) }}</strong></p>
-            <p v-if="coGiamGia"><span>Giảm giá <small>({{ thongTinPhieu }})</small></span><strong>− {{ formatVnd(data.tienGiam) }}</strong></p>
+            <p v-if="coGiamGia"><span>Giảm giá <small v-if="data.maPhieuGiamGia">({{ data.maPhieuGiamGia }})</small></span><strong>− {{ formatVnd(data.tienGiam) }}</strong></p>
             <p v-if="Number(data.phiVanChuyen) > 0"><span>Phí vận chuyển</span><strong>{{ formatVnd(data.phiVanChuyen) }}</strong></p>
             <p class="receipt-grand-total"><span>Tổng thanh toán</span><strong>{{ formatVnd(data.tienSauGiamGia) }}</strong></p>
             <p><span>Thanh toán</span><strong>{{ data.tenPhuongThucThanhToan || '—' }}</strong></p>
@@ -1329,16 +1329,24 @@ onBeforeUnmount(() => {
                 <span>Tổng tiền hàng</span>
                 <span>{{ formatVnd(tienHang) }}</span>
               </div>
-              <div class="sum-row" v-if="coGiamGia">
-                <span>Phiếu giảm giá</span>
-                <span class="sum-voucher" :title="tenGiamGia">{{ thongTinPhieu }}</span>
+              <div class="sum-row" v-if="data.tenDotGiamGia">
+                <span>Đợt giảm giá <small class="text-muted">({{ data.tenDotGiamGia }})</small></span>
+                <span class="sum-discount">Đã áp dụng</span>
               </div>
-              <div class="sum-row">
-                <span>Giảm giá</span>
-                <span v-if="coGiamGia" class="sum-discount">
+              <div class="sum-row" v-if="coGiamGia">
+                <span class="d-inline-flex align-items-center gap-1">
+                  <span>Phiếu giảm giá</span>
+                  <span v-if="data.maPhieuGiamGia" class="voucher-badge" :title="tenGiamGia">
+                    {{ data.maPhieuGiamGia }}
+                  </span>
+                </span>
+                <span class="sum-discount">
                   − {{ formatVnd(data.tienGiam) }}
                 </span>
-                <span v-else>− 0 ₫</span>
+              </div>
+              <div class="sum-row" v-else>
+                <span>Giảm giá</span>
+                <span>− 0 ₫</span>
               </div>
               <div class="sum-row" v-if="Number(data.phiVanChuyen) > 0">
                 <span>Phí vận chuyển</span>
@@ -2303,6 +2311,21 @@ onBeforeUnmount(() => {
   font-size: 12.5px !important;
   text-align: right;
   word-break: break-word;
+}
+
+.voucher-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px dashed #93c5fd;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
+  vertical-align: middle;
 }
 
 .sum-final {
