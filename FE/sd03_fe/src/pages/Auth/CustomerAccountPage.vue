@@ -26,6 +26,7 @@ const thongBao = ref({ type: '', text: '' })
 const showEditModal = ref(false)
 const editForm = ref({
   tenKhachHang: '',
+  email: '',
   soDienThoai: '',
   ngaySinh: '',
   gioiTinh: 'Nam',
@@ -177,6 +178,7 @@ const moModalSua = () => {
   editError.value = ''
   editForm.value = {
     tenKhachHang: thongTin.value?.tenKhachHang || '',
+    email: thongTin.value?.email || '',
     soDienThoai: thongTin.value?.soDienThoai || '',
     ngaySinh: thongTin.value?.ngaySinh ? String(thongTin.value.ngaySinh).split('T')[0] : '',
     gioiTinh: thongTin.value?.gioiTinh || 'Nam',
@@ -195,15 +197,30 @@ const luuThongTin = async () => {
     editError.value = 'Họ và tên không được để trống'
     return
   }
+  if (!editForm.value.email || !editForm.value.email.trim()) {
+    editError.value = 'Email không được để trống'
+    return
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.value.email.trim())) {
+    editError.value = 'Địa chỉ email không đúng định dạng (VD: nguyenvan@gmail.com)'
+    return
+  }
   savingProfile.value = true
   try {
     const res = await http.put('/auth/thong-tin', {
       tenKhachHang: editForm.value.tenKhachHang.trim(),
+      email: editForm.value.email.trim(),
       soDienThoai: editForm.value.soDienThoai ? editForm.value.soDienThoai.trim() : null,
       ngaySinh: editForm.value.ngaySinh || null,
       gioiTinh: editForm.value.gioiTinh || null,
     })
     thongTin.value = res.data || {}
+    try {
+      const savedUser = JSON.parse(localStorage.getItem('polyshoes_user') || '{}')
+      savedUser.email = res.data?.email || editForm.value.email.trim()
+      savedUser.tenKhachHang = res.data?.tenKhachHang || editForm.value.tenKhachHang.trim()
+      localStorage.setItem('polyshoes_user', JSON.stringify(savedUser))
+    } catch {}
     thongBao.value = { type: 'success', text: 'Cập nhật thông tin thành công!' }
     setTimeout(() => { thongBao.value = { type: '', text: '' } }, 3500)
     dongModalSua()
@@ -743,6 +760,18 @@ onMounted(() => {
               type="text"
               class="form-control"
               placeholder="Nhập họ và tên đầy đủ"
+              required
+            />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-medium small">Email nhận thông báo <span class="text-danger">*</span></label>
+            <input
+              v-model="editForm.email"
+              type="email"
+              class="form-control"
+              placeholder="Nhập email (ví dụ: nguyenvan@gmail.com)"
+              maxlength="150"
               required
             />
           </div>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 
 const currentOrderData = ref({
   orderCode: '',
@@ -127,6 +127,48 @@ const showQrCenterModal = computed(() => {
   return Boolean(currentOrderData.value?.isBankQrModalOpen) && Number(currentOrderData.value?.finalTotal || 0) > 0
 })
 
+const seenOrdersWithItems = ref(new Set())
+const justCompletedCheckout = ref(false)
+
+const isStandby = computed(() => {
+  const data = currentOrderData.value
+  if (!data) return true
+  const cart = data.cart || []
+  const code = data.orderCode || 'DEFAULT'
+
+  // 1. Khi giỏ hàng có sản phẩm -> Thoát màn hình chờ ngay lập tức
+  if (cart.length > 0) {
+    return false
+  }
+
+  // 2. Vừa hoàn tất mua hàng xong -> Vào màn hình chờ
+  if (data.isCheckoutCompleted || justCompletedCheckout.value) {
+    return true
+  }
+
+  // 3. Nếu đơn này đã từng thêm sản phẩm nhưng sau đó giỏ bị xóa về 0:
+  // "nếu thêm rồi mà trong giỏ hàng ko có thì cũng ko bật màn hình chờ" -> Giữ màn hình bán hàng
+  if (data.hasHadItems || seenOrdersWithItems.value.has(code)) {
+    return false
+  }
+
+  // 4. Khi chưa mua hàng (mới mở hóa đơn chưa từng có sản phẩm nào) -> Màn hình chờ
+  return true
+})
+
+watch(() => currentOrderData.value, (data) => {
+  if (!data) return
+  const code = data.orderCode || 'DEFAULT'
+  if (data.cart && data.cart.length > 0) {
+    seenOrdersWithItems.value.add(code)
+    justCompletedCheckout.value = false
+  }
+  if (data.isCheckoutCompleted) {
+    justCompletedCheckout.value = true
+    seenOrdersWithItems.value.delete(code)
+  }
+}, { deep: true, immediate: true })
+
 const qrCodeUrl = computed(() => {
   const total = Number(currentOrderData.value?.finalTotal || 0)
   if (total <= 0) return null
@@ -148,8 +190,16 @@ onMounted(() => {
       if (event.data && typeof event.data === 'object') {
         if (event.data.type === 'POS_POPUP_STATE') {
           activePosPopup.value = event.data.popup
+        } else if (event.data.type === 'POS_CHECKOUT_COMPLETED') {
+          justCompletedCheckout.value = true
+          if (event.data.orderCode) {
+            seenOrdersWithItems.value.delete(event.data.orderCode)
+          }
         } else {
           currentOrderData.value = event.data
+          if (event.data.isCheckoutCompleted) {
+            justCompletedCheckout.value = true
+          }
         }
       }
     }
@@ -159,6 +209,9 @@ onMounted(() => {
   window.addEventListener('storage', (e) => {
     if (e.key === 'polyshoes_pos_popup_state') {
       loadPopupFromStorage()
+    }
+    if (e.key === 'polyshoes_customer_display_completed') {
+      justCompletedCheckout.value = true
     }
     if (e.key === 'polyshoes_customer_display_payload' || e.key === 'polyshoes_pos_pending_orders_v1' || e.key === 'polyshoes_pos_active_idx_v1') {
       loadOrderFromStorage()
@@ -206,34 +259,52 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <!-- Info Bar Hóa Đơn & Khách Hàng -->
-    <div class="order-info-banner">
-      <div class="info-tag order-tag">
-        <span class="tag-label">MÃ ĐƠN HÀNG:</span>
-        <strong class="tag-val">{{ currentOrderData.orderCode || 'Đang tạo đơn' }}</strong>
-        <span class="tag-badge" v-if="currentOrderData.orderTitle">({{ currentOrderData.orderTitle }})</span>
+    <!-- MÀN HÌNH CHỜ (STANDBY SCREEN) -->
+    <main v-if="isStandby" class="display-standby-screen">
+      <div class="standby-card">
+        <div class="standby-logo-wrap">
+          <img src="/images/logo_polyshoes_final.png" alt="PolyShoes" class="standby-logo" />
+        </div>
+        <h2 class="standby-greeting">
+          Xin chào quý khách và cảm ơn đã tin tưởng sản phẩm của chúng tôi
+        </h2>
+        <div class="standby-brand-tag">
+          <span class="brand-tag-dot"></span>
+          <span>POLYSHOES · HỆ THỐNG GIÀY SNEAKER CHÍNH HÃNG</span>
+        </div>
+      </div>
+    </main>
+
+    <!-- MÀN HÌNH BÁN HÀNG (ACTIVE CART SCREEN) -->
+    <template v-else>
+      <!-- Info Bar Hóa Đơn & Khách Hàng -->
+      <div class="order-info-banner">
+        <div class="info-tag order-tag">
+          <span class="tag-label">MÃ ĐƠN HÀNG:</span>
+          <strong class="tag-val">{{ currentOrderData.orderCode || 'Đang tạo đơn' }}</strong>
+          <span class="tag-badge" v-if="currentOrderData.orderTitle">({{ currentOrderData.orderTitle }})</span>
+        </div>
+
+        <div class="info-tag customer-tag">
+          <span class="tag-label">KHÁCH HÀNG:</span>
+          <strong class="tag-val" v-if="currentOrderData.customer">
+            {{ currentOrderData.customer.tenKhachHang }}
+            <span class="cust-phone" v-if="currentOrderData.customer.soDienThoai">({{ currentOrderData.customer.soDienThoai }})</span>
+          </strong>
+          <span class="tag-val text-muted" v-else>Khách mua lẻ tại quầy</span>
+        </div>
+
+        <div class="info-tag mode-tag" v-if="currentOrderData.isDelivery">
+          <i class="bi bi-truck me-1"></i>
+          <span>ĐƠN GIAO HÀNG TẬN NƠI</span>
+          <span v-if="deliveryInfo?.address" class="delivery-address-pill ms-2">
+            ({{ deliveryInfo.recipientName }} - {{ deliveryInfo.address }})
+          </span>
+        </div>
       </div>
 
-      <div class="info-tag customer-tag">
-        <span class="tag-label">KHÁCH HÀNG:</span>
-        <strong class="tag-val" v-if="currentOrderData.customer">
-          {{ currentOrderData.customer.tenKhachHang }}
-          <span class="cust-phone" v-if="currentOrderData.customer.soDienThoai">({{ currentOrderData.customer.soDienThoai }})</span>
-        </strong>
-        <span class="tag-val text-muted" v-else>Khách mua lẻ tại quầy</span>
-      </div>
-
-      <div class="info-tag mode-tag" v-if="currentOrderData.isDelivery">
-        <i class="bi bi-truck me-1"></i>
-        <span>ĐƠN GIAO HÀNG TẬN NƠI</span>
-        <span v-if="deliveryInfo?.address" class="delivery-address-pill ms-2">
-          ({{ deliveryInfo.recipientName }} - {{ deliveryInfo.address }})
-        </span>
-      </div>
-    </div>
-
-    <!-- Main Content Grid -->
-    <main class="display-main">
+      <!-- Main Content Grid -->
+      <main class="display-main">
       <!-- Cột Trái: Bảng Sản Phẩm Trong Đơn Hàng -->
       <section class="display-col-cart">
         <div class="panel-card cart-panel">
@@ -376,6 +447,7 @@ onUnmounted(() => {
         </div>
       </section>
     </main>
+    </template>
 
     <!-- Popup Mã QR Thanh Toán Ở Giữa Màn Hình Khi Chuyển Sang Chuyển Khoản -->
     <transition name="qr-popup-fade">
@@ -455,6 +527,93 @@ onUnmounted(() => {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   display: flex;
   flex-direction: column;
+}
+
+/* Standby Welcome Screen */
+.display-standby-screen {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  background: radial-gradient(circle at center, #ffffff 0%, #fef2f2 55%, #fee2e2 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.standby-card {
+  max-width: 860px;
+  width: 100%;
+  text-align: center;
+  padding: 56px 40px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 2px solid #fecaca;
+  border-radius: 32px;
+  box-shadow: 0 25px 50px -12px rgba(185, 28, 28, 0.15), 0 0 0 1px rgba(220, 38, 38, 0.05);
+  backdrop-filter: blur(10px);
+  animation: standbyFadeIn 0.5s ease-out;
+}
+
+.standby-logo-wrap {
+  width: 170px;
+  height: 170px;
+  margin: 0 auto 32px;
+  padding: 16px;
+  border-radius: 28px;
+  background: #ffffff;
+  border: 2px solid #fee2e2;
+  box-shadow: 0 12px 28px -6px rgba(220, 38, 38, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.standby-logo {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.standby-greeting {
+  font-size: 30px;
+  font-weight: 800;
+  color: #991b1b;
+  line-height: 1.45;
+  margin-bottom: 24px;
+  letter-spacing: -0.3px;
+}
+
+.standby-brand-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 22px;
+  border-radius: 9999px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.brand-tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+}
+
+@keyframes standbyFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 /* Header */

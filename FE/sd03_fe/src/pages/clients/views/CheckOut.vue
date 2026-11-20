@@ -72,7 +72,12 @@ async function fetchCustomer() {
 const customer = ref(null);
 onMounted(async () => {
   const [, shippingResult] = await Promise.allSettled([
-    fetchCustomer().then((result) => { customer.value = result; }),
+    fetchCustomer().then((result) => {
+      customer.value = result;
+      if (result?.email && !f.email) {
+        f.email = result.email;
+      }
+    }),
     loadProvinces(),
     getFreeshipConfig().then((cfg) => {
       if (cfg?.freeShipThreshold != null) freeShipThreshold.value = Number(cfg.freeShipThreshold);
@@ -697,6 +702,9 @@ watch(
   currentUser,
   (u) => {
     if (!u) return;
+    if (u.email && !f.email) {
+      f.email = u.email;
+    }
     const def = savedAddresses.value[0]; // đã sort: mặc định đứng đầu
     if (def) {
       chooseAddress(def.id);
@@ -1013,7 +1021,7 @@ function buildHoaDonRequest() {
     idKhachHang: customer.value?.id ?? null,
     tenKhachHang: f.name.trim(),
     soDienThoaiKhachHang: f.phone.trim(),
-    email: customer.value?.email || f.email?.trim() || null,
+    email: f.email?.trim() || customer.value?.email || null,
     diaChiNhanHang: fullDeliveryAddress.value,
     ghiChu: f.note.trim(),
 
@@ -1150,19 +1158,15 @@ async function submit() {
   errors.phone = /^0\d{9}$/.test(f.phone)
     ? ""
     : "Số điện thoại gồm 10 số, bắt đầu bằng 0.";
-  if (!isLoggedIn.value) {
-    if (!f.email || !f.email.trim()) {
-      errors.email = "Vui lòng nhập địa chỉ email nhận thông báo đơn hàng.";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) {
-      errors.email = "Địa chỉ email không đúng định dạng (VD: nguyenvan@gmail.com).";
-    } else {
-      errors.email = "";
-    }
+  if (!f.email && customer.value?.email) {
+    f.email = customer.value.email;
+  }
+  if (!f.email || !f.email.trim()) {
+    errors.email = "Vui lòng nhập địa chỉ email nhận thông báo đơn hàng.";
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) {
+    errors.email = "Địa chỉ email không đúng định dạng (VD: nguyenvan@gmail.com).";
   } else {
     errors.email = "";
-    if (customer.value?.email && !f.email) {
-      f.email = customer.value.email;
-    }
   }
   errors.address = currentSelectedSavedAddr.value?.address || (f.address.trim() && provinceId.value && wardId.value)
     ? ""
@@ -1712,7 +1716,7 @@ const confirmQrPayment = async () => {
           </div>
 
           <div class="row g-3">
-            <div v-if="!isLoggedIn" class="col-12">
+            <div class="col-12">
               <label class="co-label">Email nhận thông báo đơn hàng <span class="text-danger">*</span></label>
               <input v-model="f.email" type="email" class="form-control co-input"
                 :class="{ 'is-invalid': errors.email }"

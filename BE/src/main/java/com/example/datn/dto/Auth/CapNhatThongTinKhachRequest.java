@@ -8,6 +8,7 @@ import lombok.Setter;
 @Setter
 public class CapNhatThongTinKhachRequest {
     private String tenKhachHang;
+    private String email;
     private String soDienThoai;
     private LocalDate ngaySinh;
     private String gioiTinh;

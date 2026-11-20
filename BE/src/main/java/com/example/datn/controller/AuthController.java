@@ -170,6 +170,16 @@ public class AuthController {
                 if (req.getTenKhachHang() != null && !req.getTenKhachHang().trim().isEmpty()) {
                     khachHang.setTenKhachHang(req.getTenKhachHang().trim());
                 }
+                if (req.getEmail() != null && !req.getEmail().trim().isEmpty()) {
+                    String emailMoi = req.getEmail().trim();
+                    if (!emailMoi.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$")) {
+                        throw new IllegalArgumentException("Địa chỉ email không đúng định dạng");
+                    }
+                    if (khachHangRepository.existsByEmailAndIdNot(emailMoi, idNguoiDung)) {
+                        throw new IllegalArgumentException("Email này đã được sử dụng bởi tài khoản khác");
+                    }
+                    khachHang.setEmail(emailMoi);
+                }
                 if (req.getSoDienThoai() != null && !req.getSoDienThoai().trim().isEmpty()) {
                     khachHang.setSoDienThoai(req.getSoDienThoai().trim());
                 }

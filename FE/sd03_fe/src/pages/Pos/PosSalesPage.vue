@@ -643,6 +643,8 @@ const createNewOrder = (silent = false) => {
     userRemovedVoucher: false,
     customCashGiven: false,
     cashGiven: 0,
+    hasHadItems: false,
+    isCheckoutCompleted: false,
     transferGiven: 0,
     note: ''
   }
@@ -807,6 +809,8 @@ const broadcastActiveOrder = () => {
         ].filter(Boolean).join(', '),
         shippingFee: Number(order.deliveryInfo.shippingFee || 0)
       } : null,
+      hasHadItems: Boolean(order.hasHadItems || (order.cart && order.cart.length > 0)),
+      isCheckoutCompleted: Boolean(order.isCheckoutCompleted),
       isBankQrModalOpen: Boolean(typeof isBankQrModalOpen !== 'undefined' && isBankQrModalOpen.value),
       updatedAt: Date.now()
     }
@@ -853,6 +857,10 @@ const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
   if (!kiemTraQuyenBanHang('thêm sản phẩm vào giỏ hàng')) return
   if (!currentOrder.value) {
     createNewOrder(true)
+  }
+  if (currentOrder.value) {
+    currentOrder.value.hasHadItems = true
+    currentOrder.value.isCheckoutCompleted = false
   }
 
   const targetProd = ensureProductInCatalog(productVariant)
@@ -1868,6 +1876,7 @@ const saveQuickCustomer = async () => {
     allCustomers.value.unshift(createdCust)
     selectCustomer(createdCust)
     isAddCustomerModalOpen.value = false
+    isVoucherModalOpen.value = false
 
     newCustomerForm.tenKhachHang = ''
     newCustomerForm.soDienThoai = ''
@@ -3228,6 +3237,56 @@ const availableEligibleVouchersCount = computed(() => {
   return allVouchers.value.filter(v => isVoucherEligible(v)).length
 })
 
+const isVoucherModalOpen = ref(false)
+const voucherSearchQuery = ref('')
+const voucherInputCode = ref('')
+
+const openVoucherModal = () => {
+  if (!currentOrder.value) createNewOrder()
+  voucherSearchQuery.value = ''
+  isVoucherModalOpen.value = true
+  validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: true })
+}
+
+const filteredVouchers = computed(() => {
+  const q = voucherSearchQuery.value.trim().toLowerCase()
+  const custId = currentOrder.value?.customer?.id ? Number(currentOrder.value.customer.id) : null
+
+  return allVouchers.value.filter(v => {
+    const isCaNhan = v.phamVi === 'CA_NHAN' || v.scope === 'CA_NHAN'
+    if (isCaNhan) {
+      if (!custId) return false
+      if (!isVoucherAssignedToCustomer(v, custId) && !hasCustomerUsedVoucher(v, custId)) {
+        return false
+      }
+    }
+    if (!q) return true
+    return (
+      (v.ma && v.ma.toLowerCase().includes(q)) ||
+      (v.ten && v.ten.toLowerCase().includes(q)) ||
+      (v.maPhieuGiamGia && v.maPhieuGiamGia.toLowerCase().includes(q))
+    )
+  })
+})
+
+const sortedFilteredVouchers = computed(() => {
+  const list = [...filteredVouchers.value]
+  return list.sort((a, b) => {
+    const elA = isVoucherEligible(a)
+    const elB = isVoucherEligible(b)
+    if (elA && !elB) return -1
+    if (!elA && elB) return 1
+
+    if (elA && elB) {
+      const discA = calculateVoucherDiscount(a, subTotal.value)
+      const discB = calculateVoucherDiscount(b, subTotal.value)
+      if (discB !== discA) return discB - discA
+    }
+
+    return (Number(a.hoaDonToiThieu || 0)) - (Number(b.hoaDonToiThieu || 0))
+  })
+})
+
 const getBestVoucherForOrder = (order = currentOrder.value) => {
   if (!order || !order.cart || order.cart.length === 0) return null
   const currentSub = order.cart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 0)), 0)
@@ -3300,7 +3359,7 @@ const nextVoucherSuggestion = computed(() => {
 })
 
 
-watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrder.value?.customer?.id], ([newSubTotal, newBest], [, , oldCustId]) => {
+watch([() => subTotal.value, () => currentOrder.value?.customer?.id], ([newSubTotal], [, oldCustId]) => {
   if (!currentOrder.value) return
   if (newSubTotal <= 0) {
     currentOrder.value.selectedVoucher = null
@@ -3313,61 +3372,25 @@ watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrd
     currentOrder.value.userRemovedVoucher = false
   }
 
+  // Nếu mã giảm giá hiện tại không còn hợp lệ (ví dụ: giảm số lượng sản phẩm làm tổng tiền dưới mức tối thiểu)
   if (currentOrder.value.selectedVoucher && !isVoucherEligible(currentOrder.value.selectedVoucher)) {
     const droppedV = currentOrder.value.selectedVoucher
     const vCode = droppedV.ma || droppedV.maPhieuGiamGia || 'Voucher'
 
-    currentOrder.value.selectedVoucher = newBest?.voucher || null
+    // BỎ TỰ ĐỘNG CHUYỂN: Chỉ gỡ mã không còn hợp lệ, không tự động chuyển sang mã khác
+    currentOrder.value.selectedVoucher = null
     currentOrder.value.userSelectedVoucherManually = false
     currentOrder.value.userRemovedVoucher = false
 
-    if (newBest?.voucher) {
-      const newCode = newBest.voucher.ma || newBest.voucher.maPhieuGiamGia || 'Mã mới'
-      const newDisc = calculateVoucherDiscount(newBest.voucher, newSubTotal)
-      notifyToast(
-        'Tự động áp dụng mã tốt nhất',
-        `Mã "${vCode}" không đủ điều kiện khi giảm số lượng, hệ thống đã tự động chuyển sang mã "${newCode}" (giảm ${formatVnd(newDisc)}).`,
-        'info',
-        3000
-      )
-    } else {
-      notifyToast(
-        'Đã gỡ phiếu giảm giá',
-        `Mã "${vCode}" đã được tự động gỡ do tổng tiền hàng (${formatVnd(newSubTotal)}) không còn đủ điều kiện tối thiểu.`,
-        'info',
-        2500
-      )
-    }
+    notifyToast(
+      'Đã gỡ phiếu giảm giá',
+      `Mã "${vCode}" đã được tự động gỡ do tổng tiền hàng (${formatVnd(newSubTotal)}) không còn đủ điều kiện tối thiểu.`,
+      'info',
+      2500
+    )
     return
   }
-
-  if (!currentOrder.value.selectedVoucher) {
-    if (newBest?.voucher && !currentOrder.value.userRemovedVoucher) {
-      currentOrder.value.selectedVoucher = newBest.voucher
-      currentOrder.value.userSelectedVoucherManually = false
-    }
-  } else if (newBest?.voucher && currentOrder.value.selectedVoucher.id !== newBest.voucher.id) {
-    const curV = currentOrder.value.selectedVoucher
-    const curDisc = calculateVoucherDiscount(curV, newSubTotal)
-    const newDisc = calculateVoucherDiscount(newBest.voucher, newSubTotal)
-
-    // Khi thêm sản phẩm đạt mức giảm tốt hơn: tự động áp dụng ngay mà không hỏi popup xác nhận
-    if (newDisc > curDisc) {
-      const curCode = curV.ma || curV.maPhieuGiamGia || 'Mã hiện tại'
-      const newCode = newBest.voucher.ma || newBest.voucher.maPhieuGiamGia || 'Mã mới'
-
-      currentOrder.value.selectedVoucher = newBest.voucher
-      currentOrder.value.userSelectedVoucherManually = false
-      currentOrder.value.declinedUpgradeVoucherId = null
-
-      notifyToast(
-        'Đã tự động áp dụng mã tốt hơn!',
-        `Đơn hàng tự động đổi sang mã "${newCode}" (giảm ${formatVnd(newDisc)}) thay cho "${curCode}"`,
-        'success',
-        2500
-      )
-    }
-  }
+  // Tuyệt đối không tự động gán mã mới khi chưa có mã hoặc tự động chuyển mã khi tổng tiền tăng
 }, { immediate: true })
 
 watch(finalTotal, (newTotal, oldTotal) => {
@@ -3566,6 +3589,7 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
   if (isSyncingHardCases) return { abortedByStaffLock: false, changes: [] }
   if (!options.isBeforeCheckout) {
     const hasOpenModalOrDialog =
+      isVoucherModalOpen.value ||
       isQrModalOpen.value ||
       isAddCustomerModalOpen.value ||
       isQuickAddAddressModalOpen.value ||
@@ -3649,6 +3673,11 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
         const newOrderSubTotal = (order.cart || []).reduce((sum, i) => sum + (Number(i.price || 0) * Number(i.quantity || 0)), 0)
         const oldOrderSubTotal = oldSubTotalsMap.get(order.id) ?? newOrderSubTotal
         const oldDiscAmt = calculateVoucherDiscount(oldV, oldOrderSubTotal)
+
+        const custId = order.customer?.id ? Number(order.customer.id) : null
+        const isCaNhan = freshV && (freshV.phamVi === 'CA_NHAN' || freshV.scope === 'CA_NHAN')
+        const alreadyUsed = Boolean(custId && freshV && hasCustomerUsedVoucher(freshV, custId))
+        const notAssigned = Boolean(isCaNhan && (!custId || !isVoucherAssignedToCustomer(freshV, custId)))
 
         let voucherInvalidReason = ''
         if (!freshV || freshV.trangThai === false) {
@@ -3808,6 +3837,7 @@ const applyVoucher = async (voucher) => {
   currentOrder.value.userSelectedVoucherManually = true
   currentOrder.value.userRemovedVoucher = false
   voucherInputCode.value = ''
+  isVoucherModalOpen.value = false
   notifySuccess('Đã áp dụng voucher', `Đã áp dụng mã "${voucher.ma || voucher.maPhieuGiamGia}" (${voucher.ten})!`)
 }
 
@@ -3818,6 +3848,7 @@ const removeVoucher = () => {
     currentOrder.value.userSelectedVoucherManually = false
     currentOrder.value.userRemovedVoucher = true
     voucherInputCode.value = ''
+    isVoucherModalOpen.value = false
     notifySuccess('Đã hủy voucher', 'Đã hủy áp dụng phiếu giảm giá cho đơn hàng!')
   }
 }
@@ -4053,15 +4084,12 @@ const handleCheckout = async (options = {}) => {
     }
 
     if (currentOrder.value.selectedVoucher && !isVoucherEligible(currentOrder.value.selectedVoucher)) {
-      const fallbackBest = getBestVoucherForOrder(currentOrder.value)
-      currentOrder.value.selectedVoucher = fallbackBest?.voucher || null
+      const droppedV = currentOrder.value.selectedVoucher
+      const vCode = droppedV.ma || droppedV.maPhieuGiamGia || 'Voucher'
+      currentOrder.value.selectedVoucher = null
       currentOrder.value.userSelectedVoucherManually = false
-      payload.idPhieuGiamGia = fallbackBest?.voucher ? fallbackBest.voucher.id : null
-      if (fallbackBest?.voucher) {
-        notifyWarning('Đổi voucher tốt nhất', `Mã giảm giá đã chọn không còn khả dụng, hệ thống tự động chuyển sang mã tốt nhất tiếp theo "${fallbackBest.voucher.ma}"!`)
-      } else {
-        notifyWarning('Bỏ mã giảm giá', 'Mã giảm giá đã chọn không còn khả dụng cho khách hàng này.')
-      }
+      payload.idPhieuGiamGia = null
+      notifyWarning('Bỏ mã giảm giá', `Mã giảm giá "${vCode}" không còn khả dụng cho đơn hàng này và đã được gỡ bỏ.`)
     } else {
       payload.idPhieuGiamGia = currentOrder.value.selectedVoucher ? currentOrder.value.selectedVoucher.id : null
     }
@@ -4086,7 +4114,7 @@ const handleCheckout = async (options = {}) => {
         errMsg.includes('Phiếu giảm giá') ||
         errMsg.includes('phiếu giảm giá')
       )) {
-        console.warn('Voucher rejected by backend, falling back to next best voucher:', errMsg)
+        console.warn('Voucher rejected by backend:', errMsg)
         const rejectedVoucherId = Number(payload.idPhieuGiamGia)
         const custId = payload.idKhachHang ? Number(payload.idKhachHang) : null
         if (custId) {
@@ -4101,13 +4129,10 @@ const handleCheckout = async (options = {}) => {
             }
           }
         }
-        const nextBest = getBestVoucherForOrder(currentOrder.value)
-        currentOrder.value.selectedVoucher = nextBest?.voucher || null
-        payload.idPhieuGiamGia = nextBest?.voucher ? nextBest.voucher.id : null
-
-        notifyWarning('Tự động đổi voucher', `Mã vừa chọn không hợp lệ với khách hàng. Hệ thống tự động chuyển sang ${nextBest?.voucher ? `mã tốt nhất tiếp theo "${nextBest.voucher.ma}"` : 'không dùng voucher'} và hoàn tất thanh toán!`)
-
-        invoiceRes = await doCheckoutCall()
+        currentOrder.value.selectedVoucher = null
+        payload.idPhieuGiamGia = null
+        notifyError('Lỗi mã giảm giá', errMsg || 'Mã giảm giá đã chọn không hợp lệ hoặc không đủ điều kiện!')
+        return
       } else {
         throw checkoutErr
       }
@@ -4156,7 +4181,14 @@ const handleCheckout = async (options = {}) => {
 
     if (currentOrder.value) {
       currentOrder.value.cart = []
+      currentOrder.value.isCheckoutCompleted = true
     }
+    try {
+      const channel = new BroadcastChannel('polyshoes_pos_display_channel')
+      channel.postMessage({ type: 'POS_CHECKOUT_COMPLETED', orderCode: completedRecord.code })
+      channel.close()
+    } catch {}
+    localStorage.setItem('polyshoes_customer_display_completed', String(Date.now()))
 
     pendingOrders.value.splice(activeOrderIndex.value, 1)
     if (pendingOrders.value.length === 0) {
@@ -4507,6 +4539,7 @@ const handleKeyDown = (e) => {
     isProductModalOpen.value = false
     isQrModalOpen.value = false
     isAddCustomerModalOpen.value = false
+    isVoucherModalOpen.value = false
     isQuickAddAddressModalOpen.value = false
     isSelectAddressModalOpen.value = false
     isBankQrModalOpen.value = false
@@ -5337,18 +5370,29 @@ onUnmounted(() => {
 
           <div class="checkout-voucher-section" v-if="currentOrder">
             <div class="voucher-section-header">
-              <span class="voucher-section-title">Phiếu giảm giá (Tự động áp dụng tốt nhất)</span>
+              <span class="voucher-section-title">Phiếu giảm giá / Voucher</span>
+              <button type="button" class="btn-browse-vouchers"
+                @click="openVoucherModal">
+                {{ currentOrder.selectedVoucher ? 'Đổi mã' : 'Danh sách' }}
+                <span class="voucher-badge-num" v-if="allVouchers.length > 0">({{ availableEligibleVouchersCount }}/{{ allVouchers.length }})</span>
+              </button>
             </div>
 
-            <!-- Thẻ voucher đã được áp dụng tốt nhất -->
+            <!-- Ô nhập mã nhanh trực tiếp trên sidebar -->
+            <div class="voucher-input-group mb-2">
+              <input v-model="voucherInputCode" type="text" class="voucher-quick-input"
+                placeholder="Nhập mã voucher..." @keyup.enter="handleApplyManualVoucher" />
+              <button type="button" class="btn-apply-manual-voucher" @click="handleApplyManualVoucher">
+                Áp dụng
+              </button>
+            </div>
+
+            <!-- Thẻ voucher đã được áp dụng -->
             <div v-if="currentOrder.selectedVoucher" class="selected-voucher-card">
               <div class="selected-voucher-content">
                 <div class="selected-voucher-top">
                   <span class="selected-voucher-code">{{ currentOrder.selectedVoucher.ma ||
                     currentOrder.selectedVoucher.maPhieuGiamGia }}</span>
-                  <span class="badge bg-success text-white" style="font-size: 10px; padding: 2px 6px;">
-                    Tốt nhất
-                  </span>
                   <span class="selected-voucher-val">- {{ formatVnd(discountAmount) }}</span>
                 </div>
                 <div class="selected-voucher-desc">
@@ -5357,6 +5401,9 @@ onUnmounted(() => {
                     formatVnd(currentOrder.selectedVoucher.hoaDonToiThieu) }}</span>
                 </div>
               </div>
+              <button class="btn-remove-voucher-pill" @click="removeVoucher" title="Gỡ bỏ mã giảm giá">
+                Gỡ
+              </button>
             </div>
 
             <!-- Gợi ý mua thêm (như bán hàng online) -->
@@ -6247,6 +6294,106 @@ onUnmounted(() => {
               </svg>
               <span>{{ isSavingQuickAddress ? 'Đang lưu...' : 'Lưu & Áp dụng ngay' }}</span>
             </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- MODAL PHIẾU GIẢM GIÁ (CHỌN THỦ CÔNG - KHÔNG TỰ ĐỘNG CHUYỂN MÃ) -->
+    <transition name="fade">
+      <div v-if="isVoucherModalOpen" class="pos-modal-overlay" @click.self="isVoucherModalOpen = false">
+        <div class="pos-modal-dialog modal-voucher-dialog">
+          <div class="pos-modal-head">
+            <div class="modal-head-title">
+              <div class="modal-title-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                  <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                </svg>
+              </div>
+              <div class="modal-title-text-group">
+                <h3>Phiếu giảm giá</h3>
+                <span class="modal-badge-count">{{ availableEligibleVouchersCount }}/{{ allVouchers.length }} dùng được</span>
+              </div>
+            </div>
+            <button class="pos-modal-close" @click="isVoucherModalOpen = false" title="Đóng (Esc)">×</button>
+          </div>
+
+          <div class="pos-modal-body">
+            <div class="voucher-modal-search-bar">
+              <input v-model="voucherSearchQuery" type="text" placeholder="Nhập mã hoặc tên phiếu giảm giá..."
+                class="voucher-search-inp" @keyup.enter="handleModalSearchApply" />
+              <button v-if="voucherSearchQuery.trim()" type="button" class="btn-modal-apply-code"
+                @click="handleModalSearchApply">
+                Áp dụng mã
+              </button>
+            </div>
+
+            <div class="voucher-cards-list">
+              <div v-for="v in sortedFilteredVouchers" :key="v.id" class="voucher-card-item" :class="{
+                eligible: isVoucherEligible(v),
+                selected: currentOrder?.selectedVoucher?.id === v.id,
+                ineligible: !isVoucherEligible(v)
+              }">
+                <div class="voucher-card-left">
+                  <div class="voucher-discount-highlight">
+                    {{ formatVoucherValue(v) }}
+                  </div>
+                  <div class="voucher-type-sub">
+                    {{ v.loaiGiamGia === 'PERCENT' || v.loaiGiamGia === '%' ? 'GIẢM %' : 'GIẢM TIỀN' }}
+                  </div>
+                </div>
+
+                <div class="voucher-card-body">
+                  <div class="voucher-card-header-row">
+                    <span class="voucher-card-code">{{ v.ma }}</span>
+                    <span v-if="isVoucherEligible(v)" class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 11px;">
+                      Dùng được
+                    </span>
+                    <span v-else class="badge bg-secondary-subtle text-secondary border border-secondary-subtle" style="font-size: 11px;">
+                      Không dùng được
+                    </span>
+                    <span v-if="v.soLuong" class="voucher-card-remain">
+                      Còn {{ Math.max(0, (v.soLuong || 0) - (v.soLuongDaSuDung || 0)) }} lượt
+                    </span>
+                  </div>
+                  <div class="voucher-card-name">{{ v.ten }}</div>
+                  <div class="voucher-card-conditions">
+                    <span>Đơn từ: <strong>{{ formatVnd(v.hoaDonToiThieu || 0) }}</strong></span>
+                    <span v-if="v.giamToiDa"> • Tối đa: <strong>{{ formatVnd(v.giamToiDa) }}</strong></span>
+                  </div>
+
+                  <div v-if="isVoucherEligible(v) && subTotal > 0" class="voucher-calc-saving text-success fw-semibold">
+                    Giảm được {{ formatVnd(calculateVoucherDiscount(v, subTotal)) }}
+                  </div>
+
+                  <div class="voucher-card-date" v-if="v.ngayKetThuc">
+                    HSD: {{ formatDateVn(v.ngayKetThuc) }}
+                  </div>
+                  <div v-if="!isVoucherEligible(v)" class="voucher-ineligible-msg text-danger small">
+                    {{ getVoucherIneligibilityReason(v) }}
+                  </div>
+                </div>
+
+                <div class="voucher-card-action">
+                  <button v-if="currentOrder?.selectedVoucher?.id === v.id" type="button" class="btn btn-sm btn-success fw-bold px-3 py-1"
+                    @click="removeVoucher" title="Bấm để gỡ bỏ voucher">
+                    ✓ Đang dùng
+                  </button>
+                  <button v-else-if="isVoucherEligible(v)" type="button" class="btn btn-sm btn-outline-primary fw-bold px-3 py-1"
+                    @click="applyVoucher(v)">
+                    Áp dụng
+                  </button>
+                  <button v-else type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" disabled>
+                    Không khả dụng
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="sortedFilteredVouchers.length === 0" class="empty-vouchers-msg">
+                Không tìm thấy phiếu giảm giá nào phù hợp với "{{ voucherSearchQuery }}".
+              </div>
+            </div>
           </div>
         </div>
       </div>
