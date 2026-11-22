@@ -276,7 +276,7 @@ export const layPhuongXa = async (ds, tinh) => {
   const fetchSub = async (subCode) => {
     if (!(typeof subCode === 'number' || !isNaN(Number(subCode)))) return null
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 8000)
+    const timer = setTimeout(() => ctrl.abort(), 3500)
     try {
       // 1. Ưu tiên API v2 (mô hình 2 cấp trực thuộc Tỉnh -> Phường/Xã)
       try {

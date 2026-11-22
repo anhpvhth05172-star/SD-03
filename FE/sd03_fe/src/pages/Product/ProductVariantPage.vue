@@ -6,7 +6,7 @@ import QuickAddModal from '@/components/QuickAddModal.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import CurrencyInput from '@/components/CurrencyInput.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
-import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm, notifyConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 import http, { API_ORIGIN } from '@/api/http'
 import { getToken } from '@/utils/auth'
@@ -943,6 +943,14 @@ const saveAddVariant = async () => {
     return
   }
 
+  const ok = await notifyConfirm(
+    'Xác nhận thêm biến thể',
+    'Bạn có chắc chắn muốn thêm biến thể mới này không?',
+    'Xác nhận thêm',
+    'Hủy'
+  )
+  if (!ok) return
+
   isSubmittingAdd.value = true
   try {
     const payload = [{
@@ -1217,6 +1225,14 @@ const saveEditVariant = async () => {
   const stockNum = Number(editForm.stock)
   const priceNum = Number(editForm.price)
   const targetSpId = editForm.idSanPham
+
+  const ok = await notifyConfirm(
+    'Xác nhận cập nhật biến thể',
+    `Bạn có chắc chắn muốn lưu thay đổi cho biến thể "${editForm.maCtsp}" (Giá: ${formatVnd(priceNum)}, Tồn: ${stockNum})?`,
+    'Xác nhận lưu',
+    'Hủy'
+  )
+  if (!ok) return
 
   isSubmittingEdit.value = true
   try {

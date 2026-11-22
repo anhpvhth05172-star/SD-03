@@ -9,50 +9,50 @@ import {
   getUser,
 } from '../utils/auth'
 import { refreshSession } from '../api/http'
-import AdminLayout from '../layouts/AdminLayout.vue'
-import ClientLayout from '@/layouts/clients/ClientLayout.vue'
-import ShippingFeeSettingsPage from '@/pages/Shipping/ShippingFeeSettingsPage.vue'
-import ProductListPage from '@/pages/Product/ProductListPage.vue'
-import ProductCreatePage from '@/pages/Product/ProductCreatePage.vue'
-import ProductVariantPage from '@/pages/Product/ProductVariantPage.vue'
-import InvoiceListPage from '@/pages/Invoice/InvoiceListPage.vue'
-import InvoiceDetailPage from '@/pages/Invoice/InvoiceDetailPage.vue'
-import InvoiceFormPage from '@/pages/Invoice/InvoiceFormPage.vue'
-import VoucherListPage from '@/pages/Discount/VoucherListPage.vue'
-import DiscountEventPage from '@/pages/Discount/DiscountEventPage.vue'
-import EmployeeListPage from '@/pages/Employee/EmployeeListPage.vue'
-import EmployeeCreatePage from '@/pages/Employee/EmployeeCreatePage.vue'
-import CustomerListPage from '@/pages/Customer/CustomerListPage.vue'
-import CustomerCreatePage from '@/pages/Customer/CustomerCreatePage.vue'
-import PosSalesPage from '@/pages/Pos/PosSalesPage.vue'
-import AttributeCategoryPage from '@/pages/Product/AttributeCategoryPage.vue'
-import DiscountForm from '@/pages/Discount/DiscountForm.vue'
-import VoucherForm from '@/pages/Discount/VoucherForm.vue'
-import DiscountFormDetail from '@/pages/Discount/DiscountFormDetail.vue'
-import VoucherFormDetail from '@/pages/Discount/VoucherFormDetail.vue'
-import DiscountFormUpdate from '@/pages/Discount/DiscountFormUpdate.vue'
-import VoucherFormUpdate from '@/pages/Discount/VoucherFormUpdate.vue'
-import LoginPage from '@/pages/Auth/LoginPage.vue'
-import RegisterPage from '@/pages/Auth/RegisterPage.vue'
-import QuenMatKhauPage from '@/pages/Auth/QuenMatKhauPage.vue'
-import StaffChatPage from '@/pages/Chat/StaffChatPage.vue'
-import CustomerAccountPage from '@/pages/Auth/CustomerAccountPage.vue'
-import StatisticsPage from '@/pages/Statistics/StatisticsPage.vue'
-import WorkSchedulePage from '@/pages/Schedule/WorkSchedulePage.vue'
-import ShiftSchedulePage from '@/pages/Schedule/ShiftSchedulePage.vue'
-import GiaoCaListPage from '@/pages/Ca/GiaoCaListPage.vue'
-import Home from '@/pages/clients/views/Home.vue'
-import ProductShop from '@/pages/clients/views/ProductShop.vue'
-import ProductDetail from '@/pages/clients/views/ProductDetail.vue'
-import ProductCart from '@/pages/clients/views/ProductCart.vue'
-import CheckOut from '@/pages/clients/views/CheckOut.vue'
-import OrderLookup from '@/pages/clients/views/OrderLookup.vue'
-import OrderList from '@/pages/clients/views/OrderList.vue'
-import ProductCartDetail from '@/pages/clients/views/ProductCartDetail.vue'
-import About from '@/pages/clients/views/About.vue'
-import Contact from '@/pages/clients/views/Contact.vue'
-import VNPayReturn from '@/pages/clients/views/VNPayReturn.vue'
-import CustomerDisplayPage from '@/pages/Pos/CustomerDisplayPage.vue'
+const AdminLayout = () => import('../layouts/AdminLayout.vue')
+const ClientLayout = () => import('@/layouts/clients/ClientLayout.vue')
+const ShippingFeeSettingsPage = () => import('@/pages/Shipping/ShippingFeeSettingsPage.vue')
+const ProductListPage = () => import('@/pages/Product/ProductListPage.vue')
+const ProductCreatePage = () => import('@/pages/Product/ProductCreatePage.vue')
+const ProductVariantPage = () => import('@/pages/Product/ProductVariantPage.vue')
+const InvoiceListPage = () => import('@/pages/Invoice/InvoiceListPage.vue')
+const InvoiceDetailPage = () => import('@/pages/Invoice/InvoiceDetailPage.vue')
+const InvoiceFormPage = () => import('@/pages/Invoice/InvoiceFormPage.vue')
+const VoucherListPage = () => import('@/pages/Discount/VoucherListPage.vue')
+const DiscountEventPage = () => import('@/pages/Discount/DiscountEventPage.vue')
+const EmployeeListPage = () => import('@/pages/Employee/EmployeeListPage.vue')
+const EmployeeCreatePage = () => import('@/pages/Employee/EmployeeCreatePage.vue')
+const CustomerListPage = () => import('@/pages/Customer/CustomerListPage.vue')
+const CustomerCreatePage = () => import('@/pages/Customer/CustomerCreatePage.vue')
+const PosSalesPage = () => import('@/pages/Pos/PosSalesPage.vue')
+const AttributeCategoryPage = () => import('@/pages/Product/AttributeCategoryPage.vue')
+const DiscountForm = () => import('@/pages/Discount/DiscountForm.vue')
+const VoucherForm = () => import('@/pages/Discount/VoucherForm.vue')
+const DiscountFormDetail = () => import('@/pages/Discount/DiscountFormDetail.vue')
+const VoucherFormDetail = () => import('@/pages/Discount/VoucherFormDetail.vue')
+const DiscountFormUpdate = () => import('@/pages/Discount/DiscountFormUpdate.vue')
+const VoucherFormUpdate = () => import('@/pages/Discount/VoucherFormUpdate.vue')
+const LoginPage = () => import('@/pages/Auth/LoginPage.vue')
+const RegisterPage = () => import('@/pages/Auth/RegisterPage.vue')
+const QuenMatKhauPage = () => import('@/pages/Auth/QuenMatKhauPage.vue')
+const StaffChatPage = () => import('@/pages/Chat/StaffChatPage.vue')
+const CustomerAccountPage = () => import('@/pages/Auth/CustomerAccountPage.vue')
+const StatisticsPage = () => import('@/pages/Statistics/StatisticsPage.vue')
+const WorkSchedulePage = () => import('@/pages/Schedule/WorkSchedulePage.vue')
+const ShiftSchedulePage = () => import('@/pages/Schedule/ShiftSchedulePage.vue')
+const GiaoCaListPage = () => import('@/pages/Ca/GiaoCaListPage.vue')
+const Home = () => import('@/pages/clients/views/Home.vue')
+const ProductShop = () => import('@/pages/clients/views/ProductShop.vue')
+const ProductDetail = () => import('@/pages/clients/views/ProductDetail.vue')
+const ProductCart = () => import('@/pages/clients/views/ProductCart.vue')
+const CheckOut = () => import('@/pages/clients/views/CheckOut.vue')
+const OrderLookup = () => import('@/pages/clients/views/OrderLookup.vue')
+const OrderList = () => import('@/pages/clients/views/OrderList.vue')
+const ProductCartDetail = () => import('@/pages/clients/views/ProductCartDetail.vue')
+const About = () => import('@/pages/clients/views/About.vue')
+const Contact = () => import('@/pages/clients/views/Contact.vue')
+const VNPayReturn = () => import('@/pages/clients/views/VNPayReturn.vue')
+const CustomerDisplayPage = () => import('@/pages/Pos/CustomerDisplayPage.vue')
 
 const metaBo = { requiresAuth: true, canBo: true }
 
@@ -68,6 +68,27 @@ export const appMode =
 /* ==========================================================================
    1. CẤU HÌNH ROUTE CHO CỔNG KHÁCH HÀNG (CLIENT - 5173)
    ========================================================================== */
+const clientLayoutRoute = {
+  path: '/',
+  component: ClientLayout,
+  children: [
+    { path: '', redirect: '/trang-chu' },
+    { path: 'trang-chu', component: Home, meta: { title: 'Trang chủ Poly Shoes' } },
+    { path: 'cua-hang', component: ProductShop, meta: { title: 'Sản phẩm' } },
+    { path: 'cua-hang/:id', component: ProductDetail, meta: { title: 'Chi tiết sản phẩm' } },
+    { path: 'gio-hang', component: ProductCart, meta: { title: 'Giỏ hàng' } },
+    { path: 'thanh-toan', component: CheckOut, meta: { title: 'Thanh toán' } },
+    { path: 'tra-cuu', component: OrderLookup, meta: { title: 'Tra cứu đơn hàng' } },
+    { path: 'don-hang', component: OrderList, meta: { title: 'Đơn hàng của bạn', canKhach: true } },
+    { path: 'don-hang/:id', component: ProductCartDetail, meta: { title: 'Chi tiết đơn hàng', canKhach: true } },
+    { path: 'tai-khoan', component: CustomerAccountPage, meta: { title: 'Tài khoản của tôi', canKhach: true } },
+    { path: 'gioi-thieu', component: About, meta: { title: 'Giới thiệu' } },
+    { path: 'lien-he', component: Contact, meta: { title: 'Liên hệ' } },
+    { path: 'goi-y', redirect: '/cua-hang' },
+    { path: 'thanh-toan-vnpay', name: 'ClientVNPayReturn', component: VNPayReturn, meta: { title: 'Kết quả thanh toán VNPay' } },
+  ],
+}
+
 const clientRoutes = [
   { path: '/man-hinh-khach', component: CustomerDisplayPage, meta: { title: 'Màn hình khách hàng | PolyShoes POS', public: true } },
   { path: '/dang-nhap', component: LoginPage, meta: { title: 'Đăng nhập', loginPage: true, loginMode: 'khach' } },
@@ -75,26 +96,7 @@ const clientRoutes = [
   { path: '/login', redirect: '/dang-nhap' },
   { path: '/dang-ky', component: RegisterPage, meta: { title: 'Đăng ký' } },
   { path: '/quen-mat-khau', component: QuenMatKhauPage, meta: { title: 'Quên mật khẩu' } },
-  {
-    path: '/',
-    component: ClientLayout,
-    children: [
-      { path: '', redirect: '/trang-chu' },
-      { path: 'trang-chu', component: Home, meta: { title: 'Trang chủ Poly Shoes' } },
-      { path: 'cua-hang', component: ProductShop, meta: { title: 'Sản phẩm' } },
-      { path: 'cua-hang/:id', component: ProductDetail, meta: { title: 'Chi tiết sản phẩm' } },
-      { path: 'gio-hang', component: ProductCart, meta: { title: 'Giỏ hàng' } },
-      { path: 'thanh-toan', component: CheckOut, meta: { title: 'Thanh toán' } },
-      { path: 'tra-cuu', component: OrderLookup, meta: { title: 'Tra cứu đơn hàng' } },
-      { path: 'don-hang', component: OrderList, meta: { title: 'Đơn hàng của bạn', canKhach: true } },
-      { path: 'don-hang/:id', component: ProductCartDetail, meta: { title: 'Chi tiết đơn hàng', canKhach: true } },
-      { path: 'tai-khoan', component: CustomerAccountPage, meta: { title: 'Tài khoản của tôi', canKhach: true } },
-      { path: 'gioi-thieu', component: About, meta: { title: 'Giới thiệu' } },
-      { path: 'lien-he', component: Contact, meta: { title: 'Liên hệ' } },
-      { path: 'goi-y', redirect: '/cua-hang' },
-      { path: 'thanh-toan-vnpay', name: 'ClientVNPayReturn', component: VNPayReturn, meta: { title: 'Kết quả thanh toán VNPay', canKhach: true } },
-    ],
-  },
+  clientLayoutRoute,
   {
     path: '/:pathMatch(.*)*',
     redirect: '/trang-chu',
@@ -157,7 +159,7 @@ const adminRoutes = [
   { path: '/nhan-vien', redirect: '/dang-nhap' },
   { path: '/login', redirect: '/dang-nhap' },
   { path: '/login-nhan-vien', redirect: '/dang-nhap' },
-  { path: '/quen-mat-khau', component: QuenMatKhauPage, meta: { title: 'Quên mật khẩu' } },
+  { path: '/quen-mat-khau', component: QuenMatKhauPage, meta: { title: 'Quên mật khẩu', public: true } },
   {
     path: '/',
     component: AdminLayout,
@@ -199,7 +201,7 @@ const allRoutes = [
   {
     path: '/',
     component: ClientLayout,
-    children: clientRoutes[4].children,
+    children: clientLayoutRoute.children,
   },
   {
     path: '/',

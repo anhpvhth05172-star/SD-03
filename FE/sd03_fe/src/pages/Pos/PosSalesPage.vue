@@ -506,6 +506,7 @@ const savePendingOrdersToStorage = () => {
         servicesDistrictId: o.deliveryInfo?.servicesDistrictId || null,
         serviceTypeId: o.deliveryInfo?.serviceTypeId || null,
         shippingFee: Number(o.deliveryInfo?.shippingFee || 0),
+        isManualShippingFee: Boolean(o.deliveryInfo?.isManualShippingFee),
         feeLoading: false,
         feeError: '',
         legacy: o.deliveryInfo?.legacy || null,
@@ -558,6 +559,7 @@ const restorePendingOrdersFromStorage = () => {
         servicesDistrictId: o.deliveryInfo?.servicesDistrictId || null,
         serviceTypeId: o.deliveryInfo?.serviceTypeId || null,
         shippingFee: Number(o.deliveryInfo?.shippingFee || 0),
+        isManualShippingFee: Boolean(o.deliveryInfo?.isManualShippingFee),
         feeLoading: false,
         feeError: '',
         legacy: o.deliveryInfo?.legacy || null,
@@ -633,6 +635,7 @@ const createNewOrder = (silent = false) => {
       servicesDistrictId: null,
       serviceTypeId: null,
       shippingFee: 0,
+      isManualShippingFee: false,
       feeLoading: false,
       feeError: '',
       legacy: null,
@@ -738,7 +741,10 @@ const finalTotal = computed(() => {
   if (!currentOrder.value) return 0
   let total = subTotal.value - discountAmount.value
   if (currentOrder.value.isDelivery) {
-    const fee = isFreeShipEligible.value ? 0 : Number(currentOrder.value.deliveryInfo.shippingFee || 0)
+    const d = currentOrder.value.deliveryInfo
+    const fee = d.isManualShippingFee
+      ? Number(d.shippingFee || 0)
+      : (isFreeShipEligible.value ? 0 : Number(d.shippingFee || 0))
     total += fee
   }
   return Math.max(0, total)
@@ -929,6 +935,7 @@ const addToCart = (productVariant, qtyToAdd = 1, silent = false) => {
         discount: productVariant.discount || (productVariant.phanTramGiam ? `-${Math.round(productVariant.phanTramGiam)}%` : null),
         phanTramGiam: productVariant.phanTramGiam !== undefined ? productVariant.phanTramGiam : null,
         giaSauGiam: productVariant.giaSauGiam !== undefined ? productVariant.giaSauGiam : null,
+        priceChangedFrom: existingDiffPriceItem ? Number(existingDiffPriceItem.price) : null,
         quantity: addQty,
         maxStock: getServerBaseStock(targetProd || productVariant),
         img: productVariant.img || ''
@@ -1074,13 +1081,32 @@ const updateCartItemQty = async (item, rawNewQty, event = null) => {
     return
   }
 
+  if (newQty === Number(item.quantity)) return
+
   // Khi tăng số lượng (bấm dấu + hoặc nhập số lượng lớn hơn): kiểm tra thay đổi giá sản phẩm
   if (newQty > item.quantity) {
-    const targetProd = allProducts.value.find(p => Number(p.id) === Number(item.idCtsp))
+    let targetProd = allProducts.value.find(p => Number(p.id) === Number(item.idCtsp))
+    try {
+      const freshRes = await http.get(`/v1/san-pham-chi-tiet/${item.idCtsp}`)
+      if (freshRes?.data) {
+        const fresh = freshRes.data
+        if (targetProd) {
+          targetProd.price = fresh.price ?? targetProd.price
+          targetProd.giaSauGiam = fresh.giaSauGiam !== undefined ? fresh.giaSauGiam : null
+          targetProd.phanTramGiam = fresh.phanTramGiam !== undefined ? fresh.phanTramGiam : null
+          targetProd.discount = fresh.discount !== undefined ? fresh.discount : null
+          targetProd.trangThai = fresh.trangThai !== undefined ? fresh.trangThai : targetProd.trangThai
+        } else {
+          targetProd = fresh
+        }
+      }
+    } catch {
+      // Dự phòng dùng dữ liệu cache trong allProducts nếu mất mạng tạm thời
+    }
     if (targetProd) {
       const effectivePrice = getEffectivePrice(targetProd)
       if (effectivePrice !== null && Number(effectivePrice) !== Number(item.price)) {
-        const prodName = item.name || targetProd.ten || targetProd.tenSanPham || 'Sản phẩm'
+        const prodName = item.name || targetProd.ten || targetProd.tenSanPham || targetProd.tenSp || 'Sản phẩm'
         const confirmChange = await notifyConfirm(
           'Giá sản phẩm đã thay đổi!',
           `Sản phẩm "${prodName}" đã đổi giá từ ${formatVnd(item.price)} sang ${formatVnd(effectivePrice)}. Bạn muốn thêm theo giá mới (tách dòng mới) hay giữ giá cũ?`,
@@ -1089,16 +1115,29 @@ const updateCartItemQty = async (item, rawNewQty, event = null) => {
         )
         if (confirmChange) {
           const qtyToAdd = newQty - item.quantity
+          const freshOriginalPrice = Number(targetProd.price || targetProd.giaBan || effectivePrice)
+          const freshDiscountStr = targetProd.discount || (targetProd.phanTramGiam ? `-${Math.round(targetProd.phanTramGiam)}%` : null)
           const existingSamePrice = currentOrder.value.cart.find(
             c => Number(c.idCtsp) === Number(item.idCtsp) && Number(c.price) === Number(effectivePrice)
           )
           if (existingSamePrice) {
             existingSamePrice.quantity += qtyToAdd
+            existingSamePrice.originalPrice = freshOriginalPrice
+            existingSamePrice.discount = freshDiscountStr
+            existingSamePrice.phanTramGiam = targetProd.phanTramGiam !== undefined ? targetProd.phanTramGiam : null
+            existingSamePrice.giaSauGiam = targetProd.giaSauGiam !== undefined ? targetProd.giaSauGiam : null
+            if (!existingSamePrice.priceChangedFrom && Number(item.price) !== Number(effectivePrice)) {
+              existingSamePrice.priceChangedFrom = Number(item.price)
+            }
           } else {
             currentOrder.value.cart.push({
               ...item,
               price: effectivePrice,
-              originalPrice: Number(targetProd.price || targetProd.giaBan || effectivePrice),
+              originalPrice: freshOriginalPrice,
+              discount: freshDiscountStr,
+              phanTramGiam: targetProd.phanTramGiam !== undefined ? targetProd.phanTramGiam : null,
+              giaSauGiam: targetProd.giaSauGiam !== undefined ? targetProd.giaSauGiam : null,
+              priceChangedFrom: Number(item.price),
               quantity: qtyToAdd
             })
           }
@@ -1781,6 +1820,7 @@ const clearDeliveryForm = () => {
   d.ward = null
   d.recipientAddress = ''
   d.shippingFee = 0
+  d.isManualShippingFee = false
   d.legacy = null
   d.feeError = ''
   d.services = []
@@ -1876,7 +1916,6 @@ const saveQuickCustomer = async () => {
     allCustomers.value.unshift(createdCust)
     selectCustomer(createdCust)
     isAddCustomerModalOpen.value = false
-    isVoucherModalOpen.value = false
 
     newCustomerForm.tenKhachHang = ''
     newCustomerForm.soDienThoai = ''
@@ -2258,6 +2297,9 @@ const getShoeImage = (p) => {
 
 const getDiscountPercentBadge = (item) => {
   if (!item) return ''
+  if (item.originalPrice !== undefined && Number(item.originalPrice || 0) <= Number(item.price || 0)) {
+    return ''
+  }
   // 1. Kiểm tra trường phanTramGiam dạng số > 0 (từ dot_giam_gia)
   if (item.phanTramGiam !== null && item.phanTramGiam !== undefined && item.phanTramGiam !== '') {
     const p = parseFloat(String(item.phanTramGiam).replace(/[^0-9.-]+/g, ''))
@@ -2275,7 +2317,7 @@ const getDiscountPercentBadge = (item) => {
   }
   // 3. So sánh giá bán gốc (price / originalPrice) và giá sau giảm (giaSauGiam / price)
   const base = Number(item.originalPrice || item.price || item.giaBan || 0)
-  const after = Number(item.giaSauGiam || (item.originalPrice && item.price ? item.price : 0))
+  const after = Number(item.originalPrice !== undefined ? item.price : (item.giaSauGiam || 0))
   if (base > 0 && after > 0 && after < base) {
     const pct = Math.round(((base - after) / base) * 100)
     if (pct > 0) return `-${pct}%`
@@ -2897,6 +2939,7 @@ const onProvinceChange = async () => {
   d.ward = null
   wardsList.value = []
   d.shippingFee = 0
+  d.isManualShippingFee = false
   d.legacy = null
   d.feeError = ''
   d.services = []
@@ -2967,7 +3010,9 @@ const tinhPhiVanChuyen = async () => {
     })
     const rawFee = res.shippingFee || getEstimatedShippingFee(d.province.name, d.ward.name)
     d.rawShippingFee = rawFee
-    d.shippingFee = isFreeShipEligible.value ? 0 : rawFee
+    if (!d.isManualShippingFee) {
+      d.shippingFee = isFreeShipEligible.value ? 0 : rawFee
+    }
     d.legacy = {
       toProvinceId: res.toProvinceId || d.province.id || 1,
       toDistrictId: res.toDistrictId || 1,
@@ -2989,7 +3034,9 @@ const tinhPhiVanChuyen = async () => {
   } catch (e) {
     const fallbackFee = getEstimatedShippingFee(d.province.name, d.ward.name)
     d.rawShippingFee = fallbackFee
-    d.shippingFee = isFreeShipEligible.value ? 0 : fallbackFee
+    if (!d.isManualShippingFee) {
+      d.shippingFee = isFreeShipEligible.value ? 0 : fallbackFee
+    }
     d.legacy = {
       toProvinceId: d.province.id || 1,
       toDistrictId: 1,
@@ -3006,6 +3053,7 @@ const tinhPhiVanChuyen = async () => {
 watch(isFreeShipEligible, (isFree) => {
   const d = currentOrder.value?.deliveryInfo
   if (d && currentOrder.value?.isDelivery) {
+    if (d.isManualShippingFee) return
     if (isFree) {
       if (!d.rawShippingFee && d.shippingFee > 0) d.rawShippingFee = d.shippingFee
       d.shippingFee = 0
@@ -3017,12 +3065,34 @@ watch(isFreeShipEligible, (isFree) => {
   }
 })
 
-const onWardChange = () => { tinhPhiVanChuyen() }
-const onServiceChange = () => { tinhPhiVanChuyen() }
+const onWardChange = () => {
+  const d = currentOrder.value?.deliveryInfo
+  if (d) d.isManualShippingFee = false
+  tinhPhiVanChuyen()
+}
+const onServiceChange = () => {
+  const d = currentOrder.value?.deliveryInfo
+  if (d) d.isManualShippingFee = false
+  tinhPhiVanChuyen()
+}
+const onManualShippingFeeInput = (event) => {
+  const d = currentOrder.value?.deliveryInfo
+  if (!d) return
+  const val = Number(event?.target?.value)
+  d.isManualShippingFee = true
+  d.shippingFee = isNaN(val) || val < 0 ? 0 : Math.round(val)
+  savePendingOrdersToStorage()
+}
+const resetManualShippingFee = () => {
+  const d = currentOrder.value?.deliveryInfo
+  if (!d) return
+  d.isManualShippingFee = false
+  tinhPhiVanChuyen()
+}
 const formatGhnServiceOption = (s) => {
   const d = currentOrder.value?.deliveryInfo
   const name = s?.shortName || ('Dịch vụ GHN #' + (s?.serviceTypeId ?? ''))
-  const feeText = isFreeShipEligible.value
+  const feeText = (isFreeShipEligible.value && !d?.isManualShippingFee)
     ? 'Miễn phí (0₫)'
     : formatVnd(d?.shippingFee || d?.rawShippingFee || 30000)
   return `${name} — ${feeText}`
@@ -3030,7 +3100,7 @@ const formatGhnServiceOption = (s) => {
 
 watch(() => currentOrder.value?.cart?.length, () => {
   const d = currentOrder.value?.deliveryInfo
-  if (d && d.province && d.ward && !d.feeLoading) {
+  if (d && d.province && d.ward && !d.feeLoading && !d.isManualShippingFee) {
     tinhPhiVanChuyen()
   }
 })
@@ -3237,56 +3307,6 @@ const availableEligibleVouchersCount = computed(() => {
   return allVouchers.value.filter(v => isVoucherEligible(v)).length
 })
 
-const isVoucherModalOpen = ref(false)
-const voucherSearchQuery = ref('')
-const voucherInputCode = ref('')
-
-const openVoucherModal = () => {
-  if (!currentOrder.value) createNewOrder()
-  voucherSearchQuery.value = ''
-  isVoucherModalOpen.value = true
-  validateAndSyncHardCases({ isBeforeCheckout: false, silentToast: true })
-}
-
-const filteredVouchers = computed(() => {
-  const q = voucherSearchQuery.value.trim().toLowerCase()
-  const custId = currentOrder.value?.customer?.id ? Number(currentOrder.value.customer.id) : null
-
-  return allVouchers.value.filter(v => {
-    const isCaNhan = v.phamVi === 'CA_NHAN' || v.scope === 'CA_NHAN'
-    if (isCaNhan) {
-      if (!custId) return false
-      if (!isVoucherAssignedToCustomer(v, custId) && !hasCustomerUsedVoucher(v, custId)) {
-        return false
-      }
-    }
-    if (!q) return true
-    return (
-      (v.ma && v.ma.toLowerCase().includes(q)) ||
-      (v.ten && v.ten.toLowerCase().includes(q)) ||
-      (v.maPhieuGiamGia && v.maPhieuGiamGia.toLowerCase().includes(q))
-    )
-  })
-})
-
-const sortedFilteredVouchers = computed(() => {
-  const list = [...filteredVouchers.value]
-  return list.sort((a, b) => {
-    const elA = isVoucherEligible(a)
-    const elB = isVoucherEligible(b)
-    if (elA && !elB) return -1
-    if (!elA && elB) return 1
-
-    if (elA && elB) {
-      const discA = calculateVoucherDiscount(a, subTotal.value)
-      const discB = calculateVoucherDiscount(b, subTotal.value)
-      if (discB !== discA) return discB - discA
-    }
-
-    return (Number(a.hoaDonToiThieu || 0)) - (Number(b.hoaDonToiThieu || 0))
-  })
-})
-
 const getBestVoucherForOrder = (order = currentOrder.value) => {
   if (!order || !order.cart || order.cart.length === 0) return null
   const currentSub = order.cart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 0)), 0)
@@ -3359,7 +3379,7 @@ const nextVoucherSuggestion = computed(() => {
 })
 
 
-watch([() => subTotal.value, () => currentOrder.value?.customer?.id], ([newSubTotal], [, oldCustId]) => {
+watch([() => subTotal.value, () => bestVoucherSuggestion.value, () => currentOrder.value?.customer?.id], ([newSubTotal, newBest], [, , oldCustId]) => {
   if (!currentOrder.value) return
   if (newSubTotal <= 0) {
     currentOrder.value.selectedVoucher = null
@@ -3372,25 +3392,61 @@ watch([() => subTotal.value, () => currentOrder.value?.customer?.id], ([newSubTo
     currentOrder.value.userRemovedVoucher = false
   }
 
-  // Nếu mã giảm giá hiện tại không còn hợp lệ (ví dụ: giảm số lượng sản phẩm làm tổng tiền dưới mức tối thiểu)
   if (currentOrder.value.selectedVoucher && !isVoucherEligible(currentOrder.value.selectedVoucher)) {
     const droppedV = currentOrder.value.selectedVoucher
     const vCode = droppedV.ma || droppedV.maPhieuGiamGia || 'Voucher'
 
-    // BỎ TỰ ĐỘNG CHUYỂN: Chỉ gỡ mã không còn hợp lệ, không tự động chuyển sang mã khác
-    currentOrder.value.selectedVoucher = null
+    currentOrder.value.selectedVoucher = newBest?.voucher || null
     currentOrder.value.userSelectedVoucherManually = false
     currentOrder.value.userRemovedVoucher = false
 
-    notifyToast(
-      'Đã gỡ phiếu giảm giá',
-      `Mã "${vCode}" đã được tự động gỡ do tổng tiền hàng (${formatVnd(newSubTotal)}) không còn đủ điều kiện tối thiểu.`,
-      'info',
-      2500
-    )
+    if (newBest?.voucher) {
+      const newCode = newBest.voucher.ma || newBest.voucher.maPhieuGiamGia || 'Mã mới'
+      const newDisc = calculateVoucherDiscount(newBest.voucher, newSubTotal)
+      notifyToast(
+        'Tự động áp dụng mã tốt nhất',
+        `Mã "${vCode}" không đủ điều kiện khi giảm số lượng, hệ thống đã tự động chuyển sang mã "${newCode}" (giảm ${formatVnd(newDisc)}).`,
+        'info',
+        3000
+      )
+    } else {
+      notifyToast(
+        'Đã gỡ phiếu giảm giá',
+        `Mã "${vCode}" đã được tự động gỡ do tổng tiền hàng (${formatVnd(newSubTotal)}) không còn đủ điều kiện tối thiểu.`,
+        'info',
+        2500
+      )
+    }
     return
   }
-  // Tuyệt đối không tự động gán mã mới khi chưa có mã hoặc tự động chuyển mã khi tổng tiền tăng
+
+  if (!currentOrder.value.selectedVoucher) {
+    if (newBest?.voucher && !currentOrder.value.userRemovedVoucher) {
+      currentOrder.value.selectedVoucher = newBest.voucher
+      currentOrder.value.userSelectedVoucherManually = false
+    }
+  } else if (newBest?.voucher && currentOrder.value.selectedVoucher.id !== newBest.voucher.id) {
+    const curV = currentOrder.value.selectedVoucher
+    const curDisc = calculateVoucherDiscount(curV, newSubTotal)
+    const newDisc = calculateVoucherDiscount(newBest.voucher, newSubTotal)
+
+    // Khi thêm sản phẩm đạt mức giảm tốt hơn: tự động áp dụng ngay mà không hỏi popup xác nhận
+    if (newDisc > curDisc) {
+      const curCode = curV.ma || curV.maPhieuGiamGia || 'Mã hiện tại'
+      const newCode = newBest.voucher.ma || newBest.voucher.maPhieuGiamGia || 'Mã mới'
+
+      currentOrder.value.selectedVoucher = newBest.voucher
+      currentOrder.value.userSelectedVoucherManually = false
+      currentOrder.value.declinedUpgradeVoucherId = null
+
+      notifyToast(
+        'Đã tự động áp dụng mã tốt hơn!',
+        `Đơn hàng tự động đổi sang mã "${newCode}" (giảm ${formatVnd(newDisc)}) thay cho "${curCode}"`,
+        'success',
+        2500
+      )
+    }
+  }
 }, { immediate: true })
 
 watch(finalTotal, (newTotal, oldTotal) => {
@@ -3589,7 +3645,6 @@ const validateAndSyncHardCases = async (options = { isBeforeCheckout: false, sil
   if (isSyncingHardCases) return { abortedByStaffLock: false, changes: [] }
   if (!options.isBeforeCheckout) {
     const hasOpenModalOrDialog =
-      isVoucherModalOpen.value ||
       isQrModalOpen.value ||
       isAddCustomerModalOpen.value ||
       isQuickAddAddressModalOpen.value ||
@@ -3836,8 +3891,6 @@ const applyVoucher = async (voucher) => {
   currentOrder.value.selectedVoucher = voucher
   currentOrder.value.userSelectedVoucherManually = true
   currentOrder.value.userRemovedVoucher = false
-  voucherInputCode.value = ''
-  isVoucherModalOpen.value = false
   notifySuccess('Đã áp dụng voucher', `Đã áp dụng mã "${voucher.ma || voucher.maPhieuGiamGia}" (${voucher.ten})!`)
 }
 
@@ -3847,68 +3900,7 @@ const removeVoucher = () => {
     currentOrder.value.selectedVoucher = null
     currentOrder.value.userSelectedVoucherManually = false
     currentOrder.value.userRemovedVoucher = true
-    voucherInputCode.value = ''
-    isVoucherModalOpen.value = false
     notifySuccess('Đã hủy voucher', 'Đã hủy áp dụng phiếu giảm giá cho đơn hàng!')
-  }
-}
-
-const handleApplyManualVoucher = async () => {
-  const code = voucherInputCode.value.trim().toUpperCase()
-  if (!code) return
-  if (!currentOrder.value) createNewOrder()
-
-  let found = allVouchers.value.find(v =>
-    (v.ma && v.ma.toUpperCase() === code) ||
-    (v.maPhieuGiamGia && v.maPhieuGiamGia.toUpperCase() === code)
-  )
-
-  if (!found) {
-    await validateAndSyncHardCases({ isBeforeCheckout: true, silentToast: true })
-    found = allVouchers.value.find(v =>
-      (v.ma && v.ma.toUpperCase() === code) ||
-      (v.maPhieuGiamGia && v.maPhieuGiamGia.toUpperCase() === code)
-    )
-  }
-
-  if (!found) {
-    const bestAlt = (allVouchers.value || [])
-      .filter(v => isVoucherEligible(v))
-      .map(v => ({ v, disc: calculateVoucherDiscount(v, subTotal.value) }))
-      .sort((a, b) => b.disc - a.disc)[0]
-
-    if (bestAlt && bestAlt.disc > 0) {
-      const applyBest = await notifyConfirm(
-        'Mã giảm giá không tìm thấy!',
-        `Không tìm thấy mã giảm giá "${code}". Hệ thống gợi ý mã giảm giá tốt nhất "${bestAlt.v.ma || bestAlt.v.maPhieuGiamGia}" (${bestAlt.v.ten || ''} - giảm ${formatVnd(bestAlt.disc)}). Bạn có muốn áp dụng không?`,
-        'Áp dụng mã tốt nhất',
-        'Không dùng mã'
-      )
-      if (applyBest) {
-        applyVoucher(bestAlt.v)
-      }
-      return
-    }
-
-    notifyError('Mã không hợp lệ', `Không tìm thấy mã giảm giá "${code}" hoặc mã đã bị khóa/hết hạn!`)
-    return
-  }
-
-  applyVoucher(found)
-}
-
-const handleModalSearchApply = () => {
-  const code = voucherSearchQuery.value.trim().toUpperCase()
-  if (!code) return
-  const found = filteredVouchers.value.find(v =>
-    (v.ma && v.ma.toUpperCase() === code) ||
-    (v.maPhieuGiamGia && v.maPhieuGiamGia.toUpperCase() === code)
-  ) || filteredVouchers.value[0]
-
-  if (found) {
-    applyVoucher(found)
-  } else {
-    notifyError('Không tìm thấy', `Không tìm thấy phiếu giảm giá nào khớp với "${code}"`)
   }
 }
 
@@ -3992,11 +3984,11 @@ const handleCheckout = async (options = {}) => {
       notifyWarning('Phí vận chuyển', 'Đang tính phí vận chuyển, vui lòng đợi trong giây lát...')
       return
     }
-    if (!d.legacy) {
+    if (!d.legacy && !d.isManualShippingFee) {
       notifyWarning('Phí vận chuyển', 'Chưa tính được phí vận chuyển. Vui lòng chọn địa chỉ giao hàng hợp lệ và thử lại.')
       return
     }
-    if (!isFreeShipEligible.value && (!d.shippingFee || d.shippingFee <= 0)) {
+    if (!d.isManualShippingFee && !isFreeShipEligible.value && (!d.shippingFee || d.shippingFee <= 0)) {
       notifyWarning('Phí vận chuyển', 'Chưa tính được phí vận chuyển. Vui lòng chọn địa chỉ giao hàng hợp lệ và thử lại.')
       return
     }
@@ -4050,7 +4042,9 @@ const handleCheckout = async (options = {}) => {
         ? (currentOrder.value.customer.ten || currentOrder.value.customer.tenKhachHang)
         : 'Khách lẻ')
     const finalShipFee = currentOrder.value.isDelivery
-      ? (isFreeShipEligible.value ? 0 : Number(delivery?.shippingFee || 0))
+      ? (delivery?.isManualShippingFee
+          ? Math.max(0, Number(delivery?.shippingFee || 0))
+          : (isFreeShipEligible.value ? 0 : Number(delivery?.shippingFee || 0)))
       : 0
     const payload = {
       maHoaDon: currentOrder.value.code,
@@ -4084,12 +4078,14 @@ const handleCheckout = async (options = {}) => {
     }
 
     if (currentOrder.value.selectedVoucher && !isVoucherEligible(currentOrder.value.selectedVoucher)) {
-      const droppedV = currentOrder.value.selectedVoucher
-      const vCode = droppedV.ma || droppedV.maPhieuGiamGia || 'Voucher'
-      currentOrder.value.selectedVoucher = null
-      currentOrder.value.userSelectedVoucherManually = false
-      payload.idPhieuGiamGia = null
-      notifyWarning('Bỏ mã giảm giá', `Mã giảm giá "${vCode}" không còn khả dụng cho đơn hàng này và đã được gỡ bỏ.`)
+      const fallbackBest = getBestVoucherForOrder(currentOrder.value)
+      currentOrder.value.selectedVoucher = fallbackBest?.voucher || null
+      payload.idPhieuGiamGia = fallbackBest?.voucher ? fallbackBest.voucher.id : null
+      if (fallbackBest?.voucher) {
+        notifyWarning('Đổi voucher tốt nhất', `Mã giảm giá đã chọn không còn khả dụng, hệ thống tự động chuyển sang mã tốt nhất tiếp theo "${fallbackBest.voucher.ma}"!`)
+      } else {
+        notifyWarning('Bỏ mã giảm giá', 'Mã giảm giá đã chọn không còn khả dụng cho khách hàng này.')
+      }
     } else {
       payload.idPhieuGiamGia = currentOrder.value.selectedVoucher ? currentOrder.value.selectedVoucher.id : null
     }
@@ -4114,7 +4110,7 @@ const handleCheckout = async (options = {}) => {
         errMsg.includes('Phiếu giảm giá') ||
         errMsg.includes('phiếu giảm giá')
       )) {
-        console.warn('Voucher rejected by backend:', errMsg)
+        console.warn('Voucher rejected by backend, falling back to next best voucher:', errMsg)
         const rejectedVoucherId = Number(payload.idPhieuGiamGia)
         const custId = payload.idKhachHang ? Number(payload.idKhachHang) : null
         if (custId) {
@@ -4129,10 +4125,13 @@ const handleCheckout = async (options = {}) => {
             }
           }
         }
-        currentOrder.value.selectedVoucher = null
-        payload.idPhieuGiamGia = null
-        notifyError('Lỗi mã giảm giá', errMsg || 'Mã giảm giá đã chọn không hợp lệ hoặc không đủ điều kiện!')
-        return
+        const nextBest = getBestVoucherForOrder(currentOrder.value)
+        currentOrder.value.selectedVoucher = nextBest?.voucher || null
+        payload.idPhieuGiamGia = nextBest?.voucher ? nextBest.voucher.id : null
+
+        notifyWarning('Tự động đổi voucher', `Mã vừa chọn không hợp lệ với khách hàng. Hệ thống tự động chuyển sang ${nextBest?.voucher ? `mã tốt nhất tiếp theo "${nextBest.voucher.ma}"` : 'không dùng voucher'} và hoàn tất thanh toán!`)
+
+        invoiceRes = await doCheckoutCall()
       } else {
         throw checkoutErr
       }
@@ -4539,7 +4538,6 @@ const handleKeyDown = (e) => {
     isProductModalOpen.value = false
     isQrModalOpen.value = false
     isAddCustomerModalOpen.value = false
-    isVoucherModalOpen.value = false
     isQuickAddAddressModalOpen.value = false
     isSelectAddressModalOpen.value = false
     isBankQrModalOpen.value = false
@@ -4993,6 +4991,10 @@ onUnmounted(() => {
                               ({{ normalizeDiscountStr(item.discount) }})
                             </strong>
                           </span>
+                          <span v-if="item.priceChangedFrom && Number(item.priceChangedFrom) !== Number(item.price)"
+                            style="color: #dc2626; font-size: 11px; font-weight: 600; display: block; margin-top: 2px;">
+                            Đổi giá: {{ formatVnd(item.priceChangedFrom) }} → {{ formatVnd(item.price) }}
+                          </span>
                         </div>
                       </td>
                       <td class="text-center cell-total-price">
@@ -5265,19 +5267,38 @@ onUnmounted(() => {
                 <div v-else class="del-fee-value-box">
                   <span class="del-fee-lbl">Phí vận chuyển:</span>
                   <div style="display: flex; align-items: center; gap: 8px;">
-                    <span v-if="isFreeShipEligible" class="badge-free-ship-tag"
+                    <span v-if="isFreeShipEligible && !currentOrder.deliveryInfo.isManualShippingFee" class="badge-free-ship-tag"
                       style="background: #ecfdf5; color: #059669; font-weight: 700; font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 1px solid #a7f3d0;">
                       🎉 Miễn phí ship (Đơn &gt; 10tr)
                     </span>
-                    <strong class="del-fee-amount"
-                      :style="{ textDecoration: isFreeShipEligible ? 'line-through' : 'none', color: isFreeShipEligible ? '#94a3b8' : 'inherit' }">
-                      {{ formatVnd(currentOrder.deliveryInfo.rawShippingFee || currentOrder.deliveryInfo.shippingFee ||
-                        0)
-                      }}
+                    <strong v-if="isFreeShipEligible && !currentOrder.deliveryInfo.isManualShippingFee"
+                      class="del-fee-amount"
+                      style="text-decoration: line-through; color: #94a3b8;">
+                      {{ formatVnd(currentOrder.deliveryInfo.rawShippingFee || 0) }}
                     </strong>
-                    <strong v-if="isFreeShipEligible" style="color: #059669; font-size: 15px; font-weight: 800;">
-                      0 ₫
-                    </strong>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        class="del-fee-manual-input"
+                        :value="Number(currentOrder.deliveryInfo.shippingFee || 0)"
+                        @input="onManualShippingFeeInput"
+                        title="Có thể nhập trực tiếp phí vận chuyển (₫)"
+                        style="width: 110px; text-align: right; font-weight: 800; font-size: 14px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #0f172a;"
+                      />
+                      <span style="font-weight: 700; color: #475569;">₫</span>
+                      <button
+                        v-if="currentOrder.deliveryInfo.isManualShippingFee"
+                        type="button"
+                        class="btn-fee-retry"
+                        @click="resetManualShippingFee"
+                        title="Tính lại phí tự động"
+                        style="font-size: 11px; padding: 3px 7px;"
+                      >
+                        Tính lại
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -5370,29 +5391,18 @@ onUnmounted(() => {
 
           <div class="checkout-voucher-section" v-if="currentOrder">
             <div class="voucher-section-header">
-              <span class="voucher-section-title">Phiếu giảm giá / Voucher</span>
-              <button type="button" class="btn-browse-vouchers"
-                @click="openVoucherModal">
-                {{ currentOrder.selectedVoucher ? 'Đổi mã' : 'Danh sách' }}
-                <span class="voucher-badge-num" v-if="allVouchers.length > 0">({{ availableEligibleVouchersCount }}/{{ allVouchers.length }})</span>
-              </button>
+              <span class="voucher-section-title">Phiếu giảm giá (Tự động áp dụng tốt nhất)</span>
             </div>
 
-            <!-- Ô nhập mã nhanh trực tiếp trên sidebar -->
-            <div class="voucher-input-group mb-2">
-              <input v-model="voucherInputCode" type="text" class="voucher-quick-input"
-                placeholder="Nhập mã voucher..." @keyup.enter="handleApplyManualVoucher" />
-              <button type="button" class="btn-apply-manual-voucher" @click="handleApplyManualVoucher">
-                Áp dụng
-              </button>
-            </div>
-
-            <!-- Thẻ voucher đã được áp dụng -->
+            <!-- Thẻ voucher đã được áp dụng tốt nhất -->
             <div v-if="currentOrder.selectedVoucher" class="selected-voucher-card">
               <div class="selected-voucher-content">
                 <div class="selected-voucher-top">
                   <span class="selected-voucher-code">{{ currentOrder.selectedVoucher.ma ||
                     currentOrder.selectedVoucher.maPhieuGiamGia }}</span>
+                  <span class="badge bg-success text-white" style="font-size: 10px; padding: 2px 6px;">
+                    Tốt nhất
+                  </span>
                   <span class="selected-voucher-val">- {{ formatVnd(discountAmount) }}</span>
                 </div>
                 <div class="selected-voucher-desc">
@@ -5401,9 +5411,6 @@ onUnmounted(() => {
                     formatVnd(currentOrder.selectedVoucher.hoaDonToiThieu) }}</span>
                 </div>
               </div>
-              <button class="btn-remove-voucher-pill" @click="removeVoucher" title="Gỡ bỏ mã giảm giá">
-                Gỡ
-              </button>
             </div>
 
             <!-- Gợi ý mua thêm (như bán hàng online) -->
@@ -6299,105 +6306,7 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <!-- MODAL PHIẾU GIẢM GIÁ (CHỌN THỦ CÔNG - KHÔNG TỰ ĐỘNG CHUYỂN MÃ) -->
-    <transition name="fade">
-      <div v-if="isVoucherModalOpen" class="pos-modal-overlay" @click.self="isVoucherModalOpen = false">
-        <div class="pos-modal-dialog modal-voucher-dialog">
-          <div class="pos-modal-head">
-            <div class="modal-head-title">
-              <div class="modal-title-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
-                  <line x1="7" y1="7" x2="7.01" y2="7"></line>
-                </svg>
-              </div>
-              <div class="modal-title-text-group">
-                <h3>Phiếu giảm giá</h3>
-                <span class="modal-badge-count">{{ availableEligibleVouchersCount }}/{{ allVouchers.length }} dùng được</span>
-              </div>
-            </div>
-            <button class="pos-modal-close" @click="isVoucherModalOpen = false" title="Đóng (Esc)">×</button>
-          </div>
 
-          <div class="pos-modal-body">
-            <div class="voucher-modal-search-bar">
-              <input v-model="voucherSearchQuery" type="text" placeholder="Nhập mã hoặc tên phiếu giảm giá..."
-                class="voucher-search-inp" @keyup.enter="handleModalSearchApply" />
-              <button v-if="voucherSearchQuery.trim()" type="button" class="btn-modal-apply-code"
-                @click="handleModalSearchApply">
-                Áp dụng mã
-              </button>
-            </div>
-
-            <div class="voucher-cards-list">
-              <div v-for="v in sortedFilteredVouchers" :key="v.id" class="voucher-card-item" :class="{
-                eligible: isVoucherEligible(v),
-                selected: currentOrder?.selectedVoucher?.id === v.id,
-                ineligible: !isVoucherEligible(v)
-              }">
-                <div class="voucher-card-left">
-                  <div class="voucher-discount-highlight">
-                    {{ formatVoucherValue(v) }}
-                  </div>
-                  <div class="voucher-type-sub">
-                    {{ v.loaiGiamGia === 'PERCENT' || v.loaiGiamGia === '%' ? 'GIẢM %' : 'GIẢM TIỀN' }}
-                  </div>
-                </div>
-
-                <div class="voucher-card-body">
-                  <div class="voucher-card-header-row">
-                    <span class="voucher-card-code">{{ v.ma }}</span>
-                    <span v-if="isVoucherEligible(v)" class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 11px;">
-                      Dùng được
-                    </span>
-                    <span v-else class="badge bg-secondary-subtle text-secondary border border-secondary-subtle" style="font-size: 11px;">
-                      Không dùng được
-                    </span>
-                    <span v-if="v.soLuong" class="voucher-card-remain">
-                      Còn {{ Math.max(0, (v.soLuong || 0) - (v.soLuongDaSuDung || 0)) }} lượt
-                    </span>
-                  </div>
-                  <div class="voucher-card-name">{{ v.ten }}</div>
-                  <div class="voucher-card-conditions">
-                    <span>Đơn từ: <strong>{{ formatVnd(v.hoaDonToiThieu || 0) }}</strong></span>
-                    <span v-if="v.giamToiDa"> • Tối đa: <strong>{{ formatVnd(v.giamToiDa) }}</strong></span>
-                  </div>
-
-                  <div v-if="isVoucherEligible(v) && subTotal > 0" class="voucher-calc-saving text-success fw-semibold">
-                    Giảm được {{ formatVnd(calculateVoucherDiscount(v, subTotal)) }}
-                  </div>
-
-                  <div class="voucher-card-date" v-if="v.ngayKetThuc">
-                    HSD: {{ formatDateVn(v.ngayKetThuc) }}
-                  </div>
-                  <div v-if="!isVoucherEligible(v)" class="voucher-ineligible-msg text-danger small">
-                    {{ getVoucherIneligibilityReason(v) }}
-                  </div>
-                </div>
-
-                <div class="voucher-card-action">
-                  <button v-if="currentOrder?.selectedVoucher?.id === v.id" type="button" class="btn btn-sm btn-success fw-bold px-3 py-1"
-                    @click="removeVoucher" title="Bấm để gỡ bỏ voucher">
-                    ✓ Đang dùng
-                  </button>
-                  <button v-else-if="isVoucherEligible(v)" type="button" class="btn btn-sm btn-outline-primary fw-bold px-3 py-1"
-                    @click="applyVoucher(v)">
-                    Áp dụng
-                  </button>
-                  <button v-else type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" disabled>
-                    Không khả dụng
-                  </button>
-                </div>
-              </div>
-
-              <div v-if="sortedFilteredVouchers.length === 0" class="empty-vouchers-msg">
-                Không tìm thấy phiếu giảm giá nào phù hợp với "{{ voucherSearchQuery }}".
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </transition>
 
     <transition name="fade">
       <div v-if="isBankQrModalOpen" class="pos-modal-overlay" @click.self="isBankQrModalOpen = false">

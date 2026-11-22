@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import QuickAddModal from '@/components/QuickAddModal.vue'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import CurrencyInput from '@/components/CurrencyInput.vue'
-import { notifySuccess, notifyWarning, notifyError } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 import http, { API_ORIGIN } from '@/api/http'
 import { getToken } from '@/utils/auth'
@@ -567,6 +567,16 @@ const saveProduct = async (confirmMerge = false) => {
     trangThai: true,
     confirmMerge: Boolean(confirmMerge),
     bienThes: bienThes
+  }
+
+  if (!confirmMerge) {
+    const ok = await notifyConfirm(
+      'Xác nhận thêm sản phẩm',
+      `Bạn có chắc chắn muốn lưu sản phẩm "${form.name.trim()}"?`,
+      'Xác nhận lưu',
+      'Hủy'
+    )
+    if (!ok) return
   }
 
   try {

@@ -309,6 +309,45 @@ function decQty() {
   addError.value = "";
 }
 
+function resolveMaxQty() {
+  const rawMax = selectedVariant.value
+    ? Number(selectedVariant.value.stock || 0)
+    : (totalStock.value > 0 ? totalStock.value : Infinity);
+  return rawMax > 0 ? rawMax : 1;
+}
+
+function onQtyInput(e) {
+  const raw = String(e?.target?.value ?? "").trim();
+  if (raw === "") return;
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return;
+  const max = resolveMaxQty();
+  if (parsed > max) {
+    qty.value = max;
+    if (e?.target) e.target.value = max;
+    addError.value = `Chỉ còn ${max} sản phẩm trong kho.`;
+  } else {
+    qty.value = parsed;
+    addError.value = "";
+  }
+}
+
+function onQtyBlur(e) {
+  const raw = String(e?.target?.value ?? "").trim();
+  const parsed = parseInt(raw, 10);
+  const max = resolveMaxQty();
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    qty.value = 1;
+    if (e?.target) e.target.value = 1;
+    addError.value = "";
+    return;
+  }
+  const clamped = Math.min(parsed, max);
+  qty.value = clamped;
+  if (e?.target) e.target.value = clamped;
+  addError.value = parsed > max ? `Chỉ còn ${max} sản phẩm trong kho.` : "";
+}
+
 async function add(goCart = false) {
   if (colors.value.length > 0 && !selectedColor.value) {
     addError.value = "Vui lòng chọn màu sắc trước.";
@@ -610,8 +649,15 @@ async function add(goCart = false) {
                 </button>
                 <input
                   class="qty-input text-center border-0 fw-semibold"
+                  type="number"
+                  min="1"
+                  :max="currentStock > 0 ? currentStock : undefined"
                   :value="qty"
-                  readonly
+                  :disabled="adding"
+                  @input="onQtyInput"
+                  @blur="onQtyBlur"
+                  @change="onQtyBlur"
+                  @keydown.enter="$event.target.blur()"
                 />
                 <button
                   type="button"
@@ -1093,11 +1139,18 @@ async function add(goCart = false) {
 }
 
 .qty-input {
-  width: 44px;
+  width: 56px;
   height: 100%;
   font-size: 0.95rem;
   background: transparent;
   color: #1e293b;
+  outline: none;
+  -moz-appearance: textfield;
+}
+.qty-input::-webkit-outer-spin-button,
+.qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 /* Nút hành động */

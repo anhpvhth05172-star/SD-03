@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref, computed, watch, onMounted, nextTick } from "vue";
+import SearchableSelect from "@/components/SearchableSelect.vue";
 import * as store from "../store";
 import { createInvoice } from "@/api/invoice";
 import { listVouchers, suDungCuaToi } from "@/api/voucher";
@@ -70,21 +71,33 @@ async function fetchCustomer() {
 }
 
 const customer = ref(null);
+const CHECKOUT_DRAFT_KEY = "ps_checkout_draft_v1";
+let isRestoringDraft = false;
+let hasRestoredDraft = false;
+let pendingDraftRegion = null;
+
 onMounted(async () => {
-  const [, shippingResult] = await Promise.allSettled([
-    fetchCustomer().then((result) => {
-      customer.value = result;
-      if (result?.email && !f.email) {
-        f.email = result.email;
-      }
-    }),
-    loadProvinces(),
-    getFreeshipConfig().then((cfg) => {
-      if (cfg?.freeShipThreshold != null) freeShipThreshold.value = Number(cfg.freeShipThreshold);
-    }).catch(() => {}),
-  ]);
-  if (shippingResult.status === "rejected") shippingError.value = "Không tải được danh sách tỉnh/thành phố.";
-  await loadVouchers();
+  isRestoringDraft = true;
+  try {
+    applyCheckoutDraftFields();
+    const [, shippingResult] = await Promise.allSettled([
+      fetchCustomer().then((result) => {
+        customer.value = result;
+        if (result?.email && !f.email) {
+          f.email = result.email;
+        }
+      }),
+      loadProvinces(),
+      getFreeshipConfig().then((cfg) => {
+        if (cfg?.freeShipThreshold != null) freeShipThreshold.value = Number(cfg.freeShipThreshold);
+      }).catch(() => {}),
+    ]);
+    if (shippingResult.status === "rejected") shippingError.value = "Không tải được danh sách tỉnh/thành phố.";
+    applyCheckoutDraftRegion();
+    await loadVouchers();
+  } finally {
+    isRestoringDraft = false;
+  }
 });
 
 /* ============== ADAPTER theo JSON thực tế ============== */
@@ -618,6 +631,7 @@ watch(provinceId, async (id) => {
       const savedClean = cleanPlaceName(savedWard);
       const match = wards.value.find(
         (w) =>
+          String(w.id) === String(savedWard) ||
           normalizePlace(w.name) === savedNorm ||
           normalizePlace(w.name).startsWith(`${savedNorm} `) ||
           cleanPlaceName(w.name) === savedClean,
@@ -706,11 +720,116 @@ watch(
       f.email = u.email;
     }
     const def = savedAddresses.value[0]; // đã sort: mặc định đứng đầu
-    if (def) {
+    if (def && !hasRestoredDraft && !selectedAddr.value && !customAddress.value) {
       chooseAddress(def.id);
     }
   },
   { immediate: true },
+);
+
+function readCheckoutDraft() {
+  try {
+    const raw = sessionStorage.getItem(CHECKOUT_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCheckoutDraft() {
+  try {
+    const prev = readCheckoutDraft();
+    const pendingWard = Boolean(savedWardToRestore.value || pendingDraftRegion);
+    const payload = {
+      name: f.name || "",
+      phone: f.phone || "",
+      email: f.email || "",
+      address: f.address || "",
+      note: f.note || "",
+      pay: f.pay || "cod",
+      provinceId: provinceId.value ? String(provinceId.value) : (pendingDraftRegion?.provinceId ? String(pendingDraftRegion.provinceId) : ""),
+      wardId: wardId.value ? String(wardId.value) : (pendingWard ? (prev?.wardId || "") : ""),
+      wardName: selectedWard.value?.name || (pendingWard ? (prev?.wardName || "") : ""),
+      selectedAddr: selectedAddr.value ?? null,
+      customAddress: customAddress.value ?? null,
+    };
+    sessionStorage.setItem(CHECKOUT_DRAFT_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+function clearCheckoutDraft() {
+  pendingDraftRegion = null;
+  try {
+    sessionStorage.removeItem(CHECKOUT_DRAFT_KEY);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function applyCheckoutDraftFields() {
+  const draft = readCheckoutDraft();
+  if (!draft) return false;
+  let restored = false;
+  if (typeof draft.name === "string" && draft.name) { f.name = draft.name; restored = true; }
+  if (typeof draft.phone === "string" && draft.phone) { f.phone = draft.phone; restored = true; }
+  if (typeof draft.email === "string" && draft.email) { f.email = draft.email; restored = true; }
+  if (typeof draft.address === "string" && draft.address) { f.address = draft.address; restored = true; }
+  if (typeof draft.note === "string" && draft.note) { f.note = draft.note; restored = true; }
+  if (typeof draft.pay === "string" && ["cod", "bank", "vnpay"].includes(draft.pay)) {
+    f.pay = draft.pay;
+    restored = true;
+  }
+  if (draft.customAddress && typeof draft.customAddress === "object") {
+    customAddress.value = draft.customAddress;
+    selectedAddr.value = draft.selectedAddr ?? draft.customAddress.id;
+    restored = true;
+  } else if (draft.selectedAddr) {
+    selectedAddr.value = draft.selectedAddr;
+    restored = true;
+  }
+  if (draft.provinceId) {
+    pendingDraftRegion = {
+      provinceId: String(draft.provinceId),
+      wardId: draft.wardId ? String(draft.wardId) : "",
+      wardName: draft.wardName || "",
+    };
+    restored = true;
+  }
+  hasRestoredDraft = restored;
+  return restored;
+}
+
+function applyCheckoutDraftRegion() {
+  const region = pendingDraftRegion;
+  pendingDraftRegion = null;
+  if (region?.provinceId) {
+    if (region.wardName || region.wardId) {
+      savedWardToRestore.value = region.wardName || region.wardId;
+    }
+    provinceId.value = String(region.provinceId);
+    return;
+  }
+  if (customAddress.value?.province) {
+    savedAddressToRestore.value = {
+      province: customAddress.value.province,
+      ward: customAddress.value.ward || "",
+    };
+    restoreSavedAddressRegion();
+  }
+}
+
+watch(
+  [f, provinceId, wardId, selectedAddr, customAddress],
+  () => {
+    if (!isRestoringDraft && !done.value) {
+      saveCheckoutDraft();
+    }
+  },
+  { deep: true },
 );
 
 /* ---------- Voucher ---------- */
@@ -1311,6 +1430,7 @@ async function submit() {
     } catch { /* Lưu lịch sử đơn hàng ở localStorage là tùy chọn. */ }
 
     done.value = true;
+    clearCheckoutDraft();
     await clearCart();
   } catch (e) {
     console.error("[Checkout] Lỗi tạo hóa đơn:", e);
@@ -1496,6 +1616,7 @@ const finishQrOrderSuccess = async (result) => {
   } catch { }
 
   done.value = true;
+  clearCheckoutDraft();
   await clearCart();
 
   if (result?.outOfStock) {
@@ -2116,8 +2237,15 @@ const confirmQrPayment = async () => {
     <!-- POPUP CHỌN / SỬA ĐỊA CHỈ KHÁCH HÀNG (CHECKOUT ONLINE) -->
     <div v-if="isAddressModalOpen" class="modal fade show d-block" style="background: rgba(0,0,0,0.5); z-index: 1055;"
       tabindex="-1" @click.self="isAddressModalOpen = false">
-      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 560px;">
-        <div class="modal-content rounded-4 border-0 shadow">
+      <div
+        class="modal-dialog modal-dialog-centered"
+        :class="{ 'modal-dialog-scrollable': !isEditingAddressInModal }"
+        style="max-width: 560px;"
+      >
+        <div
+          class="modal-content rounded-4 border-0 shadow"
+          :style="isEditingAddressInModal ? { overflow: 'visible' } : null"
+        >
           <div class="modal-header border-bottom py-3 px-4">
             <h6 class="modal-title fw-bold text-dark mb-0">
               <i class="bi bi-geo-alt-fill text-danger me-2"></i>
@@ -2217,17 +2345,29 @@ const confirmQrPayment = async () => {
               </div>
               <div class="col-md-6">
                 <label class="co-label">Tỉnh / Thành phố <span class="text-danger">*</span></label>
-                <select v-model="addrModalForm.provinceId" class="form-select co-input" @change="onAddrModalProvinceChange">
-                  <option value="">Chọn tỉnh / thành phố</option>
-                  <option v-for="p in provinces" :key="p.id" :value="String(p.id)">{{ p.name }}</option>
-                </select>
+                <SearchableSelect
+                  v-model="addrModalForm.provinceId"
+                  :options="provinces"
+                  value-key="id"
+                  label-key="name"
+                  placeholder="Chọn tỉnh / thành phố"
+                  search-placeholder="Tìm tỉnh / thành phố..."
+                  :allow-clear="false"
+                  @change="onAddrModalProvinceChange"
+                />
               </div>
               <div class="col-md-6">
                 <label class="co-label">Phường / Xã <span class="text-danger">*</span></label>
-                <select v-model="addrModalForm.wardId" class="form-select co-input" :disabled="!addrModalForm.provinceId || !addrModalWards.length">
-                  <option value="">Chọn phường / xã</option>
-                  <option v-for="w in addrModalWards" :key="w.id" :value="String(w.id)">{{ w.name }}</option>
-                </select>
+                <SearchableSelect
+                  v-model="addrModalForm.wardId"
+                  :options="addrModalWards"
+                  value-key="id"
+                  label-key="name"
+                  placeholder="Chọn phường / xã"
+                  search-placeholder="Tìm phường / xã..."
+                  :disabled="!addrModalForm.provinceId || !addrModalWards.length"
+                  :allow-clear="false"
+                />
               </div>
               <div class="col-12">
                 <label class="co-label">Địa chỉ cụ thể (số nhà, tên đường) <span class="text-danger">*</span></label>

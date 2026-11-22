@@ -527,7 +527,6 @@ public class HoaDonService {
             req.setMaHoaDon(taoMaHoaDonMoi());
         }
         validateHeader(req, null);
-        phanCongNhanVienDonOnline(req);
         CaLamViecDto caDangMo = chuanBiTaoHdTaiQuay(req);
         xacDinhPhiVanChuyenOnline(req);
         PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
@@ -559,26 +558,6 @@ public class HoaDonService {
 
     private void ghiLichSuCapNhat(HoaDon hoaDon, String ghiChu) {
         ghiLichSuCapNhat(hoaDon, ghiChu, null, null);
-    }
-
-    private void phanCongNhanVienDonOnline(HoaDonRequest req) {
-        if (!"ONLINE".equals(toMaLoaiDon(req.getLoaiDon())))
-            return;
-        List<NhanVien> nhanViens = nhanVienRepository.findActiveOrderAssignees();
-        if (nhanViens.isEmpty()) {
-            // Đơn online vẫn được phép đặt; để trống nhân viên để cửa hàng phân công sau.
-            req.setIdNhanVien(null);
-            return;
-        }
-        Map<Long, Long> soDonDangXuLy = new HashMap<>();
-        for (Object[] row : hoaDonRepository.countOpenOrdersByEmployee()) {
-            soDonDangXuLy.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
-        }
-        NhanVien nhanDon = nhanViens.stream()
-                .min(Comparator.comparingLong((NhanVien n) -> soDonDangXuLy.getOrDefault(n.getId(), 0L))
-                        .thenComparing(NhanVien::getId))
-                .orElseThrow();
-        req.setIdNhanVien(nhanDon.getId());
     }
 
     private void kiemTraNguoiTaoHoaDon(HoaDonRequest req) {
@@ -667,6 +646,16 @@ public class HoaDonService {
                 req.setToDistrictId(1);
             if (isBlank(req.getToWardCode()))
                 req.setToWardCode("001");
+        }
+        if ("ONLINE".equalsIgnoreCase(hoaDon.getLoaiDon()) && req.getIdNhanVien() == null) {
+            if (hoaDon.getNhanVien() != null) {
+                req.setIdNhanVien(hoaDon.getNhanVien().getId());
+            } else {
+                Long idNv = idNhanVienSession();
+                if (idNv != null) {
+                    req.setIdNhanVien(idNv);
+                }
+            }
         }
         fillHeader(hoaDon, req);
         PhieuGiamGia phieu = khoaVaKiemTraCoBan(req);
@@ -811,6 +800,12 @@ public class HoaDonService {
         if (("DA_HUY".equals(maMoi) || "DA_HOAN_TIEN".equals(maMoi) || "CHO_HOAN_TIEN".equals(maMoi))
                 && daTruKho(hoaDon)) {
             hoanTonKho(id);
+        }
+        if (hoaDon.getNhanVien() == null) {
+            Long idNv = idNhanVienSession();
+            if (idNv != null) {
+                nhanVienRepository.findById(idNv).ifPresent(hoaDon::setNhanVien);
+            }
         }
         hoaDon.setTrangThai(maMoi);
         hoaDon.setNguoiCapNhat(nguoiCapNhatHienTai());
@@ -1452,9 +1447,13 @@ public class HoaDonService {
                 .map(DongTinh::thanhTien)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // Chính sách Free Ship theo cấu hình mốc đơn hàng miễn phí vận chuyển
+        // Chính sách Free Ship theo cấu hình mốc đơn hàng miễn phí vận chuyển (không ghi đè khi nhân viên nhập tay ở POS giao hàng)
         BigDecimal mucFreeship = layMucFreeship();
-        if (mucFreeship.compareTo(BigDecimal.ZERO) > 0 && tongTienHang.compareTo(mucFreeship) >= 0) {
+        boolean apDungFreeshipTuDong = req == null
+                || isBlank(req.getLoaiDon())
+                || "ONLINE".equalsIgnoreCase(toMaLoaiDon(req.getLoaiDon()))
+                || req.getPhiVanChuyen() == null;
+        if (apDungFreeshipTuDong && mucFreeship.compareTo(BigDecimal.ZERO) > 0 && tongTienHang.compareTo(mucFreeship) >= 0) {
             hoaDon.setPhiVanChuyen(BigDecimal.ZERO);
             if (req != null) {
                 req.setPhiVanChuyen(BigDecimal.ZERO);

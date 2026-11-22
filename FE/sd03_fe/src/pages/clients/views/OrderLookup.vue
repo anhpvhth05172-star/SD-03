@@ -749,6 +749,28 @@ onUnmounted(() => {
   window.removeEventListener('storage', handleStorageEvent);
   window.removeEventListener('polyshoes:order-status-changed', handleCustomStatusEvent);
 });
+
+const retryingOrderId = ref(null);
+async function retryOrderPayment(order) {
+  if (!order?.id || retryingOrderId.value) return;
+  retryingOrderId.value = order.id;
+  try {
+    const res = await fetch(`/api/vnpay/retry-payment/${order.id}`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.paymentUrl) {
+      window.location.href = data.paymentUrl;
+      return;
+    }
+    notifyToast("error", data?.message || "Không thể tạo lại liên kết thanh toán VNPay.");
+  } catch {
+    notifyToast("error", "Lỗi kết nối khi tạo lại thanh toán VNPay.");
+  } finally {
+    retryingOrderId.value = null;
+  }
+}
 </script>
 
 <template>
@@ -1008,12 +1030,27 @@ onUnmounted(() => {
                 · {{ o.address }}
               </span>
             </div>
-            <button
-              class="btn btn-primary btn-sm ol-pill-btn"
-              @click="doSearch(o.code)"
-            >
-              <i class="bi bi-geo me-1"></i>Theo dõi tiến độ
-            </button>
+            <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+              <button
+                v-if="o.status === 'CHO_THANH_TOAN'"
+                type="button"
+                class="btn btn-warning btn-sm ol-pill-btn fw-bold"
+                :disabled="retryingOrderId === o.id"
+                @click="retryOrderPayment(o)"
+              >
+                <span
+                  v-if="retryingOrderId === o.id"
+                  class="spinner-border spinner-border-sm me-1"
+                ></span>
+                {{ retryingOrderId === o.id ? "Đang chuyển..." : "Thanh toán lại" }}
+              </button>
+              <button
+                class="btn btn-primary btn-sm ol-pill-btn"
+                @click="doSearch(o.code)"
+              >
+                <i class="bi bi-geo me-1"></i>Theo dõi tiến độ
+              </button>
+            </div>
           </div>
         </article>
       </div>
@@ -1190,12 +1227,27 @@ onUnmounted(() => {
                   · {{ o.address }}
                 </span>
               </div>
-              <button
-                class="btn btn-primary btn-sm ol-pill-btn"
-                @click="selectOrder(o)"
-              >
-                <i class="bi bi-geo me-1"></i>Theo dõi tiến độ
-              </button>
+              <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                <button
+                  v-if="o.status === 'CHO_THANH_TOAN'"
+                  type="button"
+                  class="btn btn-warning btn-sm ol-pill-btn fw-bold"
+                  :disabled="retryingOrderId === o.id"
+                  @click="retryOrderPayment(o)"
+                >
+                  <span
+                    v-if="retryingOrderId === o.id"
+                    class="spinner-border spinner-border-sm me-1"
+                  ></span>
+                  {{ retryingOrderId === o.id ? "Đang chuyển..." : "Thanh toán lại" }}
+                </button>
+                <button
+                  class="btn btn-primary btn-sm ol-pill-btn"
+                  @click="selectOrder(o)"
+                >
+                  <i class="bi bi-geo me-1"></i>Theo dõi tiến độ
+                </button>
+              </div>
             </div>
           </article>
         </div>
@@ -1252,9 +1304,24 @@ onUnmounted(() => {
               <i class="bi bi-clock me-1"></i>Đặt lúc {{ currentResult.date }}
             </div>
           </div>
-          <span class="ol-status big" :class="currentResult.statusInfo.tone">
-            <i class="bi bi-dot"></i>{{ currentResult.statusInfo.label }}
-          </span>
+          <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+            <button
+              v-if="currentResult.status === 'CHO_THANH_TOAN'"
+              type="button"
+              class="btn btn-warning btn-sm fw-bold rounded-pill px-3"
+              :disabled="retryingOrderId === currentResult.id"
+              @click="retryOrderPayment(currentResult)"
+            >
+              <span
+                v-if="retryingOrderId === currentResult.id"
+                class="spinner-border spinner-border-sm me-1"
+              ></span>
+              {{ retryingOrderId === currentResult.id ? "Đang chuyển sang VNPay..." : "Thanh toán lại (VNPay)" }}
+            </button>
+            <span class="ol-status big" :class="currentResult.statusInfo.tone">
+              <i class="bi bi-dot"></i>{{ currentResult.statusInfo.label }}
+            </span>
+          </div>
         </div>
 
         <div class="ol-result-body">

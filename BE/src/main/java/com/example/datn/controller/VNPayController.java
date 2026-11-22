@@ -42,6 +42,17 @@ public class VNPayController {
     }
 
     /**
+     * Tạo lại liên kết thanh toán VNPay cho đơn hàng đang chờ thanh toán.
+     */
+    @PostMapping("/retry-payment/{id}")
+    public ResponseEntity<VNPayPaymentResponse> retryPayment(
+        @PathVariable("id") Long id,
+        HttpServletRequest httpRequest
+    ) {
+        return ResponseEntity.ok(vnPayService.retryPaymentAndUrl(httpRequest, id));
+    }
+
+    /**
      * Xác nhận thanh toán khi quét mã QR thành công (tự động hoặc bấm xác nhận).
      * Chuyển đơn từ CHO_THANH_TOAN sang CHO_XAC_NHAN, trừ kho, xóa giỏ và gửi mail.
      */

@@ -3,7 +3,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
-import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm, notifyConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
 import http, { API_ORIGIN } from '@/api/http'
@@ -380,6 +380,7 @@ const resetFilters = () => {
   filters.idXuatXu = ''
   filters.doiTuong = ''
   filters.trangThai = ''
+  activeTab.value = 'ALL'
   currentPage.value = 0
   fetchProducts()
   showToastNotice('Thành công', 'Đã đặt lại bộ lọc về mặc định', 'success')
@@ -570,6 +571,14 @@ const validateEditForm = () => {
 const submitQuickEdit = async () => {
   if (!validateEditForm()) return
 
+  const ok = await notifyConfirm(
+    'Xác nhận cập nhật sản phẩm',
+    `Bạn có chắc chắn muốn lưu thay đổi cho sản phẩm "${editForm.tenSanPham.trim()}"?`,
+    'Xác nhận lưu',
+    'Hủy'
+  )
+  if (!ok) return
+
   isUpdating.value = true
   const payload = {
     tenSanPham: editForm.tenSanPham.trim(),
@@ -679,11 +688,6 @@ onUnmounted(() => {
 
     <div class="filter-box">
       <div class="status-tabs-row">
-        <div class="tabs-group">
-          <SearchableSelect v-model="activeTab" :options="statusTabs" label-key="label" value-key="value"
-            placeholder="Trạng thái" @change="selectTab" />
-        </div>
-
         <div class="page-actions">
           <button class="btn btn-reset-filter" @click="resetFilters" title="Đặt lại bộ lọc về mặc định">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -725,7 +729,7 @@ onUnmounted(() => {
 
       <transition name="collapse-fade">
         <div v-show="isFilterExpanded" class="filters-grid">
-          <div class="filter-col span-2">
+          <div class="filter-col">
             <label class="filter-lbl">Tìm kiếm sản phẩm</label>
             <div class="search-wrap">
               <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -750,6 +754,12 @@ onUnmounted(() => {
             <label class="filter-lbl">Loại giày</label>
             <SearchableSelect v-model="filters.idLoaiGiay" :options="categories" label-key="ten" value-key="id"
               placeholder="Tất cả loại giày" search-placeholder="Tìm loại giày..." @change="onFilterChange" />
+          </div>
+
+          <div class="filter-col">
+            <label class="filter-lbl">Trạng thái</label>
+            <SearchableSelect v-model="activeTab" :options="statusTabs" label-key="label" value-key="value"
+              :allow-clear="false" placeholder="Tất cả" search-placeholder="Tìm trạng thái..." @change="selectTab" />
           </div>
         </div>
       </transition>

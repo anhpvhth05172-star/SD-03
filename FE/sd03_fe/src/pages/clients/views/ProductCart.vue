@@ -450,6 +450,26 @@ const handleQtyChange = async (item, delta) => {
   }
 };
 
+const handleQtyDirectInput = async (item, event) => {
+  const raw = String(event?.target?.value ?? "").trim();
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    if (event?.target) event.target.value = item.qty;
+    return;
+  }
+  const maxStock = item.stock != null ? Number(item.stock) : Infinity;
+  const targetQty = maxStock > 0 ? Math.min(parsed, maxStock) : 1;
+  if (parsed > maxStock) {
+    actionError.value = `Kho chỉ còn ${maxStock} sản phẩm`;
+    setTimeout(() => (actionError.value = ""), 3000);
+  }
+  const delta = targetQty - Number(item.qty || 1);
+  if (delta !== 0) {
+    await handleQtyChange(item, delta);
+  }
+  if (event?.target) event.target.value = item.qty;
+};
+
 const handleRemove = async (item, idx) => {
   const tenSp = item.tenSanPham || item.ten || item.name || "sản phẩm này";
   const ok = await notifyConfirm(
@@ -642,7 +662,18 @@ const handleClear = async () => {
                       v-if="actionLoadingId === rowId(i)"
                       class="spinner-border spinner-border-sm"
                     ></span>
-                    <template v-else>{{ i.qty }}</template>
+                    <input
+                      v-else
+                      type="number"
+                      class="qty-input-cart"
+                      :value="i.qty"
+                      min="1"
+                      :max="i.stock ?? undefined"
+                      :disabled="actionLoadingId === rowId(i)"
+                      @change="handleQtyDirectInput(i, $event)"
+                      @blur="handleQtyDirectInput(i, $event)"
+                      @keydown.enter="$event.target.blur()"
+                    />
                   </span>
                   <button
                     type="button"
@@ -1191,6 +1222,23 @@ const handleClear = async () => {
   text-align: center;
   font-weight: 700;
   color: #111827;
+}
+.qty-input-cart {
+  width: 44px;
+  text-align: center;
+  font-weight: 700;
+  color: #111827;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  padding: 0;
+  -moz-appearance: textfield;
+}
+.qty-input-cart::-webkit-inner-spin-button,
+.qty-input-cart::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .item-remove {

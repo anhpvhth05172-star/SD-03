@@ -78,11 +78,7 @@ public class VNPayService {
         }
 
         String paymentUrl = buildPaymentUrl(httpRequest, hoaDon.getMaHoaDon(), soTien);
-
-        String qrUrl = String.format("https://img.vietqr.io/image/MB-0922010408-compact2.png?amount=%.0f&addInfo=%s&accountName=%s",
-            soTien.doubleValue(),
-            URLEncoder.encode(hoaDon.getMaHoaDon(), StandardCharsets.UTF_8),
-            URLEncoder.encode("POLYSHOES STORE", StandardCharsets.UTF_8));
+        String qrUrl = buildQrUrl(hoaDon.getMaHoaDon(), soTien);
 
         return VNPayPaymentResponse.builder()
             .status("OK")
@@ -93,6 +89,43 @@ public class VNPayService {
             .amount(soTien)
             .qrUrl(qrUrl)
             .build();
+    }
+
+    /** Tạo lại liên kết thanh toán VNPay cho đơn đang ở trạng thái CHO_THANH_TOAN. */
+    @Transactional
+    public VNPayPaymentResponse retryPaymentAndUrl(HttpServletRequest httpRequest, Long id) {
+        HoaDon hoaDon = hoaDonRepository.findById(id)
+            .filter(h -> !h.isDaXoa())
+            .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đơn hàng #" + id));
+        if (!"CHO_THANH_TOAN".equals(hoaDon.getTrangThai())) {
+            throw new IllegalArgumentException("Chỉ có thể thanh toán lại đơn hàng đang ở trạng thái Chờ thanh toán");
+        }
+        BigDecimal soTien = hoaDon.getTienSauGiamGia();
+        if (soTien == null || soTien.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Số tiền thanh toán phải lớn hơn 0");
+        }
+        hoaDon.setNgayCapNhat(LocalDateTime.now());
+        hoaDonRepository.save(hoaDon);
+
+        String paymentUrl = buildPaymentUrl(httpRequest, hoaDon.getMaHoaDon(), soTien);
+        String qrUrl = buildQrUrl(hoaDon.getMaHoaDon(), soTien);
+
+        return VNPayPaymentResponse.builder()
+            .status("OK")
+            .message("Tạo lại liên kết thanh toán VNPay thành công")
+            .paymentUrl(paymentUrl)
+            .orderId(hoaDon.getId())
+            .maHoaDon(hoaDon.getMaHoaDon())
+            .amount(soTien)
+            .qrUrl(qrUrl)
+            .build();
+    }
+
+    private String buildQrUrl(String maHoaDon, BigDecimal soTien) {
+        return String.format("https://img.vietqr.io/image/MB-0922010408-compact2.png?amount=%.0f&addInfo=%s&accountName=%s",
+            soTien.doubleValue(),
+            URLEncoder.encode(maHoaDon, StandardCharsets.UTF_8),
+            URLEncoder.encode("POLYSHOES STORE", StandardCharsets.UTF_8));
     }
 
     @Transactional
@@ -121,13 +154,18 @@ public class VNPayService {
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         hoaDonRepository.save(hoaDon);
 
+        boolean outOfStock = hoaDon.getGhiChu() != null && hoaDon.getGhiChu().contains("CẢNH BÁO TỒN KHO");
+        String msg = outOfStock
+            ? "Thanh toán thành công, nhưng một số sản phẩm tạm hết hàng. Đơn hàng #" + hoaDon.getMaHoaDon() + " đã chuyển sang Chờ xác nhận để nhân viên liên hệ."
+            : "Xác nhận thanh toán thành công! Đơn hàng #" + hoaDon.getMaHoaDon() + " đang ở trạng thái Chờ xác nhận.";
+
         return VNPayCallbackResponse.builder()
             .success(true)
-            .outOfStock(false)
+            .outOfStock(outOfStock)
             .orderId(hoaDon.getId())
             .maHoaDon(hoaDon.getMaHoaDon())
             .amount(hoaDon.getTienSauGiamGia())
-            .message("Xác nhận thanh toán thành công! Đơn hàng #" + hoaDon.getMaHoaDon() + " đang ở trạng thái Chờ xác nhận.")
+            .message(msg)
             .build();
     }
 

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { cartCount, fetchCart, resetCartLocal } from "@/pages/clients/store";
 import { getUser, dangXuat } from "@/utils/auth";
@@ -21,6 +21,9 @@ const handleNavSearch = () => {
 };
 
 const user = ref(getUser());
+const syncUser = () => {
+  user.value = getUser();
+};
 const isLoggedIn = computed(() => !!user.value);
 
 const userName = computed(() => {
@@ -57,13 +60,20 @@ const closeDropdowns = () => {
   showUserMenu.value = false;
 };
 
+watch(() => route.fullPath, syncUser);
+
 onMounted(() => {
+  syncUser();
   window.addEventListener("click", closeDropdowns);
+  window.addEventListener("storage", syncUser);
+  window.addEventListener("auth:logout", syncUser);
   fetchCart();
 });
 
 onUnmounted(() => {
   window.removeEventListener("click", closeDropdowns);
+  window.removeEventListener("storage", syncUser);
+  window.removeEventListener("auth:logout", syncUser);
 });
 
 const handleLogout = () => {

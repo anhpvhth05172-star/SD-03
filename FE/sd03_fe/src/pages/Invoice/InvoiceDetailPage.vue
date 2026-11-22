@@ -848,7 +848,7 @@ onBeforeUnmount(() => {
         <div class="banner-col">
           <div class="banner-row">
             <span class="banner-lbl">Tạo bởi:</span>
-            <span class="banner-val val-creator">{{ data.maNhanVien || data.tenNhanVien || 'NV001' }}</span>
+            <span class="banner-val val-creator">{{ data.maNhanVien || data.tenNhanVien || (data.maLoaiDon === 'ONLINE' ? 'Chưa tiếp nhận' : '—') }}</span>
           </div>
           <div class="banner-row">
             <span class="banner-lbl">Hình thức nhận:</span>
@@ -1087,6 +1087,18 @@ onBeforeUnmount(() => {
                       <path d="M5 12h14M12 5l7 7-7 7" />
                     </svg>
                     <span>{{ nhanHanhDongChinh(buocTiepTheoChinh) }}</span>
+                  </button>
+
+                  <!-- Nút chỉnh sửa thông tin đơn hàng khi đang Chờ xác nhận -->
+                  <button
+                    v-if="laChoXacNhan && !isTerminal"
+                    class="btn-status-action btn-sua-don"
+                    type="button"
+                    :disabled="updatingStatus || isCheDoXem"
+                    :title="isCheDoXem ? 'Chưa mở ca làm việc (chế độ xem)' : 'Chỉnh sửa thông tin đơn hàng (địa chỉ, sản phẩm, phí ship...)'"
+                    @click="router.push(`/hoa-don/${data.id}/sua`)"
+                  >
+                    <span>Chỉnh sửa đơn hàng</span>
                   </button>
 
                   <!-- Các nút chuyển trạng thái phụ (Chờ hoàn tiền, Giao thất bại, Hủy) -->

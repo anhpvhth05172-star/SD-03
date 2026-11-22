@@ -242,6 +242,31 @@ const lookupLink = computed(() =>
     ? { path: LOOKUP_ROUTE, query: { code: order.value.code } }
     : LOOKUP_ROUTE,
 );
+
+const retryingPayment = ref(false);
+const retryError = ref("");
+
+async function retryOrderPayment() {
+  if (!order.value?.id || retryingPayment.value) return;
+  retryingPayment.value = true;
+  retryError.value = "";
+  try {
+    const res = await fetch(`/api/vnpay/retry-payment/${order.value.id}`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.paymentUrl) {
+      window.location.href = data.paymentUrl;
+      return;
+    }
+    retryError.value = data?.message || "Không thể tạo liên kết thanh toán lại.";
+  } catch {
+    retryError.value = "Lỗi kết nối khi tạo lại thanh toán VNPay.";
+  } finally {
+    retryingPayment.value = false;
+  }
+}
 </script>
 
 <template>
@@ -367,6 +392,22 @@ const lookupLink = computed(() =>
           </div>
 
           <div class="d-flex flex-column gap-2">
+            <button
+              v-if="order.status === 'CHO_THANH_TOAN'"
+              type="button"
+              class="btn btn-warning fw-bold w-100 py-2"
+              :disabled="retryingPayment"
+              @click="retryOrderPayment"
+            >
+              <span
+                v-if="retryingPayment"
+                class="spinner-border spinner-border-sm me-1"
+              ></span>
+              {{ retryingPayment ? "Đang chuyển sang VNPay..." : "Thanh toán lại (VNPay)" }}
+            </button>
+            <div v-if="retryError" class="text-danger small text-center">
+              {{ retryError }}
+            </div>
             <RouterLink
               :to="lookupLink"
               class="btn btn-outline-primary w-100 py-2"

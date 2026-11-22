@@ -28,6 +28,7 @@ const laAuthCongKhai = (url = '') =>
 
 const http = axios.create({
   baseURL: API_BASE,
+  timeout: 20000,
 })
 
 let refreshPromise = null

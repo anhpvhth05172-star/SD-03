@@ -36,7 +36,12 @@ onMounted(async () => {
     result.value = data;
 
     if (data.success || data.outOfStock) {
-      // ✅ Thanh toán thành công (kể cả sự cố hết hàng chờ hoàn tiền) → xóa giỏ hàng
+      // ✅ Thanh toán thành công (kể cả sự cố hết hàng chờ hoàn tiền) → xóa giỏ hàng & bản nháp checkout
+      try {
+        sessionStorage.removeItem("ps_checkout_draft_v1");
+      } catch {
+        // ignore storage error
+      }
       try {
         await clearCart()
       } catch {
@@ -63,7 +68,7 @@ onMounted(async () => {
         }
       }
     }
-    // ❌ Nếu thất bại: BE đã xóa đơn CHO_THANH_TOAN → giỏ hàng vẫn còn nguyên
+    // ❌ Nếu thất bại: BE giữ đơn CHO_THANH_TOAN hoặc xử lý hủy → giữ giỏ hàng
   } catch (err) {
     console.error("[VNPayReturn] Lỗi xác thực:", err);
     result.value = {
@@ -83,11 +88,23 @@ function goToCart() {
 async function retryPayment() {
   retrying.value = true;
   retryError.value = "";
-  // Giỏ hàng vẫn còn → quay lại trang thanh toán
   try {
+    if (result.value?.orderId) {
+      const res = await fetch(`/api/vnpay/retry-payment/${result.value.orderId}`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.paymentUrl) {
+        window.location.href = data.paymentUrl;
+        return;
+      }
+      if (data?.message) {
+        retryError.value = data.message;
+      }
+    }
     router.push("/thanh-toan");
   } catch (e) {
-    retryError.value = "Không thể quay lại trang thanh toán.";
+    retryError.value = "Không thể tạo lại liên kết thanh toán VNPay.";
     retrying.value = false;
   }
 }
