@@ -2,14 +2,63 @@ import Swal from 'sweetalert2'
 import '@/assets/styles/custom-swal.css'
 
 /**
+ * Dọn dẹp triệt để các lớp phủ hoặc thuộc tính khóa giao diện của SweetAlert2
+ */
+export const cleanupSwalResidualDom = () => {
+  if (typeof document === 'undefined') return
+  try {
+    if (!Swal.isVisible()) {
+      document.querySelectorAll('.swal2-container').forEach((el) => el.remove())
+      document.body.classList.remove('swal2-shown', 'swal2-height-auto', 'swal2-no-backdrop', 'swal2-toast-shown', 'modal-open')
+      document.documentElement.classList.remove('swal2-shown', 'swal2-height-auto', 'swal2-no-backdrop', 'swal2-toast-shown')
+      document.body.style.removeProperty('padding-right')
+      document.body.style.removeProperty('overflow')
+      const appEl = document.getElementById('app')
+      if (appEl && appEl.getAttribute('aria-hidden') === 'true') {
+        appEl.removeAttribute('aria-hidden')
+      }
+      document.querySelectorAll('[aria-hidden="true"]').forEach((el) => {
+        if (el.id === 'app' || el.classList.contains('app-layout') || el.classList.contains('main-content-wrapper')) {
+          el.removeAttribute('aria-hidden')
+        }
+      })
+    }
+  } catch {
+    // Dọn DOM thông báo là best-effort để không che mất lỗi nghiệp vụ chính.
+  }
+}
+
+/**
+ * Đồng bộ trạng thái popup từ POS sang màn hình khách (Customer Display App)
+ */
+export const broadcastPopupToDisplay = (popupData) => {
+  if (typeof window === 'undefined') return
+  try {
+    const payload = popupData ? {
+      title: popupData.title || '',
+      text: popupData.text || '',
+      iconType: popupData.iconType || 'info',
+      timestamp: Date.now()
+    } : null
+    if (payload) {
+      localStorage.setItem('polyshoes_pos_popup_state', JSON.stringify(payload))
+    } else {
+      localStorage.removeItem('polyshoes_pos_popup_state')
+    }
+    const ch = new BroadcastChannel('polyshoes_pos_display_channel')
+    ch.postMessage({ type: 'POS_POPUP_STATE', popup: payload })
+    ch.close()
+  } catch {}
+}
+
+/**
  * Format string quotes into clean strong tags
  */
 const formatHighlight = (text) => {
   if (!text) return ''
-  return String(text).replace(
-    /["“]([^"”]+)["”]/g,
-    '<strong>"$1"</strong>'
-  )
+  return String(text)
+    .replace(/["“]([^"”]+)["”]/g, '<strong>"$1"</strong>')
+    .replace(/\n/g, '<br/>')
 }
 
 /**
@@ -51,13 +100,28 @@ const MINIMAL_ICONS = {
   `
 }
 
+const NO_HIDE_ANIMATION = {
+  showClass: {
+    popup: 'swal2-show',
+    backdrop: 'swal2-backdrop-show',
+    icon: ''
+  },
+  hideClass: {
+    popup: '',
+    backdrop: '',
+    icon: ''
+  },
+  returnFocus: false
+}
+
 /**
- * Hiển thị thông báo thành công (Icon xanh lá nhạt, tự động tắt sau 1.5s)
+ * Hiển thị thông báo thành công (Không chặn click nền để thu ngân thao tác liên tục)
  * @param {string} title Nội dung thông báo
  * @param {string} [text] Nội dung phụ
- * @param {number} [timer=1500] Thời gian tự tắt (ms)
+ * @param {number} [timer=1400] Thời gian tự tắt (ms)
  */
-export const notifySuccess = (title, text = '', timer = 1500) => {
+export const notifySuccess = (title, text = '', timer = 1400) => {
+  broadcastPopupToDisplay({ title, text, iconType: 'success' })
   const contentHtml = `
     ${MINIMAL_ICONS.success}
     <div class="minimal-title">${formatHighlight(title || 'Thành công')}</div>
@@ -65,15 +129,16 @@ export const notifySuccess = (title, text = '', timer = 1500) => {
   `
 
   return Swal.fire({
+    ...NO_HIDE_ANIMATION,
     html: contentHtml,
     showConfirmButton: false,
     timer: timer,
     timerProgressBar: false,
-    allowOutsideClick: true,
+    backdrop: false,
     allowEscapeKey: true,
     customClass: {
-      popup: 'custom-swal-popup',
-      container: 'custom-swal-container'
+      popup: 'custom-swal-popup is-non-blocking-popup',
+      container: 'custom-swal-container is-non-blocking-container'
     },
     didOpen: (popup) => {
       if (popup) {
@@ -82,6 +147,10 @@ export const notifySuccess = (title, text = '', timer = 1500) => {
           Swal.close()
         })
       }
+    },
+    didClose: () => {
+      broadcastPopupToDisplay(null)
+      setTimeout(cleanupSwalResidualDom, 10)
     }
   })
 }
@@ -90,6 +159,7 @@ export const notifySuccess = (title, text = '', timer = 1500) => {
  * Hiển thị thông báo lỗi
  */
 export const notifyError = (title, text = '') => {
+  broadcastPopupToDisplay({ title, text, iconType: 'error' })
   const contentHtml = `
     ${MINIMAL_ICONS.error}
     <div class="minimal-title">${title || 'Đã có lỗi xảy ra'}</div>
@@ -97,23 +167,54 @@ export const notifyError = (title, text = '') => {
   `
 
   return Swal.fire({
+    ...NO_HIDE_ANIMATION,
     html: contentHtml,
     showConfirmButton: true,
     confirmButtonText: 'Đóng',
+    allowOutsideClick: true,
+    allowEscapeKey: true,
     customClass: {
       popup: 'custom-swal-popup',
       container: 'custom-swal-container',
       actions: 'custom-swal-actions',
       confirmButton: 'custom-swal-confirm-btn'
     },
-    buttonsStyling: false
+    buttonsStyling: false,
+    didClose: () => {
+      broadcastPopupToDisplay(null)
+      setTimeout(cleanupSwalResidualDom, 10)
+    }
+  })
+}
+
+/**
+ * Hiển thị thông báo Toast góc trên bên phải (không chặn màn hình, không popup modal)
+ */
+export const notifyToastWarning = (title, text = '', timer = 2500) => {
+  return Swal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: 'warning',
+    title: title || 'Cảnh báo tồn kho',
+    text: text || '',
+    showConfirmButton: false,
+    timer: timer,
+    timerProgressBar: true,
+    didOpen: (toast) => {
+      toast.addEventListener('mouseenter', Swal.stopTimer)
+      toast.addEventListener('mouseleave', Swal.resumeTimer)
+    },
+    didClose: () => {
+      setTimeout(cleanupSwalResidualDom, 10)
+    }
   })
 }
 
 /**
  * Hiển thị thông báo cảnh báo
  */
-export const notifyWarning = (title, text = '') => {
+export const notifyWarning = (title, text = '', timer = undefined) => {
+  broadcastPopupToDisplay({ title, text, iconType: 'warning' })
   const contentHtml = `
     ${MINIMAL_ICONS.warning}
     <div class="minimal-title">${title || 'Cảnh báo'}</div>
@@ -121,17 +222,74 @@ export const notifyWarning = (title, text = '') => {
   `
 
   return Swal.fire({
+    ...NO_HIDE_ANIMATION,
     html: contentHtml,
     showConfirmButton: true,
     confirmButtonText: 'Đã hiểu',
+    timer: timer,
+    allowOutsideClick: true,
+    allowEscapeKey: true,
     customClass: {
       popup: 'custom-swal-popup',
       container: 'custom-swal-container',
       actions: 'custom-swal-actions',
       confirmButton: 'custom-swal-confirm-btn'
     },
-    buttonsStyling: false
+    buttonsStyling: false,
+    didClose: () => {
+      broadcastPopupToDisplay(null)
+      setTimeout(cleanupSwalResidualDom, 10)
+    }
   })
+}
+
+/**
+ * Hiển thị thông báo dạng Toast ở góc trên bên phải (không modal popup, không nút xác nhận)
+ */
+export const notifyToast = (title, text = '', type = 'warning', timer = 2500) => {
+  const icon = MINIMAL_ICONS[type] || MINIMAL_ICONS.warning
+  const contentHtml = `
+    <div style="display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 2px 4px;">
+      <div style="flex-shrink: 0; margin-top: 1px;">${icon}</div>
+      <div style="flex: 1;">
+        <div style="font-weight: 700; font-size: 13.5px; color: #1e293b; line-height: 1.3;">${formatHighlight(title)}</div>
+        ${text ? `<div style="font-size: 12px; color: #64748b; margin-top: 3px; line-height: 1.35;">${formatHighlight(text)}</div>` : ''}
+      </div>
+    </div>
+  `
+
+  return Swal.fire({
+    toast: true,
+    position: 'top-end',
+    html: contentHtml,
+    showConfirmButton: false,
+    timer: timer,
+    timerProgressBar: true,
+    backdrop: false,
+    customClass: {
+      popup: 'custom-swal-toast-top-end',
+      container: 'custom-swal-toast-container'
+    },
+    didOpen: (toast) => {
+      toast.addEventListener('mouseenter', Swal.stopTimer)
+      toast.addEventListener('mouseleave', Swal.resumeTimer)
+    },
+    didClose: () => {
+      setTimeout(cleanupSwalResidualDom, 10)
+    }
+  })
+}
+
+/**
+ * Hiển thị thông báo Toast thông tin góc trên bên phải
+ */
+export const notifyToastInfo = (title, text = '', timer = 3500) => notifyToast(title, text, 'info', timer)
+
+/**
+ * Thông báo tồn kho không đủ / hết hàng ở góc trên bên phải
+ */
+export const notifyStockWarning = (title = 'Hết hàng', text = '') => {
+  return notifyToast(title, text, 'warning', 3000)
 }
 
 /**
@@ -141,30 +299,45 @@ export const notifyConfirm = async (
   title = 'Bạn có chắc chắn?',
   text = 'Thao tác này sẽ không thể hoàn tác!',
   confirmButtonText = 'Đồng ý',
-  cancelButtonText = 'Hủy bỏ'
+  cancelButtonText = 'Hủy bỏ',
+  iconType = 'warning'
 ) => {
+  broadcastPopupToDisplay({ title, text, iconType: iconType || 'warning' })
+  const iconHtml = MINIMAL_ICONS[iconType] || MINIMAL_ICONS.warning
   const contentHtml = `
-    ${MINIMAL_ICONS.warning}
+    ${iconHtml}
     <div class="minimal-title">${title}</div>
     ${text ? `<div class="minimal-desc">${formatHighlight(text)}</div>` : ''}
   `
 
-  const result = await Swal.fire({
-    html: contentHtml,
-    showCancelButton: true,
-    confirmButtonText,
-    cancelButtonText,
-    reverseButtons: true,
-    customClass: {
-      popup: 'custom-swal-popup',
-      container: 'custom-swal-container',
-      actions: 'custom-swal-actions',
-      confirmButton: 'custom-swal-confirm-btn',
-      cancelButton: 'custom-swal-cancel-btn'
-    },
-    buttonsStyling: false
-  })
-  return result.isConfirmed
+  try {
+    const result = await Swal.fire({
+      ...NO_HIDE_ANIMATION,
+      html: contentHtml,
+      showCancelButton: true,
+      confirmButtonText,
+      cancelButtonText,
+      reverseButtons: true,
+      allowOutsideClick: true,
+      allowEscapeKey: true,
+      customClass: {
+        popup: 'custom-swal-popup',
+        container: 'custom-swal-container',
+        actions: 'custom-swal-actions',
+        confirmButton: 'custom-swal-confirm-btn',
+        cancelButton: 'custom-swal-cancel-btn'
+      },
+      buttonsStyling: false,
+      didClose: () => {
+        broadcastPopupToDisplay(null)
+        setTimeout(cleanupSwalResidualDom, 10)
+      }
+    })
+    return Boolean(result && result.isConfirmed)
+  } finally {
+    broadcastPopupToDisplay(null)
+    setTimeout(cleanupSwalResidualDom, 20)
+  }
 }
 
 /**
@@ -179,6 +352,11 @@ export default {
   success: notifySuccess,
   error: notifyError,
   warning: notifyWarning,
+  toastWarning: notifyToastWarning,
+  toast: notifyToast,
+  toastInfo: notifyToastInfo,
+  stockWarning: notifyStockWarning,
   confirm: notifyConfirm,
-  deleteConfirm: notifyDeleteConfirm
+  deleteConfirm: notifyDeleteConfirm,
+  cleanup: cleanupSwalResidualDom
 }

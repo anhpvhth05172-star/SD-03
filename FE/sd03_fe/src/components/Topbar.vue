@@ -9,7 +9,7 @@ const isAddPage = computed(() => route.path.includes('/them'))
 const isVariantPage = computed(() => route.path.includes('/bien-the'))
 
 const navigateToProducts = () => {
-  router.push('/san-pham')
+  router.push('/admin/san-pham')
 }
 </script>
 

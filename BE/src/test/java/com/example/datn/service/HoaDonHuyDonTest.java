@@ -102,8 +102,15 @@ class HoaDonHuyDonTest {
     }
 
     @Test
-    void onlineDaXacNhanKhongDuocHuy_CoThongBaoRieng() {
-        khongDuocHuy("DA_XAC_NHAN");
+    void onlineDaXacNhanVanHuyDuoc() {
+        // Quy tac hien tai cho phep khach huy don online da xac nhan chua giao
+        coTheLuu(online("DA_XAC_NHAN"));
+
+        HoaDonDTO dto = service.doiTrangThai(HD_ID, "DA_HUY", null);
+
+        assertThat(dto.getMaTrangThai()).isEqualTo("DA_HUY");
+        assertThat(dto.getTrangThai()).isEqualTo("Đã hủy");
+        verify(lichSuHoaDonRepository).save(any());
     }
 
     @Test
@@ -128,12 +135,22 @@ class HoaDonHuyDonTest {
     }
 
     @Test
-    void posKhongDuocHuy_GiuNguyenQuyTacHienTai() {
+    void posHuyDuocTuChoXacNhan() {
         coTheLuu(pos("CHO_XAC_NHAN"));
+
+        HoaDonDTO dto = service.doiTrangThai(HD_ID, "DA_HUY", null);
+
+        assertThat(dto.getMaTrangThai()).isEqualTo("DA_HUY");
+        verify(lichSuHoaDonRepository).save(any());
+    }
+
+    @Test
+    void posKhongDuocHuySauDaHoanThanh() {
+        coTheLuu(pos("DA_HOAN_THANH"));
 
         assertThatThrownBy(() -> service.doiTrangThai(HD_ID, "Đã hủy", null))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Không được chuyển từ Chờ xác nhận sang Đã hủy");
+            .hasMessage(THONG_BAO_HUY);
 
         verify(hoaDonRepository, never()).save(any(HoaDon.class));
         verify(lichSuHoaDonRepository, never()).save(any());

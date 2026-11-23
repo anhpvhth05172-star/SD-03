@@ -22,7 +22,11 @@ public class FormDataResponse {
 
     public record KhachHangOption(Long id, String ten, String soDienThoai, Boolean trangThai) {}
 
-    public record NhanVienOption(Long id, String ten) {}
+    public record NhanVienOption(Long id, String ten, String maVaiTro, Boolean trangThai) {
+        public NhanVienOption(Long id, String ten) {
+            this(id, ten, null, null);
+        }
+    }
 
     public record PhuongThucOption(Long id, String ten) {}
 
@@ -39,8 +43,49 @@ public class FormDataResponse {
         Integer soLuong,
         Integer soLuongDaSuDung,
         Integer gioiHanMoiTaiKhoan,
-        Boolean trangThai
-    ) {}
+        Boolean trangThai,
+        String phamVi,
+        List<Long> idKhachHangsChuaDung,
+        List<Long> idKhachHangsDaDung
+    ) {
+        public PhieuGiamGiaOption(
+            Long id,
+            String ma,
+            String ten,
+            String loaiGiamGia,
+            BigDecimal giaTriGiam,
+            BigDecimal giamToiDa,
+            BigDecimal hoaDonToiThieu,
+            LocalDateTime ngayBatDau,
+            LocalDateTime ngayKetThuc,
+            Integer soLuong,
+            Integer soLuongDaSuDung,
+            Integer gioiHanMoiTaiKhoan,
+            Boolean trangThai
+        ) {
+            this(id, ma, ten, loaiGiamGia, giaTriGiam, giamToiDa, hoaDonToiThieu, ngayBatDau, ngayKetThuc, soLuong, soLuongDaSuDung, gioiHanMoiTaiKhoan, trangThai, "CONG_KHAI", List.of(), List.of());
+        }
+
+        public PhieuGiamGiaOption(
+            Long id,
+            String ma,
+            String ten,
+            String loaiGiamGia,
+            BigDecimal giaTriGiam,
+            BigDecimal giamToiDa,
+            BigDecimal hoaDonToiThieu,
+            LocalDateTime ngayBatDau,
+            LocalDateTime ngayKetThuc,
+            Integer soLuong,
+            Integer soLuongDaSuDung,
+            Integer gioiHanMoiTaiKhoan,
+            Boolean trangThai,
+            String phamVi,
+            List<Long> idKhachHangsChuaDung
+        ) {
+            this(id, ma, ten, loaiGiamGia, giaTriGiam, giamToiDa, hoaDonToiThieu, ngayBatDau, ngayKetThuc, soLuong, soLuongDaSuDung, gioiHanMoiTaiKhoan, trangThai, phamVi, idKhachHangsChuaDung, List.of());
+        }
+    }
 
     public record SanPhamChiTietOption(
         Long id,

@@ -51,7 +51,7 @@ const submit = async () => {
       matKhau: f.matKhau,
       xacNhanMatKhau: f.xacNhanMatKhau,
     })
-    router.push('/dang-nhap')
+    router.push('/khach-hang')
   } catch (e) {
     error.value = e.message || 'Đăng ký thất bại'
   } finally {
@@ -63,6 +63,9 @@ const submit = async () => {
 <template>
   <div class="auth-screen">
     <div class="auth-card">
+      <router-link to="/trang-chu" class="auth-back-link">
+        <i class="bi bi-arrow-left me-1"></i>Quay lại cửa hàng
+      </router-link>
       <div class="auth-brand">
         <img src="/images/logo_polyshoes_final.png" alt="PolyShoes" />
       </div>
@@ -100,7 +103,7 @@ const submit = async () => {
 
       <p class="auth-switch">
         Đã có tài khoản?
-        <router-link to="/dang-nhap">Đăng nhập</router-link>
+        <router-link to="/khach-hang">Đăng nhập</router-link>
       </p>
     </div>
   </div>
@@ -126,6 +129,13 @@ const submit = async () => {
 .auth-brand {
   text-align: center;
   margin-bottom: 12px;
+}
+.auth-back-link {
+  display: inline-block;
+  margin-bottom: 14px;
+  color: #b91c1c;
+  font-size: 13px;
+  text-decoration: none;
 }
 .auth-brand img {
   height: 48px;

@@ -23,12 +23,15 @@ public interface SanPhamRepository extends JpaRepository<SanPham, Long> {
 
     Optional<SanPham> findFirstByOrderByIdDesc();
 
+    @Query("SELECT new com.example.datn.dto.SanPham.SanPhamLuaChonDTO(sp.id, sp.maSanPham, sp.tenSanPham, sp.trangThai) FROM SanPham sp WHERE sp.trangThai = true ORDER BY sp.tenSanPham ASC")
+    java.util.List<com.example.datn.dto.SanPham.SanPhamLuaChonDTO> findAllForDropdown();
+
     @Query(value = "SELECT sp FROM SanPham sp " +
-           "LEFT JOIN sp.xuatXu xx " +
-           "LEFT JOIN sp.thuongHieu th " +
-           "LEFT JOIN sp.chatLieu cl " +
-           "LEFT JOIN sp.kieuDang kd " +
-           "LEFT JOIN sp.loaiGiay lg " +
+           "LEFT JOIN FETCH sp.xuatXu xx " +
+           "LEFT JOIN FETCH sp.thuongHieu th " +
+           "LEFT JOIN FETCH sp.chatLieu cl " +
+           "LEFT JOIN FETCH sp.kieuDang kd " +
+           "LEFT JOIN FETCH sp.loaiGiay lg " +
            "WHERE (:keyword IS NULL OR :keyword = '' OR sp.tenSanPham LIKE CONCAT('%', :keyword, '%') OR sp.maSanPham LIKE CONCAT('%', :keyword, '%')) " +
            "AND (:idThuongHieu IS NULL OR th.id = :idThuongHieu) " +
            "AND (:idLoaiGiay IS NULL OR lg.id = :idLoaiGiay) " +

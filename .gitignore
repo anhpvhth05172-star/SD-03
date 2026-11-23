@@ -38,3 +38,8 @@ Thumbs.db
 /package.json
 /package-lock.json
 
+# Backups
+backups/
+*.zip
+*.bundle
+

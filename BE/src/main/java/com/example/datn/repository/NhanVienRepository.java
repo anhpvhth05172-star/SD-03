@@ -10,9 +10,20 @@ import org.springframework.data.repository.query.Param;
 
 public interface NhanVienRepository extends JpaRepository<NhanVien, Long> {
 
+    @Query("SELECT n FROM NhanVien n WHERE n.trangThai = true AND n.vaiTro.maVaiTro <> 'ADMIN' ORDER BY n.id")
+    java.util.List<NhanVien> findActiveOrderAssignees();
+
+    java.util.Optional<NhanVien> findFirstByVaiTro_MaVaiTroAndTrangThaiTrueAndEmailIsNotNullOrderByIdAsc(String maVaiTro);
+
     boolean existsByMaNhanVien(String maNhanVien);
 
     java.util.Optional<NhanVien> findByMaNhanVien(String maNhanVien);
+
+    java.util.Optional<NhanVien> findFirstByVaiTro_MaVaiTroAndTrangThaiTrueAndEmailIsNotNullOrderByMaNhanVienAsc(
+        String maVaiTro
+    );
+
+    java.util.List<NhanVien> findByTrangThaiTrue();
 
     boolean existsByMaNhanVienAndIdNot(String maNhanVien, Long id);
 
@@ -20,7 +31,7 @@ public interface NhanVienRepository extends JpaRepository<NhanVien, Long> {
 
     java.util.Optional<com.example.datn.entity.NhanVien> findByTenTaiKhoan(String tenTaiKhoan);
 
-    @Query("SELECT n FROM NhanVien n WHERE n.email = :giaTri OR n.tenTaiKhoan = :giaTri")
+    @Query("SELECT n FROM NhanVien n WHERE n.email = :giaTri OR n.tenTaiKhoan = :giaTri OR n.maNhanVien = :giaTri")
     java.util.Optional<com.example.datn.entity.NhanVien> findByEmailOrTenTaiKhoan(@Param("giaTri") String giaTri);
 
     boolean existsByTenTaiKhoanAndIdNot(String tenTaiKhoan, Long id);

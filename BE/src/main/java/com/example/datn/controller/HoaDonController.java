@@ -71,6 +71,25 @@ public class HoaDonController {
         return hoaDonService.get(id);
     }
 
+    @GetMapping("/cua-toi")
+    public PageResponse<HoaDonDTO> listCuaToi(
+        @RequestParam(required = false) String keyword,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "50") int size
+    ) {
+        return hoaDonService.listCuaToi(keyword, page, size);
+    }
+
+    @GetMapping("/cua-toi/{id}")
+    public HoaDonDTO getCuaToi(@PathVariable Long id) {
+        return hoaDonService.getCuaToi(id);
+    }
+
+    @GetMapping("/cua-toi/{id}/lich-su")
+    public List<com.example.datn.dto.HoaDon.LichSuHoaDonDTO> lichSuCuaToi(@PathVariable Long id) {
+        return hoaDonService.lichSuHoaDonCuaToi(id);
+    }
+
     @PostMapping
     public ResponseEntity<HoaDonDTO> create(@RequestBody HoaDonRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(hoaDonService.create(request));
@@ -94,11 +113,43 @@ public class HoaDonController {
 
     @PutMapping("/{id}/trang-thai")
     public HoaDonDTO doiTrangThai(@PathVariable Long id, @RequestBody TrangThaiHoaDonRequest request) {
-        return hoaDonService.doiTrangThai(id, request.getTrangThai(), request.getGhiChu());
+        return hoaDonService.doiTrangThai(id, request.getTrangThai(), request.getGhiChu(), request.getNguoiThaoTac());
     }
 
     @GetMapping("/{id}/lich-su")
     public List<LichSuHoaDonDTO> lichSu(@PathVariable Long id) {
         return hoaDonService.lichSuHoaDon(id);
+    }
+
+    @GetMapping("/pos-cho")
+    public List<HoaDonDTO> getPosCho() {
+        return hoaDonService.getPosCho();
+    }
+
+    @PostMapping("/pos-cho")
+    public HoaDonDTO luuPosCho(@RequestBody HoaDonRequest req) {
+        return hoaDonService.luuPosCho(req);
+    }
+
+    @DeleteMapping("/pos-cho/{id}")
+    public ResponseEntity<Void> huyPosCho(@PathVariable Long id) {
+        hoaDonService.huyPosCho(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/pos-cho/{id}/thanh-toan")
+    public HoaDonDTO thanhToanPosCho(@PathVariable Long id, @RequestBody HoaDonRequest req) {
+        return hoaDonService.thanhToanPosCho(id, req);
+    }
+
+    @PostMapping("/{id}/gui-email")
+    public org.springframework.http.ResponseEntity<?> guiLaiEmail(
+        @PathVariable Long id,
+        @RequestParam(required = false) String email
+    ) {
+        hoaDonService.guiLaiEmailHoaDon(id, email);
+        return org.springframework.http.ResponseEntity.ok(
+            java.util.Map.of("message", "Đã gửi lại email thông tin đơn hàng thành công")
+        );
     }
 }

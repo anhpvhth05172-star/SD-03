@@ -132,7 +132,7 @@ export const exportExcel = async (filename, headers, rows, options = {}) => {
 export const fetchAllPages = async (fetchPage, params, maxTrang = 20) => {
   const all = []
   let page = 0
-  let totalPages = 1
+  let totalPages
   do {
     const data = await fetchPage({ ...params, page, size: 50 })
     all.push(...(data.content || []))

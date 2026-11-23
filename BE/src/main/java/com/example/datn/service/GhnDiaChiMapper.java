@@ -67,7 +67,8 @@ public class GhnDiaChiMapper {
             throw new IllegalArgumentException(
                 "Thiếu tên tỉnh/thành hoặc phường/xã để ánh xạ địa chỉ");
         }
-        String khoaPhuong = chuanHoa(tenPhuong);
+        String tenPhuongGoc = tenPhuong.replaceAll("\\s*\\([^)]*\\)\\s*$", "").trim();
+        String khoaPhuong = chuanHoa(tenPhuongGoc.isEmpty() ? tenPhuong : tenPhuongGoc);
         List<UngVien> nhanh = timNhanh(chuanHoa(tenTinh), khoaPhuong);
         if (nhanh.size() == 1) {
             UngVien u = nhanh.get(0);

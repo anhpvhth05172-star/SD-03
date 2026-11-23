@@ -182,7 +182,7 @@
 .status-tabs-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   margin-bottom: 18px;
   flex-wrap: wrap;
   gap: 12px;
@@ -206,101 +206,6 @@
 .status-combobox-select {
   min-width: 200px;
   flex: 1;
-}
-
-.tabs-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #f8fafc;
-  padding: 4px;
-  border-radius: 10px;
-  border: 1px solid #f1f5f9;
-}
-
-.status-tab {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: 7px;
-  border: none;
-  background: none;
-  font-size: 13px;
-  font-weight: 600;
-  color: #64748b;
-  cursor: pointer;
-  transition: all 0.18s ease;
-}
-
-.status-tab:hover {
-  color: #0f172a;
-}
-
-.status-tab.active {
-  background: #ffffff;
-  color: #dc2626;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-}
-
-.tab-pill {
-  background: #f1f5f9;
-  color: #64748b;
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 9999px;
-}
-
-.status-tab.active .tab-pill {
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-}
-.green-dot { background-color: #10b981; }
-.gray-dot { background-color: #94a3b8; }
-
-.tab-actions-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.btn-toggle-expand {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  color: #475569;
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-toggle-expand:hover {
-  background: #f8fafc;
-  color: #0f172a;
-}
-
-.filter-count-badge {
-  background: #dc2626;
-  color: #ffffff;
-  font-size: 10.5px;
-  font-weight: 700;
-  width: 17px;
-  height: 17px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .btn-reset-filter {
@@ -330,8 +235,20 @@
 
 .filters-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 2fr 1fr 1fr 1fr;
   gap: 14px;
+}
+
+@media (max-width: 992px) {
+  .filters-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 576px) {
+  .filters-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .span-2 {
@@ -707,17 +624,27 @@
   font-family: inherit;
 }
 
+.data-table th.text-center,
+.data-table td.text-center {
+  text-align: center !important;
+}
+
+.data-table th.text-end,
+.data-table td.text-end {
+  text-align: right !important;
+}
+
 .product-price-discount-box {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 2px;
 }
 
 .product-sale-price-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 6px;
 }
 
@@ -985,6 +912,10 @@ input:checked + .slider:before {
   justify-content: center;
   z-index: 9999;
   padding: 20px;
+}
+
+.modal-overlay:empty {
+  display: none !important;
 }
 
 .modal-dialog {

@@ -7,7 +7,7 @@ import { layDiaGioi, layPhuongXa, phanTichDiaChiCccd, timTinh } from '@/api/diaG
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import { setFlash } from '@/utils/flash'
 import { hopLeMa, maDeXuat } from '@/utils/maNhanVien'
-import { datVaiTro, layNguoiDung, vaiTroHienTai } from '@/utils/session'
+import { layNguoiDung } from '@/utils/session'
 import { notifySuccess, notifyWarning, notifyError, notifyConfirm } from '@/utils/notify'
 import {
   duTuoiToiThieu,
@@ -37,11 +37,6 @@ const gioiTinhOptions = [
 const trangThais = [
   { value: 'true', label: 'Đang hoạt động' },
   { value: 'false', label: 'Đã khóa' },
-]
-
-const vaiTroOptions = [
-  { value: 'ADMIN', label: 'Admin' },
-  { value: 'STAFF', label: 'Nhân viên' },
 ]
 
 const tinhThanhs = ref([])
@@ -152,10 +147,6 @@ const loiTinhThanhPho = computed(() => toiDa(form.value.tinhThanhPho, 100, 'Tỉ
 const loiPhuong = computed(() => toiDa(form.value.phuong, 100, 'Phường/Xã'))
 const loiDiaChiCuThe = computed(() => toiDa(form.value.diaChiCuThe, 255, 'Địa chỉ cụ thể'))
 
-const chonVaiTro = (v) => {
-  if (v) datVaiTro(v)
-}
-
 const validate = () =>
   kiemTra([
     loiMaKhachHang.value,
@@ -231,7 +222,9 @@ const playBeep = () => {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18)
     osc.start()
     osc.stop(ctx.currentTime + 0.18)
-  } catch {}
+  } catch {
+    // Âm báo mã QR là tùy chọn trên trình duyệt không hỗ trợ Web Audio.
+  }
 }
 
 const apDungDiaChiCccd = async (diaChiRaw) => {
@@ -355,7 +348,9 @@ const stopCamera = async () => {
     try {
       await html5QrCode.stop()
       html5QrCode.clear()
-    } catch {}
+    } catch {
+      // Bỏ qua lỗi dừng camera nếu stream đã bị trình duyệt giải phóng.
+    }
     isCameraRunning.value = false
   }
 }
@@ -436,7 +431,7 @@ const submit = async () => {
     }
     notifySuccess(msg)
     setTimeout(() => {
-      router.push('/khach-hang')
+      router.push('/quan-ly-khach-hang')
     }, 500)
   } catch (e) {
     errorMsg.value = e.message
@@ -515,20 +510,6 @@ onMounted(async () => {
 <template>
   <div class="create-wrap">
     <h2 class="create-title">{{ isEdit ? 'Cập nhật Tài Khoản Khách Hàng' : 'Tạo Tài Khoản Khách Hàng' }}</h2>
-
-    <div class="role-bar">
-      <span>Đang thao tác với vai trò: <b>{{ vaiTroHienTai === 'ADMIN' ? 'Admin' : 'Nhân viên' }}</b></span>
-      <SearchableSelect
-        :model-value="vaiTroHienTai"
-        :options="vaiTroOptions"
-        label-key="label"
-        value-key="value"
-        placeholder="Chọn vai trò"
-        search-placeholder="Tìm..."
-        :allow-clear="false"
-        @change="chonVaiTro"
-      />
-    </div>
 
     <p v-if="errorMsg" class="form-error">{{ errorMsg }}</p>
     <p v-if="loading" class="form-error">Đang tải dữ liệu...</p>
@@ -687,7 +668,7 @@ onMounted(async () => {
           <button class="btn-primary" type="button" :disabled="saving" @click="submit">
             {{ saving ? 'Đang lưu...' : isEdit ? 'Cập nhật' : 'Thêm' }}
           </button>
-          <button class="btn-cancel" type="button" @click="router.push('/khach-hang')">Hủy</button>
+          <button class="btn-cancel" type="button" @click="router.push('/quan-ly-khach-hang')">Hủy</button>
         </div>
       </div>
     </div>
@@ -706,7 +687,7 @@ onMounted(async () => {
 .create-title {
   font-size: 17px;
   font-weight: 700;
-  color: #1d1d23;
+  color: #0f172a;
 }
 
 .create-grid {
@@ -738,12 +719,12 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  background: #f7f7f9;
-  border: 1px solid #ececef;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 9px 12px;
   font-size: 12.5px;
-  color: #4a4a52;
+  color: #334155;
 }
 
 .form-error {

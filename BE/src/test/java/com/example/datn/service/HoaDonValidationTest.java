@@ -3,6 +3,7 @@ package com.example.datn.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -10,9 +11,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.example.datn.dto.CaLamViecDto;
+import com.example.datn.dto.DotGiamGia.GiaKhuyenMai;
 import com.example.datn.dto.HoaDon.ChiTietHoaDonRequest;
 import com.example.datn.dto.HoaDon.HoaDonDTO;
 import com.example.datn.dto.HoaDon.HoaDonRequest;
+import com.example.datn.entity.ChiTietHoaDon;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.entity.NhanVien;
@@ -29,12 +33,19 @@ import com.example.datn.repository.NhanVienRepository;
 import com.example.datn.repository.PhieuGiamGiaRepository;
 import com.example.datn.repository.PhuongThucThanhToanRepository;
 import com.example.datn.repository.SanPhamChiTietRepository;
+import com.example.datn.service.impls.GiaService;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class HoaDonValidationTest {
 
@@ -58,6 +69,8 @@ class HoaDonValidationTest {
     private final DiaChiKhachHangRepository diaChiKhachHangRepository =
         mock(DiaChiKhachHangRepository.class);
     private final GHNService ghnService = mock(GHNService.class);
+    private final GiaoCaService giaoCaService = mock(GiaoCaService.class);
+    private final GiaService giaService = mock(GiaService.class);
 
     private final HoaDonService service = new HoaDonService(
         hoaDonRepository,
@@ -73,20 +86,33 @@ class HoaDonValidationTest {
         ghnService
     );
 
-    private PhuongThucThanhToan phuongThucThanhToan() {
-        PhuongThucThanhToan p = new PhuongThucThanhToan();
-        p.setId(PTTT_ID);
-        p.setMaPhuongThuc("TIEN_MAT");
-        p.setTenPhuongThuc("Tiền mặt tại quầy");
-        p.setTrangThai(true);
-        return p;
-    }
+        private PhuongThucThanhToan phuongThucThanhToan() {
+            PhuongThucThanhToan p = new PhuongThucThanhToan();
+            p.setId(PTTT_ID);
+            p.setMaPhuongThuc("TIEN_MAT");
+            p.setTenPhuongThuc("Tiền mặt tại quầy");
+            p.setTrangThai(true);
+            return p;
+        }
 
     @BeforeEach
     void datPhuongThucThanhToan() {
         when(phuongThucThanhToanRepository.findById(PTTT_ID))
             .thenReturn(Optional.of(phuongThucThanhToan()));
         when(nhanVienRepository.findById(NV_ID)).thenReturn(Optional.of(nhanVien()));
+        // Nhan vien dang nhap tai quay: kiemTraNguoiTaoHoaDon yeu cau principal Long + ROLE_NHAN_VIEN
+        SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken(
+            NV_ID, "n/a", List.of(new SimpleGrantedAuthority("ROLE_NHAN_VIEN"))));
+        // giaoCaService/giaService la field @Autowired, khong truyen qua constructor
+        ReflectionTestUtils.setField(service, "giaoCaService", giaoCaService);
+        ReflectionTestUtils.setField(service, "giaService", giaService);
+        when(giaoCaService.getDangMoOf(NV_ID)).thenReturn(
+            CaLamViecDto.builder().id(1L).trangThai("DANG_MO").build());
+    }
+
+    @AfterEach
+    void xoaSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     private NhanVien nhanVien() {
@@ -116,6 +142,9 @@ class HoaDonValidationTest {
     private void chuanBi(SanPhamChiTiet spct) {
         when(hoaDonRepository.existsByMaHoaDon(anyString())).thenReturn(false);
         when(sanPhamChiTietRepository.findById(SPCT_ID)).thenReturn(Optional.of(spct));
+        when(sanPhamChiTietRepository.findAllByIdForUpdate(anyCollection())).thenReturn(List.of(spct));
+        when(giaService.tinhGia(anyCollection())).thenReturn(
+            Map.of(SPCT_ID, new GiaKhuyenMai(new BigDecimal("500000"), null, new BigDecimal("500000"))));
         when(hoaDonRepository.save(any(HoaDon.class))).thenAnswer(inv -> {
             HoaDon h = inv.getArgument(0);
             h.setId(HD_ID);
@@ -154,21 +183,25 @@ class HoaDonValidationTest {
 
 
     @Test
-    void donGiaBang0_BiTuChoi() {
+    void giaBanBienTheBang0_BiTuChoi() {
         chuanBi(spct(true, true));
+        when(giaService.tinhGia(anyCollection()))
+            .thenReturn(Map.of(SPCT_ID, new GiaKhuyenMai(BigDecimal.ZERO, null, BigDecimal.ZERO)));
 
         assertThatThrownBy(() -> service.create(yeuCau(BigDecimal.ZERO)))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Đơn giá phải lớn hơn 0");
+            .hasMessageContaining("Giá bán của biến thể không hợp lệ");
     }
 
     @Test
-    void donGiaNull_BiTuChoi() {
+    void giaBanBienTheNull_BiTuChoi() {
         chuanBi(spct(true, true));
+        when(giaService.tinhGia(anyCollection()))
+            .thenReturn(Map.of(SPCT_ID, new GiaKhuyenMai(null, null, null)));
 
         assertThatThrownBy(() -> service.create(yeuCau(null)))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Đơn giá phải lớn hơn 0");
+            .hasMessageContaining("Giá bán của biến thể không hợp lệ");
     }
 
     @Test
@@ -432,24 +465,27 @@ class HoaDonValidationTest {
 
 
     @Test
-    void nhanVienRong_BiTuChoi() {
+    void nhanVienRong_KhiSua_BiTuChoi() {
         chuanBi(spct(true, true));
+        when(hoaDonRepository.findByIdForUpdate(HD_ID)).thenReturn(Optional.of(hoaDon("CHO_XAC_NHAN")));
         HoaDonRequest req = yeuCau(new BigDecimal("500000"));
         req.setIdNhanVien(null);
 
-        assertThatThrownBy(() -> service.create(req))
+        assertThatThrownBy(() -> service.update(HD_ID, req))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Vui lòng chọn nhân viên");
     }
 
     @Test
-    void nhanVienKhongTonTai_BiTuChoi() {
+    void nhanVienKhongTonTai_KhiSua_BiTuChoi() {
         chuanBi(spct(true, true));
+        when(hoaDonRepository.findByIdForUpdate(HD_ID)).thenReturn(Optional.of(hoaDon("CHO_XAC_NHAN")));
         when(nhanVienRepository.findById(999L)).thenReturn(Optional.empty());
         HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        req.setMaHoaDon("HD001");
         req.setIdNhanVien(999L);
 
-        assertThatThrownBy(() -> service.create(req))
+        assertThatThrownBy(() -> service.update(HD_ID, req))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Nhân viên không tồn tại");
     }
@@ -691,5 +727,50 @@ class HoaDonValidationTest {
 
         assertThat(dto.getTrangThai()).isEqualTo("Đã xác nhận");
         verify(lichSuHoaDonRepository).save(any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void trungBienTheTrongChiTiet_GopThanhMotDongDeKhongViPhamUnique() {
+        chuanBi(spct(true, true));
+        when(hoaDonRepository.existsById(HD_ID)).thenReturn(true);
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        ChiTietHoaDonRequest d1 = new ChiTietHoaDonRequest();
+        d1.setIdSanPhamChiTiet(SPCT_ID);
+        d1.setSoLuong(2);
+        d1.setDonGia(new BigDecimal("500000"));
+        ChiTietHoaDonRequest d2 = new ChiTietHoaDonRequest();
+        d2.setIdSanPhamChiTiet(SPCT_ID);
+        d2.setSoLuong(1);
+        d2.setDonGia(new BigDecimal("500000"));
+        req.setChiTiet(List.of(d1, d2));
+
+        service.create(req);
+
+        ArgumentCaptor<List<ChiTietHoaDon>> captor = ArgumentCaptor.forClass(List.class);
+        verify(chiTietHoaDonRepository).saveAllAndFlush(captor.capture());
+        List<ChiTietHoaDon> saved = captor.getValue();
+        assertThat(saved).hasSize(1);
+        assertThat(saved.get(0).getSoLuong()).isEqualTo(3);
+        assertThat(saved.get(0).getThanhTien()).isEqualByComparingTo("1500000");
+    }
+
+    @Test
+    void khachHangDaTonTaiCoSoTrongTen_DuocChapNhanKhiTaoHoaDon() {
+        chuanBi(spct(true, true));
+        when(hoaDonRepository.existsById(HD_ID)).thenReturn(true);
+        KhachHang kh = new KhachHang();
+        kh.setId(KH_ID);
+        kh.setTenKhachHang("pickersmoke1791617480");
+        kh.setTrangThai(true);
+        when(khachHangRepository.findById(KH_ID)).thenReturn(Optional.of(kh));
+
+        HoaDonRequest req = yeuCau(new BigDecimal("500000"));
+        req.setIdKhachHang(KH_ID);
+        req.setTenKhachHang("pickersmoke1791617480");
+
+        HoaDonDTO dto = service.create(req);
+
+        assertThat(dto).isNotNull();
     }
 }

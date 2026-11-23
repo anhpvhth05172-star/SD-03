@@ -23,4 +23,5 @@ public class LichSuHoaDonDTO {
     private String maTrangThaiSau;
     private String ghiChu;
     private String hanhDong;
+    private String nguoiThaoTac;
 }

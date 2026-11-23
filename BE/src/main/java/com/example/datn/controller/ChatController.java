@@ -127,6 +127,11 @@ public class ChatController {
         return chatService.dongHoiThoai(id, idNhanVien(auth));
     }
 
+    @PostMapping("/nhan-vien/hoi-thoai/{id}/tiep-nhan")
+    public HoiThoaiDTO tiepNhanHoiThoai(@PathVariable Long id, Authentication auth) {
+        return chatService.tiepNhanHoiThoai(id, idNhanVien(auth));
+    }
+
     // ---- AI ----
 
     @PostMapping("/ai/hoi-thoai")
@@ -152,9 +157,14 @@ public class ChatController {
             String boSung = sanPhamChatContextService.taoBoSung();
             noiDungAI = geminiService.hoi(noiDungKhach, boSung);
         } catch (Exception e) {
-            noiDungAI =
-                "Xin lỗi, trợ lý AI đang gặp sự cố kết nối. "
-                    + "Bạn hãy thử lại sau hoặc liên hệ nhân viên để được hỗ trợ trực tiếp.";
+            String fallback = sanPhamChatContextService.timGoiYFallback(noiDungKhach);
+            if (fallback != null && !fallback.isBlank()) {
+                noiDungAI = fallback;
+            } else {
+                noiDungAI =
+                    "Xin lỗi, trợ lý AI đang gặp sự cố kết nối. "
+                        + "Bạn hãy thử lại sau hoặc liên hệ nhân viên để được hỗ trợ trực tiếp.";
+            }
         }
         TinNhanDTO tinKQ = chatService.guiTinAIvaLuu(
             hoiThoai.getId(), idKhachHang, maAnDanh, noiDungKhach, noiDungAI

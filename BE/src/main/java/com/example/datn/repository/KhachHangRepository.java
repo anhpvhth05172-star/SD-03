@@ -16,6 +16,9 @@ public interface KhachHangRepository extends JpaRepository<KhachHang, Long> {
 
     boolean existsByMaKhachHang(String maKhachHang);
 
+    @Query("SELECT k.maKhachHang FROM KhachHang k WHERE k.maKhachHang LIKE 'KH%'")
+    List<String> findMaKhachHangBatDauBangKH();
+
     boolean existsByMaKhachHangAndIdNot(String maKhachHang, Long id);
 
     boolean existsByTenTaiKhoan(String tenTaiKhoan);
@@ -25,6 +28,10 @@ public interface KhachHangRepository extends JpaRepository<KhachHang, Long> {
     boolean existsByEmail(String email);
 
     boolean existsByEmailAndIdNot(String email, Long id);
+
+    Optional<KhachHang> findByEmail(String email);
+
+    Optional<KhachHang> findFirstBySoDienThoai(String soDienThoai);
 
     @Query("select k from KhachHang k where k.email = :taiKhoan or k.tenTaiKhoan = :taiKhoan")
     Optional<KhachHang> findByEmailOrTenTaiKhoan(@Param("taiKhoan") String taiKhoan);

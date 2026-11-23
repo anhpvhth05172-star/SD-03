@@ -365,6 +365,7 @@
   font-weight: 600;
 }
 
+.variant-data-table th.text-center, .variant-data-table td.text-center { text-align: center !important; }
 .variant-data-table {
   width: 100%;
   border-collapse: collapse;

@@ -4,6 +4,7 @@ import com.example.datn.dto.DotGiamGia.DotGiamGiaDTO;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -40,6 +41,12 @@ public class PhieuGiamGiaDTO {
     private String moTa;
 
     private Boolean trangThai;
+
+    private String phamVi;
+
+    private List<Long> idKhachHangsChuaDung;
+
+    private List<Long> idKhachHangsDaDung;
 
     private DotGiamGiaDTO dotGiamGia;
 

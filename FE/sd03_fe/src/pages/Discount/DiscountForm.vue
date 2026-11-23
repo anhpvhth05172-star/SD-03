@@ -68,7 +68,10 @@ const fmtMoney = (v) =>
 const onMoneyInput = (key, e) => {
   const digits = e.target.value.replace(/\D/g, "");
   form[key] = digits ? Number(digits) : null;
-  e.target.value = fmtMoney(form[key]); // hiển thị lại có dấu chấm
+  const formatted = fmtMoney(form[key]);
+  if (e.target.value !== formatted) {
+    e.target.value = formatted;
+  }
   touch(key);
   // Sửa đơn hàng tối thiểu -> kiểm tra lại giá trị giảm nếu đã nhập
   if (key === "minOrder" && form.discountValue !== null) {
@@ -151,7 +154,7 @@ const loadCustomers = async () => {
       icon: "error",
       title: "Không tải được danh sách khách hàng",
       text: e.response?.data?.message || "Không kết nối được máy chủ",
-      confirmButtonColor: "#cc0000",
+      confirmButtonColor: "#dc2626",
     });
   } finally {
     loadingCustomers.value = false;
@@ -256,7 +259,7 @@ const submit = async () => {
       icon: "error",
       title: "Tạo thất bại",
       text: e.response?.data?.message || "Không kết nối được máy chủ",
-      confirmButtonColor: "#cc0000",
+      confirmButtonColor: "#dc2626",
     });
   } finally {
     saving.value = false;
@@ -597,11 +600,11 @@ const submit = async () => {
 
 <style scoped>
 .screen {
-  --red: #cc0000;
-  --red-soft: #fdecec;
-  --line: #e5e7eb;
-  --ink: #111827;
-  --muted: #6b7280;
+  --red: #dc2626;
+  --red-soft: #fef2f2;
+  --line: #e2e8f0;
+  --ink: #0f172a;
+  --muted: #64748b;
   padding: 0.5rem 0.75rem 2rem;
   color: var(--ink);
 }

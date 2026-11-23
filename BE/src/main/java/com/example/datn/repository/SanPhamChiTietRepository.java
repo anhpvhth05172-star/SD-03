@@ -1,20 +1,44 @@
 package com.example.datn.repository;
 
 import com.example.datn.entity.SanPhamChiTiet;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, Long> {
 
-    List<SanPhamChiTiet> findBySanPhamId(Long idSanPham);
+    @Query("SELECT s FROM SanPhamChiTiet s " +
+           "LEFT JOIN FETCH s.sanPham sp " +
+           "LEFT JOIN FETCH sp.thuongHieu " +
+           "LEFT JOIN FETCH sp.loaiGiay " +
+           "LEFT JOIN FETCH sp.chatLieu " +
+           "LEFT JOIN FETCH sp.kieuDang " +
+           "LEFT JOIN FETCH sp.xuatXu " +
+           "LEFT JOIN FETCH s.mauSac " +
+           "LEFT JOIN FETCH s.kichCo " +
+           "WHERE s.sanPham.id = :idSanPham")
+    List<SanPhamChiTiet> findBySanPhamId(@Param("idSanPham") Long idSanPham);
+
+    List<SanPhamChiTiet> findBySanPhamIdIn(Collection<Long> idSanPhams);
+
+    @Query("""
+        SELECT s FROM SanPhamChiTiet s
+        LEFT JOIN FETCH s.sanPham
+        LEFT JOIN FETCH s.kichCo
+        LEFT JOIN FETCH s.mauSac
+        """)
+    List<SanPhamChiTiet> findAllWithDetails();
 
     java.util.Optional<SanPhamChiTiet> findBySanPhamIdAndMauSacIdAndKichCoId(Long idSanPham, Long idMauSac, Long idKichCo);
 
@@ -30,9 +54,15 @@ public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, 
 
 
     @Query(value = "SELECT spct FROM SanPhamChiTiet spct " +
-           "LEFT JOIN spct.sanPham sp " +
-           "LEFT JOIN spct.mauSac ms " +
-           "LEFT JOIN spct.kichCo kc " +
+           "LEFT JOIN FETCH spct.sanPham sp " +
+
+           "LEFT JOIN FETCH sp.thuongHieu " +
+           "LEFT JOIN FETCH sp.loaiGiay " +
+           "LEFT JOIN FETCH sp.chatLieu " +
+           "LEFT JOIN FETCH sp.kieuDang " +
+           "LEFT JOIN FETCH sp.xuatXu " +
+           "LEFT JOIN FETCH spct.mauSac ms " +
+           "LEFT JOIN FETCH spct.kichCo kc " +
            "WHERE (:search IS NULL OR :search = '' OR spct.maChiTietSanPham LIKE CONCAT('%', :search, '%') " +
            "   OR sp.tenSanPham LIKE CONCAT('%', :search, '%') " +
            "   OR sp.maSanPham LIKE CONCAT('%', :search, '%') " +
@@ -73,4 +103,12 @@ public interface SanPhamChiTietRepository extends JpaRepository<SanPhamChiTiet, 
         order by sp.tenSanPham asc, s.maChiTietSanPham asc
         """)
     List<SanPhamChiTiet> findAllActiveForDiscount();
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM SanPhamChiTiet s WHERE s.id = :id")
+    Optional<SanPhamChiTiet> findByIdForUpdate(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from SanPhamChiTiet s where s.id in :ids order by s.id")
+    List<SanPhamChiTiet> findAllByIdForUpdate(@Param("ids") Collection<Long> ids);
 }

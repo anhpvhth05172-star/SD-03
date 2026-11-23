@@ -13,11 +13,13 @@ import lombok.Setter;
 @AllArgsConstructor
 public class HoaDonRequest {
 
+    private Long id;
     private String maHoaDon;
     private String loaiDon;
     private BigDecimal phiVanChuyen;
     private String tenKhachHang;
     private String soDienThoaiKhachHang;
+    private String email;
     private String diaChiNhanHang;
     private String trangThai;
     private String ghiChu;
@@ -27,6 +29,7 @@ public class HoaDonRequest {
     private Long idNhanVien;
     private Long idPhuongThucThanhToan;
     private Long idPhieuGiamGia;
+    private Long idCaLamViec;
 
     private Integer toProvinceId;
     private Integer toDistrictId;

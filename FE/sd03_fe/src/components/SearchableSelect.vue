@@ -46,6 +46,10 @@ const props = defineProps({
   prefix: {
     type: String,
     default: ''
+  },
+  searchable: {
+    type: Boolean,
+    default: true
   }
 })
 
@@ -130,7 +134,7 @@ const openDropdown = () => {
   activeIndex.value = -1
 
   nextTick(() => {
-    if (searchInput.value) {
+    if (props.searchable && searchInput.value) {
       searchInput.value.focus()
     }
   })
@@ -272,7 +276,7 @@ onUnmounted(() => {
     <!-- Dropdown Menu -->
     <div v-show="isOpen" class="dropdown-popover">
       <!-- Search Input -->
-      <div class="search-box">
+      <div v-if="searchable" class="search-box">
         <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>

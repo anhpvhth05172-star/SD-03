@@ -21,6 +21,14 @@ public interface HoiThoaiRepository extends JpaRepository<HoiThoai, Long> {
         String trangThai
     );
 
+    Optional<HoiThoai> findFirstByLoaiAndMaAnDanhAndTrangThaiInOrderByNgayCapNhatDesc(
+        String loai, String maAnDanh, List<String> trangThai
+    );
+
+    Optional<HoiThoai> findFirstByLoaiAndKhachHangIdAndTrangThaiInOrderByNgayCapNhatDesc(
+        String loai, Long idKhachHang, List<String> trangThai
+    );
+
     List<HoiThoai> findByLoaiOrderByNgayCapNhatDesc(String loai);
 
     @Query(

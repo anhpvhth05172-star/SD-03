@@ -23,14 +23,14 @@ public class OpenApiClient {
             : baseUrl;
         this.httpClient = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NORMAL)
-            .connectTimeout(Duration.ofSeconds(10))
+            .connectTimeout(Duration.ofSeconds(4))
             .build();
     }
 
     public String get(String path) {
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + path))
-                .timeout(Duration.ofSeconds(10))
+                .timeout(Duration.ofSeconds(4))
                 .header("User-Agent", "PolyShoes-DATN/1.0")
                 .header("Accept", "application/json")
                 .GET()

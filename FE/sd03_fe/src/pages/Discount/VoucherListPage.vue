@@ -42,7 +42,9 @@ try {
       totalElements.value = parsed.totalElements || parsed.content.length;
     }
   }
-} catch (e) {}
+} catch {
+  // Cache sai định dạng hoặc bị chặn thì tải lại danh sách từ API.
+}
 
 /* ---------------- Tải dữ liệu ---------------- */
 const getData = async (p = 0) => {
@@ -99,7 +101,7 @@ const toggleTrangThai = async (item) => {
       icon: "warning",
       title: "Không thể kích hoạt",
       text: "Phiếu đã hết hạn, không thể kích hoạt lại",
-      confirmButtonColor: "#cc0000",
+      confirmButtonColor: "#dc2626",
     });
     return;
   }
@@ -115,7 +117,7 @@ const toggleTrangThai = async (item) => {
     showCancelButton: true,
     confirmButtonText: "Xác nhận",
     cancelButtonText: "Hủy",
-    confirmButtonColor: "#cc0000",
+    confirmButtonColor: "#dc2626",
     cancelButtonColor: "#6b7280",
     reverseButtons: true,
   });
@@ -142,7 +144,7 @@ const toggleTrangThai = async (item) => {
       icon: "error",
       title: "Cập nhật thất bại",
       text: error.response?.data?.message || "Vui lòng thử lại",
-      confirmButtonColor: "#cc0000",
+      confirmButtonColor: "#dc2626",
     });
   }
 };
@@ -462,17 +464,20 @@ onMounted(() => getData(0));
         </table>
       </div>
 
-      <PaginationBar
-        :page="page"
-        :total-pages="totalPages"
-        :total-elements="totalElements"
-        :page-size="pageSize"
-        :from="listDiscount.length ? page * pageSize + 1 : 0"
-        :to="page * pageSize + listDiscount.length"
-        label="phiếu giảm giá"
-        @change="goToPage"
-        @size-change="onSizeChange"
-      />
+      <div v-if="totalPages > 1" class="table-card-foot">
+        <PaginationBar
+          :page="page"
+          :total-pages="totalPages"
+          :total-elements="totalElements"
+          :page-size="pageSize"
+          :sizes="[5, 10, 20, 50]"
+          :from="listDiscount.length ? page * pageSize + 1 : 0"
+          :to="page * pageSize + listDiscount.length"
+          label="phiếu giảm giá"
+          @change="goToPage"
+          @size-change="onSizeChange"
+        />
+      </div>
     </section>
   </div>
 </template>
@@ -542,11 +547,11 @@ onMounted(() => getData(0));
 
 /* ---- Tìm kiếm & bộ lọc (cùng layout với đợt giảm giá) ---- */
 .filter-panel {
-  --red: #cc0000;
-  --red-dark: #b01e1e;
-  --line: #e5e7eb;
-  --ink: #111827;
-  --muted: #6b7280;
+  --red: #dc2626;
+  --red-dark: #b91c1c;
+  --line: #e2e8f0;
+  --ink: #0f172a;
+  --muted: #64748b;
 }
 
 .filter-head {

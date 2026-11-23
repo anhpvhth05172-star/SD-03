@@ -370,7 +370,7 @@ onMounted(() => {
 }
 
 .addr-form {
-  border: 1px solid #ececef;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
   padding: 14px;
   display: flex;
@@ -503,7 +503,7 @@ onMounted(() => {
 }
 
 .addr-item {
-  border: 1px solid #ececef;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
   padding: 12px 14px;
   display: flex;

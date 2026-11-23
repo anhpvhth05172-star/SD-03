@@ -17,16 +17,19 @@ import com.example.datn.entity.KichCo;
 import com.example.datn.repository.ChatLieuRepository;
 import com.example.datn.repository.KieuDangRepository;
 import com.example.datn.repository.LoaiGiayRepository;
+import com.example.datn.dto.SanPham.SanPhamLuaChonDTO;
 import com.example.datn.repository.SanPhamRepository;
 import com.example.datn.dto.DotGiamGia.GiaKhuyenMai;
 import com.example.datn.repository.*;
 import com.example.datn.service.SanPhamService;
 import com.example.datn.service.impls.GiaService;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -48,11 +51,58 @@ public class SanPhamServiceImpl implements SanPhamService {
     private final KieuDangRepository kieuDangRepository;
     private final LoaiGiayRepository loaiGiayRepository;
     private final HinhAnhSanPhamRepository hinhAnhSanPhamRepository;
+    private final com.example.datn.service.HinhAnhCacheService hinhAnhCacheService;
     private final MauSacRepository mauSacRepository;
     private final KichCoRepository kichCoRepository;
     private final ThanGiayRepository thanGiayRepository;
     private final DeGiayRepository deGiayRepository;
     private final GiaService giaService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void ensureHinhAnhColumnCapacity() {
+        if (jdbcTemplate == null) return;
+        try {
+            jdbcTemplate.execute("""
+                IF COL_LENGTH('dbo.hinh_anh_san_pham', 'duong_dan') IS NOT NULL
+                    ALTER TABLE dbo.hinh_anh_san_pham ALTER COLUMN duong_dan NVARCHAR(MAX) NULL;
+                IF COL_LENGTH('dbo.hinh_anh_san_pham', 'ten_anh') IS NOT NULL
+                    ALTER TABLE dbo.hinh_anh_san_pham ALTER COLUMN ten_anh NVARCHAR(255) NULL;
+                IF COL_LENGTH('dbo.hinh_anh_san_pham', 'id_san_pham_chi_tiet') IS NOT NULL
+                    ALTER TABLE dbo.hinh_anh_san_pham ALTER COLUMN id_san_pham_chi_tiet BIGINT NULL;
+                """);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void saveOrUpdateProductImage(SanPham sp, String rawImg) {
+        if (sp == null || rawImg == null || rawImg.trim().isEmpty()) {
+            return;
+        }
+        String cleanImg = rawImg.trim();
+        com.example.datn.util.ImageValidator.validateBase64Image(cleanImg);
+        List<com.example.datn.entity.HinhAnhSanPham> existing = hinhAnhCacheService.getImagesBySanPhamId(sp.getId());
+        com.example.datn.entity.HinhAnhSanPham defaultImg = (existing != null) ? existing.stream()
+                .filter(img -> img.getTenAnh() == null || !img.getTenAnh().startsWith("COLOR_"))
+                .findFirst()
+                .orElse(existing.isEmpty() ? null : existing.get(0)) : null;
+        if (defaultImg != null) {
+            defaultImg.setDuongDan(cleanImg);
+            if (defaultImg.getTenAnh() == null || defaultImg.getTenAnh().isBlank()) {
+                defaultImg.setTenAnh("DEFAULT_" + sp.getId());
+            }
+            hinhAnhSanPhamRepository.save(defaultImg);
+        } else {
+            com.example.datn.entity.HinhAnhSanPham hasp = new com.example.datn.entity.HinhAnhSanPham();
+            hasp.setSanPham(sp);
+            hasp.setTenAnh("DEFAULT_" + sp.getId());
+            hasp.setDuongDan(cleanImg);
+            hinhAnhSanPhamRepository.save(hasp);
+        }
+        hinhAnhCacheService.invalidate(sp.getId());
+    }
 
     /** Tiêu đề mẫu của tệp import sản phẩm (14 cột, đọc theo đúng thứ tự). */
     private static final String[] TIEU_DE_MAU_SANPHAM = {
@@ -70,6 +120,11 @@ public class SanPhamServiceImpl implements SanPhamService {
     };
 
     @Override
+    public List<SanPhamLuaChonDTO> getDanhSachLuaChon() {
+        return sanPhamRepository.findAllForDropdown();
+    }
+
+    @Override
     public Page<SanPhamResponse> getAll(int page, int size, String keyword, Long idThuongHieu, Long idLoaiGiay, Long idChatLieu, Long idKieuDang, Long idXuatXu, String doiTuong, Boolean trangThai) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id"));
         Page<SanPham> sanPhamPage = sanPhamRepository.filterSanPhams(
@@ -83,7 +138,28 @@ public class SanPhamServiceImpl implements SanPhamService {
                 trangThai,
                 pageable
         );
-        return sanPhamPage.map(this::mapToResponse);
+
+        List<SanPham> content = sanPhamPage.getContent();
+        if (content.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
+        List<Long> spIds = content.stream().map(SanPham::getId).filter(Objects::nonNull).toList();
+        List<com.example.datn.entity.SanPhamChiTiet> allVariants = sanPhamChiTietRepository.findBySanPhamIdIn(spIds);
+        Map<Long, List<com.example.datn.entity.SanPhamChiTiet>> variantsBySpId = allVariants.stream()
+                .filter(v -> v.getSanPham() != null && v.getSanPham().getId() != null)
+                .collect(Collectors.groupingBy(v -> v.getSanPham().getId()));
+
+        Map<Long, GiaKhuyenMai> allGiaMap = giaService.tinhGia(allVariants);
+
+        Map<Long, List<com.example.datn.entity.HinhAnhSanPham>> imagesBySpId = hinhAnhCacheService.getImagesBySanPhamIdIn(spIds);
+
+        return sanPhamPage.map(sp -> mapToResponseBatch(
+                sp,
+                variantsBySpId.getOrDefault(sp.getId(), Collections.emptyList()),
+                allGiaMap,
+                imagesBySpId.getOrDefault(sp.getId(), Collections.emptyList())
+        ));
     }
 
     @Override
@@ -131,6 +207,10 @@ public class SanPhamServiceImpl implements SanPhamService {
         sanPham.setNgayCapNhat(LocalDateTime.now());
 
         SanPham saved = sanPhamRepository.save(sanPham);
+        String reqImg = (request.getHinhAnh() != null && !request.getHinhAnh().trim().isEmpty())
+                ? request.getHinhAnh()
+                : request.getHinhAnhDaiDien();
+        saveOrUpdateProductImage(saved, reqImg);
         return mapToResponse(saved);
     }
 
@@ -174,6 +254,10 @@ public class SanPhamServiceImpl implements SanPhamService {
         sanPham.setNgayCapNhat(LocalDateTime.now());
 
         SanPham updated = sanPhamRepository.save(sanPham);
+        String reqImg = (request.getHinhAnh() != null && !request.getHinhAnh().trim().isEmpty())
+                ? request.getHinhAnh()
+                : request.getHinhAnhDaiDien();
+        saveOrUpdateProductImage(updated, reqImg);
         return mapToResponse(updated);
     }
 
@@ -199,6 +283,7 @@ public class SanPhamServiceImpl implements SanPhamService {
         }
 
         hinhAnhSanPhamRepository.deleteBySanPhamId(id);
+        hinhAnhCacheService.invalidate(id);
 
         sanPhamChiTietRepository.deleteBySanPhamId(id);
 
@@ -219,6 +304,17 @@ public class SanPhamServiceImpl implements SanPhamService {
 
     private SanPhamResponse mapToResponse(SanPham sp) {
         List<com.example.datn.entity.SanPhamChiTiet> variants = sanPhamChiTietRepository.findBySanPhamId(sp.getId());
+        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(variants);
+        List<com.example.datn.entity.HinhAnhSanPham> images = hinhAnhCacheService.getImagesBySanPhamId(sp.getId());
+        return mapToResponseBatch(sp, variants, giaMap, images);
+    }
+
+    private SanPhamResponse mapToResponseBatch(
+            SanPham sp,
+            List<com.example.datn.entity.SanPhamChiTiet> variants,
+            Map<Long, GiaKhuyenMai> giaMap,
+            List<com.example.datn.entity.HinhAnhSanPham> images) {
+
         int totalQty = variants.stream()
                 .mapToInt(v -> v.getSoLuong() != null ? v.getSoLuong() : 0)
                 .sum();
@@ -233,36 +329,44 @@ public class SanPhamServiceImpl implements SanPhamService {
                 .max(java.math.BigDecimal::compareTo)
                 .orElse(java.math.BigDecimal.ZERO);
 
-        Map<Long, GiaKhuyenMai> giaMap = giaService.tinhGia(variants);
-        java.math.BigDecimal maxPhanTram = giaMap.values().stream()
-                .map(GiaKhuyenMai::phanTramGiam)
-                .filter(java.util.Objects::nonNull)
-                .max(java.math.BigDecimal::compareTo)
-                .orElse(null);
+        java.math.BigDecimal maxPhanTram = null;
+        java.math.BigDecimal minGiaSauGiam = null;
+        java.math.BigDecimal maxGiaSauGiam = null;
+
+        for (com.example.datn.entity.SanPhamChiTiet v : variants) {
+            GiaKhuyenMai gkm = giaMap.get(v.getId());
+            if (gkm != null) {
+                if (gkm.phanTramGiam() != null) {
+                    if (maxPhanTram == null || gkm.phanTramGiam().compareTo(maxPhanTram) > 0) {
+                        maxPhanTram = gkm.phanTramGiam();
+                    }
+                }
+                if (gkm.giaSauGiam() != null) {
+                    if (minGiaSauGiam == null || gkm.giaSauGiam().compareTo(minGiaSauGiam) < 0) {
+                        minGiaSauGiam = gkm.giaSauGiam();
+                    }
+                    if (maxGiaSauGiam == null || gkm.giaSauGiam().compareTo(maxGiaSauGiam) > 0) {
+                        maxGiaSauGiam = gkm.giaSauGiam();
+                    }
+                }
+            }
+        }
+
+        if (minGiaSauGiam == null) minGiaSauGiam = minPrice;
+        if (maxGiaSauGiam == null) maxGiaSauGiam = maxPrice;
 
         String discountStr = "-";
         if (maxPhanTram != null && maxPhanTram.compareTo(java.math.BigDecimal.ZERO) > 0) {
             discountStr = "-" + maxPhanTram.stripTrailingZeros().toPlainString() + "%";
         }
 
-        java.math.BigDecimal minGiaSauGiam = giaMap.values().stream()
-                .map(GiaKhuyenMai::giaSauGiam)
-                .filter(java.util.Objects::nonNull)
-                .min(java.math.BigDecimal::compareTo)
-                .orElse(minPrice);
-        java.math.BigDecimal maxGiaSauGiam = giaMap.values().stream()
-                .map(GiaKhuyenMai::giaSauGiam)
-                .filter(java.util.Objects::nonNull)
-                .max(java.math.BigDecimal::compareTo)
-                .orElse(maxPrice);
-
         String hinhAnhDaiDien = null;
-        try {
-            List<com.example.datn.entity.HinhAnhSanPham> images = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
-            if (images != null && !images.isEmpty()) {
-                hinhAnhDaiDien = images.get(0).getDuongDan();
-            }
-        } catch (Exception ignored) {
+        if (images != null && !images.isEmpty()) {
+            hinhAnhDaiDien = images.stream()
+                    .filter(img -> img.getTenAnh() != null && img.getTenAnh().startsWith("DEFAULT_"))
+                    .map(com.example.datn.entity.HinhAnhSanPham::getDuongDan)
+                    .findFirst()
+                    .orElse(images.get(0).getDuongDan());
         }
 
         return SanPhamResponse.builder()
@@ -316,7 +420,14 @@ public class SanPhamServiceImpl implements SanPhamService {
         LoaiGiay loaiGiay = loaiGiayRepository.findById(request.getIdLoaiGiay())
                 .orElseThrow(() -> new IllegalArgumentException("Vui lòng chọn Loại giày hợp lệ"));
 
-        // Validate hình ảnh (Magic Bytes, dung lượng tối đa 5MB)
+        String productImg = (request.getHinhAnh() != null && !request.getHinhAnh().trim().isEmpty())
+                ? request.getHinhAnh().trim()
+                : (request.getHinhAnhDaiDien() != null && !request.getHinhAnhDaiDien().trim().isEmpty() ? request.getHinhAnhDaiDien().trim() : null);
+        if (productImg != null) {
+            com.example.datn.util.ImageValidator.validateBase64Image(productImg);
+        }
+
+        // Validate hình ảnh (Magic Bytes, dung lượng tối đa 10MB)
         if (request.getBienThes() != null) {
             for (BienTheItem item : request.getBienThes()) {
                 if (item.getHinhAnh() != null && !item.getHinhAnh().trim().isEmpty()) {
@@ -391,6 +502,7 @@ public class SanPhamServiceImpl implements SanPhamService {
             existingSp.setNgayCapNhat(LocalDateTime.now());
             sanPhamRepository.save(existingSp);
 
+            saveOrUpdateProductImage(existingSp, productImg);
             processSaveVariants(existingSp, request.getBienThes());
 
             return SmartProductSaveResponse.builder()
@@ -419,6 +531,7 @@ public class SanPhamServiceImpl implements SanPhamService {
         newSp.setNgayCapNhat(LocalDateTime.now());
 
         SanPham savedSp = sanPhamRepository.save(newSp);
+        saveOrUpdateProductImage(savedSp, productImg);
         processSaveVariants(savedSp, request.getBienThes());
 
         return SmartProductSaveResponse.builder()
@@ -504,21 +617,50 @@ public class SanPhamServiceImpl implements SanPhamService {
                 String imgKey = sp.getId() + "_" + ms.getId();
                 if (!savedImages.contains(imgKey)) {
                     savedImages.add(imgKey);
-                    try {
-                        List<com.example.datn.entity.HinhAnhSanPham> existingImages = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
-                        boolean imgExists = existingImages != null && existingImages.stream()
-                                .anyMatch(img -> item.getHinhAnh().equals(img.getDuongDan()));
-                        if (!imgExists) {
-                            com.example.datn.entity.HinhAnhSanPham hasp = new com.example.datn.entity.HinhAnhSanPham();
-                            hasp.setSanPham(sp);
-                            hasp.setDuongDan(item.getHinhAnh());
-                            hasp.setTenAnh("Ảnh màu " + ms.getTenMau());
-                            hinhAnhSanPhamRepository.save(hasp);
-                        }
-                    } catch (Exception ignored) {}
+                    String cleanImg = item.getHinhAnh().trim();
+                    String colorName = ms.getTenMau() != null ? ms.getTenMau().trim() : "";
+                    List<com.example.datn.entity.HinhAnhSanPham> existingImages = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
+                    com.example.datn.entity.HinhAnhSanPham existingColorImg = (existingImages != null) ? existingImages.stream()
+                            .filter(img -> img.getTenAnh() != null && (
+                                    img.getTenAnh().contains("COLOR_" + ms.getId()) ||
+                                    (!colorName.isEmpty() && img.getTenAnh().toLowerCase().contains(colorName.toLowerCase()))
+                            ))
+                            .findFirst()
+                            .orElse(null) : null;
+
+                    if (existingColorImg != null) {
+                        existingColorImg.setTenAnh("COLOR_" + ms.getId() + " - " + colorName);
+                        existingColorImg.setDuongDan(cleanImg);
+                        hinhAnhSanPhamRepository.save(existingColorImg);
+                    } else {
+                        com.example.datn.entity.HinhAnhSanPham hasp = new com.example.datn.entity.HinhAnhSanPham();
+                        hasp.setSanPham(sp);
+                        hasp.setTenAnh("COLOR_" + ms.getId() + " - " + colorName);
+                        hasp.setDuongDan(cleanImg);
+                        hinhAnhSanPhamRepository.save(hasp);
+                    }
+                    hinhAnhCacheService.invalidate(sp.getId());
                 }
             }
         }
+
+    }
+
+    private void saveHinhAnhDaiDien(SanPham sp, String hinhAnhDaiDien) {
+        if (hinhAnhDaiDien == null || hinhAnhDaiDien.trim().isEmpty()) return;
+        try {
+            List<com.example.datn.entity.HinhAnhSanPham> existingImages = hinhAnhSanPhamRepository.findBySanPhamId(sp.getId());
+            boolean imgExists = existingImages != null && existingImages.stream()
+                    .anyMatch(img -> hinhAnhDaiDien.equals(img.getDuongDan()));
+            if (!imgExists) {
+                com.example.datn.entity.HinhAnhSanPham hasp = new com.example.datn.entity.HinhAnhSanPham();
+                hasp.setSanPham(sp);
+                hasp.setDuongDan(hinhAnhDaiDien.trim());
+                hasp.setTenAnh(sp.getTenSanPham() + " - Đại diện");
+                hinhAnhSanPhamRepository.save(hasp);
+                hinhAnhCacheService.invalidate(sp.getId());
+            }
+        } catch (Exception ignored) {}
     }
 
     @Override

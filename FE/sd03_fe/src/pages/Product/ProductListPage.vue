@@ -3,13 +3,33 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import SearchableSelect from '@/components/SearchableSelect.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
-import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm } from '@/utils/notify'
+import { notifySuccess, notifyWarning, notifyError, notifyDeleteConfirm, notifyConfirm } from '@/utils/notify'
 import { formatNumber, formatVnd } from '@/utils/format'
 import { exportExcel } from '@/utils/export'
-import { API_ORIGIN } from '@/api/http'
+import http, { API_ORIGIN } from '@/api/http'
 
 const router = useRouter()
 const API_BASE = `${API_ORIGIN}/api/v1`
+
+const apiFetch = async (url, options = {}) => {
+  const parsed = new URL(url, window.location.origin)
+  const apiPath = `${parsed.pathname.replace(/^\/api/, '')}${parsed.search}`
+  try {
+    const response = await http.request({
+      url: apiPath,
+      method: options.method || 'GET',
+      data: options.body ? JSON.parse(options.body) : undefined,
+      signal: options.signal,
+    })
+    return { ok: true, status: response.status, json: async () => response.data }
+  } catch (error) {
+    return {
+      ok: false,
+      status: error.status || error.response?.status || 500,
+      json: async () => error.response?.data || { message: error.message },
+    }
+  }
+}
 
 const navigateToAdd = () => {
   router.push('/san-pham/them')
@@ -30,16 +50,61 @@ const statusTabs = [
   { value: 'INACTIVE', label: 'Ngừng kinh doanh' },
 ]
 const selectedIds = ref([])
-const isAllSelected = computed({
-  get: () => products.value.length > 0 && selectedIds.value.length === products.value.length,
-  set: (val) => {
-    if (val) {
-      selectedIds.value = products.value.map(p => p.id)
-    } else {
-      selectedIds.value = []
+const posPendingOrders = ref([])
+
+const getTodayDateString = () => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const loadPosPendingOrders = () => {
+  try {
+    const savedDate = localStorage.getItem('polyshoes_pos_pending_date_v1')
+    const today = getTodayDateString()
+    if (savedDate && savedDate !== today) {
+      posPendingOrders.value = []
+      return
+    }
+    const raw = localStorage.getItem('polyshoes_pos_pending_orders_v1')
+    posPendingOrders.value = raw ? JSON.parse(raw) : []
+  } catch {
+    posPendingOrders.value = []
+  }
+}
+
+const getPosReservedForProduct = (item) => {
+  if (!item || !Array.isArray(posPendingOrders.value)) return 0
+  let reserved = 0
+  for (const order of posPendingOrders.value) {
+    if (!Array.isArray(order.cart)) continue
+    for (const c of order.cart) {
+      const matchId = c.idSanPham && item.id && Number(c.idSanPham) === Number(item.id)
+      const matchCode = c.maSp && item.maSanPham && String(c.maSp).toUpperCase() === String(item.maSanPham).toUpperCase()
+      const matchName = !c.idSanPham && c.name && item.tenSanPham && String(c.name).trim() === String(item.tenSanPham).trim()
+      if (matchId || matchCode || matchName) {
+        reserved += Number(c.quantity || 0)
+      }
     }
   }
-})
+  return reserved
+}
+
+const getAvailableProductStock = (item) => {
+  const base = Number(item?.soLuong ?? 0)
+  return Math.max(0, base - getPosReservedForProduct(item))
+}
+
+const handlePosStorageSync = (e) => {
+  if (!e || !e.key || e.key === 'polyshoes_pos_pending_orders_v1' || e.key === 'polyshoes_pos_sync_signal') {
+    loadPosPendingOrders()
+    if (e?.key === 'polyshoes_pos_sync_signal') {
+      fetchProducts()
+    }
+  }
+}
 
 const filters = reactive({
   keyword: '',
@@ -91,33 +156,38 @@ const editForm = reactive({
   doiTuong: 'Nam',
   tinhNang: '',
   moTa: '',
+  hinhAnh: null,
   trangThai: true
 })
 
-const isQuickAddModalOpen = ref(false)
-const isSubmittingQuickAdd = ref(false)
-const quickAddErrors = reactive({
-  tenSanPham: '',
-  idThuongHieu: '',
-  idLoaiGiay: '',
-  idChatLieu: '',
-  idKieuDang: '',
-  idXuatXu: ''
-})
-
-const quickAddForm = reactive({
-  tenSanPham: '',
-  idThuongHieu: '',
-  idLoaiGiay: '',
-  idChatLieu: '',
-  idKieuDang: '',
-  idXuatXu: '',
-  doiTuong: 'Nam',
-  tinhNang: '',
-  moTa: '',
-  trangThai: true
-})
-
+let activeProductFileInput = null
+const triggerProductImageUpload = (targetForm) => {
+  if (activeProductFileInput && activeProductFileInput.parentNode) {
+    activeProductFileInput.parentNode.removeChild(activeProductFileInput)
+  }
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp'
+  input.style.display = 'none'
+  document.body.appendChild(input)
+  activeProductFileInput = input
+  input.onchange = (e) => {
+    const file = e.target.files?.[0]
+    if (input.parentNode) input.parentNode.removeChild(input)
+    activeProductFileInput = null
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      showToastNotice('Ảnh quá lớn', `Ảnh "${file.name}" vượt quá dung lượng tối đa 5MB!`, 'warning')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      targetForm.hinhAnh = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+  input.click()
+}
 const showToastNotice = (title, message, type = 'success') => {
   const content = message || title
   const heading = message && title ? title : ''
@@ -130,14 +200,7 @@ const showToastNotice = (title, message, type = 'success') => {
   }
 }
 
-const activeFilterCount = computed(() => {
-  let count = 0
-  if (filters.keyword && filters.keyword.trim()) count++
-  if (filters.idThuongHieu) count++
-  if (filters.idLoaiGiay) count++
-  if (filters.trangThai !== '' && filters.trangThai !== null && filters.trangThai !== undefined) count++
-  return count
-})
+
 
 const normalizeAttributeList = (data) => {
   if (!data) return []
@@ -149,9 +212,9 @@ const normalizeAttributeList = (data) => {
 
 const fetchOptions = async () => {
   try {
-    const bulkRes = await fetch(`${API_BASE}/attributes/all-filter-options`)
-    if (bulkRes.ok) {
-      const data = await bulkRes.json()
+    const cached = sessionStorage.getItem('product_list_filter_options')
+    if (cached) {
+      const data = JSON.parse(cached)
       if (data && typeof data === 'object') {
         brands.value = normalizeAttributeList(data.thuongHieu)
         categories.value = normalizeAttributeList(data.loaiGiay)
@@ -163,17 +226,37 @@ const fetchOptions = async () => {
         }
       }
     }
+  } catch {}
+
+  try {
+    const bulkRes = await apiFetch(`${API_BASE}/attributes/all-filter-options`)
+    if (bulkRes.ok) {
+      const data = await bulkRes.json()
+      if (data && typeof data === 'object') {
+        brands.value = normalizeAttributeList(data.thuongHieu)
+        categories.value = normalizeAttributeList(data.loaiGiay)
+        materials.value = normalizeAttributeList(data.chatLieu)
+        styles.value = normalizeAttributeList(data.kieuDang)
+        origins.value = normalizeAttributeList(data.xuatXu)
+        try {
+          sessionStorage.setItem('product_list_filter_options', JSON.stringify(data))
+        } catch {}
+        if (brands.value.length > 0 || categories.value.length > 0) {
+          return
+        }
+      }
+    }
   } catch (e) {
     console.warn('Lỗi gọi all-filter-options, chuyển sang gọi từng danh mục:', e)
   }
 
   try {
     const [resTH, resLG, resCL, resKD, resXX] = await Promise.allSettled([
-      fetch(`${API_BASE}/attributes/thuong_hieu`),
-      fetch(`${API_BASE}/attributes/loai_giay`),
-      fetch(`${API_BASE}/attributes/chat_lieu`),
-      fetch(`${API_BASE}/attributes/kieu_dang`),
-      fetch(`${API_BASE}/attributes/xuat_xu`)
+      apiFetch(`${API_BASE}/attributes/thuong_hieu`),
+      apiFetch(`${API_BASE}/attributes/loai_giay`),
+      apiFetch(`${API_BASE}/attributes/chat_lieu`),
+      apiFetch(`${API_BASE}/attributes/kieu_dang`),
+      apiFetch(`${API_BASE}/attributes/xuat_xu`)
     ])
 
     const parseRes = async (settledRes) => {
@@ -237,7 +320,7 @@ const fetchProducts = async () => {
 
   try {
     const params = buildQueryParams(currentPage.value)
-    const res = await fetch(`${API_BASE}/san-pham?${params.toString()}`, {
+    const res = await apiFetch(`${API_BASE}/san-pham?${params.toString()}`, {
       signal: currentAbortController.signal
     })
 
@@ -264,6 +347,13 @@ const reloadAllData = () => {
 
 const selectTab = (tab) => {
   activeTab.value = tab || 'ALL'
+  if (activeTab.value === 'ACTIVE') {
+    filters.trangThai = true
+  } else if (activeTab.value === 'INACTIVE') {
+    filters.trangThai = false
+  } else {
+    filters.trangThai = ''
+  }
   currentPage.value = 0
   fetchProducts()
 }
@@ -342,7 +432,7 @@ const toggleStatus = async (item) => {
   const code = item.maSanPham || `SP0${item.id}`
 
   try {
-    const res = await fetch(`${API_BASE}/san-pham/${item.id}/toggle-status`, { method: 'PATCH' })
+    const res = await apiFetch(`${API_BASE}/san-pham/${item.id}/toggle-status`, { method: 'PATCH' })
     if (res.ok) {
       showToastNotice(
         'Cập nhật trạng thái thành công',
@@ -359,43 +449,16 @@ const toggleStatus = async (item) => {
   }
 }
 
-const deleteProduct = async (id) => {
-  const target = products.value.find(p => p.id === id)
-  const name = target ? (target.tenSanPham || target.maSanPham) : ''
-  const confirmed = await notifyDeleteConfirm(name)
-  if (!confirmed) return
-  const originalList = [...products.value]
-  products.value = products.value.filter(p => p.id !== id)
-  if (totalElements.value > 0) totalElements.value--
-
-  try {
-    const res = await fetch(`${API_BASE}/san-pham/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}))
-      products.value = originalList
-      if (totalElements.value >= 0) totalElements.value++
-      showToastNotice('Không thể xóa', errData.message || 'Sản phẩm đã có dữ liệu giao dịch liên quan', 'danger')
-    } else {
-      showToastNotice('Thành công', 'Đã xóa sản phẩm thành công', 'success')
-      fetchProducts()
-    }
-  } catch (err) {
-    products.value = originalList
-    if (totalElements.value >= 0) totalElements.value++
-    showToastNotice('Lỗi kết nối', 'Không thể kết nối tới máy chủ', 'danger')
-  }
-}
-
-const copyToClipboard = (text) => {
-  if (!text) return
-  navigator.clipboard.writeText(text)
-  showToastNotice('Đã sao chép', `Đã sao chép mã "${text}" vào clipboard`, 'success')
-}
-
 const viewProductDetails = (item) => {
-  router.push('/san-pham/bien-the')
+  router.push({
+    path: '/san-pham/bien-the',
+    query: {
+      idSanPham: item.id,
+      tenSanPham: item.tenSanPham,
+      maSanPham: item.maSanPham || `SP0${item.id}`
+    }
+  })
 }
-const viewProductVariants = viewProductDetails
 
 const isExporting = ref(false)
 
@@ -411,7 +474,7 @@ const exportToExcel = async () => {
     } else {
       const params = buildQueryParams(0)
       params.set('size', '10000')
-      const res = await fetch(`${API_BASE}/san-pham?${params.toString()}`)
+      const res = await apiFetch(`${API_BASE}/san-pham?${params.toString()}`)
       if (res.ok) {
         const data = await res.json()
         itemsToExport = data.content || products.value
@@ -455,7 +518,6 @@ const exportToExcel = async () => {
   }
 }
 
-
 const openQuickEdit = (item) => {
   editForm.id = item.id
   editForm.maSanPham = item.maSanPham || `SP0${item.id}`
@@ -468,15 +530,16 @@ const openQuickEdit = (item) => {
   editForm.doiTuong = item.doiTuong || 'Nam'
   editForm.tinhNang = item.tinhNang || ''
   editForm.moTa = item.moTa || ''
+  editForm.hinhAnh = item.hinhAnhDaiDien || null
   editForm.trangThai = item.trangThai !== false
 
-  Object.keys(editErrors).forEach(k => editErrors[k] = '')
+  Object.keys(editErrors).forEach(k => (editErrors[k] = ''))
   isEditModalOpen.value = true
 }
 
 const validateEditForm = () => {
   let valid = true
-  Object.keys(editErrors).forEach(k => editErrors[k] = '')
+  Object.keys(editErrors).forEach(k => (editErrors[k] = ''))
 
   if (!editForm.tenSanPham || !editForm.tenSanPham.trim()) {
     editErrors.tenSanPham = 'Tên sản phẩm không được để trống'
@@ -508,6 +571,14 @@ const validateEditForm = () => {
 const submitQuickEdit = async () => {
   if (!validateEditForm()) return
 
+  const ok = await notifyConfirm(
+    'Xác nhận cập nhật sản phẩm',
+    `Bạn có chắc chắn muốn lưu thay đổi cho sản phẩm "${editForm.tenSanPham.trim()}"?`,
+    'Xác nhận lưu',
+    'Hủy'
+  )
+  if (!ok) return
+
   isUpdating.value = true
   const payload = {
     tenSanPham: editForm.tenSanPham.trim(),
@@ -519,11 +590,12 @@ const submitQuickEdit = async () => {
     doiTuong: editForm.doiTuong,
     tinhNang: editForm.tinhNang ? editForm.tinhNang.trim() : '',
     moTa: editForm.moTa ? editForm.moTa.trim() : '',
+    hinhAnh: editForm.hinhAnh || null,
     trangThai: editForm.trangThai
   }
 
   try {
-    const res = await fetch(`${API_BASE}/san-pham/${editForm.id}`, {
+    const res = await apiFetch(`${API_BASE}/san-pham/${editForm.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -543,93 +615,6 @@ const submitQuickEdit = async () => {
     isUpdating.value = false
   }
 }
-
-const openQuickAdd = () => {
-  quickAddForm.tenSanPham = ''
-  quickAddForm.idThuongHieu = ''
-  quickAddForm.idLoaiGiay = ''
-  quickAddForm.idChatLieu = ''
-  quickAddForm.idKieuDang = ''
-  quickAddForm.idXuatXu = ''
-  quickAddForm.doiTuong = 'Nam'
-  quickAddForm.tinhNang = ''
-  quickAddForm.moTa = ''
-  quickAddForm.trangThai = true
-
-  Object.keys(quickAddErrors).forEach(k => (quickAddErrors[k] = ''))
-  isQuickAddModalOpen.value = true
-}
-
-const validateQuickAddForm = () => {
-  let valid = true
-  Object.keys(quickAddErrors).forEach(k => (quickAddErrors[k] = ''))
-
-  if (!quickAddForm.tenSanPham || !quickAddForm.tenSanPham.trim()) {
-    quickAddErrors.tenSanPham = 'Tên sản phẩm không được để trống'
-    valid = false
-  }
-  if (!quickAddForm.idThuongHieu) {
-    quickAddErrors.idThuongHieu = 'Vui lòng chọn Thương hiệu'
-    valid = false
-  }
-  if (!quickAddForm.idLoaiGiay) {
-    quickAddErrors.idLoaiGiay = 'Vui lòng chọn Loại giày'
-    valid = false
-  }
-  if (!quickAddForm.idChatLieu) {
-    quickAddErrors.idChatLieu = 'Vui lòng chọn Chất liệu'
-    valid = false
-  }
-  if (!quickAddForm.idKieuDang) {
-    quickAddErrors.idKieuDang = 'Vui lòng chọn Kiểu dáng'
-    valid = false
-  }
-  if (!quickAddForm.idXuatXu) {
-    quickAddErrors.idXuatXu = 'Vui lòng chọn Xuất xứ'
-    valid = false
-  }
-  return valid
-}
-
-const submitQuickAdd = async () => {
-  if (!validateQuickAddForm()) return
-
-  isSubmittingQuickAdd.value = true
-  const payload = {
-    tenSanPham: quickAddForm.tenSanPham.trim(),
-    idThuongHieu: Number(quickAddForm.idThuongHieu),
-    idLoaiGiay: Number(quickAddForm.idLoaiGiay),
-    idChatLieu: Number(quickAddForm.idChatLieu),
-    idKieuDang: Number(quickAddForm.idKieuDang),
-    idXuatXu: Number(quickAddForm.idXuatXu),
-    doiTuong: quickAddForm.doiTuong,
-    tinhNang: quickAddForm.tinhNang ? quickAddForm.tinhNang.trim() : '',
-    moTa: quickAddForm.moTa ? quickAddForm.moTa.trim() : '',
-    trangThai: quickAddForm.trangThai
-  }
-
-  try {
-    const res = await fetch(`${API_BASE}/san-pham`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-
-    if (res.ok) {
-      showToastNotice('Thành công', `Đã thêm sản phẩm "${quickAddForm.tenSanPham}" thành công!`, 'success')
-      isQuickAddModalOpen.value = false
-      fetchProducts()
-    } else {
-      const errData = await res.json().catch(() => ({}))
-      showToastNotice('Lỗi thêm sản phẩm', errData.message || 'Không thể tạo sản phẩm mới', 'danger')
-    }
-  } catch (err) {
-    showToastNotice('Lỗi kết nối', 'Không thể kết nối máy chủ', 'danger')
-  } finally {
-    isSubmittingQuickAdd.value = false
-  }
-}
-
 const isGeneratingAi = ref(false)
 
 const generateAiContent = async (targetForm) => {
@@ -654,7 +639,7 @@ const generateAiContent = async (targetForm) => {
       doiTuong: targetForm.doiTuong || 'Nam'
     }
 
-    const res = await fetch(`${API_BASE}/san-pham/ai-generate-content`, {
+    const res = await apiFetch(`${API_BASE}/san-pham/ai-generate-content`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -677,10 +662,15 @@ const generateAiContent = async (targetForm) => {
 }
 
 onMounted(() => {
+  loadPosPendingOrders()
+  window.addEventListener('storage', handlePosStorageSync)
+  window.addEventListener('focus', loadPosPendingOrders)
   Promise.allSettled([fetchOptions(), fetchProducts()])
 })
 
 onUnmounted(() => {
+  window.removeEventListener('storage', handlePosStorageSync)
+  window.removeEventListener('focus', loadPosPendingOrders)
   if (debounceTimer) clearTimeout(debounceTimer)
   if (currentAbortController) currentAbortController.abort()
 })
@@ -698,17 +688,6 @@ onUnmounted(() => {
 
     <div class="filter-box">
       <div class="status-tabs-row">
-        <div class="tabs-group">
-          <SearchableSelect
-            v-model="activeTab"
-            :options="statusTabs"
-            label-key="label"
-            value-key="value"
-            placeholder="Trạng thái"
-            @change="selectTab"
-          />
-        </div>
-
         <div class="page-actions">
           <button class="btn btn-reset-filter" @click="resetFilters" title="Đặt lại bộ lọc về mặc định">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -738,13 +717,6 @@ onUnmounted(() => {
             </svg>
             {{ isExporting ? 'Đang xuất...' : 'Xuất Excel' }}
           </button>
-          <button class="btn btn-quick-add" @click="openQuickAdd" title="Thêm nhanh sản phẩm">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            Thêm nhanh
-          </button>
           <button class="btn btn-add-new" @click="navigateToAdd">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -757,7 +729,7 @@ onUnmounted(() => {
 
       <transition name="collapse-fade">
         <div v-show="isFilterExpanded" class="filters-grid">
-          <div class="filter-col span-2">
+          <div class="filter-col">
             <label class="filter-lbl">Tìm kiếm sản phẩm</label>
             <div class="search-wrap">
               <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -783,6 +755,12 @@ onUnmounted(() => {
             <SearchableSelect v-model="filters.idLoaiGiay" :options="categories" label-key="ten" value-key="id"
               placeholder="Tất cả loại giày" search-placeholder="Tìm loại giày..." @change="onFilterChange" />
           </div>
+
+          <div class="filter-col">
+            <label class="filter-lbl">Trạng thái</label>
+            <SearchableSelect v-model="activeTab" :options="statusTabs" label-key="label" value-key="value"
+              :allow-clear="false" placeholder="Tất cả" search-placeholder="Tìm trạng thái..." @change="selectTab" />
+          </div>
         </div>
       </transition>
     </div>
@@ -801,12 +779,12 @@ onUnmounted(() => {
           <thead>
             <tr>
               <th width="60" class="text-center">STT</th>
-              <th width="120">MÃ SẢN PHẨM</th>
-              <th width="320">SẢN PHẨM</th>
-              <th width="140">THƯƠNG HIỆU</th>
-              <th width="140">LOẠI GIÀY</th>
-              <th width="100" class="text-center">SỐ LƯỢNG</th>
-              <th width="160" class="text-end">GIÁ BÁN</th>
+              <th width="130" class="text-center">MÃ SẢN PHẨM</th>
+              <th width="280">SẢN PHẨM</th>
+              <th width="140" class="text-center">THƯƠNG HIỆU</th>
+              <th width="140" class="text-center">LOẠI GIÀY</th>
+              <th width="110" class="text-center">SỐ LƯỢNG</th>
+              <th width="170" class="text-center">GIÁ BÁN</th>
               <th width="140" class="text-center">TRẠNG THÁI</th>
               <th width="120" class="text-center">HÀNH ĐỘNG</th>
             </tr>
@@ -814,23 +792,33 @@ onUnmounted(() => {
           <tbody>
             <tr v-for="(item, idx) in products" :key="item.id">
               <td class="text-center text-muted">{{ currentPage * pageSize + idx + 1 }}</td>
-              <td class="code-plain-text">{{ item.maSanPham || `SP0${item.id}` }}</td>
+              <td class="text-center code-plain-text">{{ item.maSanPham || `SP0${item.id}` }}</td>
               <td>
-                <div class="product-details-col">
-                  <span class="name-plain-text">{{ item.tenSanPham }}</span>
-                  <span v-if="item.doiTuong" class="target-badge">{{ item.doiTuong }}</span>
+                <div class="product-cell-wrapper">
+                  <div class="product-thumbnail-box">
+                    <img v-if="item.hinhAnhDaiDien" :src="item.hinhAnhDaiDien" alt="Ảnh SP" class="product-thumb-img"
+                      @error="item.hinhAnhDaiDien = null" />
+                    <div v-else class="product-thumb-placeholder">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                      </svg>
+                    </div>
+                    <span v-if="hasProductDiscount(item)" class="image-discount-badge">{{ item.discount }}</span>
+                  </div>
+                  <div class="product-details-col">
+                    <span class="name-plain-text">{{ item.tenSanPham }}</span>
+                    <span v-if="item.doiTuong" class="target-badge">{{ item.doiTuong }}</span>
+                  </div>
                 </div>
               </td>
-              <td class="attr-plain-text">{{ item.tenThuongHieu || '---' }}</td>
-              <td class="attr-plain-text">{{ item.tenLoaiGiay || '---' }}</td>
-              <td class="text-center qty-plain-text">{{ formatNumber(item.soLuong !== undefined && item.soLuong !== null
-                ? item.soLuong : 0) }}</td>
-              <td class="text-end price-plain-text">
+              <td class="text-center attr-plain-text">{{ item.tenThuongHieu || '---' }}</td>
+              <td class="text-center attr-plain-text">{{ item.tenLoaiGiay || '---' }}</td>
+              <td class="text-center qty-plain-text">
+                <div>{{ formatNumber(getAvailableProductStock(item)) }}</div>
+              </td>
+              <td class="text-center price-plain-text">
                 <div v-if="hasProductDiscount(item)" class="product-price-discount-box">
-                  <div class="product-sale-price-row">
-                    <span class="product-sale-price">{{ formatProductDiscountedPrice(item) }}</span>
-                    <span class="badge-discount-pill">{{ item.discount }}</span>
-                  </div>
+                  <span class="product-sale-price">{{ formatProductDiscountedPrice(item) }}</span>
                   <span class="product-original-price">{{ formatProductPrice(item) }}</span>
                 </div>
                 <span v-else>{{ formatProductPrice(item) }}</span>
@@ -842,10 +830,17 @@ onUnmounted(() => {
               </td>
               <td class="text-center">
                 <div class="action-btns">
-                  <label class="switch-toggle" :title="item.trangThai ? 'Click để ngừng kinh doanh' : 'Click để bật kinh doanh'">
+                  <label class="switch-toggle"
+                    :title="item.trangThai ? 'Click để ngừng kinh doanh' : 'Click để bật kinh doanh'">
                     <input type="checkbox" :checked="item.trangThai" @change="toggleStatus(item)" />
                     <span class="slider round"></span>
                   </label>
+                  <button class="act-btn edit-btn" title="Chỉnh sửa sản phẩm" @click="openQuickEdit(item)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                  </button>
                   <button class="act-btn view-btn" title="Xem chi tiết sản phẩm" @click="viewProductDetails(item)">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -902,19 +897,11 @@ onUnmounted(() => {
         </table>
       </div>
 
-      <div v-if="totalPages > 1" class="table-card-foot">
-        <PaginationBar
-          :page="currentPage"
-          :total-pages="totalPages"
-          :total-elements="totalElements"
-          :page-size="pageSize"
-          :sizes="pageSizeOptions"
-          :from="products.length ? currentPage * pageSize + 1 : 0"
-          :to="currentPage * pageSize + products.length"
-          label="sản phẩm"
-          @change="changePage"
-          @size-change="onSizeChange"
-        />
+      <div v-if="totalElements > 0" class="table-card-foot">
+        <PaginationBar :page="currentPage" :total-pages="totalPages" :total-elements="totalElements"
+          :page-size="pageSize" :sizes="pageSizeOptions" :from="products.length ? currentPage * pageSize + 1 : 0"
+          :to="currentPage * pageSize + products.length" label="sản phẩm" @change="changePage"
+          @size-change="onSizeChange" />
       </div>
     </div>
 
@@ -1019,6 +1006,22 @@ onUnmounted(() => {
                   placeholder="Nhập mô tả chi tiết sản phẩm..."></textarea>
               </div>
 
+              <div class="form-group span-2">
+                <label class="form-label">Hình ảnh đại diện sản phẩm</label>
+                <div v-if="editForm.hinhAnh" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f8fafc;">
+                  <img :src="editForm.hinhAnh" alt="Preview" style="width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0;" />
+                  <div style="flex: 1;">
+                    <div style="font-size: 13px; font-weight: 600; color: #0f172a;">Đã chọn ảnh đại diện</div>
+                    <div style="font-size: 12px; color: #64748b;">Nhấn Đổi ảnh để chọn ảnh khác (JPG, PNG, WEBP • Tối đa 5MB)</div>
+                  </div>
+                  <button type="button" class="btn btn-secondary" @click="triggerProductImageUpload(editForm)">Đổi ảnh</button>
+                </div>
+                <div v-else @click="triggerProductImageUpload(editForm)" style="cursor: pointer; padding: 14px; text-align: center; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f8fafc;">
+                  <div style="font-size: 13px; font-weight: 600; color: #334155;">+ Nhấn để tải ảnh đại diện cho sản phẩm</div>
+                  <div style="font-size: 12px; color: #64748b;">Hỗ trợ JPG, PNG, WEBP (Tối đa 5MB)</div>
+                </div>
+              </div>
+
               <div class="form-group span-2 switch-row">
                 <label class="form-label mb-0">Trạng thái (Bật: Đang kinh doanh / Tắt: Ngừng kinh doanh)</label>
                 <label class="switch-toggle">
@@ -1039,125 +1042,6 @@ onUnmounted(() => {
       </div>
     </transition>
 
-    <transition name="modal-fade">
-      <div v-if="isQuickAddModalOpen" class="modal-overlay" @click.self="isQuickAddModalOpen = false">
-        <div class="modal-dialog">
-          <div class="modal-header">
-            <div class="modal-title-group">
-              <h3 class="modal-title">Thêm nhanh sản phẩm</h3>
-            </div>
-            <button class="modal-close" @click="isQuickAddModalOpen = false">×</button>
-          </div>
-
-          <div class="modal-body">
-            <div class="edit-grid">
-              <div class="form-group span-2">
-                <label class="form-label">Tên sản phẩm <span class="req">*</span></label>
-                <input v-model="quickAddForm.tenSanPham" type="text" class="modal-input"
-                  :class="{ 'has-error': quickAddErrors.tenSanPham }" placeholder="Nhập tên sản phẩm..." />
-                <span v-if="quickAddErrors.tenSanPham" class="err-msg">{{ quickAddErrors.tenSanPham }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Thương hiệu <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idThuongHieu" :options="brands" label-key="ten" value-key="id"
-                  placeholder="-- Chọn thương hiệu --" search-placeholder="Tìm thương hiệu..."
-                  :has-error="!!quickAddErrors.idThuongHieu" />
-                <span v-if="quickAddErrors.idThuongHieu" class="err-msg">{{ quickAddErrors.idThuongHieu }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Loại giày <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idLoaiGiay" :options="categories" label-key="ten" value-key="id"
-                  placeholder="-- Chọn loại giày --" search-placeholder="Tìm loại giày..."
-                  :has-error="!!quickAddErrors.idLoaiGiay" />
-                <span v-if="quickAddErrors.idLoaiGiay" class="err-msg">{{ quickAddErrors.idLoaiGiay }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Chất liệu <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idChatLieu" :options="materials" label-key="ten" value-key="id"
-                  placeholder="-- Chọn chất liệu --" search-placeholder="Tìm chất liệu..."
-                  :has-error="!!quickAddErrors.idChatLieu" />
-                <span v-if="quickAddErrors.idChatLieu" class="err-msg">{{ quickAddErrors.idChatLieu }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Kiểu dáng <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idKieuDang" :options="styles" label-key="ten" value-key="id"
-                  placeholder="-- Chọn kiểu dáng --" search-placeholder="Tìm kiểu dáng..."
-                  :has-error="!!quickAddErrors.idKieuDang" />
-                <span v-if="quickAddErrors.idKieuDang" class="err-msg">{{ quickAddErrors.idKieuDang }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Xuất xứ <span class="req">*</span></label>
-                <SearchableSelect v-model="quickAddForm.idXuatXu" :options="origins" label-key="ten" value-key="id"
-                  placeholder="-- Chọn xuất xứ --" search-placeholder="Tìm xuất xứ..."
-                  :has-error="!!quickAddErrors.idXuatXu" />
-                <span v-if="quickAddErrors.idXuatXu" class="err-msg">{{ quickAddErrors.idXuatXu }}</span>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Đối tượng sử dụng</label>
-                <SearchableSelect v-model="quickAddForm.doiTuong" :options="[
-                  { value: 'Nam', label: 'Nam' },
-                  { value: 'Nữ', label: 'Nữ' },
-                  { value: 'Unisex', label: 'Tất cả (Unisex)' }
-                ]" label-key="label" value-key="value" placeholder="Chọn đối tượng..." :allow-clear="false" />
-              </div>
-
-              <div class="form-group span-2 ai-magic-card">
-                <div class="ai-magic-content">
-                  <div class="ai-magic-info">
-                    <span class="ai-badge">Gemini AI Copilot</span>
-                    <span class="ai-magic-desc">Tự động sinh tính năng nổi bật và bài viết mô tả sản phẩm chuẩn
-                      SEO</span>
-                  </div>
-                  <button type="button" class="btn-ai-generate" :disabled="isGeneratingAi"
-                    @click="generateAiContent(editForm)">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      stroke-width="2.2">
-                      <path
-                        d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83">
-                      </path>
-                    </svg>
-                    {{ isGeneratingAi ? 'Đang tạo...' : '✨ Sinh mô tả bằng AI' }}
-                  </button>
-                </div>
-              </div>
-
-              <div class="form-group span-2">
-                <label class="form-label">Tính năng nổi bật</label>
-                <input v-model="quickAddForm.tinhNang" type="text" class="modal-input"
-                  placeholder="Ví dụ: Êm ái, Chống trượt, Thoáng khí..." />
-              </div>
-
-              <div class="form-group span-2">
-                <label class="form-label">Mô tả sản phẩm</label>
-                <textarea v-model="quickAddForm.moTa" class="modal-textarea" rows="3"
-                  placeholder="Nhập mô tả chi tiết sản phẩm..."></textarea>
-              </div>
-
-              <div class="form-group span-2 switch-row">
-                <label class="form-label mb-0">Trạng thái (Bật: Kinh doanh / Tắt: Ngưng kinh doanh)</label>
-                <label class="switch-toggle">
-                  <input type="checkbox" v-model="quickAddForm.trangThai" />
-                  <span class="slider round"></span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="isQuickAddModalOpen = false">Hủy bỏ</button>
-            <button class="btn btn-primary" :disabled="isSubmittingQuickAdd" @click="submitQuickAdd">
-              {{ isSubmittingQuickAdd ? 'Đang lưu...' : 'Thêm sản phẩm' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </transition>
 
   </div>
 </template>

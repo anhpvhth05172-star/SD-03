@@ -18,8 +18,10 @@ public class TongKetDto {
 
     private Long id;
     private String maCa;
+    private String tenCaLich;
     private Long idNhanVien;
     private String tenNhanVien;
+    private String tenNguoiNhan;
     private String tenQuy;
     private LocalDateTime thoiGianMo;
     private String trangThai;
@@ -31,6 +33,7 @@ public class TongKetDto {
     private BigDecimal tienHoanMat;
     private BigDecimal tienDuKien;
     private List<HoaDonTongHopItem> hoaDonGanDay;
+    private List<String> hoaDonDangXuLy;
 
     @Getter
     @Setter

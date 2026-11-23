@@ -134,15 +134,83 @@ public class GHNService {
     }
 
     public ShippingFeeResponse tinhPhiResponse(ShippingFeeRequest req) {
-        if (!cauHinh.daCauHinh()) {
-            return new ShippingFeeResponse(30000, "VND", "Phí vận chuyển tiêu chuẩn");
+        if (cauHinh.daCauHinh()) {
+            try {
+                int phi = tinhPhi(req);
+                int phiTroGia = apDungChinhSachTroGia(phi, req);
+                return new ShippingFeeResponse(phiTroGia, "VND", "Phí giao hàng GHN Express (Đã trợ giá)");
+            } catch (Exception ex) {
+                // GHN API timeout, lỗi token hoặc địa chỉ không khớp -> tự động chuyển sang biểu phí khu vực
+            }
         }
-        try {
-            int phi = tinhPhi(req);
-            return new ShippingFeeResponse(phi, "VND", "Phí vận chuyển được tính bởi GHN");
-        } catch (Exception e) {
-            return new ShippingFeeResponse(30000, "VND", "Phí vận chuyển tiêu chuẩn");
+        int phiKhuVuc = tinhPhiChuanTheoKhuVuc(req);
+        return new ShippingFeeResponse(phiKhuVuc, "VND", "Phí giao hàng PolyShoes Express (Đã trợ giá)");
+    }
+
+    public int getMucTranPhiShipTheoKhuVuc(ShippingFeeRequest req) {
+        String prov = req != null ? chuanHoaDiaChi(req.getToProvinceName()) : "";
+        String ward = req != null ? chuanHoaDiaChi(req.getToWardName()) : "";
+
+        // 1. Hà Nội: Nội thành 20.000đ, Ngoại thành 25.000đ
+        if (prov.contains("ha noi")) {
+            boolean laNoiThanh = ward.contains("ba dinh") || ward.contains("hoan kiem")
+                || ward.contains("dong da") || ward.contains("hai ba trung")
+                || ward.contains("cau giay") || ward.contains("thanh xuan")
+                || ward.contains("tay ho") || ward.contains("bac tu liem")
+                || ward.contains("nam tu liem") || ward.contains("long bien")
+                || ward.contains("bo de") || ward.contains("gia thuy") || ward.contains("ngoc lam")
+                || ward.contains("hoang mai") || ward.contains("ha dong");
+            return laNoiThanh ? 20000 : 25000;
         }
+
+        // 2. Miền Bắc: 25.000đ
+        if (prov.contains("bac ninh") || prov.contains("hung yen")
+            || prov.contains("ha nam") || prov.contains("vinh phuc")
+            || prov.contains("hai phong") || prov.contains("hai duong")
+            || prov.contains("quang ninh") || prov.contains("nam dinh")
+            || prov.contains("ninh binh") || prov.contains("thai binh")
+            || prov.contains("phu tho") || prov.contains("thai nguyen")
+            || prov.contains("hoa binh") || prov.contains("bac kan") || prov.contains("bac can")
+            || prov.contains("lang son") || prov.contains("tuyen quang")
+            || prov.contains("yen bai") || prov.contains("lao cai")
+            || prov.contains("cao bang") || prov.contains("ha giang")
+            || prov.contains("son la") || prov.contains("dien bien") || prov.contains("lai chau")) {
+            return 25000;
+        }
+
+        // 3. Miền Trung & TP. Hồ Chí Minh: 30.000đ
+        if (prov.contains("thanh hoa") || prov.contains("nghe an") || prov.contains("ha tinh")
+            || prov.contains("da nang") || prov.contains("quang binh") || prov.contains("quang tri")
+            || prov.contains("hue") || prov.contains("thua thien")
+            || prov.contains("quang nam") || prov.contains("quang ngai")
+            || prov.contains("binh dinh") || prov.contains("phu yen")
+            || prov.contains("khanh hoa") || prov.contains("nha trang")
+            || prov.contains("ninh thuan") || prov.contains("binh thuan")
+            || prov.contains("ho chi minh") || prov.contains("sai gon") || prov.contains("tphcm")) {
+            return 30000;
+        }
+
+        // 4. Miền Nam, Miền Tây, Tây Nguyên, Tỉnh xa: Tối đa 35.000đ
+        return 35000;
+    }
+
+    public int apDungChinhSachTroGia(int phiGhnGoc, ShippingFeeRequest req) {
+        int tranKhuVuc = getMucTranPhiShipTheoKhuVuc(req);
+        // Khách hàng trả tối đa theo mức trần của khu vực, phần chênh lệch đắt đỏ được Shop trợ giá
+        return Math.min(phiGhnGoc, tranKhuVuc);
+    }
+
+    public int tinhPhiChuanTheoKhuVuc(ShippingFeeRequest req) {
+        return getMucTranPhiShipTheoKhuVuc(req);
+    }
+
+    private String chuanHoaDiaChi(String input) {
+        if (input == null) return "";
+        String s = java.text.Normalizer.normalize(input, java.text.Normalizer.Form.NFD)
+            .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
+            .replace('đ', 'd').replace('Đ', 'D')
+            .trim().toLowerCase();
+        return s.replaceAll("^(thanh pho|tp\\.?|tinh|quan|huyen|thi xa|tx\\.?|phuong|xa|thi tran)\\s+", "").trim();
     }
 
     public List<ShippingAddressDTO> getTinhThanhMoi() {
@@ -152,47 +220,29 @@ public class GHNService {
             return daCache;
         }
 
-        if (cauHinh.daCauHinh()) {
+        // Ưu tiên 63 tỉnh/thành từ OpenAPI v1 (đồng bộ mã code 1..96 với getPhuongXaMoi)
+        for (String apiPath : List.of("/api/v1/p/", "/api/v2/p/")) {
             try {
-                JsonNode root = doc(ghnApiClient.get(PATH_PROVINCE_V3));
-                kiemTraCode(root, "tỉnh/thành (mô hình 2 tầng)");
+                String json = openApiClient.get(apiPath);
+                JsonNode root = objectMapper.readTree(json);
                 List<ShippingAddressDTO> ketQua = new ArrayList<>();
-                for (JsonNode n : root.path("data")) {
-                    int id = n.path("_id").asInt(0);
-                    String ten = n.path("name").asText("");
-                    if (id > 0 && !ten.isBlank()) {
-                        ketQua.add(new ShippingAddressDTO(id, ten));
+                if (root.isArray()) {
+                    for (JsonNode n : root) {
+                        int id = n.path("code").asInt(0);
+                        String ten = n.path("name").asText("");
+                        if (id > 0 && !ten.isBlank()) {
+                            ketQua.add(new ShippingAddressDTO(id, ten));
+                        }
                     }
                 }
-                sapXepTheoTen(ketQua);
-                cacheTinhMoi = ketQua;
-                cacheTinhMoiLuc = now;
-                return ketQua;
+                if (!ketQua.isEmpty()) {
+                    sapXepTheoTen(ketQua);
+                    cacheTinhMoi = ketQua;
+                    cacheTinhMoiLuc = now;
+                    return ketQua;
+                }
             } catch (Exception ignored) {
             }
-        }
-
-        // Fallback: Tra cứu qua OpenApiClient (https://provinces.open-api.vn/api/v1/p/)
-        try {
-            String json = openApiClient.get("/api/v1/p/");
-            JsonNode root = objectMapper.readTree(json);
-            List<ShippingAddressDTO> ketQua = new ArrayList<>();
-            if (root.isArray()) {
-                for (JsonNode n : root) {
-                    int id = n.path("code").asInt(0);
-                    String ten = n.path("name").asText("");
-                    if (id > 0 && !ten.isBlank()) {
-                        ketQua.add(new ShippingAddressDTO(id, ten));
-                    }
-                }
-            }
-            if (!ketQua.isEmpty()) {
-                sapXepTheoTen(ketQua);
-                cacheTinhMoi = ketQua;
-                cacheTinhMoiLuc = now;
-                return ketQua;
-            }
-        } catch (Exception ignored) {
         }
 
         // Fallback danh sách 63 tỉnh thành Việt Nam trong bộ nhớ
@@ -216,6 +266,16 @@ public class GHNService {
             return daCache.ds();
         }
 
+        // Ưu tiên OpenAPI v1 (63 tỉnh, kèm Quận/Huyện để tính phí nội/ngoại thành), sau đó v2
+        for (String apiPath : List.of("/api/v1/p/" + provinceId + "?depth=3", "/api/v2/p/" + provinceId + "?depth=2")) {
+            List<ShippingAddressDTO> openApiResult = docPhuongXaTuOpenApi(apiPath);
+            if (!openApiResult.isEmpty()) {
+                cachePhuongXaMoi.put(provinceId, new CapPhongXaMoi(openApiResult, now));
+                return openApiResult;
+            }
+        }
+
+        RuntimeException loiV3 = null;
         if (cauHinh.daCauHinh()) {
             try {
                 JsonNode root = doc(ghnApiClient.get(
@@ -229,20 +289,34 @@ public class GHNService {
                         ketQua.add(new ShippingAddressDTO(id, ten));
                     }
                 }
-                sapXepTheoTen(ketQua);
-                cachePhuongXaMoi.put(provinceId, new CapPhongXaMoi(ketQua, now));
-                return ketQua;
-            } catch (Exception ignored) {
+                if (!ketQua.isEmpty()) {
+                    sapXepTheoTen(ketQua);
+                    cachePhuongXaMoi.put(provinceId, new CapPhongXaMoi(ketQua, now));
+                    return ketQua;
+                }
+            } catch (RuntimeException ex) {
+                loiV3 = ex;
             }
         }
 
-        // Fallback: Tra cứu phường/xã qua OpenApiClient (https://provinces.open-api.vn/api/v1/p/)
+        if (loiV3 != null && provinceId >= 1000000) {
+            throw loiV3;
+        }
+        List<ShippingAddressDTO> ketQua = List.of(
+            new ShippingAddressDTO(1, "Phường/Xã trung tâm"),
+            new ShippingAddressDTO(2, "Khu vực nội thành")
+        );
+        cachePhuongXaMoi.put(provinceId, new CapPhongXaMoi(ketQua, now));
+        return ketQua;
+    }
+
+    private List<ShippingAddressDTO> docPhuongXaTuOpenApi(String apiPath) {
         try {
-            String json = openApiClient.get("/api/v1/p/" + provinceId + "?depth=3");
+            String json = openApiClient.get(apiPath);
             JsonNode root = objectMapper.readTree(json);
             List<ShippingAddressDTO> ketQua = new ArrayList<>();
             JsonNode districts = root.path("districts");
-            if (districts.isArray() && districts.size() > 0) {
+            if (districts.isArray() && !districts.isEmpty()) {
                 for (JsonNode d : districts) {
                     String tenQuan = d.path("name").asText("");
                     JsonNode wards = d.path("wards");
@@ -267,18 +341,11 @@ public class GHNService {
             }
             if (!ketQua.isEmpty()) {
                 sapXepTheoTen(ketQua);
-                cachePhuongXaMoi.put(provinceId, new CapPhongXaMoi(ketQua, now));
-                return ketQua;
             }
+            return ketQua;
         } catch (Exception ignored) {
+            return List.of();
         }
-
-        List<ShippingAddressDTO> ketQua = List.of(
-            new ShippingAddressDTO(1, "Phường/Xã trung tâm"),
-            new ShippingAddressDTO(2, "Khu vực nội thành")
-        );
-        cachePhuongXaMoi.put(provinceId, new CapPhongXaMoi(ketQua, now));
-        return ketQua;
     }
 
     public List<ShippingServiceDTO> getDichVu(Integer toDistrictId) {
@@ -378,7 +445,7 @@ public class GHNService {
         ObjectNode body = objectMapper.createObjectNode();
         int serviceTypeId = req.getServiceTypeId() != null && req.getServiceTypeId() > 0
             ? req.getServiceTypeId()
-            : cauHinh.getServiceTypeId();
+            : tongTrongLuong >= 20_000 ? 5 : 2;
         body.put("service_type_id", serviceTypeId);
         body.put("to_district_id", req.getToDistrictId());
         body.put("to_ward_code", req.getToWardCode().trim());

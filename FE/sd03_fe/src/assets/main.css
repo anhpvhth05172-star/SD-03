@@ -5,63 +5,98 @@
 }
 
 :root {
-  --red: #cc0000;
+  /* =========================================================================
+     GLOBAL UNIFIED DESIGN SYSTEM (MATCHING PRODUCT MANAGEMENT)
+     ========================================================================= */
+  --primary: #dc2626;
+  --primary-hover: #b91c1c;
+  --primary-active: #991b1b;
+  --primary-light: #fef2f2;
+  --primary-tint: #fee2e2;
+  --primary-border: #fecdd3;
+  --primary-border-strong: #fca5a5;
+
+  /* Aliases for legacy & common screen elements */
+  --red: #dc2626;
   --red-bright: #ef4444;
-  --red-dark: #a30000;
-  --red-soft: #fdeef0;
-  --blue: #3b82f6;
-  --blue-dark: #2f6fe0;
-  --green: #22c55e;
-  --black: #141416;
+  --red-dark: #b91c1c;
+  --red-soft: #fef2f2;
+  --pink-line: #fecdd3;
+
+  --blue: #2563eb;
+  --blue-dark: #1d4ed8;
+  --blue-soft: #eff6ff;
+  --green: #10b981;
+  --green-dark: #059669;
+  --green-soft: #ecfdf5;
+  --amber: #f59e0b;
+  --amber-dark: #d97706;
+  --amber-soft: #fffbeb;
+
+  --black: #0f172a;
   --white: #ffffff;
 
-  --grad-brand: linear-gradient(135deg, #0d0d0f 0%, #cc0000 100%);
-  --grad-tri: linear-gradient(90deg, #0d0d0f 0%, #ffffff 50%, #cc0000 100%);
+  --grad-brand: linear-gradient(135deg, #0f172a 0%, #dc2626 100%);
+  --grad-tri: linear-gradient(90deg, #0f172a 0%, #ffffff 50%, #dc2626 100%);
 
-  --app-bg: #ececef;
-  --panel-bg: #f8f8fa;
-  --card-line: #ececef;
-  --line: #e9eaee;
-  --pink-line: #f0c8cc;
-  --text: #24242a;
-  --muted: #8b8b93;
-}
-
-:root {
-  --primary: #d92d20;
-  --primary-hover: #b42318;
-  --primary-active: #912018;
-  --primary-light: #fee4e2;
-  --primary-tint: #fff1f3;
-  --primary-border: #fecdca;
-
+  /* Backgrounds & Surfaces (Chuẩn Slate/White) */
+  --app-bg: #f8fafc;
   --bg-page: #f8fafc;
+  --panel-bg: #ffffff;
   --bg-card: #ffffff;
-  --bg-card-hover: #fafafa;
-  --bg-input-disabled: #f8fafc;
+  --bg-card-hover: #f8fafc;
+  --bg-input-disabled: #f1f5f9;
 
+  /* Borders & Dividers (Chuẩn Slate-200 & Slate-100) */
+  --card-line: #e2e8f0;
   --border-color: #e2e8f0;
   --border-input: #e2e8f0;
-  --border-focus: #d92d20;
+  --border-input-hover: #cbd5e1;
+  --border-focus: #dc2626;
+  --line: #e2e8f0;
 
+  /* Typography / Text Colors (Chuẩn Slate-900 / Slate-700 / Slate-500) */
   --text-main: #0f172a;
+  --text-heading: #0f172a;
+  --text: #0f172a;
   --text-secondary: #334155;
+  --text-body: #334155;
   --text-muted: #64748b;
+  --muted: #64748b;
   --text-light: #94a3b8;
   --text-placeholder: #94a3b8;
 
+  /* Status Badges */
   --status-active-bg: #ecfdf5;
   --status-active-text: #059669;
+  --status-active-border: #a7f3d0;
   --status-active-dot: #10b981;
 
   --status-warning-bg: #fffbeb;
   --status-warning-text: #d97706;
+  --status-warning-border: #fde68a;
   --status-warning-dot: #f59e0b;
+
+  --status-danger-bg: #fef2f2;
+  --status-danger-text: #dc2626;
+  --status-danger-border: #fecdd3;
+  --status-danger-dot: #ef4444;
 
   --status-inactive-bg: #f1f5f9;
   --status-inactive-text: #64748b;
+  --status-inactive-border: #e2e8f0;
   --status-inactive-dot: #94a3b8;
 
+  /* Bootstrap Variable Mappings */
+  --bs-primary: #dc2626;
+  --bs-primary-rgb: 220, 38, 38;
+  --bs-body-color: #0f172a;
+  --bs-body-bg: #f8fafc;
+  --bs-border-color: #e2e8f0;
+  --bs-link-color: #dc2626;
+  --bs-link-hover-color: #b91c1c;
+
+  /* Radii & Shadows */
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -73,10 +108,14 @@
   --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
   --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
   --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.03);
-  --shadow-primary: 0 4px 14px rgba(217, 45, 32, 0.35);
+  --shadow-primary: 0 4px 14px rgba(220, 38, 38, 0.25);
 
-  --font-family: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-family: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --bs-body-font-family: var(--font-family);
+  --bs-font-sans-serif: var(--font-family);
+  --bs-font-monospace: var(--font-mono);
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s ease;
 }
@@ -96,13 +135,31 @@ table,
 th,
 td,
 h1, h2, h3, h4, h5, h6,
-p, span, a, label, div, small, strong, em, b, i, code, pre, kbd,
+p, span, a, label, div, small, strong, em, b, i,
 .form-control,
 .form-select,
 .btn,
+.dropdown-menu,
+.dropdown-item,
+.modal,
 .swal2-popup,
-.custom-swal-popup {
-  font-family: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+.custom-swal-popup,
+.badge,
+.card {
+  font-family: var(--font-family) !important;
+}
+
+/* Explicit monospace styling for barcodes, codes, skus */
+code,
+pre,
+kbd,
+samp,
+.code-badge,
+.sku-badge,
+.barcode-text,
+.font-mono,
+.mono {
+  font-family: var(--font-mono) !important;
 }
 
 html,
@@ -213,7 +270,7 @@ textarea {
   background-color: var(--primary);
   color: #ffffff;
   border-color: var(--primary);
-  box-shadow: 0 1px 2px rgba(217, 45, 32, 0.15);
+  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.15);
 }
 .btn-primary:hover {
   background-color: var(--primary-hover);
@@ -297,8 +354,8 @@ textarea {
 
 .ss.is-open,
 .ss:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
 }
 
 .ss.is-disabled {
@@ -323,7 +380,7 @@ textarea {
 
 .form-input:focus, .form-select:focus {
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.12);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
 }
 
 .form-input::placeholder {

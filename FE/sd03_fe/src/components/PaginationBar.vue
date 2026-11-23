@@ -85,6 +85,8 @@ const pages = computed(() => {
   gap: 12px;
   padding: 14px 20px;
   border-top: 1px solid #eef2f6;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .pb-info {

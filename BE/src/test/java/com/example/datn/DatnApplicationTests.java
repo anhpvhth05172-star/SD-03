@@ -9,5 +9,4 @@ class DatnApplicationTests {
     @Test
     void contextLoads() {
     }
-
 }
