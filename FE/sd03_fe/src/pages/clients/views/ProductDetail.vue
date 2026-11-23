@@ -398,7 +398,7 @@ async function add(goCart = false) {
       router.push("/gio-hang");
     } else {
       added.value = true;
-      addSuccessMessage.value = res?.message || "Đã thêm sản phẩm vào giỏ hàng";
+      addSuccessMessage.value = res?.message || "Đã thêm sản phẩm vào giỏ hàng thành công!";
       setTimeout(() => {
         added.value = false;
         addSuccessMessage.value = "";
@@ -409,6 +409,54 @@ async function add(goCart = false) {
   } finally {
     adding.value = false;
   }
+}
+
+function buyNow() {
+  if (colors.value.length > 0 && !selectedColor.value) {
+    addError.value = "Vui lòng chọn màu sắc trước.";
+    return;
+  }
+  if (!selectedVariant.value) {
+    addError.value = "Vui lòng chọn size trước khi mua ngay.";
+    return;
+  }
+  const stock = Number(selectedVariant.value.stock || 0);
+  if (stock <= 0) {
+    addError.value = "Sản phẩm này đã hết hàng.";
+    return;
+  }
+  const parsedQty = parseInt(String(qty.value ?? ""), 10);
+  if (!Number.isFinite(parsedQty) || parsedQty < 1) {
+    addError.value = "Số lượng mua phải lớn hơn 0.";
+    return;
+  }
+  if (parsedQty > stock) {
+    qty.value = stock;
+    addError.value = `Chỉ còn ${stock} sản phẩm trong kho.`;
+    return;
+  }
+
+  addError.value = "";
+  const buyItem = {
+    id: selectedVariant.value.id,
+    idSanPhamChiTiet: selectedVariant.value.id,
+    variantId: selectedVariant.value.id,
+    productId: product.value.id,
+    name: product.value.tenSanPham,
+    brand: product.value.tenThuongHieu || "",
+    color: selectedVariant.value.color || "",
+    size: selectedVariant.value.size || "",
+    qty: parsedQty,
+    price: displayPrice.value,
+    stock,
+    img:
+      selectedVariant.value.img ||
+      displayImg.value ||
+      product.value?.img ||
+      null,
+  };
+  sessionStorage.setItem("ps_buy_now_item", JSON.stringify(buyItem));
+  router.push({ path: "/thanh-toan", query: { mode: "buy-now" } });
 }
 </script>
 
@@ -710,7 +758,7 @@ async function add(goCart = false) {
             <button
               class="btn btn-action-compact btn-buy-compact"
               :disabled="adding || !inStock"
-              @click="add(true)"
+              @click="buyNow()"
             >
               <i class="bi bi-lightning-charge-fill me-1"></i>
               <span>Mua ngay</span>

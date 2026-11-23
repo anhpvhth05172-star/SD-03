@@ -632,6 +632,10 @@ public class HoaDonService {
             throw new IllegalArgumentException(
                     "Hãy sử dụng PUT /api/hoa-don/{id}/trang-thai để đổi trạng thái hóa đơn");
         }
+        List<ChiTietHoaDon> chiTietHienTai = chiTietHoaDonRepository.findByHoaDonId(hoaDon.getId());
+        if (!chiTietHienTai.isEmpty() && sanPhamTrongDonBiThayDoi(chiTietHienTai, req.getChiTiet())) {
+            throw new IllegalArgumentException("Không được chỉnh sửa danh sách sản phẩm trong hóa đơn");
+        }
         if (req.getToProvinceId() == null && hoaDon.getToProvinceId() != null) {
             req.setToProvinceId(hoaDon.getToProvinceId());
             req.setToDistrictId(hoaDon.getToDistrictId());
@@ -687,6 +691,33 @@ public class HoaDonService {
         ghiLichSuCapNhat(hoaDon, req.getGhiChu(), tienSauGiamCu, tienSauGiamMoi);
         guiEmailHoaDonTuDong(hoaDon, req != null ? req.getEmail() : null);
         return toFullDTO(hoaDon);
+    }
+
+    private boolean sanPhamTrongDonBiThayDoi(List<ChiTietHoaDon> cu, List<ChiTietHoaDonRequest> moi) {
+        if (moi == null || moi.size() != cu.size()) {
+            return true;
+        }
+        List<ChiTietHoaDon> sortedCu = cu.stream()
+                .sorted(java.util.Comparator.comparing(c -> c.getSanPhamChiTiet().getId()))
+                .toList();
+        List<ChiTietHoaDonRequest> sortedMoi = moi.stream()
+                .sorted(java.util.Comparator.comparing(
+                        ChiTietHoaDonRequest::getIdSanPhamChiTiet,
+                        java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())))
+                .toList();
+        for (int i = 0; i < sortedCu.size(); i++) {
+            ChiTietHoaDon o = sortedCu.get(i);
+            ChiTietHoaDonRequest n = sortedMoi.get(i);
+            Long oldSpctId = o.getSanPhamChiTiet() != null ? o.getSanPhamChiTiet().getId() : null;
+            if (!java.util.Objects.equals(oldSpctId, n.getIdSanPhamChiTiet())
+                    || !java.util.Objects.equals(o.getSoLuong(), n.getSoLuong())) {
+                return true;
+            }
+            if (n.getDonGia() != null && o.getDonGia() != null && n.getDonGia().compareTo(o.getDonGia()) != 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void ghiLichSuCapNhat(HoaDon hoaDon, String ghiChu, BigDecimal tienCu, BigDecimal tienMoi) {

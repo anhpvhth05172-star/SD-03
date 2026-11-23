@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
+import QRCode from "qrcode";
 import * as store from "../store";
 import { getUser, getToken as getSessionToken, isKhachHangDangNhap } from "@/utils/auth";
 import { notifyToast } from "@/utils/notify";
@@ -65,7 +66,9 @@ const HDI = {
 const PAY_LABEL = {
   11: "Thanh toán khi nhận hàng (COD)",
   2: "Chuyển khoản ngân hàng",
+  3: "Chuyển khoản ngân hàng (VietQR)",
   4: "Thanh toán qua VNPAY",
+  5: "Ví điện tử MoMo",
 };
 
 // Chuẩn hóa mã trạng thái bất kể back-end trả về tiếng Việt hay code
@@ -136,6 +139,7 @@ function normalize(h) {
     phone: HD.phone(h),
     address: HD.address(h),
     note: HD.note(h),
+    payId,
     pay: PAY_LABEL[payId] || HD.payName(h) || "Thanh toán khi nhận hàng (COD)",
     ship: HD.ship(h),
     discount: HD.discount(h),
@@ -750,25 +754,137 @@ onUnmounted(() => {
   window.removeEventListener('polyshoes:order-status-changed', handleCustomStatusEvent);
 });
 
-const retryingOrderId = ref(null);
-async function retryOrderPayment(order) {
-  if (!order?.id || retryingOrderId.value) return;
-  retryingOrderId.value = order.id;
+const retryModalOrder = ref(null);
+const retryMethod = ref("vnpay"); // 'vnpay' | 'vietqr' | 'momo'
+const retryStep = ref("choose"); // 'choose' | 'qr'
+const retryQrData = ref(null);
+const retrySubmitting = ref(false);
+const retryConfirming = ref(false);
+const RETRY_PAY_ID_MAP = { vietqr: 3, vnpay: 4, momo: 5 };
+
+function openRetryPaymentModal(order) {
+  if (!order?.id) return;
+  retryModalOrder.value = order;
+  retryMethod.value = order.payId === 3 ? "vietqr" : order.payId === 5 ? "momo" : "vnpay";
+  retryStep.value = "choose";
+  retryQrData.value = null;
+  retrySubmitting.value = false;
+  retryConfirming.value = false;
+}
+
+function closeRetryPaymentModal() {
+  retryModalOrder.value = null;
+  retryStep.value = "choose";
+  retryQrData.value = null;
+  retrySubmitting.value = false;
+  retryConfirming.value = false;
+}
+
+async function proceedRetryPayment() {
+  const order = retryModalOrder.value;
+  if (!order?.id || retrySubmitting.value) return;
+  retrySubmitting.value = true;
   try {
-    const res = await fetch(`/api/vnpay/retry-payment/${order.id}`, {
+    const payId = RETRY_PAY_ID_MAP[retryMethod.value] || 4;
+    const res = await fetch(
+      `/api/vnpay/retry-payment/${order.id}?idPhuongThucThanhToan=${payId}`,
+      { method: "POST", headers: authHeaders() },
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      notifyToast(
+        "Không thể thanh toán lại",
+        data?.message || "Không thể khởi tạo giao dịch thanh toán.",
+        "error",
+        3500,
+      );
+      return;
+    }
+
+    if (retryMethod.value === "vnpay") {
+      if (data?.paymentUrl) {
+        window.location.href = data.paymentUrl;
+        return;
+      }
+      notifyToast("Không thể thanh toán lại", "Không nhận được liên kết VNPay.", "error", 3500);
+      return;
+    }
+
+    const amount = Number(data?.amount ?? order.total ?? 0);
+    const maHoaDon = data?.maHoaDon || order.code;
+    let momoQrDataUrl = "";
+    if (retryMethod.value === "momo") {
+      const payload = `2|99|0922010408|POLYSHOES STORE||0|0|${Math.max(0, Math.round(amount))}|${maHoaDon || "POLYSHOES"}|transfer_myqr`;
+      try {
+        momoQrDataUrl = await QRCode.toDataURL(payload, {
+          width: 240,
+          margin: 2,
+          color: { dark: "#a50064", light: "#ffffff" },
+        });
+      } catch {
+        momoQrDataUrl = "";
+      }
+    }
+
+    retryQrData.value = {
+      orderId: data?.orderId || order.id,
+      maHoaDon,
+      amount,
+      qrUrl: data?.qrUrl || "",
+      momoQrDataUrl,
+    };
+    retryStep.value = "qr";
+  } catch {
+    notifyToast(
+      "Lỗi kết nối",
+      "Lỗi kết nối khi tạo lại phiên thanh toán.",
+      "error",
+      3500,
+    );
+  } finally {
+    retrySubmitting.value = false;
+  }
+}
+
+async function confirmRetryQrPayment() {
+  const orderId = retryQrData.value?.orderId || retryModalOrder.value?.id;
+  if (!orderId || retryConfirming.value) return;
+  retryConfirming.value = true;
+  try {
+    const res = await fetch(`/api/vnpay/xac-nhan-qr/${orderId}`, {
       method: "POST",
       headers: authHeaders(),
     });
     const data = await res.json().catch(() => ({}));
-    if (res.ok && data?.paymentUrl) {
-      window.location.href = data.paymentUrl;
+    if (res.ok && data?.success) {
+      closeRetryPaymentModal();
+      notifyToast(
+        "Thanh toán thành công!",
+        data.message || "Đơn hàng đã chuyển sang Chờ xác nhận.",
+        "success",
+        4000,
+      );
+      loadRecent();
+      if (currentResult.value?.id === orderId) {
+        try {
+          const fresh = await fetchById(orderId);
+          if (fresh) currentResult.value = fresh;
+        } catch {
+          // ignore refresh errors after confirmation
+        }
+      }
       return;
     }
-    notifyToast("error", data?.message || "Không thể tạo lại liên kết thanh toán VNPay.");
+    notifyToast(
+      "Xác nhận thất bại",
+      data?.message || "Chưa thể xác nhận thanh toán cho đơn hàng này.",
+      "error",
+      3500,
+    );
   } catch {
-    notifyToast("error", "Lỗi kết nối khi tạo lại thanh toán VNPay.");
+    notifyToast("Lỗi kết nối", "Không thể xác nhận thanh toán, vui lòng thử lại.", "error", 3500);
   } finally {
-    retryingOrderId.value = null;
+    retryConfirming.value = false;
   }
 }
 </script>
@@ -1035,14 +1151,9 @@ async function retryOrderPayment(order) {
                 v-if="o.status === 'CHO_THANH_TOAN'"
                 type="button"
                 class="btn btn-warning btn-sm ol-pill-btn fw-bold"
-                :disabled="retryingOrderId === o.id"
-                @click="retryOrderPayment(o)"
+                @click="openRetryPaymentModal(o)"
               >
-                <span
-                  v-if="retryingOrderId === o.id"
-                  class="spinner-border spinner-border-sm me-1"
-                ></span>
-                {{ retryingOrderId === o.id ? "Đang chuyển..." : "Thanh toán lại" }}
+                <i class="bi bi-arrow-repeat me-1"></i>Thanh toán lại
               </button>
               <button
                 class="btn btn-primary btn-sm ol-pill-btn"
@@ -1309,14 +1420,9 @@ async function retryOrderPayment(order) {
               v-if="currentResult.status === 'CHO_THANH_TOAN'"
               type="button"
               class="btn btn-warning btn-sm fw-bold rounded-pill px-3"
-              :disabled="retryingOrderId === currentResult.id"
-              @click="retryOrderPayment(currentResult)"
+              @click="openRetryPaymentModal(currentResult)"
             >
-              <span
-                v-if="retryingOrderId === currentResult.id"
-                class="spinner-border spinner-border-sm me-1"
-              ></span>
-              {{ retryingOrderId === currentResult.id ? "Đang chuyển sang VNPay..." : "Thanh toán lại (VNPay)" }}
+              <i class="bi bi-arrow-repeat me-1"></i>Thanh toán lại
             </button>
             <span class="ol-status big" :class="currentResult.statusInfo.tone">
               <i class="bi bi-dot"></i>{{ currentResult.statusInfo.label }}
@@ -1507,6 +1613,188 @@ async function retryOrderPayment(order) {
       </div>
     </section>
 
+    <!-- Modal chọn phương thức thanh toán lại -->
+    <div
+      v-if="retryModalOrder"
+      class="ol-retry-backdrop"
+      @click.self="closeRetryPaymentModal"
+    >
+      <div class="ol-retry-modal" :class="{ 'is-momo': retryStep === 'qr' && retryMethod === 'momo' }">
+        <div class="ol-retry-head">
+          <div>
+            <h5 class="ol-retry-title mb-0">
+              <i class="bi bi-credit-card-2-front me-2"></i>
+              {{
+                retryStep === 'choose'
+                  ? 'Chọn phương thức thanh toán lại'
+                  : (retryMethod === 'momo' ? 'Thanh toán qua Ví MoMo' : 'Chuyển khoản VietQR (Napas 24/7)')
+              }}
+            </h5>
+            <div class="small text-muted-ps mt-1">
+              Đơn hàng <strong>#{{ retryModalOrder.code }}</strong> ·
+              <strong class="text-danger">{{ money(retryQrData?.amount ?? retryModalOrder.total) }}</strong>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="ol-retry-close"
+            aria-label="Đóng"
+            @click="closeRetryPaymentModal"
+          >
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <div v-if="retryStep === 'choose'" class="ol-retry-body">
+          <div class="ol-retry-options">
+            <label
+              class="ol-retry-opt"
+              :class="{ active: retryMethod === 'vnpay' }"
+            >
+              <input v-model="retryMethod" type="radio" value="vnpay" name="retryPayMethod" />
+              <div class="ol-retry-opt-icon is-vnpay">
+                <i class="bi bi-wallet2"></i>
+              </div>
+              <div class="flex-grow-1">
+                <div class="fw-bold">Cổng thanh toán VNPAY</div>
+                <div class="small text-muted-ps">Thẻ ATM nội địa, thẻ quốc tế Visa/Master, VNPAY-QR</div>
+              </div>
+            </label>
+
+            <label
+              class="ol-retry-opt"
+              :class="{ active: retryMethod === 'vietqr' }"
+            >
+              <input v-model="retryMethod" type="radio" value="vietqr" name="retryPayMethod" />
+              <div class="ol-retry-opt-icon is-vietqr">
+                <i class="bi bi-qr-code-scan"></i>
+              </div>
+              <div class="flex-grow-1">
+                <div class="fw-bold">Chuyển khoản VietQR (MB Bank)</div>
+                <div class="small text-muted-ps">Quét mã QR bằng ứng dụng ngân hàng bất kỳ</div>
+              </div>
+            </label>
+
+            <label
+              class="ol-retry-opt"
+              :class="{ active: retryMethod === 'momo', 'is-momo-opt': retryMethod === 'momo' }"
+            >
+              <input v-model="retryMethod" type="radio" value="momo" name="retryPayMethod" />
+              <div class="ol-retry-opt-icon is-momo">
+                <i class="bi bi-phone"></i>
+              </div>
+              <div class="flex-grow-1">
+                <div class="fw-bold">Ví điện tử MoMo</div>
+                <div class="small text-muted-ps">Quét mã QR MoMo thanh toán nhanh trên điện thoại</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div v-else class="ol-retry-body">
+          <div class="ol-retry-qr-wrap">
+            <div class="ol-retry-qr-box" :class="{ 'is-momo': retryMethod === 'momo' }">
+              <img
+                v-if="retryMethod === 'vietqr' && retryQrData?.qrUrl"
+                :src="retryQrData.qrUrl"
+                alt="Mã QR VietQR"
+                class="ol-retry-qr-img"
+              />
+              <img
+                v-else-if="retryMethod === 'momo' && retryQrData?.momoQrDataUrl"
+                :src="retryQrData.momoQrDataUrl"
+                alt="Mã QR MoMo"
+                class="ol-retry-qr-img"
+              />
+              <div v-else class="small text-muted-ps py-4">Không tạo được mã QR</div>
+            </div>
+
+            <div class="ol-retry-qr-info">
+              <div class="ol-retry-info-row">
+                <span>{{ retryMethod === 'momo' ? 'Kênh thanh toán' : 'Ngân hàng' }}</span>
+                <strong>{{ retryMethod === 'momo' ? 'Ví MoMo' : 'MB Bank (Quân Đội)' }}</strong>
+              </div>
+              <div class="ol-retry-info-row">
+                <span>Số tài khoản</span>
+                <strong>0922010408</strong>
+              </div>
+              <div class="ol-retry-info-row">
+                <span>Chủ tài khoản</span>
+                <strong>POLYSHOES STORE</strong>
+              </div>
+              <div class="ol-retry-info-row">
+                <span>Số tiền</span>
+                <strong :style="{ color: retryMethod === 'momo' ? '#a50064' : '#dc2626' }">
+                  {{ money(retryQrData?.amount ?? retryModalOrder.total) }}
+                </strong>
+              </div>
+              <div class="ol-retry-info-row">
+                <span>Nội dung CK</span>
+                <strong class="ol-retry-memo">{{ retryQrData?.maHoaDon || retryModalOrder.code }}</strong>
+              </div>
+              <div class="ol-retry-note small text-muted-ps mt-2">
+                <i class="bi bi-info-circle me-1"></i>
+                Vui lòng giữ đúng nội dung chuyển khoản để hệ thống đối soát nhanh chóng.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ol-retry-foot">
+          <template v-if="retryStep === 'choose'">
+            <button
+              type="button"
+              class="btn btn-light border ol-pill-btn px-3"
+              :disabled="retrySubmitting"
+              @click="closeRetryPaymentModal"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary ol-pill-btn px-4 fw-bold"
+              :class="{ 'ol-btn-momo': retryMethod === 'momo' }"
+              :disabled="retrySubmitting"
+              @click="proceedRetryPayment"
+            >
+              <span v-if="retrySubmitting" class="spinner-border spinner-border-sm me-1"></span>
+              {{ retrySubmitting ? 'Đang xử lý...' : 'Tiếp tục thanh toán' }}
+            </button>
+          </template>
+          <template v-else>
+            <button
+              type="button"
+              class="btn btn-outline-secondary ol-pill-btn px-3"
+              :disabled="retryConfirming"
+              @click="retryStep = 'choose'"
+            >
+              <i class="bi bi-arrow-left me-1"></i>Đổi phương thức
+            </button>
+            <div class="d-flex gap-2 ms-auto">
+              <button
+                type="button"
+                class="btn btn-light border ol-pill-btn px-3"
+                :disabled="retryConfirming"
+                @click="closeRetryPaymentModal"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary ol-pill-btn px-4 fw-bold"
+                :class="{ 'ol-btn-momo': retryMethod === 'momo' }"
+                :disabled="retryConfirming"
+                @click="confirmRetryQrPayment"
+              >
+                <span v-if="retryConfirming" class="spinner-border spinner-border-sm me-1"></span>
+                <i v-else class="bi bi-check2-circle me-1"></i>
+                {{ retryConfirming ? 'Đang xác nhận...' : 'Tôi đã thanh toán xong' }}
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
 
   </div>
 </template>
@@ -2424,6 +2712,176 @@ async function retryOrderPayment(order) {
   }
   .ol-stat-num {
     font-size: 1.25rem;
+  }
+}
+
+/* ---------- Modal Thanh toán lại ---------- */
+.ol-retry-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1050;
+}
+.ol-retry-modal {
+  width: 100%;
+  max-width: 580px;
+  background: #fff;
+  border-radius: 18px;
+  border-top: 4px solid #dc2626;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+  overflow: hidden;
+}
+.ol-retry-modal.is-momo {
+  border-top-color: #a50064;
+}
+.ol-retry-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.ol-retry-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.ol-retry-close {
+  border: none;
+  background: #f8fafc;
+  color: #475569;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.ol-retry-close:hover {
+  background: #e2e8f0;
+}
+.ol-retry-body {
+  padding: 18px 20px;
+}
+.ol-retry-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ol-retry-opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.ol-retry-opt input {
+  accent-color: #dc2626;
+  width: 17px;
+  height: 17px;
+}
+.ol-retry-opt.active {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+.ol-retry-opt.is-momo-opt {
+  border-color: #a50064;
+  background: #fdf2f8;
+}
+.ol-retry-opt.is-momo-opt input {
+  accent-color: #a50064;
+}
+.ol-retry-opt-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+.ol-retry-opt-icon.is-vnpay {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.ol-retry-opt-icon.is-vietqr {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.ol-retry-opt-icon.is-momo {
+  background: #fce7f3;
+  color: #a50064;
+}
+.ol-retry-qr-wrap {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 18px;
+  align-items: center;
+}
+.ol-retry-qr-box {
+  border: 1.5px solid #fecaca;
+  background: #fff;
+  border-radius: 14px;
+  padding: 10px;
+  text-align: center;
+}
+.ol-retry-qr-box.is-momo {
+  border-color: #f9a8d4;
+  background: #fdf2f8;
+}
+.ol-retry-qr-img {
+  width: 100%;
+  max-width: 200px;
+  height: auto;
+  border-radius: 8px;
+}
+.ol-retry-qr-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+.ol-retry-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed #e2e8f0;
+}
+.ol-retry-info-row span {
+  color: #64748b;
+}
+.ol-retry-memo {
+  color: #dc2626;
+  background: #fef2f2;
+  padding: 1px 7px;
+  border-radius: 6px;
+}
+.ol-retry-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid #f1f5f9;
+  background: #fafafa;
+}
+.ol-btn-momo {
+  background-color: #a50064 !important;
+  border-color: #a50064 !important;
+}
+@media (max-width: 575.98px) {
+  .ol-retry-qr-wrap {
+    grid-template-columns: 1fr;
   }
 }
 </style>

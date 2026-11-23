@@ -47,9 +47,10 @@ public class VNPayController {
     @PostMapping("/retry-payment/{id}")
     public ResponseEntity<VNPayPaymentResponse> retryPayment(
         @PathVariable("id") Long id,
+        @RequestParam(value = "idPhuongThucThanhToan", required = false) Long idPhuongThucThanhToan,
         HttpServletRequest httpRequest
     ) {
-        return ResponseEntity.ok(vnPayService.retryPaymentAndUrl(httpRequest, id));
+        return ResponseEntity.ok(vnPayService.retryPaymentAndUrl(httpRequest, id, idPhuongThucThanhToan));
     }
 
     /**

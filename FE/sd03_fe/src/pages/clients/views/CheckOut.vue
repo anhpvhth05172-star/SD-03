@@ -1,5 +1,7 @@
 <script setup>
 import { reactive, ref, computed, watch, onMounted, nextTick } from "vue";
+import { useRoute } from "vue-router";
+import QRCode from "qrcode";
 import SearchableSelect from "@/components/SearchableSelect.vue";
 import * as store from "../store";
 import { createInvoice } from "@/api/invoice";
@@ -8,7 +10,31 @@ import { getProvinces, getWards, getServices, tinhPhi, getFreeshipConfig } from 
 import { notifyConfirm, notifySuccess, notifyWarning, notifyError } from "@/utils/notify";
 import { getUser, isKhachHangDangNhap } from "@/utils/auth";
 
-const { cart, cartTotal, money } = store;
+const route = useRoute();
+const { cart, cartTotal: storeCartTotal, money } = store;
+
+const buyNowItem = ref(null);
+function loadBuyNowItem() {
+  try {
+    const raw = sessionStorage.getItem("ps_buy_now_item");
+    const parsed = raw ? JSON.parse(raw) : null;
+    buyNowItem.value =
+      parsed && typeof parsed === "object" && (parsed.idSanPhamChiTiet || parsed.id)
+        ? parsed
+        : null;
+  } catch {
+    buyNowItem.value = null;
+  }
+}
+loadBuyNowItem();
+watch(() => route.fullPath, () => { loadBuyNowItem(); });
+const isBuyNowMode = computed(() => route.query.mode === "buy-now" && !!buyNowItem.value);
+const checkoutItems = computed(() => (isBuyNowMode.value ? [buyNowItem.value] : cart.items));
+const cartTotal = computed(() =>
+  isBuyNowMode.value
+    ? checkoutItems.value.reduce((sum, i) => sum + (Number(i.price) || 0) * (Number(i.qty) || 0), 0)
+    : Number(storeCartTotal.value || 0),
+);
 
 // Phí vận chuyển đơn online cơ bản (chuẩn nội thành 20.000đ).
 const SHIP_FEE = 20000;
@@ -144,7 +170,7 @@ const itemKey = (i) => `${i.id}-${i.size}`;
 
 // Tổng số lượng sản phẩm khách đã chọn (cộng dồn qty của từng dòng)
 const totalQty = computed(() =>
-  cart.items.reduce((sum, i) => sum + (Number(i.qty) || 0), 0),
+  checkoutItems.value.reduce((sum, i) => sum + (Number(i.qty) || 0), 0),
 );
 
 /* ================= PHIẾU GIẢM GIÁ (gọi API thật) ================= */
@@ -314,6 +340,7 @@ const addrModalForm = reactive({
 });
 
 const currentSelectedSavedAddr = computed(() => {
+  if (!isLoggedIn.value) return null;
   if (customAddress.value && selectedAddr.value === customAddress.value.id) {
     return customAddress.value;
   }
@@ -665,7 +692,7 @@ watch([provinceId, wardId, serviceTypeId, currentSelectedSavedAddr], async ([pro
       toProvinceName: provName,
       toWardName: wardName,
       serviceTypeId: serviceTypeId.value || undefined,
-      items: cart.items.map((i) => ({
+      items: checkoutItems.value.map((i) => ({
         idSanPhamChiTiet: i.idSanPhamChiTiet ?? i.variantId ?? i.spctId ?? i.id,
         soLuong: i.qty || 1,
       })),
@@ -779,17 +806,19 @@ function applyCheckoutDraftFields() {
   if (typeof draft.email === "string" && draft.email) { f.email = draft.email; restored = true; }
   if (typeof draft.address === "string" && draft.address) { f.address = draft.address; restored = true; }
   if (typeof draft.note === "string" && draft.note) { f.note = draft.note; restored = true; }
-  if (typeof draft.pay === "string" && ["cod", "bank", "vnpay"].includes(draft.pay)) {
+  if (typeof draft.pay === "string" && ["cod", "vnpay", "vietqr", "momo"].includes(draft.pay)) {
     f.pay = draft.pay;
     restored = true;
   }
-  if (draft.customAddress && typeof draft.customAddress === "object") {
-    customAddress.value = draft.customAddress;
-    selectedAddr.value = draft.selectedAddr ?? draft.customAddress.id;
-    restored = true;
-  } else if (draft.selectedAddr) {
-    selectedAddr.value = draft.selectedAddr;
-    restored = true;
+  if (getLoggedInUser()) {
+    if (draft.customAddress && typeof draft.customAddress === "object") {
+      customAddress.value = draft.customAddress;
+      selectedAddr.value = draft.selectedAddr ?? draft.customAddress.id;
+      restored = true;
+    } else if (draft.selectedAddr) {
+      selectedAddr.value = draft.selectedAddr;
+      restored = true;
+    }
   }
   if (draft.provinceId) {
     pendingDraftRegion = {
@@ -1121,11 +1150,11 @@ function genMaHoaDon() {
 }
 
 /* ---------- Phương thức thanh toán: id cố định theo bảng phuong_thuc_thanh_toan ---------- */
-// 11 = COD (Thanh toán khi nhận hàng), 2 = Chuyển khoản ngân hàng, 4 = VNPay QR (id 4 trong hinh_thuc_thanh_toan)
-const PAY_METHOD_ID = { cod: 11, bank: 2, vnpay: 4 };
+// 11 = COD, 4 = VNPay QR, 3 = Quét mã QR (VietQR), 5 = MoMo
+const PAY_METHOD_ID = { cod: 11, vnpay: 4, vietqr: 3, momo: 5 };
 
 const phuongThucFields = (kind) => ({
-  idPhuongThucThanhToan: PAY_METHOD_ID[kind],
+  idPhuongThucThanhToan: PAY_METHOD_ID[kind] ?? PAY_METHOD_ID.cod,
 });
 
 // Các field khớp HoaDonRequest của back-end. Tiền hàng, giảm giá, tổng tiền
@@ -1154,7 +1183,7 @@ function buildHoaDonRequest() {
     toDistrictId: toDistrictId.value,
     toWardCode: toWardCode.value,
 
-    chiTiet: cart.items.map((i) => ({
+    chiTiet: checkoutItems.value.map((i) => ({
       idSanPhamChiTiet: i.idSanPhamChiTiet ?? i.variantId ?? i.spctId ?? i.id,
       soLuong: i.qty,
       donGia: i.price,
@@ -1268,30 +1297,50 @@ async function verifyAndHandleVoucherBeforeCheckout() {
 
 async function submit() {
   submitError.value = "";
-  if (!currentSelectedSavedAddr.value) {
-    submitError.value = "Vui lòng thêm địa chỉ nhận hàng trước khi đặt hàng!";
-    openAddAddressModal();
-    return;
+  errors.name = "";
+  errors.phone = "";
+  errors.email = "";
+  errors.province = "";
+  errors.ward = "";
+  errors.address = "";
+
+  if (isLoggedIn.value) {
+    if (!currentSelectedSavedAddr.value) {
+      submitError.value = "Vui lòng thêm địa chỉ nhận hàng trước khi đặt hàng!";
+      openAddAddressModal();
+      return;
+    }
+    errors.name = f.name.trim() ? "" : "Vui lòng nhập họ và tên.";
+    errors.phone = /^0\d{9}$/.test(f.phone.trim())
+      ? ""
+      : "Số điện thoại gồm 10 số, bắt đầu bằng 0.";
+    if (!f.email && customer.value?.email) {
+      f.email = customer.value.email;
+    }
+    errors.address = currentSelectedSavedAddr.value?.address
+      ? ""
+      : "Vui lòng chọn hoặc thêm địa chỉ nhận hàng.";
+  } else {
+    errors.name = f.name.trim() ? "" : "Vui lòng nhập họ và tên người nhận.";
+    errors.phone = /^0\d{9}$/.test(f.phone.trim())
+      ? ""
+      : "Số điện thoại phải gồm 10 số, bắt đầu bằng 0.";
+    errors.province = provinceId.value ? "" : "Vui lòng chọn Tỉnh / Thành phố.";
+    errors.ward = wardId.value ? "" : "Vui lòng chọn Phường / Xã.";
+    errors.address = f.address.trim()
+      ? ""
+      : "Vui lòng nhập địa chỉ cụ thể (số nhà, tên đường...).";
   }
-  errors.name = f.name.trim() ? "" : "Vui lòng nhập họ và tên.";
-  errors.phone = /^0\d{9}$/.test(f.phone)
-    ? ""
-    : "Số điện thoại gồm 10 số, bắt đầu bằng 0.";
-  if (!f.email && customer.value?.email) {
-    f.email = customer.value.email;
-  }
+
   if (!f.email || !f.email.trim()) {
     errors.email = "Vui lòng nhập địa chỉ email nhận thông báo đơn hàng.";
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) {
     errors.email = "Địa chỉ email không đúng định dạng (VD: nguyenvan@gmail.com).";
-  } else {
-    errors.email = "";
   }
-  errors.address = currentSelectedSavedAddr.value?.address || (f.address.trim() && provinceId.value && wardId.value)
-    ? ""
-    : "Vui lòng chọn hoặc thêm địa chỉ nhận hàng.";
-  if (errors.name || errors.phone || errors.email || errors.address) {
-    submitError.value = errors.name || errors.phone || errors.email || errors.address;
+
+  if (errors.name || errors.phone || errors.email || errors.province || errors.ward || errors.address) {
+    submitError.value =
+      errors.name || errors.phone || errors.email || errors.province || errors.ward || errors.address;
     return;
   }
   if (shippingLoading.value) {
@@ -1310,21 +1359,17 @@ async function submit() {
 
   submitting.value = true;
 
-  // ====== VNPAY: Tạo đơn CHO_THANH_TOAN + mở QR quét thanh toán ======
-  if (f.pay === "vnpay") {
+  // ====== VNPAY / VietQR / MoMo: Tạo đơn CHO_THANH_TOAN ======
+  if (["vnpay", "vietqr", "momo"].includes(f.pay)) {
     const payload = buildHoaDonRequest();
-    // Ghi đè trangThai, BE sẽ set CHO_THANH_TOAN
     payload.trangThai = "CHO_THANH_TOAN";
-    console.log("[Checkout] VNPAY payload:", payload);
+    console.log(`[Checkout] ${f.pay.toUpperCase()} payload:`, payload);
     try {
-      const res = await fetch(
-        "/api/vnpay/create-payment",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders() },
-          body: JSON.stringify(payload),
-        },
-      );
+      const res = await fetch("/api/vnpay/create-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(payload),
+      });
 
       if (!res.ok) {
         let errJson = {};
@@ -1332,18 +1377,32 @@ async function submit() {
           errJson = await res.json();
         } catch { /* Response có thể không phải JSON. */ }
         throw new Error(
-          errJson.message || `Lỗi tạo thanh toán VNPAY (mã lỗi ${res.status}).`,
+          errJson.message || `Lỗi tạo thanh toán (mã lỗi ${res.status}).`,
         );
       }
 
       const payData = await res.json();
-      if (payData && (payData.qrUrl || payData.paymentUrl)) {
-        submitting.value = false;
-        openQrModal(payData);
-        return;
-      } else {
-        throw new Error("Không nhận được liên kết thanh toán từ VNPAY.");
+      if (f.pay === "vnpay") {
+        if (payData?.paymentUrl) {
+          if (isBuyNowMode.value) {
+            sessionStorage.setItem("ps_vnpay_buy_now", "1");
+          } else {
+            sessionStorage.removeItem("ps_vnpay_buy_now");
+          }
+          clearCheckoutDraft();
+          submitting.value = false;
+          window.location.href = payData.paymentUrl;
+          return;
+        }
+        throw new Error("Không nhận được liên kết cổng thanh toán VNPAY.");
       }
+
+      if (payData && (payData.qrUrl || payData.orderId)) {
+        submitting.value = false;
+        await openQrModal(payData, f.pay);
+        return;
+      }
+      throw new Error("Không nhận được thông tin mã QR thanh toán.");
     } catch (e) {
       console.error("[Checkout] Lỗi VNPAY:", e);
       const errMsg = String(e.message || "").toLowerCase();
@@ -1422,7 +1481,7 @@ async function submit() {
           note: f.note,
           pay: f.pay,
         },
-        items: JSON.parse(JSON.stringify(cart.items)),
+        items: JSON.parse(JSON.stringify(checkoutItems.value)),
         total: finalTotal.value,
         date: new Date().toLocaleString("vi-VN"),
       });
@@ -1431,7 +1490,11 @@ async function submit() {
 
     done.value = true;
     clearCheckoutDraft();
-    await clearCart();
+    if (isBuyNowMode.value) {
+      try { sessionStorage.removeItem("ps_buy_now_item"); } catch { }
+    } else {
+      await clearCart();
+    }
   } catch (e) {
     console.error("[Checkout] Lỗi tạo hóa đơn:", e);
     const rawMsg = e.response?.data?.message || e.message || "";
@@ -1493,8 +1556,9 @@ async function copyOrderCode() {
   }
 }
 
-// ====== Quét mã QR thanh toán (VietQR / VNPAY) ======
+// ====== Quét mã QR thanh toán (VietQR / MoMo) ======
 const isQrModalOpen = ref(false);
+const qrModalMode = ref('vietqr'); // 'vietqr' | 'momo'
 const qrModalData = ref({
   orderId: null,
   maHoaDon: '',
@@ -1505,6 +1569,20 @@ const qrModalData = ref({
   accountName: 'POLYSHOES STORE',
   bankName: 'MB Bank (Ngân hàng Quân Đội)'
 });
+
+async function buildMomoQrDataUrl(maHoaDon, amount) {
+  const amt = Math.max(0, Math.round(Number(amount || 0)));
+  const payload = `2|99|0922010408|POLYSHOES STORE||0|0|${amt}|${maHoaDon || 'POLYSHOES'}|transfer_myqr`;
+  try {
+    return await QRCode.toDataURL(payload, {
+      width: 220,
+      margin: 1,
+      color: { dark: '#a50064', light: '#ffffff' }
+    });
+  } catch {
+    return '';
+  }
+}
 const qrConfirming = ref(false);
 const autoCountdown = ref(10);
 let autoCountdownTimer = null;
@@ -1608,7 +1686,7 @@ const finishQrOrderSuccess = async (result) => {
         note: f.note,
         pay: f.pay,
       },
-      items: JSON.parse(JSON.stringify(cart.items)),
+      items: JSON.parse(JSON.stringify(checkoutItems.value)),
       total: qrModalData.value.amount || finalTotal.value,
       date: new Date().toLocaleString('vi-VN'),
     });
@@ -1617,7 +1695,11 @@ const finishQrOrderSuccess = async (result) => {
 
   done.value = true;
   clearCheckoutDraft();
-  await clearCart();
+  if (isBuyNowMode.value) {
+    try { sessionStorage.removeItem('ps_buy_now_item'); } catch { }
+  } else {
+    await clearCart();
+  }
 
   if (result?.outOfStock) {
     notifyWarning('Sự cố tồn kho', result.message || 'Sản phẩm đã hết hàng trong kho. Đơn chuyển sang Chờ hoàn tiền!');
@@ -1648,26 +1730,38 @@ const startQrPaymentPolling = () => {
 };
 
 const isQrTest1k = ref(false);
-const toggleQrTest1k = () => {
+const toggleQrTest1k = async () => {
   isQrTest1k.value = !isQrTest1k.value;
   const amt = isQrTest1k.value ? 1000 : (qrModalData.value.amount || finalTotal.value);
+  if (qrModalMode.value === 'momo') {
+    const momoQr = await buildMomoQrDataUrl(qrModalData.value.maHoaDon, amt);
+    if (momoQr) qrModalData.value.qrUrl = momoQr;
+    return;
+  }
   qrModalData.value.qrUrl = `https://img.vietqr.io/image/MB-0922010408-compact2.png?amount=${amt}&addInfo=${encodeURIComponent(qrModalData.value.maHoaDon)}&accountName=${encodeURIComponent(qrModalData.value.accountName)}`;
 };
 
-const openQrModal = (payData) => {
+const openQrModal = async (payData, mode = 'vietqr') => {
+  qrModalMode.value = mode === 'momo' ? 'momo' : 'vietqr';
   isQrTest1k.value = false;
+  const fallbackVietQr = `https://img.vietqr.io/image/MB-0922010408-compact2.png?amount=${Math.round(Number(payData.amount || 0))}&addInfo=${encodeURIComponent(payData.maHoaDon || '')}&accountName=${encodeURIComponent('POLYSHOES STORE')}`;
+  const qrUrl = qrModalMode.value === 'momo'
+    ? ((await buildMomoQrDataUrl(payData.maHoaDon, payData.amount)) || payData.qrUrl || fallbackVietQr)
+    : (payData.qrUrl || fallbackVietQr);
   qrModalData.value = {
     orderId: payData.orderId,
     maHoaDon: payData.maHoaDon,
     amount: payData.amount,
-    qrUrl: payData.qrUrl,
-    paymentUrl: payData.paymentUrl,
+    qrUrl,
+    paymentUrl: payData.paymentUrl || '',
     accountNo: '0922010408',
     accountName: 'POLYSHOES STORE',
-    bankName: 'MB Bank (Ngân hàng Quân Đội)'
+    bankName: qrModalMode.value === 'momo' ? 'Ví điện tử MoMo' : 'MB Bank (Ngân hàng Quân Đội)'
   };
   isQrModalOpen.value = true;
-  startQrPaymentPolling();
+  if (qrModalMode.value === 'vietqr') {
+    startQrPaymentPolling();
+  }
 };
 
 const closeQrModal = () => {
@@ -1687,7 +1781,10 @@ const confirmQrPayment = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() }
     });
-    const result = await res.json();
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(result?.message || `Không thể xác nhận thanh toán (mã ${res.status}).`);
+    }
     await finishQrOrderSuccess(result);
   } catch (err) {
     console.error('Lỗi xác nhận thanh toán QR:', err);
@@ -1728,7 +1825,7 @@ const confirmQrPayment = async () => {
   </div>
 
   <!-- ===== Giỏ trống ===== -->
-  <div v-else-if="!cart.items.length" class="co-success">
+  <div v-else-if="!checkoutItems.length" class="co-success">
     <div class="co-success-ico empty"><i class="bi bi-bag-x"></i></div>
     <h5 class="fw-bold">Giỏ hàng đang trống</h5>
     <p class="text-muted-ps">
@@ -1784,67 +1881,147 @@ const confirmQrPayment = async () => {
         <!-- Thông tin giao hàng -->
         <section class="co-card mb-3">
           <h5 class="co-title">
-            <span class="co-title-ico"><i class="bi bi-geo-alt-fill"></i></span>Địa chỉ nhận hàng
+            <span class="co-title-ico"><i class="bi bi-geo-alt-fill"></i></span>
+            {{ isLoggedIn ? 'Địa chỉ nhận hàng' : 'Thông tin nhận hàng (Khách vãng lai)' }}
           </h5>
 
-          <!-- Card hiển thị địa chỉ đã chọn (phong cách PolyShoes) -->
-          <div v-if="currentSelectedSavedAddr" class="ps-address-box p-3 rounded-3 border mb-3 position-relative"
-            style="background: #ffffff; border-color: #e2e8f0; border-left: 4px solid #dc2626 !important; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
-            <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-              <div class="d-flex align-items-center gap-2">
-                <span class="badge bg-danger text-white px-2 py-1" style="font-size: 11px;">
-                  <i class="bi bi-geo-alt-fill me-1"></i>Địa chỉ nhận hàng
-                </span>
-                <span v-if="currentSelectedSavedAddr.isDefault" class="badge bg-primary px-2 py-1" style="font-size: 11px;">Mặc định</span>
-                <span v-else-if="selectedAddr?.startsWith('guest_') || selectedAddr === 'custom'" class="badge bg-success px-2 py-1" style="font-size: 11px;">Vừa thêm</span>
-                <span v-else class="badge bg-secondary-subtle text-dark px-2 py-1" style="font-size: 11px;">Đã lưu</span>
+          <!-- Đã đăng nhập: dùng sổ địa chỉ đã lưu -->
+          <template v-if="isLoggedIn">
+            <div v-if="currentSelectedSavedAddr" class="ps-address-box p-3 rounded-3 border mb-3 position-relative"
+              style="background: #ffffff; border-color: #e2e8f0; border-left: 4px solid #dc2626 !important; box-shadow: 0 1px 4px rgba(0,0,0,0.04);">
+              <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                  <span class="badge bg-danger text-white px-2 py-1" style="font-size: 11px;">
+                    <i class="bi bi-geo-alt-fill me-1"></i>Địa chỉ nhận hàng
+                  </span>
+                  <span v-if="currentSelectedSavedAddr.isDefault" class="badge bg-primary px-2 py-1" style="font-size: 11px;">Mặc định</span>
+                  <span v-else-if="selectedAddr?.startsWith('guest_') || selectedAddr === 'custom'" class="badge bg-success px-2 py-1" style="font-size: 11px;">Vừa thêm</span>
+                  <span v-else class="badge bg-secondary-subtle text-dark px-2 py-1" style="font-size: 11px;">Đã lưu</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                  <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold"
+                    style="font-size: 12px;" @click="openSelectAddressListModal">
+                    <i class="bi bi-arrow-repeat me-1"></i>Thay đổi
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-1"
+                    style="font-size: 12px;" @click="openEditAddressModal(currentSelectedSavedAddr)" title="Sửa địa chỉ này">
+                    <i class="bi bi-pencil-square"></i>
+                  </button>
+                </div>
               </div>
-              <div class="d-flex align-items-center gap-2">
-                <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold"
-                  style="font-size: 12px;" @click="openSelectAddressListModal">
-                  <i class="bi bi-arrow-repeat me-1"></i>Thay đổi
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-1"
-                  style="font-size: 12px;" @click="openEditAddressModal(currentSelectedSavedAddr)" title="Sửa địa chỉ này">
-                  <i class="bi bi-pencil-square"></i>
-                </button>
+
+              <div class="d-flex align-items-baseline gap-2 mb-1">
+                <span class="fw-bold text-dark fs-6">{{ currentSelectedSavedAddr.name }}</span>
+                <span class="text-muted small">|</span>
+                <span class="fw-semibold text-secondary small">{{ currentSelectedSavedAddr.phone }}</span>
+              </div>
+              <div class="text-secondary small">
+                <i class="bi bi-pin-map text-danger me-1"></i>{{ currentSelectedSavedAddr.address }}
               </div>
             </div>
 
-            <div class="d-flex align-items-baseline gap-2 mb-1">
-              <span class="fw-bold text-dark fs-6">{{ currentSelectedSavedAddr.name }}</span>
-              <span class="text-muted small">|</span>
-              <span class="fw-semibold text-secondary small">{{ currentSelectedSavedAddr.phone }}</span>
+            <div v-else class="ps-address-empty-card p-4 rounded-3 border text-center mb-3"
+              style="background: #fafafa; border: 2px dashed #cbd5e1 !important;">
+              <div class="mb-2">
+                <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-danger-subtle text-danger" style="width: 48px; height: 48px;">
+                  <i class="bi bi-geo-alt fs-4"></i>
+                </div>
+              </div>
+              <h6 class="fw-bold text-dark mb-1">Chưa có địa chỉ nhận hàng</h6>
+              <p class="text-muted small mb-3">Vui lòng thêm địa chỉ nhận hàng để PolyShoes tính phí vận chuyển và giao giày đến bạn.</p>
+              <button type="button" class="btn btn-danger rounded-pill px-4 py-2 fw-bold shadow-sm" @click="openAddAddressModal">
+                <i class="bi bi-plus-circle me-1"></i>Thêm địa chỉ nhận hàng
+              </button>
             </div>
-            <div class="text-secondary small">
-              <i class="bi bi-pin-map text-danger me-1"></i>{{ currentSelectedSavedAddr.address }}
-            </div>
-          </div>
 
-          <!-- Empty State khi chưa có địa chỉ (phong cách PolyShoes) -->
-          <div v-else class="ps-address-empty-card p-4 rounded-3 border text-center mb-3"
-            style="background: #fafafa; border: 2px dashed #cbd5e1 !important;">
-            <div class="mb-2">
-              <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-danger-subtle text-danger" style="width: 48px; height: 48px;">
-                <i class="bi bi-geo-alt fs-4"></i>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="co-label">Email nhận thông báo đơn hàng <span class="text-danger">*</span></label>
+                <input v-model="f.email" type="email" class="form-control co-input"
+                  :class="{ 'is-invalid': errors.email }"
+                  placeholder="Nhập địa chỉ email để nhận hóa đơn (ví dụ: nguyenvan@gmail.com)" />
+                <div class="invalid-feedback">{{ errors.email }}</div>
+              </div>
+              <div v-if="shippingError" class="col-12 small text-danger">{{ shippingError }}</div>
+              <div class="col-12">
+                <label class="co-label">Ghi chú (không bắt buộc)</label>
+                <textarea v-model="f.note" rows="2" class="form-control co-input"
+                  placeholder="Ghi chú về đơn hàng, thời gian nhận hàng..."></textarea>
               </div>
             </div>
-            <h6 class="fw-bold text-dark mb-1">Chưa có địa chỉ nhận hàng</h6>
-            <p class="text-muted small mb-3">Vui lòng thêm địa chỉ nhận hàng để PolyShoes tính phí vận chuyển và giao giày đến bạn.</p>
-            <button type="button" class="btn btn-danger rounded-pill px-4 py-2 fw-bold shadow-sm" @click="openAddAddressModal">
-              <i class="bi bi-plus-circle me-1"></i>Thêm địa chỉ nhận hàng
-            </button>
-          </div>
+          </template>
 
-          <div class="row g-3">
+          <!-- Khách vãng lai: 1 form nhập trực tiếp duy nhất -->
+          <div v-else class="row g-3">
+            <div class="col-md-6">
+              <label class="co-label">Họ và tên người nhận <span class="text-danger">*</span></label>
+              <input v-model="f.name" type="text" class="form-control co-input"
+                :class="{ 'is-invalid': errors.name }"
+                placeholder="Nhập họ và tên người nhận"
+                @input="errors.name = ''" />
+              <div class="invalid-feedback">{{ errors.name }}</div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="co-label">Số điện thoại <span class="text-danger">*</span></label>
+              <input v-model="f.phone" type="tel" maxlength="11" class="form-control co-input"
+                :class="{ 'is-invalid': errors.phone }"
+                placeholder="Nhập SĐT 10 số (VD: 0987654321)"
+                @input="errors.phone = ''" />
+              <div class="invalid-feedback">{{ errors.phone }}</div>
+            </div>
+
             <div class="col-12">
               <label class="co-label">Email nhận thông báo đơn hàng <span class="text-danger">*</span></label>
               <input v-model="f.email" type="email" class="form-control co-input"
                 :class="{ 'is-invalid': errors.email }"
-                placeholder="Nhập địa chỉ email để nhận hóa đơn (ví dụ: nguyenvan@gmail.com)" />
+                placeholder="Nhập địa chỉ email để nhận hóa đơn (ví dụ: nguyenvan@gmail.com)"
+                @input="errors.email = ''" />
               <div class="invalid-feedback">{{ errors.email }}</div>
             </div>
+
+            <div class="col-md-6">
+              <label class="co-label">Tỉnh / Thành phố <span class="text-danger">*</span></label>
+              <SearchableSelect
+                v-model="provinceId"
+                :options="provinces"
+                value-key="id"
+                label-key="name"
+                placeholder="Chọn Tỉnh / Thành phố"
+                search-placeholder="Tìm tỉnh / thành phố..."
+                :allow-clear="false"
+                @change="errors.province = ''; errors.ward = ''"
+              />
+              <div v-if="errors.province" class="text-danger small mt-1">{{ errors.province }}</div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="co-label">Phường / Xã <span class="text-danger">*</span></label>
+              <SearchableSelect
+                v-model="wardId"
+                :options="wards"
+                value-key="id"
+                label-key="name"
+                placeholder="Chọn Phường / Xã"
+                search-placeholder="Tìm phường / xã..."
+                :disabled="!provinceId || !wards.length"
+                :allow-clear="false"
+                @change="errors.ward = ''"
+              />
+              <div v-if="errors.ward" class="text-danger small mt-1">{{ errors.ward }}</div>
+            </div>
+
+            <div class="col-12">
+              <label class="co-label">Địa chỉ cụ thể (Số nhà, ngõ, tên đường...) <span class="text-danger">*</span></label>
+              <input v-model="f.address" type="text" class="form-control co-input"
+                :class="{ 'is-invalid': errors.address }"
+                placeholder="VD: Số 120 đường Cầu Giấy, Tòa nhà Discovery..."
+                @input="errors.address = ''" />
+              <div class="invalid-feedback">{{ errors.address }}</div>
+            </div>
+
             <div v-if="shippingError" class="col-12 small text-danger">{{ shippingError }}</div>
+
             <div class="col-12">
               <label class="co-label">Ghi chú (không bắt buộc)</label>
               <textarea v-model="f.note" rows="2" class="form-control co-input"
@@ -1882,14 +2059,11 @@ const confirmQrPayment = async () => {
             <span class="co-ico-box"><i class="bi bi-cash-coin"></i></span>
             <span class="flex-grow-1">
               <span class="d-block fw-semibold">Thanh toán khi nhận hàng (COD)</span>
-              <!-- <span class="d-block small text-muted">
-                Thanh toán tiền mặt trực tiếp cho nhân viên giao hàng khi nhận
-                hàng.
-              </span> -->
+              <span class="d-block small text-muted">Thanh toán tiền mặt trực tiếp khi nhận giày</span>
             </span>
           </label>
 
-          <label for="pay-vnpay" class="co-option mb-0" :class="{ active: f.pay === 'vnpay' }">
+          <label for="pay-vnpay" class="co-option" :class="{ active: f.pay === 'vnpay' }">
             <input id="pay-vnpay" v-model="f.pay" name="pay" value="vnpay" type="radio"
               class="form-check-input co-radio" />
             <span class="co-ico-box vnpay-ico-box">
@@ -1898,18 +2072,34 @@ const confirmQrPayment = async () => {
               </span>
             </span>
             <span class="flex-grow-1">
-              <span class="d-flex align-items-center gap-2 flex-wrap">
-                <span class="fw-semibold">Thanh toán qua VNPAY</span>
-                <!-- <span
-                  class="badge bg-danger-subtle text-danger"
-                  style="font-size: 0.7rem"
-                  >Khuyên dùng</span
-                > -->
+              <span class="d-block fw-semibold">Thanh toán qua VNPAY</span>
+              <span class="d-block small text-muted">Chuyển hướng tới cổng VNPAY (Thẻ ATM, Visa/Mastercard, Ví VNPAY)</span>
+            </span>
+          </label>
+
+          <label for="pay-vietqr" class="co-option" :class="{ active: f.pay === 'vietqr' }">
+            <input id="pay-vietqr" v-model="f.pay" name="pay" value="vietqr" type="radio"
+              class="form-check-input co-radio" />
+            <span class="co-ico-box vnpay-ico-box">
+              <span class="fw-bold" style="font-size: 0.78rem; letter-spacing: -0.3px">
+                <span style="color: #005baa">Viet</span><span style="color: #e11b22">QR</span>
               </span>
-              <!-- <span class="d-block small text-muted">
-                Thanh toán bảo mật qua VNPAY QR, 40+ ngân hàng nội địa hoặc thẻ
-                Visa/Mastercard.
-              </span> -->
+            </span>
+            <span class="flex-grow-1">
+              <span class="d-block fw-semibold">Chuyển khoản ngân hàng (VietQR)</span>
+              <span class="d-block small text-muted">Quét mã QR Napas 24/7 — MB Bank</span>
+            </span>
+          </label>
+
+          <label for="pay-momo" class="co-option mb-0" :class="{ active: f.pay === 'momo' }">
+            <input id="pay-momo" v-model="f.pay" name="pay" value="momo" type="radio"
+              class="form-check-input co-radio" />
+            <span class="co-ico-box momo-ico-box">
+              <span class="fw-bold" style="font-size: 0.8rem; color: #ffffff;">MoMo</span>
+            </span>
+            <span class="flex-grow-1">
+              <span class="d-block fw-semibold">Thanh toán qua Ví MoMo</span>
+              <span class="d-block small text-muted">Quét mã QR thanh toán bằng ứng dụng Ví MoMo</span>
             </span>
           </label>
         </section>
@@ -1927,7 +2117,7 @@ const confirmQrPayment = async () => {
             </div>
 
             <div class="co-items">
-              <div v-for="i in cart.items" :key="itemKey(i)" class="co-item">
+              <div v-for="i in checkoutItems" :key="itemKey(i)" class="co-item">
                 <div class="co-thumb">
                   <img v-if="itemImage(i) && !imgFailed[itemKey(i)]" :src="itemImage(i)" :alt="i.name"
                     @error="imgFailed[itemKey(i)] = true" />
@@ -2102,7 +2292,11 @@ const confirmQrPayment = async () => {
                   ? "Đang xử lý..."
                   : f.pay === "vnpay"
                     ? "Thanh toán qua VNPAY"
-                    : "Đặt hàng"
+                    : f.pay === "vietqr"
+                      ? "Thanh toán qua VietQR"
+                      : f.pay === "momo"
+                        ? "Thanh toán qua Ví MoMo"
+                        : "Đặt hàng"
               }}
               <i v-if="!submitting" class="bi bi-arrow-right ms-1"></i>
             </button>
@@ -2112,18 +2306,24 @@ const confirmQrPayment = async () => {
       </div>
     </div>
 
-    <!-- ================= MODAL QUÉT MÃ QR THANH TOÁN (VIETQR / VNPAY) ================= -->
+    <!-- ================= MODAL QUÉT MÃ QR THANH TOÁN (VIETQR / MOMO) ================= -->
     <transition name="fade">
       <div v-if="isQrModalOpen" class="qr-modal-backdrop" @click.self="closeQrModal">
-        <div class="qr-modal-card">
+        <div class="qr-modal-card" :class="{ 'is-momo-modal': qrModalMode === 'momo' }">
           <!-- Header -->
           <div class="qr-modal-header">
             <div class="qr-header-left">
-              <div class="qr-header-badge">
+              <div v-if="qrModalMode === 'momo'" class="qr-header-badge">
+                <span class="momo-badge-pill">MoMo</span>
+                <span class="momo-sub-pill">Ví điện tử MoMo</span>
+              </div>
+              <div v-else class="qr-header-badge">
                 <span class="viet-txt">Viet</span><span class="qr-txt">QR</span>
                 <span class="napas-badge">Napas 24/7</span>
               </div>
-              <h5 class="qr-header-title">Quét mã QR để thanh toán đơn hàng</h5>
+              <h5 class="qr-header-title">
+                {{ qrModalMode === 'momo' ? 'Quét mã QR MoMo để thanh toán đơn hàng' : 'Quét mã QR để thanh toán đơn hàng' }}
+              </h5>
             </div>
             <button type="button" class="btn-close-qr" @click="closeQrModal" title="Đóng">✕</button>
           </div>
@@ -2137,8 +2337,8 @@ const confirmQrPayment = async () => {
                   <img :src="qrModalData.qrUrl" class="qr-image" alt="Mã QR thanh toán" />
                 </div>
                 <div class="qr-instruction">
-                  <i class="bi bi-qr-code-scan me-1 text-primary"></i>
-                  <span>Quét bằng app ngân hàng hoặc ví điện tử bất kỳ</span>
+                  <i class="bi bi-qr-code-scan me-1" :style="{ color: qrModalMode === 'momo' ? '#a50064' : '#0284c7' }"></i>
+                  <span>{{ qrModalMode === 'momo' ? 'Quét bằng ứng dụng Ví MoMo trên điện thoại' : 'Quét bằng app ngân hàng hoặc ví điện tử bất kỳ' }}</span>
                 </div>
               </div>
 
@@ -2165,7 +2365,7 @@ const confirmQrPayment = async () => {
 
                 <div class="qr-details-table">
                   <div class="qr-detail-row">
-                    <span class="detail-label">Ngân hàng:</span>
+                    <span class="detail-label">{{ qrModalMode === 'momo' ? 'Ví thanh toán:' : 'Ngân hàng:' }}</span>
                     <span class="detail-value fw-bold text-dark">{{ qrModalData.bankName }}</span>
                   </div>
                   <div class="qr-detail-row">
@@ -2173,11 +2373,11 @@ const confirmQrPayment = async () => {
                     <span class="detail-value fw-bold text-dark">{{ qrModalData.accountName }}</span>
                   </div>
                   <div class="qr-detail-row">
-                    <span class="detail-label">Số tài khoản:</span>
+                    <span class="detail-label">{{ qrModalMode === 'momo' ? 'Số ví MoMo:' : 'Số tài khoản:' }}</span>
                     <div class="detail-value-copy">
-                      <span class="fw-bold font-monospace text-primary fs-6">{{ qrModalData.accountNo }}</span>
+                      <span class="fw-bold font-monospace fs-6" :style="{ color: qrModalMode === 'momo' ? '#a50064' : '#0d6efd' }">{{ qrModalData.accountNo }}</span>
                       <button type="button" class="btn-copy-mini"
-                        @click="copyText(qrModalData.accountNo, 'Số tài khoản')">
+                        @click="copyText(qrModalData.accountNo, qrModalMode === 'momo' ? 'Số ví MoMo' : 'Số tài khoản')">
                         Sao chép
                       </button>
                     </div>
@@ -2198,7 +2398,8 @@ const confirmQrPayment = async () => {
 
                 <div class="qr-notice-card">
                   <i class="bi bi-info-circle-fill text-warning me-1"></i>
-                  <span>Hệ thống sẽ tự động tắt mã QR và xác nhận đơn ngay khi bạn chuyển tiền (kể cả 1k).</span>
+                  <span v-if="qrModalMode === 'momo'">Sau khi quét mã chuyển khoản trên Ví MoMo (chưa nối API tự động MoMo Sandbox), bấm <strong>Tôi đã thanh toán MoMo</strong> để xác nhận đơn.</span>
+                  <span v-else>Hệ thống sẽ tự động tắt mã QR và xác nhận đơn ngay khi bạn chuyển tiền (kể cả 1k).</span>
                 </div>
 
                 <!-- Toast sao chép -->
@@ -2214,20 +2415,16 @@ const confirmQrPayment = async () => {
 
           <!-- Footer -->
           <div class="qr-modal-footer">
-            <a v-if="qrModalData.paymentUrl" :href="qrModalData.paymentUrl" target="_blank"
-              class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1">
-              <i class="bi bi-box-arrow-up-right"></i>
-              <span>Mở cổng VNPAY (Thẻ/Ví)</span>
-            </a>
             <div class="d-flex align-items-center gap-2 ms-auto">
               <button type="button" class="btn btn-light" @click="closeQrModal">
                 Đóng
               </button>
-              <button type="button" class="btn btn-success d-inline-flex align-items-center gap-2 fw-semibold px-4"
+              <button type="button" class="btn d-inline-flex align-items-center gap-2 fw-semibold px-4"
+                :class="qrModalMode === 'momo' ? 'btn-momo-confirm' : 'btn-success'"
                 :disabled="qrConfirming" @click="confirmQrPayment">
                 <span v-if="qrConfirming" class="spinner-border spinner-border-sm"></span>
                 <i v-else class="bi bi-check-circle-fill"></i>
-                <span>{{ qrConfirming ? 'Đang hoàn tất...' : 'Tôi đã quét mã xong' }}</span>
+                <span>{{ qrConfirming ? 'Đang hoàn tất...' : (qrModalMode === 'momo' ? 'Tôi đã thanh toán MoMo' : 'Tôi đã quét mã xong') }}</span>
               </button>
             </div>
           </div>
@@ -2591,6 +2788,46 @@ const confirmQrPayment = async () => {
 .vnpay-ico-box {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
+}
+
+.momo-ico-box {
+  background: linear-gradient(135deg, #a50064, #d82d8b);
+  border: 1px solid #a50064;
+}
+
+.is-momo-modal .qr-modal-header {
+  background: #fdf2f8;
+  border-bottom-color: #fbcfe8;
+}
+
+.momo-badge-pill {
+  background: #a50064;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.92rem;
+  padding: 2px 10px;
+  border-radius: 6px;
+}
+
+.momo-sub-pill {
+  background: #fce7f3;
+  color: #9d174d;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.btn-momo-confirm {
+  background: #a50064;
+  border-color: #a50064;
+  color: #ffffff;
+}
+
+.btn-momo-confirm:hover:not(:disabled) {
+  background: #880e4f;
+  border-color: #880e4f;
+  color: #ffffff;
 }
 
 /* ===== Right column ===== */

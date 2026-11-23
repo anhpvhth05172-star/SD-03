@@ -1269,6 +1269,11 @@ const onCashInputKeydown = (e) => {
 
 const formatMoneyInput = (n) => (Number(n) > 0 ? Number(n).toLocaleString('vi-VN') : '')
 
+const formatShippingFeeInput = (n) => {
+  const num = Number(n)
+  return Number.isFinite(num) && num > 0 ? Math.round(num).toLocaleString('vi-VN') : '0'
+}
+
 const parseMoneyInput = (rawValue) => {
   const raw = String(rawValue || '').replace(/[^0-9]/g, '')
   if (raw === '') return 0
@@ -3078,15 +3083,36 @@ const onServiceChange = () => {
 const onManualShippingFeeInput = (event) => {
   const d = currentOrder.value?.deliveryInfo
   if (!d) return
-  const val = Number(event?.target?.value)
+  const rawDigits = String(event?.target?.value ?? '').replace(/[^0-9]/g, '')
+  if (rawDigits === '') {
+    d.isManualShippingFee = true
+    d.shippingFee = 0
+    if (event?.target) event.target.value = ''
+    savePendingOrdersToStorage()
+    return
+  }
+  const val = Math.min(100000000, Math.round(Number(rawDigits) || 0))
   d.isManualShippingFee = true
-  d.shippingFee = isNaN(val) || val < 0 ? 0 : Math.round(val)
+  d.shippingFee = val
+  if (event?.target) event.target.value = val.toLocaleString('vi-VN')
   savePendingOrdersToStorage()
+}
+const onManualShippingFeeBlur = (event) => {
+  const d = currentOrder.value?.deliveryInfo
+  if (!d || !event?.target) return
+  event.target.value = formatShippingFeeInput(d.shippingFee)
 }
 const resetManualShippingFee = () => {
   const d = currentOrder.value?.deliveryInfo
   if (!d) return
   d.isManualShippingFee = false
+  if (!d.province || !d.ward) {
+    d.shippingFee = 0
+    d.rawShippingFee = 0
+    d.feeError = ''
+    savePendingOrdersToStorage()
+    return
+  }
   tinhPhiVanChuyen()
 }
 const formatGhnServiceOption = (s) => {
@@ -5220,8 +5246,7 @@ onUnmounted(() => {
                 </div>
 
                 <!-- Địa chỉ chi tiết -->
-                <div class="pos-del-field"
-                  :class="{ 'col-span-2': !(currentOrder.deliveryInfo.services && currentOrder.deliveryInfo.services.length) }">
+                <div class="pos-del-field">
                   <label class="pos-del-label">
                     Địa chỉ cụ thể (Số nhà, ngõ, tên đường, tòa nhà...) <span class="req-star">*</span>
                   </label>
@@ -5278,14 +5303,16 @@ onUnmounted(() => {
                     </strong>
                     <div style="display: flex; align-items: center; gap: 4px;">
                       <input
-                        type="number"
-                        min="0"
-                        step="1000"
+                        type="text"
+                        inputmode="numeric"
                         class="del-fee-manual-input"
-                        :value="Number(currentOrder.deliveryInfo.shippingFee || 0)"
+                        :value="formatShippingFeeInput(currentOrder.deliveryInfo.shippingFee)"
+                        @keydown="onCashInputKeydown($event)"
                         @input="onManualShippingFeeInput"
+                        @blur="onManualShippingFeeBlur"
+                        @focus="$event.target.select()"
                         title="Có thể nhập trực tiếp phí vận chuyển (₫)"
-                        style="width: 110px; text-align: right; font-weight: 800; font-size: 14px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #0f172a;"
+                        style="width: 120px; text-align: right; font-weight: 800; font-size: 14px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #0f172a;"
                       />
                       <span style="font-weight: 700; color: #475569;">₫</span>
                       <button
@@ -5452,7 +5479,7 @@ onUnmounted(() => {
             </div>
             <div v-if="currentOrder && currentOrder.isDelivery" class="bill-row">
               <span class="bill-label">Phí vận chuyển:</span>
-              <span v-if="isFreeShipEligible" class="bill-val" style="color: #059669; font-weight: 700;">
+              <span v-if="isFreeShipEligible && !currentOrder.deliveryInfo.isManualShippingFee" class="bill-val" style="color: #059669; font-weight: 700;">
                 0 ₫ (Miễn phí ship)
               </span>
               <span v-else-if="currentOrder.deliveryInfo.shippingFee > 0" class="bill-val">
@@ -5496,26 +5523,26 @@ onUnmounted(() => {
             <div class="cash-input-field">
               <div class="cash-label-row">
                 <span class="cash-label">Khách thanh toán tiền mặt</span>
+                <span
+                  v-if="currentOrder.paymentMethod === 'TIEN_MAT' && finalTotal > 0 && currentOrder.cashGiven < finalTotal"
+                  class="text-danger fw-semibold"
+                  style="font-size: 11px; white-space: nowrap;"
+                >
+                  {{ currentOrder.cashGiven > 0 ? `Thiếu ${formatVnd(finalTotal - currentOrder.cashGiven)}` : 'Chưa nhập' }}
+                </span>
               </div>
               <div class="cash-input-wrap">
                 <input
                   type="text"
                   inputmode="numeric"
                   class="cash-amount-inp"
-                  :style="(currentOrder.paymentMethod === 'TIEN_MAT' && finalTotal > 0 && currentOrder.cashGiven < finalTotal) ? 'border-color: #dc2626; background: #fef2f2; padding-right: 125px;' : ''"
+                  :style="(currentOrder.paymentMethod === 'TIEN_MAT' && finalTotal > 0 && currentOrder.cashGiven < finalTotal) ? 'border-color: #dc2626; background: #fef2f2;' : ''"
                   :value="formatMoneyInput(currentOrder.cashGiven)"
                   @keydown="onCashInputKeydown($event)"
                   @input="handleCashGivenInput($event)"
                   placeholder="Nhập số tiền khách đưa..."
                   @focus="$event.target.select()"
                 />
-                <span
-                  v-if="currentOrder.paymentMethod === 'TIEN_MAT' && finalTotal > 0 && currentOrder.cashGiven < finalTotal"
-                  class="text-danger fw-semibold"
-                  style="position: absolute; right: 32px; font-size: 11px; white-space: nowrap; pointer-events: none;"
-                >
-                  {{ currentOrder.cashGiven > 0 ? `Thiếu ${formatVnd(finalTotal - currentOrder.cashGiven)}` : 'Chưa nhập' }}
-                </span>
                 <span class="cash-currency-badge">₫</span>
               </div>
             </div>
@@ -5525,26 +5552,26 @@ onUnmounted(() => {
             <div class="cash-input-field">
               <div class="cash-label-row">
                 <span class="cash-label">Số tiền chuyển khoản</span>
+                <span
+                  v-if="finalTotal > 0 && (Number(currentOrder.cashGiven || 0) + Number(currentOrder.transferGiven || 0)) < finalTotal"
+                  class="text-danger fw-semibold"
+                  style="font-size: 11px; white-space: nowrap;"
+                >
+                  Thiếu {{ formatVnd(finalTotal - Number(currentOrder.cashGiven || 0) - Number(currentOrder.transferGiven || 0)) }}
+                </span>
               </div>
               <div class="cash-input-wrap">
                 <input
                   type="text"
                   inputmode="numeric"
                   class="cash-amount-inp"
-                  :style="(finalTotal > 0 && (Number(currentOrder.cashGiven || 0) + Number(currentOrder.transferGiven || 0)) < finalTotal) ? 'border-color: #dc2626; background: #fef2f2; padding-right: 125px;' : ''"
+                  :style="(finalTotal > 0 && (Number(currentOrder.cashGiven || 0) + Number(currentOrder.transferGiven || 0)) < finalTotal) ? 'border-color: #dc2626; background: #fef2f2;' : ''"
                   :value="formatMoneyInput(currentOrder.transferGiven)"
                   @keydown="onCashInputKeydown($event)"
                   @input="handleTransferGivenInput($event)"
                   placeholder="Nhập số tiền chuyển khoản..."
                   @focus="$event.target.select()"
                 />
-                <span
-                  v-if="finalTotal > 0 && (Number(currentOrder.cashGiven || 0) + Number(currentOrder.transferGiven || 0)) < finalTotal"
-                  class="text-danger fw-semibold"
-                  style="position: absolute; right: 32px; font-size: 11px; white-space: nowrap; pointer-events: none;"
-                >
-                  Thiếu {{ formatVnd(finalTotal - Number(currentOrder.cashGiven || 0) - Number(currentOrder.transferGiven || 0)) }}
-                </span>
                 <span class="cash-currency-badge">₫</span>
               </div>
             </div>

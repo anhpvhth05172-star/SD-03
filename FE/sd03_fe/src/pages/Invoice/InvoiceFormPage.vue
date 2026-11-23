@@ -260,53 +260,55 @@ const validate = () => {
   if (ghiChu.length > 1000) e.ghiChu = 'Ghi chú quá độ dài tối đa (1000 ký tự)'
   else if (coKyTuDieuKhien(ghiChu)) e.ghiChu = 'Ghi chú chứa ký tự không hợp lệ'
 
-  if (!form.value.chiTiet.length) {
-    e.chiTiet = 'Vui lòng thêm ít nhất một sản phẩm'
-  } else {
-    const daChon = new Set()
-    form.value.chiTiet.forEach((line, i) => {
-      if (e['dong' + i]) return
-      if (!line.idSanPhamChiTiet) {
-        e['dong' + i] = 'Vui lòng chọn sản phẩm'
-        return
-      }
-      if (daChon.has(line.idSanPhamChiTiet)) {
-        const sp = spctById.value[line.idSanPhamChiTiet]
-        e['dong' + i] = `Sản phẩm "${sp ? sp.ma : line.idSanPhamChiTiet}" đã tồn tại ở dòng trước`
-        return
-      }
-      daChon.add(line.idSanPhamChiTiet)
+  if (!isEdit.value) {
+    if (!form.value.chiTiet.length) {
+      e.chiTiet = 'Vui lòng thêm ít nhất một sản phẩm'
+    } else {
+      const daChon = new Set()
+      form.value.chiTiet.forEach((line, i) => {
+        if (e['dong' + i]) return
+        if (!line.idSanPhamChiTiet) {
+          e['dong' + i] = 'Vui lòng chọn sản phẩm'
+          return
+        }
+        if (daChon.has(line.idSanPhamChiTiet)) {
+          const sp = spctById.value[line.idSanPhamChiTiet]
+          e['dong' + i] = `Sản phẩm "${sp ? sp.ma : line.idSanPhamChiTiet}" đã tồn tại ở dòng trước`
+          return
+        }
+        daChon.add(line.idSanPhamChiTiet)
 
-      const soLuongTrong =
-        line.soLuong === '' || line.soLuong === null || line.soLuong === undefined
-      const soLuong = Number(line.soLuong)
-      if (soLuongTrong || !Number.isInteger(soLuong) || soLuong < 1) {
-        e['dong' + i] = 'Số lượng phải là số nguyên lớn hơn 0'
-        return
-      }
+        const soLuongTrong =
+          line.soLuong === '' || line.soLuong === null || line.soLuong === undefined
+        const soLuong = Number(line.soLuong)
+        if (soLuongTrong || !Number.isInteger(soLuong) || soLuong < 1) {
+          e['dong' + i] = 'Số lượng phải là số nguyên lớn hơn 0'
+          return
+        }
 
-      const donGiaTrong =
-        line.donGia === '' || line.donGia === null || line.donGia === undefined
-      const donGia = Number(line.donGia)
-      if (donGiaTrong || !Number.isFinite(donGia) || donGia <= 0) {
-        e['dong' + i] = 'Đơn giá phải lớn hơn 0'
-        return
-      }
+        const donGiaTrong =
+          line.donGia === '' || line.donGia === null || line.donGia === undefined
+        const donGia = Number(line.donGia)
+        if (donGiaTrong || !Number.isFinite(donGia) || donGia <= 0) {
+          e['dong' + i] = 'Đơn giá phải lớn hơn 0'
+          return
+        }
 
-      const spct = spctById.value[line.idSanPhamChiTiet]
-      if (spct && (spct.trangThai === false || spct.trangThaiSanPham === false)) {
-        e['dong' + i] = `Sản phẩm "${spct.ma}" đã ngừng bán`
-        return
-      }
-      if (
-        spct &&
-        spct.soLuong !== null &&
-        spct.soLuong !== undefined &&
-        soLuong > Number(spct.soLuong)
-      ) {
-        e['dong' + i] = `Sản phẩm "${spct.ma}" chỉ còn ${spct.soLuong} trong kho`
-      }
-    })
+        const spct = spctById.value[line.idSanPhamChiTiet]
+        if (spct && (spct.trangThai === false || spct.trangThaiSanPham === false)) {
+          e['dong' + i] = `Sản phẩm "${spct.ma}" đã ngừng bán`
+          return
+        }
+        if (
+          spct &&
+          spct.soLuong !== null &&
+          spct.soLuong !== undefined &&
+          soLuong > Number(spct.soLuong)
+        ) {
+          e['dong' + i] = `Sản phẩm "${spct.ma}" chỉ còn ${spct.soLuong} trong kho`
+        }
+      })
+    }
   }
 
   if (form.value.idKhachHang) {
@@ -410,6 +412,10 @@ onMounted(async () => {
         toWardCode: res.toWardCode || '001',
         chiTiet: (res.chiTiet || []).map((c) => ({
           idSanPhamChiTiet: c.idSanPhamChiTiet,
+          maSanPhamChiTiet: c.maSanPhamChiTiet || '',
+          tenSanPham: c.tenSanPham || '',
+          tenMau: c.tenMau || '',
+          tenKichCo: c.tenKichCo || '',
           soLuong: c.soLuong,
           donGia: c.donGia,
           ghiChu: c.ghiChu || '',
@@ -448,7 +454,7 @@ onMounted(async () => {
       <div v-if="isEdit && initialData" class="overview-banner">
         <div class="ob-col">
           <span class="ob-label">Mã hóa đơn:</span>
-          <strong class="ob-val text-primary">{{ form.maHoaDon }}</strong>
+          <strong class="ob-val ob-code-red">{{ form.maHoaDon }}</strong>
         </div>
         <div class="ob-col">
           <span class="ob-label">Phương thức thanh toán:</span>
@@ -621,7 +627,10 @@ onMounted(async () => {
       <!-- 2. THÔNG TIN SẢN PHẨM TRONG ĐƠN HÀNG -->
       <div class="section-label">
         <span class="sec-num">2</span>
-        THÔNG TIN SẢN PHẨM TRONG ĐƠN HÀNG
+        <span>THÔNG TIN SẢN PHẨM TRONG ĐƠN HÀNG</span>
+        <span v-if="isEdit" class="ro-section-badge">
+          Chỉ xem — không thể chỉnh sửa sản phẩm khi cập nhật hóa đơn
+        </span>
       </div>
 
       <div class="table-responsive">
@@ -629,19 +638,22 @@ onMounted(async () => {
           <thead>
             <tr>
               <th class="col-stt">STT</th>
-              <th class="col-sp">Sản phẩm chi tiết (Biến thể) *</th>
-              <th class="col-ton">Tồn kho</th>
+              <th class="col-sp">Sản phẩm chi tiết (Biến thể) <span v-if="!isEdit">*</span></th>
+              <th v-if="!isEdit" class="col-ton">Tồn kho</th>
               <th class="col-sl">Số lượng</th>
               <th class="col-gia">Đơn giá (₫)</th>
               <th class="col-tt">Thành tiền</th>
-              <th class="col-x">Xóa</th>
+              <th v-if="!isEdit" class="col-x">Xóa</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(line, i) in form.chiTiet" :key="i">
               <td class="col-stt text-center text-muted">{{ i + 1 }}</td>
               <td class="col-sp">
-                <select v-model="line.idSanPhamChiTiet" @change="onProductChange(line)">
+                <div v-if="isEdit" class="ro-sp-text">
+                  {{ spctById[line.idSanPhamChiTiet] ? optionLabel(spctById[line.idSanPhamChiTiet]) : (line.tenSanPham ? `${line.maSanPhamChiTiet ? line.maSanPhamChiTiet + ' - ' : ''}${line.tenSanPham}${line.tenKichCo || line.tenMau ? ` (${[line.tenKichCo, line.tenMau].filter(Boolean).join(' / ')})` : ''}` : `Biến thể #${line.idSanPhamChiTiet || '—'}`) }}
+                </div>
+                <select v-else v-model="line.idSanPhamChiTiet" @change="onProductChange(line)">
                   <option value="">— Chọn sản phẩm / biến thể —</option>
                   <option
                     v-for="s in options.sanPhamChiTiets"
@@ -653,7 +665,7 @@ onMounted(async () => {
                   </option>
                 </select>
               </td>
-              <td class="col-ton text-center">
+              <td v-if="!isEdit" class="col-ton text-center">
                 <span
                   v-if="line.idSanPhamChiTiet"
                   class="stock-tag"
@@ -663,16 +675,20 @@ onMounted(async () => {
                 </span>
                 <span v-else class="text-muted">—</span>
               </td>
-              <td class="col-sl">
+              <td class="col-sl text-center">
+                <span v-if="isEdit" class="ro-qty-badge">{{ line.soLuong }}</span>
                 <input
+                  v-else
                   v-model.number="line.soLuong"
                   type="number"
                   min="1"
                   class="input-qty"
                 />
               </td>
-              <td class="col-gia">
+              <td class="col-gia text-end">
+                <span v-if="isEdit" class="ro-price-text">{{ formatVnd(line.donGia) }}</span>
                 <input
+                  v-else
                   v-model.number="line.donGia"
                   type="number"
                   min="0"
@@ -683,7 +699,7 @@ onMounted(async () => {
               <td class="col-tt amount text-end">
                 {{ formatVnd(lineThanhTien(line)) }}
               </td>
-              <td class="col-x text-center">
+              <td v-if="!isEdit" class="col-x text-center">
                 <button
                   class="line-remove"
                   type="button"
@@ -699,7 +715,7 @@ onMounted(async () => {
         </table>
       </div>
 
-      <button class="line-add" type="button" @click="addLine">
+      <button v-if="!isEdit" class="line-add" type="button" @click="addLine">
         + Thêm sản phẩm vào đơn hàng
       </button>
 
@@ -756,7 +772,7 @@ onMounted(async () => {
             </div>
             <div class="rc-body">
               <p class="rc-text">
-                Khách hàng chọn thanh toán khi nhận hàng. Khi thay đổi địa chỉ, phí ship hoặc danh sách sản phẩm:
+                Khách hàng chọn thanh toán khi nhận hàng. Khi thay đổi địa chỉ hoặc phí vận chuyển:
               </p>
               <div class="rc-highlight">
                 <span>Số tiền thu hộ (COD) shipper cần thu mới là:</span>
@@ -875,10 +891,12 @@ onMounted(async () => {
 }
 
 .bc-link {
-  color: #2563eb;
+  color: #dc2626;
+  font-weight: 600;
   text-decoration: none;
 }
 .bc-link:hover {
+  color: #b91c1c;
   text-decoration: underline;
 }
 .bc-sep {
@@ -917,21 +935,25 @@ onMounted(async () => {
 }
 
 .mode-badge {
-  background: #fef3c7;
-  color: #b45309;
+  background: #fef2f2;
+  color: #b91c1c;
   font-size: 12px;
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 20px;
-  border: 1px solid #fde68a;
+  border: 1px solid #fecaca;
+}
+
+.ob-code-red {
+  color: #dc2626;
 }
 
 .overview-banner {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: #fffafa;
+  border: 1px solid #fecaca;
   border-radius: 8px;
   padding: 12px 16px;
   margin-bottom: 22px;
@@ -968,20 +990,22 @@ onMounted(async () => {
 }
 
 .ob-pill-unpaid {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
 }
 
 .section-label {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   font-size: 13px;
   font-weight: 700;
   color: #0f172a;
   margin: 22px 0 14px;
   padding-left: 8px;
-  border-left: 3px solid #2563eb;
+  border-left: 3px solid #dc2626;
   letter-spacing: 0.2px;
 }
 
@@ -991,10 +1015,46 @@ onMounted(async () => {
   justify-content: center;
   width: 20px;
   height: 20px;
-  background: #2563eb;
+  background: #dc2626;
   color: #fff;
   border-radius: 50%;
   font-size: 11px;
+}
+
+.ro-section-badge {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.ro-sp-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  padding: 4px 0;
+}
+
+.ro-qty-badge {
+  display: inline-block;
+  min-width: 34px;
+  padding: 3px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ro-price-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
 }
 
 .form-grid {
@@ -1037,8 +1097,8 @@ onMounted(async () => {
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  border-color: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
 }
 
 .field-wide {
@@ -1212,9 +1272,9 @@ onMounted(async () => {
 }
 
 .line-add {
-  border: 1px dashed #93c5fd;
-  background: #eff6ff;
-  color: #1d4ed8;
+  border: 1px dashed #fca5a5;
+  background: #fef2f2;
+  color: #b91c1c;
   font-size: 13px;
   font-weight: 600;
   width: 100%;
@@ -1226,7 +1286,7 @@ onMounted(async () => {
 }
 
 .line-add:hover {
-  background: #dbeafe;
+  background: #fee2e2;
 }
 
 .finance-panel {
@@ -1278,7 +1338,7 @@ onMounted(async () => {
 }
 
 .t-final-val {
-  color: #2563eb;
+  color: #dc2626;
   font-size: 16px;
 }
 
@@ -1307,13 +1367,13 @@ onMounted(async () => {
 }
 
 .cod-box {
-  border-left: 4px solid #2563eb;
-  background: #f8fafc;
+  border-left: 4px solid #dc2626;
+  background: #fffafa;
 }
 
 .prepaid-box {
-  border-left: 4px solid #7c3aed;
-  background: #faf5ff;
+  border-left: 4px solid #b91c1c;
+  background: #fef2f2;
 }
 
 .rc-head {
@@ -1329,15 +1389,15 @@ onMounted(async () => {
 }
 
 .cod-badge {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border: 1px solid #bfdbfe;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
 }
 
 .prepaid-badge {
-  background: #f3e8ff;
-  color: #6b21a8;
-  border: 1px solid #ddd6fe;
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
 }
 
 .rc-text {
@@ -1352,7 +1412,7 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   background: #ffffff;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #fecaca;
   border-radius: 6px;
   padding: 10px 14px;
   margin-bottom: 8px;
@@ -1361,7 +1421,7 @@ onMounted(async () => {
 
 .highlight-val {
   font-size: 17px;
-  color: #1d4ed8;
+  color: #dc2626;
 }
 
 .rc-sub {
@@ -1377,7 +1437,7 @@ onMounted(async () => {
   font-size: 13px;
   color: #475569;
   padding-bottom: 10px;
-  border-bottom: 1px solid #e9d5ff;
+  border-bottom: 1px solid #fecaca;
   margin-bottom: 12px;
 }
 
@@ -1393,9 +1453,9 @@ onMounted(async () => {
 }
 
 .diff-alert-refund {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  color: #1e40af;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
 }
 
 .diff-alert-neutral {
@@ -1433,7 +1493,7 @@ onMounted(async () => {
   padding: 0 24px;
   border: none;
   border-radius: 8px;
-  background: #2563eb;
+  background: #dc2626;
   color: #fff;
   font-size: 13.5px;
   font-weight: 600;
@@ -1445,7 +1505,7 @@ onMounted(async () => {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: #b91c1c;
 }
 
 .btn-primary:disabled {

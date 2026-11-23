@@ -19,6 +19,7 @@ import com.example.datn.dto.HoaDon.HoaDonDTO;
 import com.example.datn.dto.HoaDon.HoaDonRequest;
 import com.example.datn.dto.VNPayCallbackResponse;
 import com.example.datn.dto.VNPayPaymentResponse;
+import com.example.datn.entity.ChiTietHoaDon;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.NhanVien;
 import com.example.datn.entity.PhuongThucThanhToan;
@@ -150,6 +151,7 @@ class ReviewFixesUnitTest {
                 mockHoaDonServiceForVnPay,
                 hoaDonRepository,
                 lichSuHoaDonRepository,
+                phuongThucThanhToanRepository,
                 emailService);
     }
 
@@ -312,5 +314,33 @@ class ReviewFixesUnitTest {
         assertThat(resp.isSuccess()).isTrue();
         assertThat(resp.isOutOfStock()).isTrue();
         assertThat(resp.getMessage()).contains("tạm hết hàng");
+    }
+
+    @Test
+    void update_thayDoiSanPhamTrongDon_biTuChoi() {
+        HoaDon hd = new HoaDon();
+        hd.setId(HD_ID);
+        hd.setMaHoaDon("HDFIX001");
+        hd.setLoaiDon("ONLINE");
+        hd.setTrangThai("CHO_XAC_NHAN");
+        hd.setDaXoa(false);
+        hd.setPhiVanChuyen(new BigDecimal("30000"));
+        hd.setTienSauGiamGia(new BigDecimal("530000"));
+
+        ChiTietHoaDon cu = new ChiTietHoaDon();
+        cu.setHoaDon(hd);
+        cu.setSanPhamChiTiet(spct(new BigDecimal("500000")));
+        cu.setSoLuong(1);
+        cu.setDonGia(new BigDecimal("500000"));
+
+        when(hoaDonRepository.findByIdForUpdate(HD_ID)).thenReturn(Optional.of(hd));
+        when(chiTietHoaDonRepository.findByHoaDonId(HD_ID)).thenReturn(List.of(cu));
+
+        HoaDonRequest req = buildReq("Online", new BigDecimal("500000"), new BigDecimal("30000"));
+        req.getChiTiet().get(0).setSoLuong(2);
+
+        assertThatThrownBy(() -> hoaDonService.update(HD_ID, req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Không được chỉnh sửa danh sách sản phẩm trong hóa đơn");
     }
 }

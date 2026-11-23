@@ -36,16 +36,21 @@ onMounted(async () => {
     result.value = data;
 
     if (data.success || data.outOfStock) {
-      // ✅ Thanh toán thành công (kể cả sự cố hết hàng chờ hoàn tiền) → xóa giỏ hàng & bản nháp checkout
+      // ✅ Thanh toán thành công (kể cả sự cố hết hàng chờ hoàn tiền) → xóa nháp / đơn mua ngay; chỉ xóa giỏ nếu không phải mua ngay
+      const isBuyNow = sessionStorage.getItem("ps_vnpay_buy_now") === "1";
       try {
         sessionStorage.removeItem("ps_checkout_draft_v1");
+        sessionStorage.removeItem("ps_vnpay_buy_now");
+        if (isBuyNow) sessionStorage.removeItem("ps_buy_now_item");
       } catch {
         // ignore storage error
       }
-      try {
-        await clearCart()
-      } catch {
-        // Thanh toán đã được xác nhận phía BE; không chặn màn hình kết quả vì lỗi dọn cache.
+      if (!isBuyNow) {
+        try {
+          await clearCart()
+        } catch {
+          // Thanh toán đã được xác nhận phía BE; không chặn màn hình kết quả vì lỗi dọn cache.
+        }
       }
 
       // Lưu đơn vào danh sách tra cứu (nếu có mã đơn)

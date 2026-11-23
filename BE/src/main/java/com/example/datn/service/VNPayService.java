@@ -8,8 +8,10 @@ import com.example.datn.dto.VNPayPaymentResponse;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.entity.LichSuHoaDon;
+import com.example.datn.entity.PhuongThucThanhToan;
 import com.example.datn.repository.HoaDonRepository;
 import com.example.datn.repository.LichSuHoaDonRepository;
+import com.example.datn.repository.PhuongThucThanhToanRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.net.URLEncoder;
@@ -51,6 +53,7 @@ public class VNPayService {
     private final HoaDonService hoaDonService;
     private final HoaDonRepository hoaDonRepository;
     private final LichSuHoaDonRepository lichSuHoaDonRepository;
+    private final PhuongThucThanhToanRepository phuongThucThanhToanRepository;
     private final EmailService emailService;
 
     @Value("${sepay.webhook.api-key:}")
@@ -91,9 +94,19 @@ public class VNPayService {
             .build();
     }
 
-    /** Tạo lại liên kết thanh toán VNPay cho đơn đang ở trạng thái CHO_THANH_TOAN. */
+    /** Tạo lại liên kết thanh toán cho đơn đang ở trạng thái CHO_THANH_TOAN. */
     @Transactional
     public VNPayPaymentResponse retryPaymentAndUrl(HttpServletRequest httpRequest, Long id) {
+        return retryPaymentAndUrl(httpRequest, id, null);
+    }
+
+    /** Tạo lại liên kết thanh toán (cho phép đổi phương thức thanh toán) cho đơn CHO_THANH_TOAN. */
+    @Transactional
+    public VNPayPaymentResponse retryPaymentAndUrl(
+        HttpServletRequest httpRequest,
+        Long id,
+        Long idPhuongThucThanhToan
+    ) {
         HoaDon hoaDon = hoaDonRepository.findById(id)
             .filter(h -> !h.isDaXoa())
             .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đơn hàng #" + id));
@@ -104,6 +117,11 @@ public class VNPayService {
         if (soTien == null || soTien.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Số tiền thanh toán phải lớn hơn 0");
         }
+        if (idPhuongThucThanhToan != null) {
+            PhuongThucThanhToan pttt = phuongThucThanhToanRepository.findById(idPhuongThucThanhToan)
+                .orElseThrow(() -> new IllegalArgumentException("Phương thức thanh toán không hợp lệ"));
+            hoaDon.setPhuongThucThanhToan(pttt);
+        }
         hoaDon.setNgayCapNhat(LocalDateTime.now());
         hoaDonRepository.save(hoaDon);
 
@@ -112,7 +130,7 @@ public class VNPayService {
 
         return VNPayPaymentResponse.builder()
             .status("OK")
-            .message("Tạo lại liên kết thanh toán VNPay thành công")
+            .message("Tạo lại liên kết thanh toán thành công")
             .paymentUrl(paymentUrl)
             .orderId(hoaDon.getId())
             .maHoaDon(hoaDon.getMaHoaDon())
