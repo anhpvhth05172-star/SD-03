@@ -18,4 +18,5 @@ public class CapNhatThongTinKhachRequest {
     private String phuong;
     private String diaChiCuThe;
     private Boolean macDinh;
+    private Long idDiaChiMacDinh;
 }

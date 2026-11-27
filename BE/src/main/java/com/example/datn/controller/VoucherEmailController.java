@@ -122,7 +122,6 @@ public class VoucherEmailController {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> m = (Map<String, Object>) map;
                 PhieuGiamGia phieu = objectMapper.convertValue(m, PhieuGiamGia.class);
-                phieu.setDotGiamGia(null); // tránh lazy-load không cần thiết khi gửi mail
                 return phieu;
             } catch (RuntimeException e) {
                 throw new IllegalArgumentException("Dữ liệu phiếu giảm giá không hợp lệ: " + e.getMessage());

@@ -449,3 +449,10 @@ textarea {
   background-color: var(--status-inactive-bg);
   color: var(--status-inactive-text);
 }
+
+/* Căn phải tất cả các ô nhập số (trừ mã OTP và ô stepper +/-) */
+input[type="number"]:not(.step-input),
+input[inputmode="numeric"]:not(.otp-input),
+input[inputmode="decimal"] {
+  text-align: right;
+}

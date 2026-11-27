@@ -65,10 +65,6 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
 
     private final KichCoRepository kichCoRepository;
 
-    private final ThanGiayRepository thanGiayRepository;
-
-    private final DeGiayRepository deGiayRepository;
-
     private final ChiTietHoaDonRepository chiTietHoaDonRepository;
 
     private final HinhAnhSanPhamRepository hinhAnhSanPhamRepository;
@@ -249,50 +245,6 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
 
 
 
-            ThanGiay tg = req.getIdThanGiay() != null ? thanGiayRepository.findById(req.getIdThanGiay()).orElse(null) : null;
-
-            DeGiay dg = req.getIdDeGiay() != null ? deGiayRepository.findById(req.getIdDeGiay()).orElse(null) : null;
-
-
-
-            if (tg == null) {
-
-                tg = thanGiayRepository.findAll().stream().findFirst().orElseGet(() -> {
-
-                    ThanGiay defaultTg = new ThanGiay();
-
-                    defaultTg.setTenThanGiay("Thân giày tiêu chuẩn");
-
-                    defaultTg.setMaThanGiay("TG-DEFAULT");
-
-                    defaultTg.setTrangThai(true);
-
-                    return thanGiayRepository.save(defaultTg);
-
-                });
-
-            }
-
-            if (dg == null) {
-
-                dg = deGiayRepository.findAll().stream().findFirst().orElseGet(() -> {
-
-                    DeGiay defaultDg = new DeGiay();
-
-                    defaultDg.setTenDeGiay("Đế giày cao su");
-
-                    defaultDg.setMaDeGiay("DG-DEFAULT");
-
-                    defaultDg.setTrangThai(true);
-
-                    return deGiayRepository.save(defaultDg);
-
-                });
-
-            }
-
-
-
             SanPhamChiTiet spct = new SanPhamChiTiet();
 
             spct.setSanPham(sp);
@@ -300,10 +252,6 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
             spct.setKichCo(kc);
 
             spct.setMauSac(ms);
-
-            spct.setThanGiay(tg);
-
-            spct.setDeGiay(dg);
 
 
 
@@ -502,26 +450,6 @@ public class SanPhamChiTietServiceImpl implements SanPhamChiTietService {
                     .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy màu sắc hợp lệ"));
 
             spct.setMauSac(ms);
-
-        }
-
-        if (req.getIdThanGiay() != null) {
-
-            ThanGiay tg = thanGiayRepository.findById(req.getIdThanGiay())
-
-                    .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy thân giày hợp lệ"));
-
-            spct.setThanGiay(tg);
-
-        }
-
-        if (req.getIdDeGiay() != null) {
-
-            DeGiay dg = deGiayRepository.findById(req.getIdDeGiay())
-
-                    .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đế giày hợp lệ"));
-
-            spct.setDeGiay(dg);
 
         }
 

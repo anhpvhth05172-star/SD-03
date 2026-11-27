@@ -20,7 +20,7 @@ const props = defineProps({
   },
   align: {
     type: String,
-    default: 'left' // 'left' hoặc 'right'
+    default: 'right' // 'left' hoặc 'right'
   },
   disabled: {
     type: Boolean,
@@ -294,7 +294,7 @@ const handleBlur = (e) => {
 
 .currency-input {
   width: 100%;
-  padding: 8px 48px 8px 12px;
+  padding: 8px 52px 8px 12px;
   font-size: 14px;
   border: 1.5px solid #cbd5e1;
   border-radius: 8px;

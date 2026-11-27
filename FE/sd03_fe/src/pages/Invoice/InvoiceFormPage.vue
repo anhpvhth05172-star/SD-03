@@ -1151,6 +1151,7 @@ onMounted(async () => {
 
 .line-table {
   width: 100%;
+  min-width: 680px;
   border-collapse: collapse;
   background: #fff;
   border: 1px solid #e2e8f0;
@@ -1187,7 +1188,8 @@ onMounted(async () => {
   height: 34px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
-  text-align: center;
+  text-align: right;
+  padding: 0 8px;
   font-size: 13px;
   font-weight: 600;
 }
@@ -1305,12 +1307,15 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 9px;
+  min-width: 0;
 }
 
 .t-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: 13.5px;
   color: #475569;
 }
@@ -1357,6 +1362,7 @@ onMounted(async () => {
 
 .reconcile-card {
   height: 100%;
+  min-width: 0;
 }
 
 .reconcile-box {
@@ -1364,6 +1370,7 @@ onMounted(async () => {
   padding: 16px 18px;
   border: 1px solid #e2e8f0;
   background: #ffffff;
+  min-width: 0;
 }
 
 .cod-box {
@@ -1411,6 +1418,8 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   background: #ffffff;
   border: 1px solid #fecaca;
   border-radius: 6px;
@@ -1548,5 +1557,14 @@ onMounted(async () => {
   background: #fef2f2;
   border-radius: 6px;
   padding: 6px 9px;
+}
+
+@media (max-width: 1080px) {
+  .finance-panel {
+    grid-template-columns: 1fr;
+  }
+  .overview-banner {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 </style>

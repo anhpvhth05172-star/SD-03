@@ -156,7 +156,7 @@ const onFileChange = async (e) => {
 
 const kiemTraEmailTrung = async () => {
   const em = (form.value.email || '').trim()
-  if (!em || !emailHopLe(em)) {
+  if (!em || emailHopLe(em)) {
     emailTrungLoi.value = ''
     return
   }

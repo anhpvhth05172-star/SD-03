@@ -9,9 +9,7 @@ public record ThuocTinhResponse(
     List<Item> xuatXu,
     List<Item> kieuDang,
     List<Item> mauSac,
-    List<Item> kichCo,
-    List<Item> thanGiay,
-    List<Item> deGiay
+    List<Item> kichCo
 ) {
 
     public record Item(Long id, String ma, String ten) {}

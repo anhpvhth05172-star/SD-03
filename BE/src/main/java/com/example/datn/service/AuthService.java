@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,7 @@ public class AuthService {
 
     private static final String EMAIL_REGEX = "^[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+$";
     private static final String PHONE_REGEX = "^0\\d{9}$";
+    private static final Pattern KY_TU_CAM_DANG_NHAP = Pattern.compile("[<>\\u0000-\\u001F\\u007F]");
 
     private final KhachHangRepository khachHangRepository;
     private final NhanVienRepository nhanVienRepository;
@@ -128,11 +130,9 @@ public class AuthService {
 
     @Transactional
     public AuthResponse dangNhap(DangNhapRequest req) {
-        if (req == null || isBlank(req.getTaiKhoan()) || isBlank(req.getMatKhau())) {
-            throw new DangNhapThatBaiException("Vui lòng nhập tài khoản và mật khẩu");
-        }
+        String taiKhoan = validateDangNhap(req);
         KhachHang khachHang = khachHangRepository
-            .findByEmailOrTenTaiKhoan(req.getTaiKhoan().trim())
+            .findByEmailOrTenTaiKhoan(taiKhoan)
             .orElseThrow(() -> new DangNhapThatBaiException("Sai tài khoản hoặc mật khẩu"));
         if (!kiemTraMatKhau(req.getMatKhau(), khachHang.getMatKhau())) {
             throw new DangNhapThatBaiException("Sai tài khoản hoặc mật khẩu");
@@ -168,11 +168,9 @@ public class AuthService {
      */
     @Transactional
     public AuthResponse dangNhapNhanVien(DangNhapRequest req) {
-        if (req == null || isBlank(req.getTaiKhoan()) || isBlank(req.getMatKhau())) {
-            throw new DangNhapThatBaiException("Vui lòng nhập tài khoản và mật khẩu");
-        }
+        String taiKhoan = validateDangNhap(req);
         NhanVien nhanVien = nhanVienRepository
-            .findByEmailOrTenTaiKhoan(req.getTaiKhoan().trim())
+            .findByEmailOrTenTaiKhoan(taiKhoan)
             .orElseThrow(() -> new DangNhapThatBaiException("Sai tài khoản hoặc mật khẩu"));
         if (!kiemTraMatKhau(req.getMatKhau(), nhanVien.getMatKhau())) {
             throw new DangNhapThatBaiException("Sai tài khoản hoặc mật khẩu");
@@ -203,11 +201,49 @@ public class AuthService {
         return resp;
     }
 
+    private static String validateDangNhap(DangNhapRequest req) {
+        boolean taiKhoanTrong = req == null || isBlank(req.getTaiKhoan());
+        boolean matKhauNullHoacRong = req == null || req.getMatKhau() == null || req.getMatKhau().isEmpty();
+        if (taiKhoanTrong && matKhauNullHoacRong) {
+            throw new DangNhapThatBaiException("Vui lòng nhập tài khoản và mật khẩu");
+        }
+        if (taiKhoanTrong) {
+            throw new DangNhapThatBaiException("Tài khoản / Email không được để trống");
+        }
+        String taiKhoan = req.getTaiKhoan().trim();
+        if (taiKhoan.length() > 150) {
+            throw new DangNhapThatBaiException("Tài khoản / Email không được vượt quá 150 ký tự");
+        }
+        if (KY_TU_CAM_DANG_NHAP.matcher(taiKhoan).find()) {
+            throw new DangNhapThatBaiException("Tài khoản / Email chứa ký tự không hợp lệ");
+        }
+        if (taiKhoan.contains("@") && !taiKhoan.matches(EMAIL_REGEX)) {
+            throw new DangNhapThatBaiException("Email không hợp lệ");
+        }
+        String matKhau = req.getMatKhau();
+        if (matKhau == null || matKhau.isEmpty()) {
+            throw new DangNhapThatBaiException("Mật khẩu không được để trống");
+        }
+        if (matKhau.trim().isEmpty()) {
+            throw new DangNhapThatBaiException("Mật khẩu không được chỉ chứa khoảng trắng");
+        }
+        if (matKhau.length() < 6) {
+            throw new DangNhapThatBaiException("Mật khẩu phải có ít nhất 6 ký tự");
+        }
+        if (matKhau.length() > 127) {
+            throw new DangNhapThatBaiException("Mật khẩu không được vượt quá 127 ký tự");
+        }
+        return taiKhoan;
+    }
+
     private boolean kiemTraMatKhau(String nhapVao, String daLuu) {
         if (isBlank(daLuu)) {
             return false;
         }
         if (daLuu.startsWith("$2a$") || daLuu.startsWith("$2b$") || daLuu.startsWith("$2y$")) {
+            if (nhapVao.getBytes(StandardCharsets.UTF_8).length > 72) {
+                return false;
+            }
             return passwordEncoder.matches(nhapVao, daLuu);
         }
         return daLuu.equals(nhapVao);

@@ -171,10 +171,10 @@ onUnmounted(() => {
               {{ hoiThoaiChon.trangThai === 'CHO_TIEP_NHAN' ? 'Chờ tiếp nhận' : hoiThoaiChon.trangThai === 'DANG_MO' ? 'Đang mở' : 'Đã đóng' }}
             </span>
           </div>
-          <button v-if="hoiThoaiChon.trangThai === 'DANG_MO'" type="button" class="btn-close" @click="dong">
+          <button v-if="hoiThoaiChon.trangThai === 'DANG_MO'" type="button" class="btn-chat-action" @click="dong">
             Đóng hội thoại
           </button>
-          <button v-if="hoiThoaiChon.trangThai === 'CHO_TIEP_NHAN'" type="button" class="btn-close" @click="tiepNhan">
+          <button v-if="hoiThoaiChon.trangThai === 'CHO_TIEP_NHAN'" type="button" class="btn-chat-action" @click="tiepNhan">
             Tiếp nhận
           </button>
         </header>
@@ -304,6 +304,8 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 12px 16px;
   border-bottom: 1px solid #e2e8f0;
 }
@@ -319,7 +321,7 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.btn-close {
+.btn-chat-action {
   border: 1px solid #fecaca;
   background: #fef2f2;
   color: #dc2626;
@@ -327,6 +329,8 @@ onUnmounted(() => {
   padding: 6px 12px;
   font-size: 12.5px;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
 }
 
@@ -416,6 +420,7 @@ onUnmounted(() => {
 
 .composer input {
   flex: 1;
+  min-width: 0;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   padding: 10px 12px;
@@ -432,11 +437,27 @@ onUnmounted(() => {
   padding: 0 18px;
   font-weight: 700;
   font-size: 13.5px;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
 }
 
 .composer button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (max-width: 960px) {
+  .conv-list {
+    width: 195px;
+    flex-shrink: 0;
+  }
+  .composer {
+    padding: 8px;
+    gap: 6px;
+  }
+  .composer button {
+    padding: 0 12px;
+  }
 }
 </style>

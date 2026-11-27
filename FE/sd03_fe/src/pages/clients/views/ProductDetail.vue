@@ -228,7 +228,6 @@ const specs = computed(() => {
     { label: "Thương hiệu", value: p.tenThuongHieu },
     { label: "Loại giày", value: p.tenLoaiGiay },
     { label: "Chất liệu", value: p.tenChatLieu },
-    { label: "Đế giày", value: p.tenDeGiay },
     { label: "Xuất xứ", value: p.tenXuatXu },
     { label: "Giới tính", value: p.tenGioiTinh || p.gioiTinh },
     { label: "Kiểu dáng", value: p.tenKieuDang },

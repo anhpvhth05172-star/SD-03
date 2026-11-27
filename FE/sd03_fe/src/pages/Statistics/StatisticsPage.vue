@@ -50,7 +50,6 @@ const dauThang = () => {
 const tuNgay = ref(toInputDate(new Date()))
 const denNgay = ref(toInputDate(new Date()))
 const quickActive = ref('homNay')
-const kieuThongKe = ref('ngay')
 const thuongHieuChon = ref('')
 const timSanPham = ref('')
 const thuongHieus = ref([])
@@ -482,7 +481,6 @@ const datLaiBoLoc = () => {
   denNgay.value = toInputDate(nay)
   thuongHieuChon.value = ''
   timSanPham.value = ''
-  kieuThongKe.value = 'ngay'
   notifySuccess('Đã đặt lại bộ lọc', 'Dữ liệu đã được nạp lại cho ngày hôm nay')
 }
 
@@ -845,16 +843,6 @@ onMounted(async () => {
           <div class="input-with-icon">
             <input type="date" v-model="denNgay" class="form-control" />
           </div>
-        </div>
-
-        <div class="filter-input-col">
-          <label class="filter-label">THỐNG KÊ</label>
-          <select v-model="kieuThongKe" class="form-select">
-            <option value="ngay">Theo ngày</option>
-            <option value="tuan">Theo tuần</option>
-            <option value="thang">Theo tháng</option>
-            <option value="nam">Theo năm</option>
-          </select>
         </div>
 
         <div class="filter-input-col">
@@ -2182,6 +2170,9 @@ onMounted(async () => {
   border-color: #3b82f6;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
+.filter-inputs-grid .form-select {
+  padding-right: 32px;
+}
 
 .search-input-wrap {
   position: relative;
@@ -2199,6 +2190,8 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  width: auto;
+  min-width: max-content;
   height: 38px;
   padding: 0 14px;
   background: #ffffff;
@@ -2321,6 +2314,8 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  min-width: 0;
+  overflow: hidden;
   min-height: 142px;
 }
 .kpi-card:hover {
@@ -2452,12 +2447,13 @@ onMounted(async () => {
 }
 
 .kpi-value {
-  font-size: 21px;
+  font-size: clamp(14px, 1.3vw, 20px);
   font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 1.25;
   color: #0f172a;
   font-family: var(--font-display, inherit);
+  overflow-wrap: anywhere;
 }
 .text-green { color: #059669; }
 .text-amber { color: #d97706; }
@@ -3199,6 +3195,8 @@ onMounted(async () => {
   border: 1px solid #e2e8f0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   margin-bottom: 20px;
+  min-width: 0;
+  max-width: 100%;
 }
 .ss-loading,
 .ss-empty {
@@ -3259,21 +3257,31 @@ onMounted(async () => {
 /* -------------------------------------------------------------
    RESPONSIVE
 ------------------------------------------------------------- */
-@media (max-width: 1200px) {
-  .kpi-grid {
-    grid-template-columns: repeat(3, 1fr);
+@media (max-width: 1380px) {
+  .kpi-grid,
+  .kpi-grid.kpi-grid-6 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+@media (max-width: 1200px) {
   .charts-two-col-grid {
     grid-template-columns: 1fr;
   }
 }
-@media (max-width: 768px) {
-  .kpi-grid {
-    grid-template-columns: 1fr;
+@media (max-width: 960px) {
+  .kpi-grid,
+  .kpi-grid.kpi-grid-6 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .filter-inputs-grid {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+@media (max-width: 576px) {
+  .kpi-grid,
+  .kpi-grid.kpi-grid-6 {
+    grid-template-columns: 1fr;
   }
 }
 </style>

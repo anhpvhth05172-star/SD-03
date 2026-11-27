@@ -541,7 +541,7 @@ const reset = () => {
 /* ===== Filter bar ===== */
 .filter-bar {
   position: sticky;
-  top: 70px;
+  top: 96px;
   z-index: 20;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(10px);
@@ -843,6 +843,12 @@ const reset = () => {
   margin-bottom: 10px;
 }
 
+@media (max-width: 991.98px) {
+  .filter-bar {
+    top: 76px;
+  }
+}
+
 @media (max-width: 767px) {
   .shop-hero {
     padding: 26px 20px;
@@ -852,7 +858,7 @@ const reset = () => {
     font-size: 1.6rem;
   }
   .filter-bar {
-    top: 56px;
+    top: 76px;
   }
   .grid-anchor {
     scroll-margin-top: 130px;

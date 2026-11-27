@@ -28,9 +28,7 @@ const slugToIdMap = {
   'kieu-dang': 'kieu_dang',
   'loai-giay': 'loai_giay',
   'kich-co': 'kich_co',
-  'mau-sac': 'mau_sac',
-  'than-giay': 'than_giay',
-  'de-giay': 'de_giay'
+  'mau-sac': 'mau_sac'
 }
 
 const getTabFromRoute = () => {
@@ -38,7 +36,7 @@ const getTabFromRoute = () => {
   if (param && slugToIdMap[param]) {
     return slugToIdMap[param]
   }
-  if (param && attributesData[param]) {
+  if (param && Object.values(slugToIdMap).includes(param)) {
     return param
   }
   return 'thuong_hieu'
@@ -53,9 +51,7 @@ const tabs = [
   { id: 'kieu_dang', label: 'Kiểu dáng', codePrefix: 'KD', placeholder: 'Ví dụ: Cổ thấp (Low-top), Cổ cao...' },
   { id: 'loai_giay', label: 'Loại giày', codePrefix: 'LG', placeholder: 'Ví dụ: Giày chạy bộ, Giày bóng rổ...' },
   { id: 'kich_co', label: 'Kích cỡ', codePrefix: 'KC', placeholder: 'Ví dụ: 39, 40, 40.5, 41, 42...' },
-  { id: 'mau_sac', label: 'Màu sắc', codePrefix: 'MS', placeholder: 'Ví dụ: Trắng đỏ, Đen tuyền, Xanh navy...' },
-  { id: 'than_giay', label: 'Thân giày', codePrefix: 'TG', placeholder: 'Ví dụ: Lưới thoáng khí Mesh...' },
-  { id: 'de_giay', label: 'Đế giày', codePrefix: 'DG', placeholder: 'Ví dụ: Đệm EVA, Zoom Air, Cao su đúc...' }
+  { id: 'mau_sac', label: 'Màu sắc', codePrefix: 'MS', placeholder: 'Ví dụ: Trắng đỏ, Đen tuyền, Xanh navy...' }
 ]
 
 const attributesData = reactive({
@@ -65,9 +61,7 @@ const attributesData = reactive({
   kieu_dang: [],
   loai_giay: [],
   kich_co: [],
-  mau_sac: [],
-  than_giay: [],
-  de_giay: []
+  mau_sac: []
 })
 
 const isLoading = ref(false)

@@ -16,7 +16,6 @@ import com.example.datn.dto.DotGiamGia.GiaKhuyenMai;
 import com.example.datn.dto.HoaDon.ChiTietHoaDonRequest;
 import com.example.datn.dto.HoaDon.HoaDonDTO;
 import com.example.datn.dto.HoaDon.HoaDonRequest;
-import com.example.datn.entity.DotGiamGia;
 import com.example.datn.entity.HoaDon;
 import com.example.datn.entity.KhachHang;
 import com.example.datn.entity.LichSuSuDungPhieuGiamGia;
@@ -231,20 +230,14 @@ class HoaDonServicePhieuGiamGiaTest {
     @Test
     void test6_DotGiamGiaKhongDuocCongVaoPhieu() {
         PhieuGiamGia pgg = phieu("PERCENT", "20", 1);
-        DotGiamGia dot = new DotGiamGia();
-        dot.setId(5L);
-        dot.setMaDotGiamGia("DOT001");
-        dot.setTenDotGiamGia("Sale tháng 10");
-        dot.setPhanTramGiam(new BigDecimal("10"));
-        pgg.setDotGiamGia(dot);
         chuanBi(pgg);
 
         HoaDonDTO dto = service.create(yeuCau(PGG_ID, KH_A));
 
         assertThat(dto.getTienGiam()).isEqualByComparingTo("200000");
         assertThat(dto.getTienSauGiamGia()).isEqualByComparingTo("800000");
-        assertThat(dto.getIdDotGiamGia()).isEqualTo(5L);
-        assertThat(dto.getTenDotGiamGia()).isEqualTo("Sale tháng 10");
+        assertThat(dto.getIdDotGiamGia()).isNull();
+        assertThat(dto.getTenDotGiamGia()).isNull();
     }
 
     @Test

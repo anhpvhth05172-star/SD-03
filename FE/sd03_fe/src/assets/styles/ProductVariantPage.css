@@ -206,12 +206,14 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 18px;
   margin-bottom: 18px;
 }
 
 .search-col {
   flex: 1;
+  min-width: 220px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -220,6 +222,7 @@
 .filter-actions-group {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   flex-shrink: 0;
 }

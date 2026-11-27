@@ -37,12 +37,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
+:where(h1, h2, h3, h4, h5, h6) {
   color: #0f172a;
   font-weight: 750;
   letter-spacing: -0.03em;
@@ -547,7 +542,7 @@ h6 {
 
 .client-footer-bottom {
   border-top: 1px solid #1f2937;
-  padding: 1.35rem 0;
+  padding: 1.35rem 0 5rem;
   font-size: 0.8rem;
   color: #64748b;
   background: #0f172a;
@@ -561,5 +556,31 @@ h6 {
 
 .footer-bottom-link-dark:hover {
   color: #ffffff !important;
+}
+
+@media (max-width: 991.98px) {
+  .client-nav {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    width: 100%;
+    padding: 0.5rem 0;
+  }
+  .client-nav .nav-item {
+    width: 100%;
+  }
+  .client-dropdown-menu {
+    right: auto;
+    left: 0;
+    max-width: calc(100vw - 32px);
+  }
+}
+
+@media (max-width: 575.98px) {
+  .ps-card .price {
+    font-size: 0.92rem !important;
+    letter-spacing: -0.03em;
+    word-break: break-word;
+  }
 }
 

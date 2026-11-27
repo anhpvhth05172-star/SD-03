@@ -774,8 +774,8 @@ const addForm = reactive({
   idSanPham: '',
   idMauSac: '',
   idKichCo: '',
-  stock: 10,
-  price: 1500000,
+  stock: '',
+  price: '',
   trangThai: true,
   imagePreview: null,
   existingColorImage: null
@@ -834,8 +834,8 @@ const openAddVariantModal = () => {
   addForm.idSanPham = currentSpId ? Number(currentSpId) : (productsList.value.length > 0 ? productsList.value[0].id : '')
   addForm.idMauSac = ''
   addForm.idKichCo = ''
-  addForm.stock = 10
-  addForm.price = (variants.value.length > 0 && variants.value[0].price) ? Number(variants.value[0].price) : 1500000
+  addForm.stock = ''
+  addForm.price = ''
   addForm.trangThai = true
   addForm.imagePreview = null
   addForm.existingColorImage = null
@@ -921,12 +921,12 @@ const saveAddVariant = async () => {
     return
   }
   const stockNum = Number(addForm.stock)
-  if (addForm.stock === null || addForm.stock === undefined || !Number.isInteger(stockNum) || stockNum < 0 || stockNum > 100000) {
+  if (addForm.stock === '' || addForm.stock === null || addForm.stock === undefined || !Number.isInteger(stockNum) || stockNum < 0 || stockNum > 100000) {
     addFormError.value = 'Số lượng tồn phải là số nguyên từ 0 đến 100,000!'
     return
   }
   const priceNum = Number(addForm.price)
-  if (addForm.price === null || addForm.price === undefined || !Number.isFinite(priceNum) || priceNum < 1000 || priceNum > 1000000000) {
+  if (addForm.price === '' || addForm.price === null || addForm.price === undefined || !Number.isFinite(priceNum) || priceNum < 1000 || priceNum > 1000000000) {
     addFormError.value = 'Giá bán phải từ 1,000 VNĐ đến 1,000,000,000 VNĐ!'
     return
   }
@@ -1045,7 +1045,7 @@ const normalizeEditStock = () => {
 
 const normalizeAddStock = () => {
   if (addForm.stock === '' || addForm.stock === null || addForm.stock === undefined || isNaN(addForm.stock)) {
-    addForm.stock = 0
+    addForm.stock = ''
   } else {
     addForm.stock = Math.max(0, Math.min(100000, Math.floor(Number(addForm.stock))))
   }

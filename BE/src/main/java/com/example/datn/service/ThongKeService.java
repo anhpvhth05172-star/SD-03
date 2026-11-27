@@ -65,7 +65,9 @@ public class ThongKeService {
     }
 
     private static final Set<String> TRANG_THAI_HUY_HOAN_TIEN = Set.of("DA_HUY", "DA_HOAN_TIEN");
-    private static final Set<String> MA_HINH_THUC_TIEN_MAT = Set.of("TM", "CASH", "COD", "TIEN_MAT");
+    private static final Set<String> MA_HINH_THUC_TIEN_MAT = Set.of(
+        "TM", "CASH", "COD", "TIEN_MAT", "PT01", "PT11", "PT19"
+    );
 
     private static boolean laHuyHoanTien(String trangThai) {
         return trangThai != null && TRANG_THAI_HUY_HOAN_TIEN.contains(trangThai);

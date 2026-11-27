@@ -27,9 +27,6 @@ public class SanPhamChiTietRequest {
     @NotNull(message = "Vui lòng chọn kích cỡ cho biến thể")
     private Long idKichCo;
 
-    private Long idThanGiay;
-    private Long idDeGiay;
-
     @Size(max = 80, message = "Mã chi tiết sản phẩm tối đa 80 ký tự")
     private String maChiTietSanPham;
 
@@ -46,21 +43,6 @@ public class SanPhamChiTietRequest {
     @DecimalMin(value = "0.0", message = "Trọng lượng phải lớn hơn hoặc bằng 0")
     @DecimalMax(value = "10000.0", message = "Trọng lượng tối đa 10,000 gram")
     private BigDecimal trongLuong;
-
-    @DecimalMin(value = "0.0", message = "Chiều cao đế phải lớn hơn hoặc bằng 0")
-    @DecimalMax(value = "50.0", message = "Chiều cao đế tối đa 50 cm")
-    private BigDecimal chieuCaoDe;
-
-    @DecimalMin(value = "0.0", message = "Chiều cao gót phải lớn hơn hoặc bằng 0")
-    @DecimalMax(value = "50.0", message = "Chiều cao gót tối đa 50 cm")
-    private BigDecimal chieuCaoGot;
-
-    @DecimalMin(value = "0.0", message = "Độ chênh gót mũi phải lớn hơn hoặc bằng 0")
-    @DecimalMax(value = "50.0", message = "Độ chênh gót mũi tối đa 50 cm")
-    private BigDecimal doChenhGotMui;
-
-    @Size(max = 100, message = "Form giày tối đa 100 ký tự")
-    private String formGiay;
 
     private String hinhAnh;
 

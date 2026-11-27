@@ -9,15 +9,9 @@ public record SanPhamChiTietDTO(
     String maChiTietSanPham,
     String tenMau,
     String tenKichCo,
-    String tenThanGiay,
-    String tenDeGiay,
     Integer soLuong,
     BigDecimal giaBan,
     Boolean trangThai,
     BigDecimal trongLuong,
-    BigDecimal chieuCaoDe,
-    BigDecimal chieuCaoGot,
-    BigDecimal doChenhGotMui,
-    String formGiay,
     LocalDateTime ngayTao
 ) {}

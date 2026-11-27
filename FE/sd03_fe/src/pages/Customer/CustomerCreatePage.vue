@@ -70,7 +70,7 @@ const form = ref({
 
 const kiemTraEmailTrung = async () => {
   const em = (form.value.email || '').trim()
-  if (!em || !emailHopLe(em)) {
+  if (!em || emailHopLe(em)) {
     emailTrungLoi.value = ''
     return
   }
@@ -555,7 +555,7 @@ onMounted(async () => {
                 type="email"
                 maxlength="150"
                 placeholder="khachhang@gmail.com"
-                @blur="cham('email'); kiemTraEmailTrung"
+                @blur="cham('email'); kiemTraEmailTrung()"
               />
               <p v-if="hienLoi('email', loiEmail)" class="field-hint is-error">{{ loiEmail }}</p>
               <p v-else-if="emailTrungLoi" class="field-hint is-error">{{ emailTrungLoi }}</p>

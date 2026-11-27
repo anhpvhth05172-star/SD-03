@@ -778,15 +778,15 @@ onUnmounted(() => {
         <table class="data-table">
           <thead>
             <tr>
-              <th width="60" class="text-center">STT</th>
-              <th width="130" class="text-center">MÃ SẢN PHẨM</th>
-              <th width="280">SẢN PHẨM</th>
-              <th width="140" class="text-center">THƯƠNG HIỆU</th>
-              <th width="140" class="text-center">LOẠI GIÀY</th>
-              <th width="110" class="text-center">SỐ LƯỢNG</th>
-              <th width="170" class="text-center">GIÁ BÁN</th>
-              <th width="140" class="text-center">TRẠNG THÁI</th>
-              <th width="120" class="text-center">HÀNH ĐỘNG</th>
+              <th width="48" class="text-center">STT</th>
+              <th width="96" class="text-center">MÃ SẢN PHẨM</th>
+              <th width="220">SẢN PHẨM</th>
+              <th width="115" class="text-center">THƯƠNG HIỆU</th>
+              <th width="110" class="text-center">LOẠI GIÀY</th>
+              <th width="86" class="text-center">SỐ LƯỢNG</th>
+              <th width="135" class="text-center">GIÁ BÁN</th>
+              <th width="120" class="text-center">TRẠNG THÁI</th>
+              <th width="110" class="text-center">HÀNH ĐỘNG</th>
             </tr>
           </thead>
           <tbody>

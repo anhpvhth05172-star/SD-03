@@ -485,4 +485,20 @@ onUnmounted(() => {
 .exp-icon-shield {
   display: inline-block;
 }
+
+@media (max-width: 575.98px) {
+  .banner-nav-btn {
+    top: auto;
+    bottom: 12px;
+    transform: none;
+    width: 32px;
+    height: 32px;
+  }
+  .prev-btn {
+    left: 12px;
+  }
+  .next-btn {
+    right: 12px;
+  }
+}
 </style>

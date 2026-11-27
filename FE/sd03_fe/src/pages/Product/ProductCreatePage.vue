@@ -92,8 +92,8 @@ const tempColorSelect = ref(null)
 const tempSizeSelect = ref(null)
 
 const isAllChecked = ref(true)
-const defaultQty = ref(10)
-const defaultPrice = ref(1500000)
+const defaultQty = ref('')
+const defaultPrice = ref('')
 
 const hasGeneratedVariants = ref(false)
 const colorGroups = ref([])
@@ -186,8 +186,8 @@ const generateVariants = () => {
         stt: idx + 1,
         sizeId: size.id,
         sizeName: size.ten || size.name,
-        qty: defaultQty.value || 0,
-        price: defaultPrice.value || 0
+        qty: defaultQty.value !== '' && defaultQty.value !== null && defaultQty.value !== undefined ? defaultQty.value : '',
+        price: defaultPrice.value !== '' && defaultPrice.value !== null && defaultPrice.value !== undefined ? defaultPrice.value : ''
       })
     })
 
@@ -222,20 +222,27 @@ const applyBulkValues = () => {
     return
   }
 
-  if (defaultPrice.value === null || defaultPrice.value === undefined || defaultPrice.value === '') {
-    showToast('Giá bán mặc định không được để trống!', 'warning')
-    return
-  }
-  const priceNum = Number(defaultPrice.value)
-  if (isNaN(priceNum) || priceNum < 1000 || priceNum > 1000000000) {
-    showToast('Giá bán mặc định phải là số từ 1,000đ đến 1,000,000,000đ!', 'warning')
+  const hasPrice = defaultPrice.value !== null && defaultPrice.value !== undefined && defaultPrice.value !== ''
+  const hasQty = defaultQty.value !== null && defaultQty.value !== undefined && defaultQty.value !== ''
+
+  if (!hasPrice && !hasQty) {
+    showToast('Vui lòng nhập số lượng hoặc giá bán mặc định để áp dụng!', 'warning')
     return
   }
 
-  let qtyNum = 0
-  if (defaultQty.value !== null && defaultQty.value !== undefined && defaultQty.value !== '') {
+  let priceNum = null
+  if (hasPrice) {
+    priceNum = Number(defaultPrice.value)
+    if (isNaN(priceNum) || priceNum < 1000 || priceNum > 1000000000) {
+      showToast('Giá bán mặc định phải là số từ 1,000đ đến 1,000,000,000đ!', 'warning')
+      return
+    }
+  }
+
+  let qtyNum = null
+  if (hasQty) {
     qtyNum = Number(defaultQty.value)
-    if (isNaN(qtyNum) || qtyNum < 0 || qtyNum > 100000) {
+    if (!Number.isInteger(qtyNum) || qtyNum < 0 || qtyNum > 100000) {
       showToast('Số lượng mặc định phải là số nguyên từ 0 đến 100,000!', 'warning')
       return
     }
@@ -244,13 +251,16 @@ const applyBulkValues = () => {
   colorGroups.value.forEach(group => {
     group.items.forEach(item => {
       if (item.checked) {
-        item.qty = qtyNum
-        item.price = priceNum
+        if (hasQty) item.qty = qtyNum
+        if (hasPrice) item.price = priceNum
       }
     })
   })
 
-  showToast(`Đã áp dụng số lượng (${qtyNum}) và giá bán (${priceNum.toLocaleString('vi-VN')} đ) cho ${selectedCount} biến thể đã chọn!`, 'success')
+  const parts = []
+  if (hasQty) parts.push(`số lượng (${qtyNum})`)
+  if (hasPrice) parts.push(`giá bán (${priceNum.toLocaleString('vi-VN')} đ)`)
+  showToast(`Đã áp dụng ${parts.join(' và ')} cho ${selectedCount} biến thể đã chọn!`, 'success')
 }
 
 const toggleCheckAll = (e) => {
@@ -518,14 +528,16 @@ const saveProduct = async (confirmMerge = false) => {
     for (const group of colorGroups.value) {
       for (const item of group.items) {
         if (item.checked) {
+          const isEmptyQty = item.qty === '' || item.qty === null || item.qty === undefined
+          const isEmptyPrice = item.price === '' || item.price === null || item.price === undefined
           const qty = Number(item.qty)
           const price = Number(item.price)
 
-          if (!Number.isInteger(qty) || qty < 0 || qty > 100000) {
+          if (isEmptyQty || !Number.isInteger(qty) || qty < 0 || qty > 100000) {
             invalidVariantError = `Biến thể (Màu: ${group.colorName}, Size: ${item.sizeName}) có số lượng không hợp lệ (phải từ 0 đến 100,000).`
             break
           }
-          if (isNaN(price) || price < 1000 || price > 1000000000) {
+          if (isEmptyPrice || isNaN(price) || price < 1000 || price > 1000000000) {
             invalidVariantError = `Biến thể (Màu: ${group.colorName}, Size: ${item.sizeName}) có giá bán không hợp lệ (phải từ 1,000đ đến 1,000,000,000đ).`
             break
           }
@@ -849,7 +861,7 @@ onMounted(() => {
         <div class="bulk-inputs-right">
           <div class="bulk-field">
             <label class="bulk-lbl">Số lượng mặc định</label>
-            <input v-model.number="defaultQty" type="number" class="bulk-num-input" placeholder="0" min="0" />
+            <input v-model.number="defaultQty" type="number" class="bulk-num-input" placeholder="Nhập số lượng..." min="0" />
           </div>
 
           <div class="bulk-field" style="min-width: 200px;">
@@ -870,6 +882,7 @@ onMounted(() => {
           <span class="group-summary-badge">{{ group.sizeSummary }}</span>
         </div>
 
+        <div class="variant-table-scroll">
         <table class="variant-data-table">
           <thead>
             <tr>
@@ -889,7 +902,7 @@ onMounted(() => {
               <td class="text-muted">{{ item.stt }}</td>
               <td class="font-medium">Size {{ item.sizeName }}</td>
               <td>
-                <input v-model.number="item.qty" type="number" class="table-num-input" min="0" />
+                <input v-model.number="item.qty" type="number" class="table-num-input" placeholder="Nhập số lượng..." min="0" />
               </td>
               <td>
                 <CurrencyInput v-model="item.price" placeholder="Nhập giá..." />
@@ -902,6 +915,7 @@ onMounted(() => {
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
     </div>
 

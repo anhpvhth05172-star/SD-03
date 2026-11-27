@@ -1126,16 +1126,16 @@ const submit = async () => {
   width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
-  font-size: 0.92rem;
+  font-size: 0.84rem;
 }
 .dg-table-wide {
-  min-width: 1100px;
+  min-width: 880px;
 }
 .dg-table th {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 0.8rem 0.75rem;
+  padding: 0.65rem 0.45rem;
   background: #fff;
   border-bottom: 1px solid var(--line);
   text-align: center;
@@ -1145,7 +1145,7 @@ const submit = async () => {
   text-overflow: ellipsis;
 }
 .dg-table td {
-  padding: 0.7rem 0.75rem;
+  padding: 0.65rem 0.45rem;
   border-bottom: 1px solid #f1f2f4;
   text-align: center;
   vertical-align: middle;

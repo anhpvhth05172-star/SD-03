@@ -16,10 +16,9 @@ public interface ThongKeRepository extends JpaRepository<com.example.datn.entity
     @Query("""
         SELECT new com.example.datn.dto.ThongKe.HoaDonThongKeRow(
             h.id, h.trangThai, h.tienSauGiamGia, h.daXoa,
-            ptt.hinhThucThanhToan.maHinhThuc, h.loaiDon)
+            ptt.maPhuongThuc, h.loaiDon)
         FROM HoaDon h
         LEFT JOIN h.phuongThucThanhToan ptt
-        LEFT JOIN ptt.hinhThucThanhToan
         WHERE h.ngayTao >= :tu AND h.ngayTao < :den
         """)
     List<HoaDonThongKeRow> findHoaDonTrongKhoang(
@@ -69,13 +68,12 @@ public interface ThongKeRepository extends JpaRepository<com.example.datn.entity
         SELECT new com.example.datn.dto.ThongKe.HoaDonChiTietThongKeRow(
             h.id, h.maHoaDon, h.ngayTao, h.tenKhachHang, h.soDienThoaiKhachHang,
             nv.tenTaiKhoan, h.loaiDon,
-            COALESCE(htt.tenHinhThuc, ptt.tenPhuongThuc, 'Chưa xác định'),
-            htt.maHinhThuc,
+            COALESCE(ptt.tenPhuongThuc, 'Chưa xác định'),
+            ptt.maPhuongThuc,
             h.trangThai, h.tienSauGiamGia, h.daXoa)
         FROM HoaDon h
         LEFT JOIN h.nhanVien nv
         LEFT JOIN h.phuongThucThanhToan ptt
-        LEFT JOIN ptt.hinhThucThanhToan htt
         WHERE h.ngayTao >= :tu AND h.ngayTao < :den
         ORDER BY h.ngayTao DESC
         """)

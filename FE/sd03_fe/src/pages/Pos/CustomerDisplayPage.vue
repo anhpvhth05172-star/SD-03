@@ -1365,7 +1365,52 @@ onUnmounted(() => {
 
 @media (max-width: 900px) {
   .display-main {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .panel-card {
+    height: auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .display-header {
+    height: auto;
+    min-height: 56px;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .welcome-badge {
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+  .clock-display {
+    font-size: 11.5px;
+    padding: 4px 8px;
+  }
+  .display-main {
+    padding: 12px;
+  }
+  .panel-body {
+    padding: 12px;
+  }
+  .summary-total-box {
+    padding: 12px;
+  }
+  .total-amount {
+    font-size: 24px;
+    overflow-wrap: anywhere;
+  }
+  .thank-you-box {
+    padding: 12px 6px 4px;
+    word-break: break-word;
+  }
+  .customer-cart-table {
+    min-width: 520px;
   }
 }
 </style>

@@ -366,6 +366,8 @@ onMounted(loadData)
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-bottom: 20px;
 }
 
@@ -391,6 +393,7 @@ onMounted(loadData)
 
 .action-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 

@@ -709,7 +709,7 @@ onMounted(async () => {
         <table class="employee-table">
           <thead>
             <tr>
-              <th style="width: 40px; text-align: center;" title="Chọn tất cả nhân viên trong trang">
+              <th style="width: 38px; text-align: center;" title="Chọn tất cả nhân viên trong trang">
                 <input
                   type="checkbox"
                   class="row-check"
@@ -718,17 +718,17 @@ onMounted(async () => {
                   @change="toggleSelectAllPage"
                 />
               </th>
-              <th style="width: 45px;">STT</th>
-              <th style="width: 60px; text-align: center;">Ảnh</th>
-              <th style="width: 105px;">Mã NV</th>
-              <th style="width: 160px;">Họ tên</th>
-              <th style="width: 175px;">Email</th>
-              <th style="width: 80px;">Giới tính</th>
-              <th style="width: 115px;">SĐT</th>
+              <th style="width: 40px;">STT</th>
+              <th style="width: 52px; text-align: center;">Ảnh</th>
+              <th style="width: 90px;">Mã NV</th>
+              <th style="width: 130px;">Họ tên</th>
+              <th style="width: 145px;">Email</th>
+              <th style="width: 68px;">Giới tính</th>
+              <th style="width: 100px;">SĐT</th>
               <th>Địa chỉ</th>
-              <th style="width: 120px;">Vai trò</th>
-              <th style="width: 110px; text-align: center;">Trạng thái</th>
-              <th style="width: 150px; text-align: center;">Hành động</th>
+              <th style="width: 96px;">Vai trò</th>
+              <th style="width: 96px; text-align: center;">Trạng thái</th>
+              <th style="width: 128px; text-align: center;">Hành động</th>
             </tr>
           </thead>
           <tbody>
@@ -1333,7 +1333,7 @@ onMounted(async () => {
 }
 
 .employee-table th {
-  padding: 13px 12px;
+  padding: 11px 8px;
   font-size: 11.5px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1344,8 +1344,8 @@ onMounted(async () => {
 }
 
 .employee-table td {
-  padding: 13px 12px;
-  font-size: 13px;
+  padding: 11px 8px;
+  font-size: 12.5px;
   color: #334155;
   border-bottom: 1px solid #f8fafc;
   vertical-align: middle;

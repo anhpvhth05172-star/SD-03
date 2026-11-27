@@ -717,8 +717,8 @@ watch(() => route.fullPath, () => {
 }
 
 .data-table th {
-  padding: 12px 10px;
-  font-size: 11.5px;
+  padding: 10px 7px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   color: #475569;
@@ -729,10 +729,24 @@ watch(() => route.fullPath, () => {
 }
 
 .data-table td {
-  padding: 12px 10px;
+  padding: 10px 7px;
+  font-size: 12.5px;
   color: #334155;
   border-bottom: 1px solid #f8fafc;
   vertical-align: middle;
+}
+
+@media (max-width: 1480px) {
+  .data-table th {
+    white-space: normal;
+    font-size: 10.5px;
+    padding: 8px 5px;
+    line-height: 1.25;
+  }
+  .data-table td {
+    padding: 8px 5px;
+    font-size: 12px;
+  }
 }
 
 .data-table tbody tr:hover {

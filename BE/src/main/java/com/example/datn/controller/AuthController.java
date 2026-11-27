@@ -23,11 +23,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -193,7 +195,9 @@ public class AuthController {
                 khachHang.setNguoiCapNhat(khachHang.getTenTaiKhoan());
                 khachHangRepository.save(khachHang);
 
-                if (req.getDiaChiCuThe() != null && !req.getDiaChiCuThe().trim().isEmpty() && khachHangService != null) {
+                if (req.getIdDiaChiMacDinh() != null && khachHangService != null) {
+                    khachHangService.datMacDinh(idNguoiDung, req.getIdDiaChiMacDinh());
+                } else if (req.getDiaChiCuThe() != null && !req.getDiaChiCuThe().trim().isEmpty() && khachHangService != null) {
                     DiaChiKhachHangRequest dcReq = new DiaChiKhachHangRequest();
                     String tenDiaChi = req.getTenDiaChi() != null && !req.getTenDiaChi().trim().isEmpty()
                         ? req.getTenDiaChi().trim()
@@ -211,6 +215,26 @@ public class AuthController {
                     }
                 }
             }
+        }
+        return thongTin();
+    }
+
+    @DeleteMapping("/thong-tin")
+    public ThongTinResponse xoaDiaChiCuaToi(@RequestParam("idDiaChi") Long idDiaChi) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof Long idNguoiDung)) {
+            throw new DangNhapThatBaiException("Chưa đăng nhập");
+        }
+        boolean laNhanVien = auth.getAuthorities().stream()
+            .anyMatch(a -> "ROLE_NHAN_VIEN".equals(a.getAuthority()));
+        if (laNhanVien) {
+            throw new IllegalArgumentException("Chỉ tài khoản khách hàng mới hỗ trợ xóa địa chỉ");
+        }
+        if (idDiaChi == null) {
+            throw new IllegalArgumentException("Thiếu mã địa chỉ cần xóa");
+        }
+        if (khachHangService != null) {
+            khachHangService.xoaDiaChi(idNguoiDung, idDiaChi);
         }
         return thongTin();
     }

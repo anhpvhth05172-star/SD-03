@@ -89,6 +89,10 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
             throw bad("Mức giảm tối đa không được âm");
         if (req.getHoaDonToiThieu() != null && req.getHoaDonToiThieu().signum() < 0)
             throw bad("Hóa đơn tối thiểu không được âm");
+        if ("AMOUNT".equals(req.getLoaiGiamGia())
+                && req.getHoaDonToiThieu() != null && req.getHoaDonToiThieu().signum() > 0
+                && req.getGiaTriGiam().compareTo(req.getHoaDonToiThieu()) > 0)
+            throw bad("Giá trị giảm không được lớn hơn hóa đơn tối thiểu");
         if (req.getSoLuong() == null || req.getSoLuong() < 1
                 || req.getSoLuong() < (db.getSoLuongDaSuDung() == null ? 0 : db.getSoLuongDaSuDung()))
             throw bad("Số lượng không được nhỏ hơn 1 hoặc số lượng đã sử dụng");
@@ -375,6 +379,10 @@ public class PhieuGiamGiaServiceImpl implements PhieuGiamGiaService {
             throw bad("Mức giảm tối đa không được âm");
         if (r.getHoaDonToiThieu() != null && r.getHoaDonToiThieu().signum() < 0)
             throw bad("Hóa đơn tối thiểu không được âm");
+        if ("AMOUNT".equals(r.getLoaiGiamGia())
+                && r.getHoaDonToiThieu() != null && r.getHoaDonToiThieu().signum() > 0
+                && r.getGiaTriGiam().compareTo(r.getHoaDonToiThieu()) > 0)
+            throw bad("Giá trị giảm không được lớn hơn hóa đơn tối thiểu");
         if ("PERCENT".equals(r.getLoaiGiamGia())
                 && r.getGiaTriGiam().compareTo(BigDecimal.valueOf(100)) > 0)
             throw bad("Phần trăm giảm tối đa là 100");

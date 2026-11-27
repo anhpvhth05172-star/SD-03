@@ -1,6 +1,6 @@
 <script setup>
 import { provide, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import ChatWidget from './components/ChatWidget.vue'
 import { API_ORIGIN } from './api/http'
 import { appMode } from './router'
@@ -8,7 +8,8 @@ import { appMode } from './router'
 const baseAPI = `${API_ORIGIN}/`
 provide('baseAPI', baseAPI)
 
-const hienChatWidget = computed(() => appMode !== 'admin')
+const route = useRoute()
+const hienChatWidget = computed(() => appMode !== 'admin' && route.path !== '/man-hinh-khach')
 
 const router = useRouter()
 

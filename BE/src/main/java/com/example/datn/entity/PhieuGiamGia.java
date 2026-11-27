@@ -61,10 +61,6 @@ public class PhieuGiamGia {
     @Column(name = "gioi_han_moi_tai_khoan", nullable = false)
     private Integer gioiHanMoiTaiKhoan = 1;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_dot_giam_gia")
-    private DotGiamGia dotGiamGia;
-
     @Column(name = "trang_thai", nullable = false)
     private Boolean trangThai = true;
 

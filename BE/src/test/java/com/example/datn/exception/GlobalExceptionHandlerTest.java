@@ -57,6 +57,17 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void illegalStateException_Tra400VaMessage() {
+        ResponseEntity<ErrorResponse> res = handler.handleIllegalArgumentOrState(
+            new IllegalStateException("Hoi thoai da dong"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, res.getStatusCode());
+        assertNotNull(res.getBody());
+        assertEquals(400, res.getBody().getStatus());
+        assertEquals("Hoi thoai da dong", res.getBody().getMessage());
+    }
+
+    @Test
     void messageNullVanTraChuoiKhongNull() {
         MockHttpServletRequest req = new MockHttpServletRequest("GET", "/api/nhan-vien");
 

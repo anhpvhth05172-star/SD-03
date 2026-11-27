@@ -142,12 +142,15 @@ const xulyDangXuat = async () => {
   gap: 8px;
   color: #64748b;
   font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .breadcrumb svg {
   width: 15px;
   height: 15px;
   color: #475569;
+  flex-shrink: 0;
 }
 
 .crumb {
@@ -162,6 +165,9 @@ const xulyDangXuat = async () => {
 .crumb-current {
   color: #0f172a;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .auth-box {
@@ -308,11 +314,24 @@ const xulyDangXuat = async () => {
   font-weight: 600;
   border-radius: 16px;
   padding: 6px 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
 }
 
 .btn-logout:hover {
   background: #fef2f2;
   border-color: #fecaca;
+}
+
+@media (max-width: 992px) {
+  .app-header {
+    padding: 0 14px;
+    gap: 10px;
+  }
+  .crumb,
+  .crumb-sep {
+    display: none;
+  }
 }
 </style>

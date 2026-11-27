@@ -1637,7 +1637,7 @@ onBeforeUnmount(() => {
 
 .inv-layout {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -1646,6 +1646,8 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 16px;
   align-items: flex-start;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .main-col {
@@ -1685,13 +1687,17 @@ onBeforeUnmount(() => {
   border-radius: 14px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
   padding: 18px 20px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .card-head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 9px;
   margin-bottom: 14px;
+  min-width: 0;
 }
 
 .card-icon {
@@ -2890,9 +2896,46 @@ onBeforeUnmount(() => {
   margin-bottom: 10px;
 }
 
+@media (max-width: 1320px) {
+  .inv-print-area {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .main-col {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .side-col {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .kv,
+  .kv-row,
+  .kv-value {
+    min-width: 0;
+  }
+
+  .kv-value {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}
+
 @media (max-width: 980px) {
   .inv-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .inv-print-area {

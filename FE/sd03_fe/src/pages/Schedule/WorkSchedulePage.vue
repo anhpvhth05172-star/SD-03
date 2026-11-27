@@ -1918,12 +1918,14 @@ onMounted(() => {
   background: #ffffff;
   border: 1px solid #f1f5f9;
   border-radius: 14px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
 }
 
 .schedule-matrix-table {
   width: 100%;
+  min-width: 860px;
   border-collapse: collapse;
   table-layout: fixed;
 }

@@ -5,6 +5,9 @@ import http from '@/api/http'
 import { getUser, dangXuat, getRefreshToken, isKhachHangDangNhap } from '@/utils/auth'
 import { huyPhien } from '@/api/auth'
 import { money, resetCartLocal } from '@/components/store'
+import SearchableSelect from '@/components/SearchableSelect.vue'
+import { layDiaGioi, layPhuongXa, timTinh } from '@/api/diaGioi'
+import { notifySuccess, notifyError, notifyDeleteConfirm } from '@/utils/notify'
 
 const router = useRouter()
 const localUser = ref(getUser())
@@ -33,6 +36,26 @@ const editForm = ref({
 })
 const savingProfile = ref(false)
 const editError = ref('')
+
+// Modal & CRUD address book state
+const showAddressModal = ref(false)
+const savingAddress = ref(false)
+const processingAddressId = ref(null)
+const addrError = ref('')
+const addrEditingWasDefault = ref(false)
+const addrForm = ref({
+  id: null,
+  tenDiaChi: '',
+  tinhThanhPho: '',
+  phuong: '',
+  diaChiCuThe: '',
+  macDinh: false,
+})
+const tinhThanhs = ref([])
+const phuongXas = ref([])
+const diaGioiLoading = ref(false)
+const diaGioiError = ref('')
+let yeuCauDiaGioi = 0
 
 // Copied voucher state
 const copiedCode = ref('')
@@ -81,13 +104,52 @@ const formatAddress = (addr) => {
   if (!addr) return ''
   if (typeof addr === 'string') return addr
   const parts = [
-    addr.diaChiChiTiet,
-    addr.phuongXa,
+    addr.diaChiCuThe || addr.diaChiChiTiet,
+    addr.phuong || addr.phuongXa,
     addr.quanHuyen,
-    addr.tinhThanhPho,
+    addr.thanhPho || addr.tinhThanhPho,
   ].filter(Boolean)
   return parts.join(', ')
 }
+
+const danhSachDiaChiHienThi = computed(() => {
+  const ds = thongTin.value?.danhSachDiaChi
+  if (Array.isArray(ds) && ds.length) return ds
+  if (thongTin.value?.diaChiMacDinh) return [thongTin.value.diaChiMacDinh]
+  return []
+})
+
+const laDiaChiMacDinhBatBuoc = computed(() =>
+  (!addrForm.value.id && danhSachDiaChiHienThi.value.length === 0) ||
+  (!!addrForm.value.id && addrEditingWasDefault.value)
+)
+
+const optsTinh = computed(() => {
+  const base = [
+    {
+      value: '',
+      label: diaGioiLoading.value ? 'Đang tải danh sách tỉnh/thành...' : 'Chọn Tỉnh/Thành phố',
+    },
+    ...tinhThanhs.value.map((t) => ({ value: t.ten, label: t.ten })),
+  ]
+  const cur = addrForm.value.tinhThanhPho
+  if (cur && !tinhThanhs.value.some((t) => t.ten === cur)) {
+    base.splice(1, 0, { value: cur, label: cur })
+  }
+  return base
+})
+
+const optsPhuong = computed(() => [
+  {
+    value: '',
+    label: diaGioiLoading.value
+      ? 'Đang tải...'
+      : addrForm.value.tinhThanhPho
+        ? 'Chọn Phường/Xã'
+        : 'Chọn Tỉnh/Thành phố trước',
+  },
+  ...phuongXas.value.map((p) => ({ value: p.ten, label: p.ten })),
+])
 
 const getOrderStatusBadge = (st) => {
   const s = String(st || '').toUpperCase()
@@ -228,6 +290,156 @@ const luuThongTin = async () => {
     editError.value = e.response?.data?.message || e.message || 'Cập nhật thông tin thất bại'
   } finally {
     savingProfile.value = false
+  }
+}
+
+const napDiaGioi = async (tenTinh, tenPhuong) => {
+  const myToken = ++yeuCauDiaGioi
+  diaGioiLoading.value = true
+  diaGioiError.value = ''
+  try {
+    const ds = await layDiaGioi()
+    if (myToken !== yeuCauDiaGioi) return
+    tinhThanhs.value = ds
+    const tinh = timTinh(ds, tenTinh)
+    if (tinh && tenTinh && addrForm.value.tinhThanhPho !== tinh.ten) {
+      addrForm.value.tinhThanhPho = tinh.ten
+    }
+    phuongXas.value = await layPhuongXa(ds, tinh)
+    if (tenPhuong && !phuongXas.value.some((p) => p.ten === tenPhuong)) {
+      phuongXas.value = [{ code: 'khac', ten: tenPhuong }, ...phuongXas.value]
+    }
+  } catch (e) {
+    if (myToken === yeuCauDiaGioi) {
+      diaGioiError.value = e.message || 'Không tải được danh sách địa lý'
+    }
+  } finally {
+    if (myToken === yeuCauDiaGioi) diaGioiLoading.value = false
+  }
+}
+
+const chonTinh = async (tenTinh) => {
+  addrForm.value.tinhThanhPho = tenTinh || ''
+  addrForm.value.phuong = ''
+  const myToken = ++yeuCauDiaGioi
+  const ds = tinhThanhs.value.length ? tinhThanhs.value : await layDiaGioi().catch(() => null)
+  if (myToken !== yeuCauDiaGioi || !ds) return
+  diaGioiLoading.value = true
+  try {
+    phuongXas.value = await layPhuongXa(ds, timTinh(ds, tenTinh))
+  } finally {
+    if (myToken === yeuCauDiaGioi) diaGioiLoading.value = false
+  }
+}
+
+const moModalDiaChi = (dc = null) => {
+  addrError.value = ''
+  if (dc) {
+    addrEditingWasDefault.value = !!dc.macDinh
+    addrForm.value = {
+      id: dc.id,
+      tenDiaChi: dc.tenChiChi || dc.tenDiaChi || '',
+      tinhThanhPho: dc.thanhPho || dc.tinhThanhPho || '',
+      phuong: dc.phuong || dc.phuongXa || '',
+      diaChiCuThe: dc.diaChiCuThe || dc.diaChiChiTiet || '',
+      macDinh: !!dc.macDinh,
+    }
+  } else {
+    addrEditingWasDefault.value = false
+    addrForm.value = {
+      id: null,
+      tenDiaChi: '',
+      tinhThanhPho: '',
+      phuong: '',
+      diaChiCuThe: '',
+      macDinh: danhSachDiaChiHienThi.value.length === 0,
+    }
+  }
+  showAddressModal.value = true
+  napDiaGioi(addrForm.value.tinhThanhPho, addrForm.value.phuong)
+}
+
+const dongModalDiaChi = () => {
+  showAddressModal.value = false
+  addrError.value = ''
+}
+
+const luuDiaChi = async () => {
+  addrError.value = ''
+  const ten = addrForm.value.tenDiaChi.trim()
+  const tinh = addrForm.value.tinhThanhPho
+  const phuong = addrForm.value.phuong
+  const cuThe = addrForm.value.diaChiCuThe.trim()
+
+  if (ten.length > 100) {
+    addrError.value = 'Tên địa chỉ tối đa 100 ký tự'
+    return
+  }
+  if (!tinh) {
+    addrError.value = 'Vui lòng chọn Tỉnh/Thành phố'
+    return
+  }
+  if (phuongXas.value.length > 0 && !phuong) {
+    addrError.value = 'Vui lòng chọn Phường/Xã'
+    return
+  }
+  if (!cuThe) {
+    addrError.value = 'Vui lòng nhập địa chỉ cụ thể'
+    return
+  }
+  if (cuThe.length > 255) {
+    addrError.value = 'Địa chỉ cụ thể tối đa 255 ký tự'
+    return
+  }
+
+  savingAddress.value = true
+  const isEditing = !!addrForm.value.id
+  try {
+    const res = await http.put('/auth/thong-tin', {
+      idDiaChi: addrForm.value.id,
+      tenDiaChi: ten || null,
+      tinhThanhPho: tinh || null,
+      phuong: phuong || null,
+      diaChiCuThe: cuThe,
+      macDinh: laDiaChiMacDinhBatBuoc.value ? true : !!addrForm.value.macDinh,
+    })
+    thongTin.value = res.data || {}
+    dongModalDiaChi()
+    notifySuccess(isEditing ? 'Đã cập nhật địa chỉ thành công!' : 'Đã thêm địa chỉ mới thành công!')
+  } catch (e) {
+    addrError.value = e.response?.data?.message || e.message || 'Không thể lưu địa chỉ'
+  } finally {
+    savingAddress.value = false
+  }
+}
+
+const datDiaChiMacDinh = async (dc) => {
+  if (!dc?.id || processingAddressId.value) return
+  processingAddressId.value = dc.id
+  try {
+    const res = await http.put('/auth/thong-tin', { idDiaChiMacDinh: dc.id })
+    thongTin.value = res.data || {}
+    notifySuccess('Đã đổi địa chỉ mặc định!')
+  } catch (e) {
+    notifyError('Không thể đặt địa chỉ mặc định', e.response?.data?.message || e.message)
+  } finally {
+    processingAddressId.value = null
+  }
+}
+
+const xoaDiaChi = async (dc) => {
+  if (!dc?.id || processingAddressId.value) return
+  const ok = await notifyDeleteConfirm(dc.tenChiChi ? `địa chỉ "${dc.tenChiChi}"` : 'địa chỉ này')
+  if (!ok) return
+  processingAddressId.value = dc.id
+  try {
+    const res = await http.delete('/auth/thong-tin', { params: { idDiaChi: dc.id } })
+    thongTin.value = res.data || {}
+    notifySuccess('Đã xóa địa chỉ thành công!')
+  } catch (e) {
+    notifyError('Không thể xóa địa chỉ', e.response?.data?.message || e.message)
+  } finally {
+    processingAddressId.value = null
   }
 }
 
@@ -620,7 +832,7 @@ onMounted(() => {
                   <div class="voucher-ticket-card">
                     <div class="voucher-ticket-left">
                       <div class="voucher-discount-val">
-                        <template v-if="p.hinhThucGiam === 'PHAN_TRAM' || p.loaiGiamGia === 'PHAN_TRAM'">
+                        <template v-if="p.loaiGiamGia === 'PERCENT' || p.hinhThucGiam === 'PHAN_TRAM' || p.loaiGiamGia === 'PHAN_TRAM'">
                           {{ p.giaTriGiam || p.mucGiam }}%
                         </template>
                         <template v-else>
@@ -631,14 +843,14 @@ onMounted(() => {
                     </div>
 
                     <div class="voucher-ticket-right p-3">
-                      <div class="d-flex align-items-start justify-content-between gap-2">
+                      <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
                         <div class="voucher-code-title fw-bold text-dark mb-1">
                           {{ p.ma }}
                         </div>
                         <button
                           type="button"
                           :class="['btn btn-sm', copiedCode === p.ma ? 'btn-success' : 'btn-outline-danger']"
-                          style="font-size: 11px; padding: 2px 8px;"
+                          style="font-size: 11px; padding: 2px 8px; white-space: nowrap; flex-shrink: 0;"
                           @click="copyVoucher(p.ma)"
                         >
                           <i :class="['bi me-1', copiedCode === p.ma ? 'bi-check2' : 'bi-clipboard']"></i>
@@ -666,71 +878,84 @@ onMounted(() => {
 
             <!-- TAB 4: SỔ ĐỊA CHỈ -->
             <div v-else-if="activeTab === 'dia-chi'">
-              <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
-                <h5 class="fw-bold mb-0 text-dark">
-                  <i class="bi bi-geo-alt-fill text-danger me-2"></i>Sổ địa chỉ nhận hàng
-                </h5>
+              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 pb-2 border-bottom">
+                <div class="d-flex align-items-center gap-2">
+                  <h5 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-geo-alt-fill text-danger me-2"></i>Sổ địa chỉ nhận hàng
+                  </h5>
+                  <span class="badge bg-light text-secondary border">{{ danhSachDiaChiHienThi.length }} địa chỉ</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-danger" @click="moModalDiaChi()">
+                  <i class="bi bi-plus-lg me-1"></i> Thêm địa chỉ mới
+                </button>
               </div>
 
-              <div v-if="!thongTin?.diaChiMacDinh && (!thongTin?.danhSachDiaChi || !thongTin.danhSachDiaChi.length)" class="empty-state text-center py-5">
+              <div v-if="!danhSachDiaChiHienThi.length" class="empty-state text-center py-5">
                 <div class="empty-icon text-muted mb-3">
                   <i class="bi bi-geo-alt fs-1"></i>
                 </div>
                 <h6 class="fw-bold mb-2">Chưa lưu địa chỉ nào</h6>
-                <p class="text-muted small">Địa chỉ của bạn sẽ được tự động lưu lại khi bạn thực hiện đặt hàng tại PolyShoes.</p>
-                <router-link to="/cua-hang" class="btn btn-danger btn-sm px-4">
-                  Mua sắm ngay
-                </router-link>
+                <p class="text-muted small">Thêm địa chỉ nhận hàng mặc định để đặt đơn nhanh hơn khi thanh toán.</p>
+                <button type="button" class="btn btn-danger btn-sm px-4" @click="moModalDiaChi()">
+                  <i class="bi bi-plus-lg me-1"></i> Thêm địa chỉ mới
+                </button>
               </div>
 
               <div v-else class="row g-3">
-                <!-- Địa chỉ mặc định -->
-                <div v-if="thongTin?.diaChiMacDinh" class="col-md-6">
-                  <div class="address-box-card address-box-default p-3 border rounded shadow-sm">
-                    <div class="d-flex align-items-center justify-content-between mb-2">
-                      <span class="badge bg-danger">Mặc định</span>
-                      <i class="bi bi-check-circle-fill text-danger"></i>
-                    </div>
-                    <div class="fw-bold text-dark mb-1">
-                      {{ thongTin.diaChiMacDinh.tenNguoiNhan || thongTin.tenKhachHang || 'Người nhận' }}
-                    </div>
-                    <div class="text-muted small mb-2">
-                      <i class="bi bi-telephone me-1"></i>
-                      {{ thongTin.diaChiMacDinh.soDienThoai || thongTin.soDienThoai || 'Chưa có SĐT' }}
-                    </div>
-                    <div class="address-text text-secondary small">
-                      <i class="bi bi-geo-alt text-danger me-1"></i>
-                      {{ formatAddress(thongTin.diaChiMacDinh) }}
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Các địa chỉ khác trong danh sách -->
-                <template v-if="thongTin?.danhSachDiaChi && thongTin.danhSachDiaChi.length">
-                  <div
-                    v-for="(dc, idx) in thongTin.danhSachDiaChi"
-                    :key="dc.id || idx"
-                    class="col-md-6"
-                  >
-                    <div v-if="!thongTin.diaChiMacDinh || dc.id !== thongTin.diaChiMacDinh.id" class="address-box-card p-3 border rounded shadow-sm">
+                <div
+                  v-for="dc in danhSachDiaChiHienThi"
+                  :key="dc.id"
+                  class="col-md-6"
+                >
+                  <div :class="['address-box-card p-3 border rounded shadow-sm h-100 d-flex flex-column justify-content-between', { 'address-box-default': dc.macDinh }]">
+                    <div>
                       <div class="d-flex align-items-center justify-content-between mb-2">
                         <span v-if="dc.macDinh" class="badge bg-danger">Mặc định</span>
                         <span v-else class="badge bg-light text-secondary border">Địa chỉ phụ</span>
+                        <i v-if="dc.macDinh" class="bi bi-check-circle-fill text-danger"></i>
                       </div>
                       <div class="fw-bold text-dark mb-1">
-                        {{ dc.tenNguoiNhan || thongTin.tenKhachHang || 'Người nhận' }}
+                        {{ dc.tenChiChi || dc.tenDiaChi || thongTin.tenKhachHang || 'Địa chỉ nhận hàng' }}
                       </div>
                       <div class="text-muted small mb-2">
                         <i class="bi bi-telephone me-1"></i>
-                        {{ dc.soDienThoai || thongTin.soDienThoai || '—' }}
+                        {{ thongTin.soDienThoai || 'Chưa có SĐT' }}
                       </div>
                       <div class="address-text text-secondary small">
                         <i class="bi bi-geo-alt text-danger me-1"></i>
-                        {{ formatAddress(dc) }}
+                        {{ formatAddress(dc) || '—' }}
                       </div>
                     </div>
+
+                    <div class="border-top pt-2 mt-3 d-flex flex-wrap gap-2">
+                      <button
+                        v-if="!dc.macDinh"
+                        type="button"
+                        class="btn btn-sm btn-outline-secondary"
+                        :disabled="processingAddressId === dc.id"
+                        @click="datDiaChiMacDinh(dc)"
+                      >
+                        Đặt mặc định
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-primary"
+                        :disabled="processingAddressId === dc.id"
+                        @click="moModalDiaChi(dc)"
+                      >
+                        <i class="bi bi-pencil me-1"></i> Sửa
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-danger"
+                        :disabled="processingAddressId === dc.id"
+                        @click="xoaDiaChi(dc)"
+                      >
+                        <i class="bi bi-trash me-1"></i> Xóa
+                      </button>
+                    </div>
                   </div>
-                </template>
+                </div>
               </div>
             </div>
           </div>
@@ -813,6 +1038,96 @@ onMounted(() => {
             <button type="submit" class="btn btn-danger px-4" :disabled="savingProfile">
               <span v-if="savingProfile" class="spinner-border spinner-border-sm me-1" role="status"></span>
               {{ savingProfile ? 'Đang lưu...' : 'Lưu thay đổi' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL THÊM / SỬA ĐỊA CHỈ -->
+    <div v-if="showAddressModal" class="modal-backdrop-custom d-flex align-items-center justify-content-center" @click.self="dongModalDiaChi">
+      <div class="modal-card-custom modal-card-address shadow-lg">
+        <div class="modal-header-custom d-flex align-items-center justify-content-between p-3 border-bottom">
+          <h5 class="fw-bold mb-0">
+            <i class="bi bi-geo-alt-fill text-danger me-2"></i>{{ addrForm.id ? 'Cập nhật địa chỉ' : 'Thêm địa chỉ nhận hàng mới' }}
+          </h5>
+          <button type="button" class="btn-close" @click="dongModalDiaChi" aria-label="Đóng"></button>
+        </div>
+
+        <form @submit.prevent="luuDiaChi" class="p-4">
+          <div v-if="addrError" class="alert alert-danger py-2 small mb-3">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ addrError }}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-medium small">Tên địa chỉ / Nhãn gợi nhớ</label>
+            <input
+              v-model="addrForm.tenDiaChi"
+              type="text"
+              class="form-control"
+              maxlength="100"
+              placeholder="Ví dụ: Nhà riêng, Văn phòng..."
+            />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-medium small">Tỉnh / Thành phố <span class="text-danger">*</span></label>
+            <SearchableSelect
+              v-model="addrForm.tinhThanhPho"
+              :options="optsTinh"
+              :disabled="diaGioiLoading"
+              placeholder="Chọn Tỉnh/Thành phố"
+              @change="chonTinh"
+            />
+            <div v-if="diaGioiError" class="text-danger small mt-1">
+              {{ diaGioiError }}
+              <button type="button" class="btn btn-link btn-sm p-0 ms-1" @click="napDiaGioi(addrForm.tinhThanhPho, addrForm.phuong)">
+                Thử lại
+              </button>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-medium small">Phường / Xã <span class="text-danger">*</span></label>
+            <SearchableSelect
+              v-model="addrForm.phuong"
+              :options="optsPhuong"
+              :disabled="diaGioiLoading || !addrForm.tinhThanhPho"
+              placeholder="Chọn Phường/Xã"
+            />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-medium small">Địa chỉ cụ thể <span class="text-danger">*</span></label>
+            <textarea
+              v-model="addrForm.diaChiCuThe"
+              class="form-control"
+              rows="2"
+              maxlength="255"
+              placeholder="Số nhà, ngõ, tên đường..."
+            ></textarea>
+          </div>
+
+          <div class="form-check mb-3">
+            <input
+              id="addrDefaultCheck"
+              v-model="addrForm.macDinh"
+              type="checkbox"
+              class="form-check-input"
+              :disabled="laDiaChiMacDinhBatBuoc"
+            />
+            <label class="form-check-label small" for="addrDefaultCheck">
+              Đặt làm địa chỉ mặc định
+            </label>
+          </div>
+
+          <div class="d-flex justify-content-end gap-2 pt-2 border-top mt-4">
+            <button type="button" class="btn btn-light border px-3" @click="dongModalDiaChi">
+              Hủy bỏ
+            </button>
+            <button type="submit" class="btn btn-danger px-4" :disabled="savingAddress">
+              <span v-if="savingAddress" class="spinner-border spinner-border-sm me-1" role="status"></span>
+              {{ savingAddress ? 'Đang lưu...' : addrForm.id ? 'Lưu thay đổi' : 'Thêm địa chỉ' }}
             </button>
           </div>
         </form>
@@ -1040,6 +1355,11 @@ onMounted(() => {
 }
 .voucher-ticket-right {
   flex: 1;
+  min-width: 0;
+}
+.voucher-code-title {
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 /* Address Cards */
@@ -1064,6 +1384,7 @@ onMounted(() => {
   backdrop-filter: blur(2px);
   z-index: 1050;
   padding: 16px;
+  overflow-y: auto;
 }
 .modal-card-custom {
   background: #ffffff;
@@ -1072,6 +1393,9 @@ onMounted(() => {
   border-radius: 16px;
   overflow: hidden;
   animation: modalPopIn 0.2s ease-out;
+}
+.modal-card-address {
+  overflow: visible;
 }
 @keyframes modalPopIn {
   from {

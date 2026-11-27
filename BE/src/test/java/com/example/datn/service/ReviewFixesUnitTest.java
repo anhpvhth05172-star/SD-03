@@ -343,4 +343,13 @@ class ReviewFixesUnitTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Không được chỉnh sửa danh sách sản phẩm trong hóa đơn");
     }
+
+    @Test
+    void thongKe_phanLoaiMaPhuongThucThanhToanSauKhiBoHinhThucThanhToan() {
+        assertThat(ThongKeService.daThanhToan("DA_XAC_NHAN", "ONLINE", "PT01", false)).isFalse();
+        assertThat(ThongKeService.daThanhToan("DA_XAC_NHAN", "ONLINE", "PT11", false)).isFalse();
+        assertThat(ThongKeService.daThanhToan("DA_XAC_NHAN", "ONLINE", "PT02", false)).isTrue();
+        assertThat(ThongKeService.daThanhToan("DA_XAC_NHAN", "ONLINE", "PT04", false)).isTrue();
+        assertThat(ThongKeService.daThanhToan("DA_HOAN_THANH", "ONLINE", "PT11", false)).isTrue();
+    }
 }

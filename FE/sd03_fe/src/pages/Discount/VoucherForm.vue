@@ -1015,13 +1015,13 @@ const submit = async () => {
 .dg-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.92rem;
+  font-size: 0.84rem;
 }
 .dg-table th {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 0.8rem 1rem;
+  padding: 0.65rem 0.5rem;
   background: #fff;
   border-bottom: 1px solid var(--line);
   text-align: left;
@@ -1029,7 +1029,7 @@ const submit = async () => {
   white-space: nowrap;
 }
 .dg-table td {
-  padding: 0.8rem 1rem;
+  padding: 0.65rem 0.5rem;
   border-bottom: 1px solid #f1f2f4;
   white-space: nowrap;
 }
@@ -1049,10 +1049,10 @@ const submit = async () => {
   cursor: pointer;
 }
 .dg-w-check {
-  width: 48px;
+  width: 40px;
 }
 .dg-w-stt {
-  width: 64px;
+  width: 48px;
 }
 .dg-center {
   text-align: center !important;
@@ -1109,7 +1109,7 @@ const submit = async () => {
 
 /* ---- Ảnh biến thể + nhãn % đợt giảm giá khác ---- */
 .dg-w-img {
-  width: 84px;
+  width: 64px;
 }
 .dg-img-wrap {
   position: relative;

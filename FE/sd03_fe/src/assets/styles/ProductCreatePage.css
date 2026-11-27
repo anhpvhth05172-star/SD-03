@@ -41,7 +41,7 @@
 
 .form-grid-2col {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px 24px;
 }
 
@@ -49,10 +49,20 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 .full-row {
   grid-column: span 2;
+}
+
+@media (max-width: 1024px) {
+  .form-grid-2col {
+    grid-template-columns: 1fr;
+  }
+  .full-row {
+    grid-column: span 1;
+  }
 }
 
 .field-label-row {
@@ -266,6 +276,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
   padding-bottom: 16px;
   border-bottom: 1px solid #f1f5f9;
 }
@@ -290,13 +302,17 @@
 .bulk-inputs-right {
   display: flex;
   align-items: flex-end;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  max-width: 100%;
 }
 
 .bulk-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .bulk-lbl {
@@ -308,6 +324,7 @@
 .bulk-num-input {
   height: 36px;
   width: 180px;
+  max-width: 100%;
   padding: 0 12px;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
@@ -365,9 +382,14 @@
   font-weight: 600;
 }
 
+.variant-table-scroll {
+  overflow-x: auto;
+  width: 100%;
+}
 .variant-data-table th.text-center, .variant-data-table td.text-center { text-align: center !important; }
 .variant-data-table {
   width: 100%;
+  min-width: 640px;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -593,7 +615,7 @@
 .fixed-bottom-bar {
   position: fixed;
   bottom: 0;
-  left: 0;
+  left: 260px;
   right: 0;
   height: 64px;
   background: rgba(255, 255, 255, 0.95);
@@ -604,6 +626,13 @@
   justify-content: flex-end;
   padding: 0 32px;
   z-index: 99;
+}
+
+@media (max-width: 992px) {
+  .fixed-bottom-bar {
+    left: 210px;
+    padding: 0 16px;
+  }
 }
 
 .btn-save-fixed {

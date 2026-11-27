@@ -677,8 +677,11 @@ const submit = async () => {
 /* ---- Lưới form ---- */
 .grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.1rem 1.5rem;
+}
+.field {
+  min-width: 0;
 }
 .span-2 {
   grid-column: 1 / -1;
@@ -851,6 +854,7 @@ const submit = async () => {
 .table-wrap {
   max-height: 340px;
   overflow: auto;
+  overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
@@ -874,7 +878,8 @@ const submit = async () => {
 .cus-table td {
   padding: 0.75rem 1rem;
   border-bottom: 1px solid #f1f2f4;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
 }
 .cus-table tbody tr:last-child td {
   border-bottom: 0;
@@ -945,7 +950,7 @@ const submit = async () => {
   cursor: not-allowed;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 1024px) {
   .grid {
     grid-template-columns: 1fr;
   }

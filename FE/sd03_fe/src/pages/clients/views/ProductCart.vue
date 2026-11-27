@@ -339,7 +339,12 @@ let priceSyncTimer = null;
 let isSyncingPrices = false;
 
 const syncCartPrices = async (silent = true) => {
-  if (isSyncingPrices || document.hidden || actionLoadingId.value != null) return;
+  if (
+    isSyncingPrices ||
+    document.hidden ||
+    actionLoadingId.value != null ||
+    document.activeElement?.classList?.contains("qty-input-cart")
+  ) return;
   isSyncingPrices = true;
   try {
     await fetchCart({ silent });

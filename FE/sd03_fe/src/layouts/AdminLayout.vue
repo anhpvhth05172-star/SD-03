@@ -57,4 +57,10 @@ const pageTitle = computed(() => route.meta.title || '')
   padding: 20px 24px;
   background: #f8fafc;
 }
+
+@media (max-width: 992px) {
+  .page-body {
+    padding: 14px 16px;
+  }
+}
 </style>

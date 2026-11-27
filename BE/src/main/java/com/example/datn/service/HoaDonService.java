@@ -1499,11 +1499,9 @@ public class HoaDonService {
         hoaDon.setTienSauGiamGia(tong.subtract(giam));
         PhieuGiamGia phieu = hoaDon.getPhieuGiamGia();
         if (phieu != null) {
-            hoaDon.setDotGiamGia(phieu.getDotGiamGia());
             hoaDon.setTenGiamGiaUngDung(
                     PhieuGiamGiaUtil.tenHienThi(phieu.getLoaiGiamGia(), phieu.getGiaTriGiam()));
         } else {
-            hoaDon.setDotGiamGia(null);
             hoaDon.setTenGiamGiaUngDung(null);
         }
         return dong;
@@ -1757,8 +1755,6 @@ public class HoaDonService {
                         : (h.getPhieuGiamGia() != null ? h.getPhieuGiamGia().getTenPhieuGiamGia() : null))
                 .loaiGiamGia(h.getPhieuGiamGia() != null ? h.getPhieuGiamGia().getLoaiGiamGia() : null)
                 .giaTriGiam(h.getPhieuGiamGia() != null ? h.getPhieuGiamGia().getGiaTriGiam() : null)
-                .idDotGiamGia(h.getDotGiamGia() != null ? h.getDotGiamGia().getId() : null)
-                .tenDotGiamGia(h.getDotGiamGia() != null ? h.getDotGiamGia().getTenDotGiamGia() : null)
                 .tienGiam(h.getTienGiam())
                 .tenGiamGiaUngDung(h.getTenGiamGiaUngDung())
                 .toProvinceId(h.getToProvinceId())

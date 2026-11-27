@@ -5,7 +5,6 @@ import com.example.datn.entity.PhieuGiamGia;
 import jakarta.persistence.LockModeType;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -21,11 +20,6 @@ public interface PhieuGiamGiaRepository extends JpaRepository<PhieuGiamGia, Long
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from PhieuGiamGia p where p.id = :id")
     Optional<PhieuGiamGia> findByIdForUpdate(@Param("id") Long id);
-
-    @Query("select p from PhieuGiamGia p left join fetch p.dotGiamGia")
-    List<PhieuGiamGia> findAllWithDot();
-
-    long countByDotGiamGiaId(Long idDotGiamGia);
 
     @Query("SELECT new com.example.datn.dto.PhieuGiamGia.PhieuGiamGiaDTO(pgg.id, pgg.maPhieuGiamGia, pgg.tenPhieuGiamGia, pgg.giaTriGiam, pgg.moTa, pgg.soLuongDaSuDung, pgg.ngayKetThuc, pgg.trangThai) FROM PhieuGiamGia pgg")
     Page<PhieuGiamGiaDTO> getListPageDiscount(Pageable pageable);

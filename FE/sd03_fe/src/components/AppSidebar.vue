@@ -48,8 +48,6 @@ const menu = [
       { label: 'Loại giày', path: '/admin/thuoc-tinh/loai-giay' },
       { label: 'Kích cỡ', path: '/admin/thuoc-tinh/kich-co' },
       { label: 'Màu sắc', path: '/admin/thuoc-tinh/mau-sac' },
-      { label: 'Thân giày', path: '/admin/thuoc-tinh/than-giay' },
-      { label: 'Đế giày', path: '/admin/thuoc-tinh/de-giay' },
     ],
   },
   {
@@ -83,15 +81,15 @@ const menu = [
     ],
   },
   {
-    label: 'Cài đặt phí ship',
-    path: '/cai-dat-phi-ship',
-    iconType: 'orders',
-    adminOnly: true,
-  },
-  {
     label: 'Chat khách hàng',
     path: '/chat',
     iconType: 'chat',
+  },
+  {
+    label: 'Cài đặt phí ship',
+    path: '/cai-dat-phi-ship',
+    iconType: 'shipping',
+    adminOnly: true,
   },
 ]
 
@@ -195,6 +193,14 @@ const visibleMenu = computed(() =>
 <svg v-else-if="item.iconType === 'chat'" width="18" height="18" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+
+                <svg v-else-if="item.iconType === 'shipping'" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="1" y="3" width="15" height="13" />
+                  <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+                  <circle cx="5.5" cy="18.5" r="2.5" />
+                  <circle cx="18.5" cy="18.5" r="2.5" />
                 </svg>
 
                 <svg v-else-if="item.iconType === 'cashRegister'" width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -508,5 +514,12 @@ const visibleMenu = computed(() =>
 .submenu-item-btn.is-active .submenu-bullet {
   background: #dc2626;
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+}
+
+@media (max-width: 992px) {
+  .sidebar-container {
+    width: 210px;
+    padding: 14px 10px 16px;
+  }
 }
 </style>

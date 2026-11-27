@@ -47,7 +47,6 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
         LEFT JOIN FETCH h.khachHang kh
         LEFT JOIN FETCH h.phuongThucThanhToan pt
         LEFT JOIN FETCH h.phieuGiamGia pgg
-        LEFT JOIN FETCH h.dotGiamGia dgg
         LEFT JOIN FETCH h.nhanVien nv
         WHERE h.maHoaDon = :maHoaDon AND h.daXoa = false
         """)
@@ -58,7 +57,6 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
         LEFT JOIN FETCH h.khachHang kh
         LEFT JOIN FETCH h.phuongThucThanhToan pt
         LEFT JOIN FETCH h.phieuGiamGia pgg
-        LEFT JOIN FETCH h.dotGiamGia dgg
         LEFT JOIN FETCH h.nhanVien nv
         WHERE h.daXoa = false
           AND (h.soDienThoaiKhachHang = :phone OR (kh IS NOT NULL AND kh.soDienThoai = :phone))

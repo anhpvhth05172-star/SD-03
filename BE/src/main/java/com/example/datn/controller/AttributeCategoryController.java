@@ -4,12 +4,10 @@ import com.example.datn.dto.ThuocTinh.AttributeRequest;
 import com.example.datn.dto.ThuocTinh.AttributeResponse;
 import com.example.datn.service.AttributeService;
 import com.example.datn.service.ChatLieuService;
-import com.example.datn.service.DeGiayService;
 import com.example.datn.service.KichCoService;
 import com.example.datn.service.KieuDangService;
 import com.example.datn.service.LoaiGiayService;
 import com.example.datn.service.MauSacService;
-import com.example.datn.service.ThanGiayService;
 import com.example.datn.service.ThuongHieuService;
 import com.example.datn.service.XuatXuService;
 import jakarta.validation.Valid;
@@ -41,8 +39,6 @@ public class AttributeCategoryController {
     private final LoaiGiayService loaiGiayService;
     private final KichCoService kichCoService;
     private final MauSacService mauSacService;
-    private final ThanGiayService thanGiayService;
-    private final DeGiayService deGiayService;
 
     private AttributeService getService(String category) {
         String cat = category == null ? "" : category.trim().toLowerCase().replace("-", "_");
@@ -54,8 +50,6 @@ public class AttributeCategoryController {
             case "loai_giay" -> loaiGiayService;
             case "kich_co" -> kichCoService;
             case "mau_sac" -> mauSacService;
-            case "than_giay" -> thanGiayService;
-            case "de_giay" -> deGiayService;
             default -> throw new IllegalArgumentException("Không hỗ trợ thuộc tính: " + category);
         };
     }

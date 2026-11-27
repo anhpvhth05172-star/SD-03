@@ -99,7 +99,6 @@ async function fetchCustomer() {
 const customer = ref(null);
 const CHECKOUT_DRAFT_KEY = "ps_checkout_draft_v1";
 let isRestoringDraft = false;
-let hasRestoredDraft = false;
 let pendingDraftRegion = null;
 
 onMounted(async () => {
@@ -131,7 +130,7 @@ const currentUser = computed(() => customer.value);
 const isLoggedIn = computed(() => !!customer.value);
 
 const userInfo = (u) => ({
-  name: u.tenKhachHang || "",
+  name: u.tenKhachHang || u.tenTaiKhoan || "",
   phone: u.soDienThoai || "",
   email: u.email || "",
 });
@@ -151,7 +150,7 @@ const savedAddresses = computed(() => {
     .filter((a) => a.trangThai !== false)
     .map((a) => ({
       id: a.id,
-      name: a.tenChiChi || c.tenKhachHang || "",
+      name: a.tenChiChi || a.tenDiaChi || c.tenKhachHang || c.tenTaiKhoan || "",
       phone: c.soDienThoai || "",
       address: fullAddress(a),
       street: a.diaChiCuThe || "",
@@ -738,6 +737,23 @@ const lockAddress = computed(
     && !!savedAddresses.value.find((a) => a.id === selectedAddr.value)?.street,
 );
 
+function syncLoggedInContactFromAddress(addr = currentSelectedSavedAddr.value) {
+  if (!isLoggedIn.value || !currentUser.value) return;
+  const base = userInfo(currentUser.value);
+  if (!String(f.name || "").trim()) {
+    f.name = addr?.name || base.name || "";
+  }
+  if (!String(f.phone || "").trim()) {
+    f.phone = addr?.phone || base.phone || "";
+  }
+  if (!String(f.email || "").trim()) {
+    f.email = base.email || "";
+  }
+  if (!String(f.address || "").trim() && addr?.street) {
+    f.address = addr.street;
+  }
+}
+
 // Chạy khi dữ liệu khách hàng tải xong
 watch(
   currentUser,
@@ -747,9 +763,18 @@ watch(
       f.email = u.email;
     }
     const def = savedAddresses.value[0]; // đã sort: mặc định đứng đầu
-    if (def && !hasRestoredDraft && !selectedAddr.value && !customAddress.value) {
+    if (def && !selectedAddr.value && !customAddress.value) {
       chooseAddress(def.id);
     }
+    syncLoggedInContactFromAddress(currentSelectedSavedAddr.value);
+  },
+  { immediate: true },
+);
+
+watch(
+  currentSelectedSavedAddr,
+  (addr) => {
+    syncLoggedInContactFromAddress(addr);
   },
   { immediate: true },
 );
@@ -828,7 +853,6 @@ function applyCheckoutDraftFields() {
     };
     restored = true;
   }
-  hasRestoredDraft = restored;
   return restored;
 }
 
@@ -1310,6 +1334,7 @@ async function submit() {
       openAddAddressModal();
       return;
     }
+    syncLoggedInContactFromAddress(currentSelectedSavedAddr.value);
     errors.name = f.name.trim() ? "" : "Vui lòng nhập họ và tên.";
     errors.phone = /^0\d{9}$/.test(f.phone.trim())
       ? ""
@@ -1882,7 +1907,7 @@ const confirmQrPayment = async () => {
         <section class="co-card mb-3">
           <h5 class="co-title">
             <span class="co-title-ico"><i class="bi bi-geo-alt-fill"></i></span>
-            {{ isLoggedIn ? 'Địa chỉ nhận hàng' : 'Thông tin nhận hàng (Khách vãng lai)' }}
+            {{ isLoggedIn ? 'Địa chỉ nhận hàng' : 'Thông tin nhận hàng' }}
           </h5>
 
           <!-- Đã đăng nhập: dùng sổ địa chỉ đã lưu -->
@@ -2833,7 +2858,7 @@ const confirmQrPayment = async () => {
 /* ===== Right column ===== */
 .co-sticky {
   position: sticky;
-  top: 1rem;
+  top: 104px;
 }
 
 .co-cart-head {

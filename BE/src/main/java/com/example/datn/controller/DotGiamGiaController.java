@@ -3,7 +3,6 @@ package com.example.datn.controller;
 import com.example.datn.dto.DotGiamGia.DotGiamGiaDTO;
 import com.example.datn.entity.DotGiamGia;
 import com.example.datn.repository.DotGiamGiaRepository;
-import com.example.datn.repository.PhieuGiamGiaRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class DotGiamGiaController {
 
     private final DotGiamGiaRepository dotGiamGiaRepository;
-    private final PhieuGiamGiaRepository phieuGiamGiaRepository;
 
     @GetMapping
     public List<DotGiamGiaDTO> list() {
@@ -34,7 +32,7 @@ public class DotGiamGiaController {
             dot.getNgayBatDau(),
             dot.getNgayKetThuc(),
             dot.getTrangThai(),
-            phieuGiamGiaRepository.countByDotGiamGiaId(dot.getId())
+            0L
         );
     }
 }

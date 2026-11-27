@@ -201,6 +201,10 @@ const poll = async () => {
       return
     }
     if (!hoiThoaiNhanVien.value) return
+    if (hoiThoaiNhanVien.value.trangThai === 'CHO_TIEP_NHAN') {
+      const ht = await layHoiThoaiKhach()
+      if (ht) hoiThoaiNhanVien.value = ht
+    }
     const ds = await layTinKhach(hoiThoaiNhanVien.value.id, tuId)
     if (ds && ds.length) {
       tinNhan.value = [...tinNhan.value, ...ds]
@@ -323,7 +327,7 @@ onUnmounted(() => {
         <p v-if="cheDo === 'nhan-vien' && hoiThoaiNhanVien?.trangThai === 'CHO_TIEP_NHAN'" class="chat-empty">
           Yêu cầu đã gửi. Nhân viên sẽ tiếp nhận trước khi bạn có thể nhắn tin.
         </p>
-        <p v-if="!tinNhan.length && !loi" class="chat-empty">
+        <p v-else-if="!tinNhan.length && !loi" class="chat-empty">
           {{ cheDo === 'ai' ? 'Hỏi mình bất cứ điều gì về giày dép PolyShoes!' : 'Gửi tin nhắn, nhân viên sẽ phản hồi trong giây lát.' }}
         </p>
         <div v-for="t in tinNhan" :key="t.id" class="chat-bubble" :class="{
@@ -419,9 +423,9 @@ onUnmounted(() => {
 
 .chat-widget-root {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: 9999;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1020;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -440,6 +444,17 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+@media (max-width: 768px) {
+  .chat-fab {
+    width: 48px;
+    height: 48px;
+  }
+  .chat-panel {
+    width: calc(100vw - 32px);
+    max-width: 340px;
+  }
 }
 
 .chat-panel {

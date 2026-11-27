@@ -40,14 +40,6 @@ public class SanPhamChiTiet {
     @JoinColumn(name = "id_mau_sac", nullable = false)
     private MauSac mauSac;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_than_giay", nullable = false)
-    private ThanGiay thanGiay;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_de_giay", nullable = false)
-    private DeGiay deGiay;
-
     @Column(name = "ma_chi_tiet_san_pham", nullable = false, unique = true, length = 80)
     private String maChiTietSanPham;
 
@@ -65,18 +57,6 @@ public class SanPhamChiTiet {
 
     @Column(name = "trong_luong")
     private BigDecimal trongLuong;
-
-    @Column(name = "chieu_cao_de")
-    private BigDecimal chieuCaoDe;
-
-    @Column(name = "chieu_cao_got")
-    private BigDecimal chieuCaoGot;
-
-    @Column(name = "do_chenh_got_mui")
-    private BigDecimal doChenhGotMui;
-
-    @Column(name = "form_giay", length = 100)
-    private String formGiay;
 
     @Column(name = "nguoi_cap_nhat", length = 100)
     private String nguoiCapNhat;

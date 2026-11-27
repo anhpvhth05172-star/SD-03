@@ -54,8 +54,6 @@ public class SanPhamServiceImpl implements SanPhamService {
     private final com.example.datn.service.HinhAnhCacheService hinhAnhCacheService;
     private final MauSacRepository mauSacRepository;
     private final KichCoRepository kichCoRepository;
-    private final ThanGiayRepository thanGiayRepository;
-    private final DeGiayRepository deGiayRepository;
     private final GiaService giaService;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -546,22 +544,6 @@ public class SanPhamServiceImpl implements SanPhamService {
     private void processSaveVariants(SanPham sp, List<BienTheItem> bienThes) {
         if (bienThes == null || bienThes.isEmpty()) return;
 
-        com.example.datn.entity.ThanGiay defaultTg = thanGiayRepository.findAll().stream().findFirst().orElseGet(() -> {
-            com.example.datn.entity.ThanGiay tg = new com.example.datn.entity.ThanGiay();
-            tg.setTenThanGiay("Thân giày tiêu chuẩn");
-            tg.setMaThanGiay("TG-DEFAULT");
-            tg.setTrangThai(true);
-            return thanGiayRepository.save(tg);
-        });
-
-        com.example.datn.entity.DeGiay defaultDg = deGiayRepository.findAll().stream().findFirst().orElseGet(() -> {
-            com.example.datn.entity.DeGiay dg = new com.example.datn.entity.DeGiay();
-            dg.setTenDeGiay("Đế giày cao su");
-            dg.setMaDeGiay("DG-DEFAULT");
-            dg.setTrangThai(true);
-            return deGiayRepository.save(dg);
-        });
-
         java.util.Set<String> savedImages = new java.util.HashSet<>();
 
         for (BienTheItem item : bienThes) {
@@ -593,8 +575,6 @@ public class SanPhamServiceImpl implements SanPhamService {
                 spct.setSanPham(sp);
                 spct.setMauSac(ms);
                 spct.setKichCo(kc);
-                spct.setThanGiay(defaultTg);
-                spct.setDeGiay(defaultDg);
 
                 String colorCode = ms.getMaMau() != null && !ms.getMaMau().trim().isEmpty() ? ms.getMaMau() : ("MS" + ms.getId());
                 String sizeCode = kc.getTenKichCo() != null && !kc.getTenKichCo().trim().isEmpty() ? kc.getTenKichCo() : ("KC" + kc.getId());
@@ -893,22 +873,6 @@ public class SanPhamServiceImpl implements SanPhamService {
                 }
 
                 // Lưu các biến thể
-                com.example.datn.entity.ThanGiay defaultTg = thanGiayRepository.findAll().stream().findFirst().orElseGet(() -> {
-                    com.example.datn.entity.ThanGiay tg = new com.example.datn.entity.ThanGiay();
-                    tg.setTenThanGiay("Thân giày tiêu chuẩn");
-                    tg.setMaThanGiay("TG-DEFAULT");
-                    tg.setTrangThai(true);
-                    return thanGiayRepository.save(tg);
-                });
-
-                com.example.datn.entity.DeGiay defaultDg = deGiayRepository.findAll().stream().findFirst().orElseGet(() -> {
-                    com.example.datn.entity.DeGiay dg = new com.example.datn.entity.DeGiay();
-                    dg.setTenDeGiay("Đế giày cao su");
-                    dg.setMaDeGiay("DG-DEFAULT");
-                    dg.setTrangThai(true);
-                    return deGiayRepository.save(dg);
-                });
-
                 for (ExcelRowData rData : rows) {
                     MauSac ms = findOrCreateMauSac(rData.mauSac);
                     KichCo kc = findOrCreateKichCo(rData.kichCo);
@@ -930,8 +894,6 @@ public class SanPhamServiceImpl implements SanPhamService {
                         spct.setSanPham(sp);
                         spct.setMauSac(ms);
                         spct.setKichCo(kc);
-                        spct.setThanGiay(defaultTg);
-                        spct.setDeGiay(defaultDg);
 
                         String colorCode = ms.getMaMau() != null && !ms.getMaMau().trim().isEmpty() ? ms.getMaMau() : ("MS" + ms.getId());
                         String sizeCode = kc.getTenKichCo() != null && !kc.getTenKichCo().trim().isEmpty() ? kc.getTenKichCo() : ("KC" + kc.getId());

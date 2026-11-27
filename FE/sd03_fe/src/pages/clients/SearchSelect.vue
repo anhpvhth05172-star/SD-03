@@ -148,6 +148,13 @@ onBeforeUnmount(() =>
 .ss {
   position: relative;
   width: 100%;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  display: block;
 }
 
 /* Khớp với .select-box select của trang cửa hàng */

@@ -6,20 +6,67 @@ import { lienKetSauDangNhap } from '@/api/chat'
 import { luuPhien, getMaAnDanh } from '@/utils/auth'
 import { datVaiTro, datNguoiDung } from '@/utils/session'
 import { dongBoGioHangSauDangNhap } from '@/components/store'
+import { batBuoc, toiDa, emailHopLe } from '@/utils/validate'
 
 const router = useRouter()
 const route = useRoute()
 
 const cheDo = computed(() => route.meta.loginMode || 'nhan-vien')
 const form = ref({ taiKhoan: '', matKhau: '', ghiNhoDangNhap: false })
+const fieldErrors = ref({ taiKhoan: '', matKhau: '' })
+const accountInputRef = ref(null)
+const passwordInputRef = ref(null)
 const error = ref('')
 const loading = ref(false)
 const hienMatKhau = ref(false)
 
+const KY_TU_CAM_TAI_KHOAN = /[<>]|[\u0000-\u001F\u007F]/
+
+const validateTaiKhoan = (val) => {
+  const trimmed = String(val ?? '').trim()
+  return (
+    batBuoc(val, 'Tài khoản / Email') ||
+    toiDa(val, 150, 'Tài khoản / Email') ||
+    (KY_TU_CAM_TAI_KHOAN.test(trimmed) ? 'Tài khoản / Email chứa ký tự không hợp lệ' : '') ||
+    (trimmed.includes('@') ? emailHopLe(val) : '')
+  )
+}
+
+const validateMatKhau = (val) => {
+  if (val === null || val === undefined || val === '') {
+    return 'Mật khẩu không được để trống'
+  }
+  const raw = String(val)
+  if (raw.trim() === '') {
+    return 'Mật khẩu không được chỉ chứa khoảng trắng'
+  }
+  if (raw.length < 6) {
+    return 'Mật khẩu phải có ít nhất 6 ký tự'
+  }
+  if (raw.length > 127) {
+    return 'Mật khẩu không được vượt quá 127 ký tự'
+  }
+  return ''
+}
+
+const onAccountInput = () => {
+  fieldErrors.value.taiKhoan = ''
+  error.value = ''
+}
+
+const onPasswordInput = () => {
+  fieldErrors.value.matKhau = ''
+  error.value = ''
+}
+
 const submit = async () => {
   error.value = ''
-  if (!form.value.taiKhoan.trim() || !form.value.matKhau) {
-    error.value = 'Vui lòng nhập tài khoản và mật khẩu'
+  const errTk = validateTaiKhoan(form.value.taiKhoan)
+  const errMk = validateMatKhau(form.value.matKhau)
+  fieldErrors.value = { taiKhoan: errTk, matKhau: errMk }
+  if (errTk || errMk) {
+    if (errTk) accountInputRef.value?.focus()
+    else passwordInputRef.value?.focus()
     return
   }
   loading.value = true
@@ -73,14 +120,27 @@ const duongDanSauDangNhap = (macDinh) => {
       </div>
       <h1 class="auth-title">{{ cheDo === 'khach' ? 'ĐĂNG NHẬP KHÁCH HÀNG' : 'ĐĂNG NHẬP NHÂN VIÊN' }}</h1>
 
-      <form class="auth-form" @submit.prevent="submit">
+      <form class="auth-form" novalidate @submit.prevent="submit">
         <div class="field">
           <label for="login-account">Tài khoản / Email</label>
-          <div class="input-wrap">
+          <div class="input-wrap" :class="{ 'is-invalid': Boolean(fieldErrors.taiKhoan) }">
             <i class="bi bi-person" aria-hidden="true"></i>
-            <input id="login-account" v-model="form.taiKhoan" type="text"
-              placeholder="Nhập tài khoản hoặc email" autocomplete="username" />
+            <input
+              id="login-account"
+              ref="accountInputRef"
+              v-model="form.taiKhoan"
+              type="text"
+              placeholder="Nhập tài khoản hoặc email"
+              autocomplete="username"
+              :aria-invalid="Boolean(fieldErrors.taiKhoan)"
+              :aria-describedby="fieldErrors.taiKhoan ? 'login-account-error' : undefined"
+              @blur="fieldErrors.taiKhoan = validateTaiKhoan(form.taiKhoan)"
+              @input="onAccountInput"
+            />
           </div>
+          <p v-if="fieldErrors.taiKhoan" id="login-account-error" class="field-error" role="alert">
+            {{ fieldErrors.taiKhoan }}
+          </p>
         </div>
 
         <div class="field">
@@ -90,15 +150,28 @@ const duongDanSauDangNhap = (macDinh) => {
               Quên mật khẩu?
             </router-link>
           </div>
-          <div class="input-wrap">
+          <div class="input-wrap" :class="{ 'is-invalid': Boolean(fieldErrors.matKhau) }">
             <i class="bi bi-lock" aria-hidden="true"></i>
-            <input id="login-password" v-model="form.matKhau" :type="hienMatKhau ? 'text' : 'password'"
-              placeholder="Nhập mật khẩu" autocomplete="current-password" />
+            <input
+              id="login-password"
+              ref="passwordInputRef"
+              v-model="form.matKhau"
+              :type="hienMatKhau ? 'text' : 'password'"
+              placeholder="Nhập mật khẩu"
+              autocomplete="current-password"
+              :aria-invalid="Boolean(fieldErrors.matKhau)"
+              :aria-describedby="fieldErrors.matKhau ? 'login-password-error' : undefined"
+              @blur="fieldErrors.matKhau = validateMatKhau(form.matKhau)"
+              @input="onPasswordInput"
+            />
             <button class="password-toggle" type="button" :aria-label="hienMatKhau ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'"
               @click="hienMatKhau = !hienMatKhau">
               <i :class="hienMatKhau ? 'bi bi-eye-slash' : 'bi bi-eye'" aria-hidden="true"></i>
             </button>
           </div>
+          <p v-if="fieldErrors.matKhau" id="login-password-error" class="field-error" role="alert">
+            {{ fieldErrors.matKhau }}
+          </p>
         </div>
 
         <p v-if="error" class="auth-error">{{ error }}</p>
@@ -108,7 +181,7 @@ const duongDanSauDangNhap = (macDinh) => {
         </button>
       </form>
 
-      <p class="auth-footer">© 2026 FF T-Shirt Fashion Store. Hệ thống quản lý bán hàng.</p>
+      <p class="auth-footer">© 2026 PolyShoes. Hệ thống quản lý bán hàng.</p>
       <p v-if="cheDo === 'khach'" class="auth-customer-links">
         Chưa có tài khoản? <router-link to="/dang-ky">Đăng ký</router-link>
       </p>
@@ -197,6 +270,19 @@ const duongDanSauDangNhap = (macDinh) => {
 .input-wrap:focus-within {
   border-color: #dc2626;
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+.input-wrap.is-invalid {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+.input-wrap.is-invalid:focus-within {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.16);
+}
+.field-error {
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #dc2626;
 }
 .input-wrap > i { font-size: 17px; }
 .input-wrap input {

@@ -424,16 +424,16 @@ onMounted(load)
         <table class="data-table">
           <thead>
             <tr>
-              <th width="60" class="text-center">STT</th>
-              <th width="150">MÃ HÓA ĐƠN</th>
-              <th width="230">KHÁCH HÀNG</th>
-              <th width="150">NHÂN VIÊN</th>
-              <th width="110">LOẠI ĐƠN</th>
-              <th width="140" class="text-end">TỔNG TIỀN</th>
-              <th width="160">NGÀY TẠO</th>
-              <th width="150" class="text-center">TRẠNG THÁI</th>
-              <th width="140" class="text-center">THANH TOÁN</th>
-              <th width="110" class="text-center">HÀNH ĐỘNG</th>
+              <th width="44" class="text-center">STT</th>
+              <th width="100">MÃ HÓA ĐƠN</th>
+              <th width="155">KHÁCH HÀNG</th>
+              <th width="110">NHÂN VIÊN</th>
+              <th width="85">LOẠI ĐƠN</th>
+              <th width="110" class="text-end">TỔNG TIỀN</th>
+              <th width="118">NGÀY TẠO</th>
+              <th width="120" class="text-center">TRẠNG THÁI</th>
+              <th width="106" class="text-center">THANH TOÁN</th>
+              <th width="90" class="text-center">HÀNH ĐỘNG</th>
             </tr>
           </thead>
           <tbody>

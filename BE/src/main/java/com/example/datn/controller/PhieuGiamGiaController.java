@@ -56,7 +56,7 @@ public class PhieuGiamGiaController {
                 Collectors.mapping(r -> r.getKhachHang().getId(), Collectors.toList())
             ));
 
-        return phieuGiamGiaRepository.findAllWithDot().stream()
+        return phieuGiamGiaRepository.findAll().stream()
             .filter(p -> Boolean.TRUE.equals(p.getTrangThai()))
             .filter(p -> p.getNgayBatDau() == null || !now.isBefore(p.getNgayBatDau()))
             .filter(p -> p.getNgayKetThuc() == null || !now.isAfter(p.getNgayKetThuc()))
@@ -79,7 +79,11 @@ public class PhieuGiamGiaController {
                 p.getMaPhieuGiamGia(),
                 PhieuGiamGiaUtil.tenHienThi(p.getLoaiGiamGia(), p.getGiaTriGiam()),
                 p.getGioiHanMoiTaiKhoan() != null ? p.getGioiHanMoiTaiKhoan() : 1,
-                dem.getOrDefault(p.getId(), 0L)
+                dem.getOrDefault(p.getId(), 0L),
+                p.getLoaiGiamGia(),
+                p.getGiaTriGiam(),
+                p.getHoaDonToiThieu(),
+                p.getNgayKetThuc()
             ))
             .toList();
     }
@@ -90,13 +94,6 @@ public class PhieuGiamGiaController {
         Map<Long, Map<Long, Long>> usageByPhieuAndKhach,
         Map<Long, List<Long>> khChuaDungMap
     ) {
-        PhieuGiamGiaDTO.DotGiamGiaDTO dot = p.getDotGiamGia() != null
-            ? new PhieuGiamGiaDTO.DotGiamGiaDTO(
-                p.getDotGiamGia().getId(),
-                p.getDotGiamGia().getMaDotGiamGia(),
-                p.getDotGiamGia().getTenDotGiamGia()
-            )
-            : null;
         int limit = p.getGioiHanMoiTaiKhoan() != null && p.getGioiHanMoiTaiKhoan() > 0
             ? p.getGioiHanMoiTaiKhoan() : 1;
         Map<Long, Long> khUsage = usageByPhieuAndKhach.getOrDefault(p.getId(), Map.of());
@@ -133,7 +130,7 @@ public class PhieuGiamGiaController {
             p.getSoLuongDaSuDung(),
             limit,
             p.getTrangThai(),
-            dot
+            null
         );
         dto.setPhamVi(p.getPhamVi());
         dto.setIdKhachHangsChuaDung(chuaDung);
